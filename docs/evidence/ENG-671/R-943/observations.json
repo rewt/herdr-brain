@@ -1,0 +1,741 @@
+{
+  "schema": "limit-register-observation/v1",
+  "run": "R-943",
+  "item": "ENG-671",
+  "captured_at": "2026-10-27T16:20:34.817669+00:00",
+  "source_head": "f2d7630e7aadc2dfc80bf608d3a20285ec5aed72",
+  "node": "v20.19.4",
+  "method": "Read existing diagnostics only. No workload, suite, native mutation, signal, lock probe or service control. Nearest-rank quantiles; n=0 has null statistics. JSONL complete-prefix hashes, with unfinished tails excluded. Completed pass observations are grouped by their recorded start source_head, not proved import-graph attestation.",
+  "raw": {
+    "file": "/Users/rewt/development/rewt/.org/evidence/ENG-671/R-943/passive-samples.json",
+    "sha256": "1131ab57e6a45c99dee7dfde36b09a307623896a6694a1415ce760afd3e74ece"
+  },
+  "source_manifest": {
+    ".lane.json": {
+      "sha256": "bf69d61828d55ad92fa20624e1cbe18b30f16e15c1154ff64b8aaa30881a94bd"
+    },
+    ".lane.validation.json": {
+      "sha256": "3ebce70888b512662e8a88a5343e9c807c53864ae83b5dbb42c8dd604f8d8f39"
+    },
+    "lib/deadline.mjs": {
+      "sha256": "646e91c327307f60358709110f349c1a41d79f60d18dc6375978bca385c75c54"
+    },
+    "lib/store.mjs": {
+      "sha256": "9efd2677e0aba9d28e9d2d53f241431df43e28f014a1a9dfbb7a2737fdfe3ba8"
+    },
+    "lib/run-timing.mjs": {
+      "sha256": "c1f5ee653e25678d9151d9cef6e5edeb0bba52d204597763707368dab0ea47e3"
+    },
+    "lib/record-snapshot.mjs": {
+      "sha256": "8128e3055705c36b994abdbaf7273245d975b03d2e2eefd55747edb384c8f397"
+    },
+    "lib/worker-identity.mjs": {
+      "sha256": "f0d686116498208334a30f7a502779a681746167e16ea71101a1be08173cc9b8"
+    },
+    "lib/run-owner-guard.mjs": {
+      "sha256": "3387bc542514e5e41b69fb440a658c1a068e4f36cb134b48385ff85de6dad82c"
+    },
+    "lib/memory.mjs": {
+      "sha256": "f667f0466e4c0701e261683e2f55a84432f16a5a494e208b83a036395c3cc5cb"
+    },
+    "lib/processes.mjs": {
+      "sha256": "18d019a3b3650796952447d401236ebaac56e9a55e411970edabd7b2b0fb9139"
+    },
+    "lib/retire.mjs": {
+      "sha256": "7050827e5010ef0a577bcf30f528978136f7ad20239e378dbc45e209cfc36d9a"
+    },
+    "lib/retire-lock.mjs": {
+      "sha256": "b3af95ccb9d362e16ec39cd33a5379191116b152790af4bcec07940f71a96e5a"
+    },
+    "lib/lane-removal.mjs": {
+      "sha256": "a1a9cbb6f08a780afb48240501c76f04a2c6077be6c5f91f7dd12e514c586162"
+    },
+    "line-service/line-service.mjs": {
+      "sha256": "ff082c50689ba6c28b0816de5fc645413ca52c720095f17e0d314791e40d7894"
+    },
+    "line-service/launchd.mjs": {
+      "sha256": "7eb8ca2a5a5875a721c5294440ea7f1a792466f9ac57105ae361a4b3597d9b7d"
+    },
+    "line-service/review-queue.mjs": {
+      "sha256": "6ac95eeb8c1110e5ef3c6ca6e992b57b9f98169fd81bf0cafff9030b798d11fa"
+    },
+    "dispatch/dispatch.mjs": {
+      "sha256": "2e8c6baecf2067db685f4240da72168a09b5480f73e813e7b3b203f34f26804e"
+    },
+    "dispatch/session-cap.mjs": {
+      "sha256": "e28c8a58b01862139774656cb1c5d622e2d6c90b5b6684fbe1d5e21600e14287"
+    },
+    "dispatch/session-bind.mjs": {
+      "sha256": "180b627a114d98995dba7e333648bc9c3bb2b9ef1561ac275b21a58ac4c14153"
+    },
+    "dispatch/foreground-command.mjs": {
+      "sha256": "1b25d91619b735114b6a7dc9c17a3c7cbc047dff7e7170828c3f8948d4cf01c8"
+    },
+    "dispatch/unlanded-cap.mjs": {
+      "sha256": "043fac1a8d445a3fe76a694009dc0496a73dac468b9cf57eb2c122992fde693a"
+    },
+    "settle/config.mjs": {
+      "sha256": "1318c4613473a284bdebae555b95b41b6f802ad4ba928f4bd108e15c66a29f1e"
+    },
+    "lanes/lane.mjs": {
+      "sha256": "2b6efa6a50a6c5009e637cc70200d48761044712828af953bf18c6b2d811a80b"
+    },
+    "lanes/promotion-lock.mjs": {
+      "sha256": "7d21005685ac21dc872421c0d42a6a152bea41da49457b94323e4350e8f62915"
+    },
+    "test/helpers/run.mjs": {
+      "sha256": "43bc89bb86c378eab197e81e38c40da61d0a6389fe2205b6ecfba46be8f4792c"
+    },
+    "test/helpers/runner-limits.mjs": {
+      "sha256": "2b292dfb5031e80e4d78706ebf93938fbd7444810cd087af3bf7ce80d2cb5ca3"
+    },
+    "test-slot/limits.mjs": {
+      "sha256": "aeebb0ae20494d78f0dd902c8a8505f2d7c63ad15cfe1d42f514e6a9e8af044e"
+    },
+    "test-slot/watch.mjs": {
+      "sha256": "41fc8e2fc80c38ae286a32a3ff6b785a446f1271d1880cf77bba546cb63ceee4"
+    },
+    "test-slot/reservations.mjs": {
+      "sha256": "f6520a85dcf5ac6e2dd9eaea033729275942403d255a217739286dd21d25c836"
+    },
+    "test-slot/test-slot.mjs": {
+      "sha256": "5e2bb3fdbe94c1a0cb5a1457304e61cb66b594ffdd77df4575db3e2607419213"
+    },
+    "test-slot/ticket-queue.mjs": {
+      "sha256": "37ad65dc7f6cff885985c20a1ab0ea4924b77984d35ce517e6d822c562cef646"
+    },
+    "sessions/runtime.mjs": {
+      "sha256": "1640196f5311f4f440c6ed4b2b9feadc9cd8189c741dd65c5d306d0f770c4b13"
+    },
+    "sessions/authorization.mjs": {
+      "sha256": "b4456d67d10f5b4ad9fc473d6374657f30f390d7b6f68f87d1c852c65124f4ae"
+    },
+    "supervisor/closeout.mjs": {
+      "sha256": "b90b911f48835015d3d79391d2fdbb8be5091c1e1515f6747a45b7621328acfb"
+    },
+    "supervisor/notice-lock.mjs": {
+      "sha256": "e8010bbc42c8ba36d72fbeb6eb590d38bfc63ec1274759146b8326ee0ae11cd5"
+    },
+    "watch/watch.mjs": {
+      "sha256": "60d1b5486601e9c8587e59c7109b6cbffcd4e5411b63cf3358a5ebb53dfe5cd1"
+    }
+  },
+  "installed": {
+    "root": "/Users/rewt/.local/share/herdr-monitor/releases/rc-20261025T230221Z-c160b32b6b",
+    "commit": "c160b32b6bc36cd93baab307d30cdff11b1de467",
+    "files": {
+      ".lane.json": {
+        "sha256": "15dc64c0b4ac6e907229524842f6d7d773ea8d1e2f62f3bcf4a57bf277d9d3f3"
+      },
+      ".lane.validation.json": {
+        "sha256": "3ebce70888b512662e8a88a5343e9c807c53864ae83b5dbb42c8dd604f8d8f39"
+      },
+      "lib/deadline.mjs": {
+        "sha256": "646e91c327307f60358709110f349c1a41d79f60d18dc6375978bca385c75c54"
+      },
+      "lib/store.mjs": {
+        "sha256": "68817019529b92b70338c6c025cc87ba0650648fc753be82e78ba4bf0298611b"
+      },
+      "lib/run-timing.mjs": {
+        "sha256": "2d8ef04ec08f45d7c716ad351fbdd7ad17c84ae244963ee89f6bfbb3a0dd6d7d"
+      },
+      "lib/record-snapshot.mjs": {
+        "absent": true
+      },
+      "lib/worker-identity.mjs": {
+        "sha256": "f0d686116498208334a30f7a502779a681746167e16ea71101a1be08173cc9b8"
+      },
+      "lib/run-owner-guard.mjs": {
+        "sha256": "3387bc542514e5e41b69fb440a658c1a068e4f36cb134b48385ff85de6dad82c"
+      },
+      "lib/memory.mjs": {
+        "sha256": "f667f0466e4c0701e261683e2f55a84432f16a5a494e208b83a036395c3cc5cb"
+      },
+      "lib/processes.mjs": {
+        "sha256": "18d019a3b3650796952447d401236ebaac56e9a55e411970edabd7b2b0fb9139"
+      },
+      "lib/retire.mjs": {
+        "sha256": "77c9fd3e0ab463d880811907e74d2ea315392453f6c2310332503bee3c254883"
+      },
+      "lib/retire-lock.mjs": {
+        "sha256": "b3af95ccb9d362e16ec39cd33a5379191116b152790af4bcec07940f71a96e5a"
+      },
+      "lib/lane-removal.mjs": {
+        "sha256": "a1a9cbb6f08a780afb48240501c76f04a2c6077be6c5f91f7dd12e514c586162"
+      },
+      "line-service/line-service.mjs": {
+        "absent": true
+      },
+      "line-service/launchd.mjs": {
+        "absent": true
+      },
+      "line-service/review-queue.mjs": {
+        "absent": true
+      },
+      "dispatch/dispatch.mjs": {
+        "sha256": "c094a606c654477ff901e30a52820f0369ea572d70c442a1ecad9947bfd4c211"
+      },
+      "dispatch/detach.mjs": {
+        "absent": true
+      },
+      "dispatch/session-cap.mjs": {
+        "sha256": "4f390eae146c480dd336ea5a0e598ffc9f53e3983e81150648f31dcaa98cb705"
+      },
+      "dispatch/session-bind.mjs": {
+        "sha256": "f52b14377498e21f921e24334d6b2831ca1b4643af9b06901a8856c13eada1f1"
+      },
+      "dispatch/foreground-command.mjs": {
+        "absent": true
+      },
+      "dispatch/unlanded-cap.mjs": {
+        "sha256": "8132ff72715e480a3046e0d35d36b4e51739f1522613ee2dd92985bb288c8055"
+      },
+      "settle/config.mjs": {
+        "sha256": "1318c4613473a284bdebae555b95b41b6f802ad4ba928f4bd108e15c66a29f1e"
+      },
+      "lanes/lane.mjs": {
+        "sha256": "b073ebb8613ec94edd58bf24c498019810692372ed25ea95652a2be065d896cf"
+      },
+      "lanes/promotion-lock.mjs": {
+        "sha256": "7d21005685ac21dc872421c0d42a6a152bea41da49457b94323e4350e8f62915"
+      },
+      "test/helpers/run.mjs": {
+        "sha256": "43bc89bb86c378eab197e81e38c40da61d0a6389fe2205b6ecfba46be8f4792c"
+      },
+      "test/helpers/runner-limits.mjs": {
+        "sha256": "2b292dfb5031e80e4d78706ebf93938fbd7444810cd087af3bf7ce80d2cb5ca3"
+      },
+      "test-slot/limits.mjs": {
+        "sha256": "aeebb0ae20494d78f0dd902c8a8505f2d7c63ad15cfe1d42f514e6a9e8af044e"
+      },
+      "test-slot/watch.mjs": {
+        "sha256": "41fc8e2fc80c38ae286a32a3ff6b785a446f1271d1880cf77bba546cb63ceee4"
+      },
+      "test-slot/reservations.mjs": {
+        "sha256": "f6520a85dcf5ac6e2dd9eaea033729275942403d255a217739286dd21d25c836"
+      },
+      "test-slot/test-slot.mjs": {
+        "sha256": "e03857522b4553e739b3d408b3fbf4186ed8d7a39a1758b90b9bd9ecc9bbf8d6"
+      },
+      "test-slot/ticket-queue.mjs": {
+        "sha256": "37ad65dc7f6cff885985c20a1ab0ea4924b77984d35ce517e6d822c562cef646"
+      },
+      "sessions/runtime.mjs": {
+        "sha256": "1640196f5311f4f440c6ed4b2b9feadc9cd8189c741dd65c5d306d0f770c4b13"
+      },
+      "sessions/authorization.mjs": {
+        "sha256": "b4456d67d10f5b4ad9fc473d6374657f30f390d7b6f68f87d1c852c65124f4ae"
+      },
+      "supervisor/closeout.mjs": {
+        "sha256": "1239d939b80d76df593c62179e8f9798cab705d32e7cf56ecaaad50a3cb09525"
+      },
+      "supervisor/notice-lock.mjs": {
+        "sha256": "a575eaaae08a2a15a718ca83f577d11b09826998ebc6d02b3b73f7101f1595a2"
+      },
+      "watch/watch.mjs": {
+        "sha256": "d9bd60dea892eba209a919a9c49897c0ca258b1d31c76e4d9e555f233800fbf4"
+      }
+    }
+  },
+  "line": {
+    "installation": {
+      "at": "2026-10-26T17:18:31.581Z",
+      "target": "gui/501/dev.herdr.line.c8b8479c34b7b676f466",
+      "repo": "/Users/rewt/development/rewt/herdr-brain",
+      "org": "/Users/rewt/development/rewt/.org",
+      "source": "/Users/rewt/development/rewt/herdr-brain/",
+      "node": "/Users/rewt/.nvm/versions/node/v20.19.4/bin/node",
+      "file": "/Users/rewt/development/rewt/.org/line-service/c8b8479c34b7b676f466/service.plist",
+      "phase": "stopped",
+      "stopped_at": "2026-10-26T17:19:24.775Z"
+    },
+    "heartbeat": {
+      "at": "2026-10-27T16:20:14.072Z",
+      "started_at": "2026-10-27T16:20:14.072Z",
+      "project": "/Users/rewt/development/rewt/herdr-brain/.git",
+      "source": "/Users/rewt/development/rewt/herdr-brain/",
+      "phase": "starting",
+      "pid": 34299
+    },
+    "saved_plist_interval_s": 30,
+    "installation_proves_loaded_now": false,
+    "pass_source_proves_every_child_version": false
+  },
+  "locks": {
+    "3e377cd01eba7f4e89216127b03b6e85c9c20104a673393be89c7426976cc525": {
+      "hold_ms": {
+        "n": 340,
+        "min": 0.5054169999930309,
+        "p50": 136.32016699999997,
+        "p95": 375.3889999999956,
+        "max": 6205.643833
+      },
+      "wait_ms": {
+        "n": 340,
+        "min": 0.03179200000158744,
+        "p50": 0.12562500000058208,
+        "p95": 138.94087500000023,
+        "max": 4065.730958
+      },
+      "first_at": "2026-10-27T16:10:20.817Z",
+      "last_at": "2026-10-27T16:20:29.196Z",
+      "p95_hold_to_50ms_target": 7.5077799999999115,
+      "outcomes": {
+        "returned": 335,
+        "threw": 5
+      }
+    }
+  },
+  "passes": {
+    "72a6c9da19699af623196bbba741a05c2a7d4e9b": {
+      "duration_s": {
+        "n": 30,
+        "min": 24.970598208,
+        "p50": 39.76157875,
+        "p95": 101.33183870799999,
+        "max": 104.24846454200001
+      },
+      "first_at": "2026-10-27T15:11:49.053Z",
+      "last_at": "2026-10-27T15:52:51.011Z",
+      "starts": 2,
+      "p95_to_480s_work_allowance_context_only": 0.21110799730833332,
+      "p95_to_600s_alert": 0.16888639784666665
+    },
+    "10e03697c1288ff7fd69d9aa064d1c7dc6d9c515": {
+      "duration_s": {
+        "n": 14,
+        "min": 21.508194083,
+        "p50": 29.718040124999998,
+        "p95": 90.61292750000001,
+        "max": 90.61292750000001
+      },
+      "first_at": "2026-10-27T15:53:21.605Z",
+      "last_at": "2026-10-27T16:09:52.209Z",
+      "starts": 1,
+      "p95_to_480s_work_allowance_context_only": 0.1887769322916667,
+      "p95_to_600s_alert": 0.15102154583333335
+    },
+    "f2d7630e7aadc2dfc80bf608d3a20285ec5aed72": {
+      "duration_s": {
+        "n": 5,
+        "min": 21.931384458,
+        "p50": 37.310092708,
+        "p95": 266.906498167,
+        "max": 266.906498167
+      },
+      "first_at": "2026-10-27T16:10:22.983Z",
+      "last_at": "2026-10-27T16:19:43.528Z",
+      "starts": 9,
+      "p95_to_480s_work_allowance_context_only": 0.5560552045145833,
+      "p95_to_600s_alert": 0.4448441636116667
+    }
+  },
+  "session_binding_s": {
+    "n": 57,
+    "min": 2.443,
+    "p50": 20.815,
+    "p95": 33.651,
+    "max": 37.066
+  },
+  "session_binding_p95_to_60s": 0.5608500000000001,
+  "admission_granted_s": {
+    "n": 67,
+    "min": 0.603,
+    "p50": 5.402,
+    "p95": 42.773,
+    "max": 67.039
+  },
+  "admission_effective_load_factor": null,
+  "admission_p95_to_60s_base_only": 0.7128833333333334,
+  "capacity_latest": {
+    "line": 100525,
+    "at": "2026-10-27T16:19:23.134Z",
+    "action": "capacity",
+    "cap": 3,
+    "count": 1,
+    "kind": "review",
+    "build_cap": 12,
+    "review_cap": 3,
+    "native_cap": 15,
+    "native_count": 11,
+    "shared_cap_source": "sum of separate build and review pools"
+  },
+  "saved_consumers": [
+    {
+      "kind": "dispatch",
+      "root": "/Users/rewt/development/rewt/herdr-brain",
+      "commit": null,
+      "timeout": null,
+      "stage": "complete",
+      "count": 426
+    },
+    {
+      "kind": "dispatch",
+      "root": null,
+      "commit": null,
+      "timeout": null,
+      "stage": "complete",
+      "count": 448
+    },
+    {
+      "kind": "dispatch",
+      "root": "/Users/rewt/development/rewt/herdr-brain",
+      "commit": null,
+      "timeout": null,
+      "stage": "worker",
+      "count": 3
+    },
+    {
+      "kind": "dispatch",
+      "root": "/Users/rewt/development/rewt/herdr-brain",
+      "commit": null,
+      "timeout": null,
+      "stage": "launching",
+      "count": 4
+    },
+    {
+      "kind": "dispatch",
+      "root": "/Users/rewt/development/rewt/herdr-brain",
+      "commit": null,
+      "timeout": null,
+      "stage": "starting",
+      "count": 5
+    },
+    {
+      "kind": "dispatch",
+      "root": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-continuation-cap",
+      "commit": null,
+      "timeout": null,
+      "stage": "complete",
+      "count": 1
+    },
+    {
+      "kind": "dispatch",
+      "root": null,
+      "commit": null,
+      "timeout": null,
+      "stage": "worker",
+      "count": 6
+    },
+    {
+      "kind": "dispatch",
+      "root": "/Users/rewt/development/rewt/herdr-brain",
+      "commit": null,
+      "timeout": null,
+      "stage": "open",
+      "count": 4
+    },
+    {
+      "kind": "dispatch",
+      "root": null,
+      "commit": null,
+      "timeout": null,
+      "stage": "starting",
+      "count": 3
+    },
+    {
+      "kind": "dispatch",
+      "root": null,
+      "commit": null,
+      "timeout": null,
+      "stage": "open",
+      "count": 1
+    },
+    {
+      "kind": "settle",
+      "root": null,
+      "commit": null,
+      "timeout": 1800,
+      "stage": "complete",
+      "count": 262
+    },
+    {
+      "kind": "settle",
+      "root": null,
+      "commit": null,
+      "timeout": 1800,
+      "stage": "reviewing",
+      "count": 11
+    },
+    {
+      "kind": "settle",
+      "root": null,
+      "commit": null,
+      "timeout": 1800,
+      "stage": "validate",
+      "count": 1
+    },
+    {
+      "kind": "settle",
+      "root": "/Users/rewt/development/rewt/herdr-brain",
+      "commit": null,
+      "timeout": 1800,
+      "stage": "complete",
+      "count": 253
+    },
+    {
+      "kind": "settle",
+      "root": "/Users/rewt/development/rewt/herdr-brain",
+      "commit": null,
+      "timeout": 0,
+      "stage": "reviewing",
+      "count": 3
+    },
+    {
+      "kind": "settle",
+      "root": "/Users/rewt/development/rewt/herdr-brain",
+      "commit": null,
+      "timeout": 0,
+      "stage": "complete",
+      "count": 3
+    },
+    {
+      "kind": "watch",
+      "root": "/Users/rewt/development/rewt/herdr-brain",
+      "commit": null,
+      "timeout": null,
+      "stage": null,
+      "count": 250
+    }
+  ],
+  "own_dispatch": {
+    "file": "/Users/rewt/development/rewt/.org/dispatch/80f17840-1b82-4166-9435-691a8479dff8.json",
+    "sha256": "2609bff28c5f9944d2f390038d9c4ba3e56468a616331754895a9a2887d28239",
+    "run": "R-943",
+    "item": "ENG-671",
+    "release": {
+      "root": "/Users/rewt/development/rewt/herdr-brain",
+      "id": null,
+      "commit": null,
+      "protocol": 1
+    },
+    "ownership": {
+      "owner": {
+        "controller": "brain",
+        "release": {
+          "id": "source",
+          "commit": null,
+          "root": "/Users/rewt/development/rewt/herdr-brain",
+          "identity": "/Users/rewt/development/rewt/herdr-brain/.git"
+        },
+        "legacy": false
+      },
+      "generation": 23396
+    },
+    "worker": {
+      "agentName": "lane-line-eng-671--3bbfc9-ff7caa",
+      "pane": "w4EA:p1",
+      "tabId": "w4EA:t1",
+      "workspaceId": "w4EA",
+      "agentSessionId": null,
+      "terminalId": "term_65ed4c04b24f6223",
+      "cwd": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-line-eng-671-1"
+    },
+    "watcher": {
+      "run": "R-943",
+      "pid": 55691,
+      "identity": "1793117724:702573",
+      "log": "/Users/rewt/development/rewt/.org/dispatch/R-943.watch.log",
+      "release": {
+        "root": "/Users/rewt/development/rewt/herdr-brain",
+        "id": null,
+        "commit": null,
+        "protocol": 1
+      }
+    },
+    "sessionBinding": {
+      "status": "bound",
+      "process": {
+        "pid": 29896,
+        "identity": "1793117713:705334"
+      },
+      "receipt": {
+        "run": "R-943",
+        "started_seq": 23394,
+        "cwd": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-line-eng-671-1",
+        "seq": 23416,
+        "agent": "lane-line-eng-671--3bbfc9-ff7caa",
+        "pane": "w4EA:p1",
+        "worker_workspace": "w4EA",
+        "terminal_id": "term_65ed4c04b24f6223"
+      },
+      "prompted_at": "2026-10-27T16:15:30.966Z",
+      "deadline": "2026-10-27T16:16:30.966Z",
+      "proposed": {
+        "type": "run.session_bound",
+        "run": "R-943",
+        "dispatch": {
+          "journal": "/Users/rewt/development/rewt/.org/dispatch/80f17840-1b82-4166-9435-691a8479dff8.json",
+          "attempt": "80f17840-1b82-4166-9435-691a8479dff8",
+          "project": "/Users/rewt/development/rewt/herdr-brain/.git",
+          "record": "/Users/rewt/development/rewt/.org"
+        },
+        "receipt": {
+          "run": "R-943",
+          "started_seq": 23394,
+          "cwd": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-line-eng-671-1",
+          "seq": 23416,
+          "agent": "lane-line-eng-671--3bbfc9-ff7caa",
+          "pane": "w4EA:p1",
+          "worker_workspace": "w4EA",
+          "terminal_id": "term_65ed4c04b24f6223"
+        },
+        "process": {
+          "pid": 29896,
+          "identity": "1793117713:705334"
+        },
+        "prompted_at": "2026-10-27T16:15:30.966Z",
+        "deadline": "2026-10-27T16:16:30.966Z",
+        "observed_at": "2026-10-27T16:15:35.041Z",
+        "session": "01a17e24-f866-7560-b38b-8a21c6f142f9"
+      }
+    },
+    "exceptionAddress": {
+      "to": null,
+      "source": "unknown",
+      "reason": "No project-specific exception address is configured."
+    },
+    "to": "lane-line-eng-671--3bbfc9-ff7caa",
+    "sessionCap": {
+      "cap": 12,
+      "count": 10,
+      "kind": "build",
+      "build_cap": 12,
+      "review_cap": 3,
+      "native_cap": 15,
+      "native_count": 11,
+      "shared_cap_source": "sum of separate build and review pools"
+    }
+  },
+  "freeze_provenance": {
+    "file": "/Users/rewt/development/rewt/.org/evidence/ENG-625/R-822/measurement.json",
+    "sha256": "c5b342d9b979d571542c42c9107345db4e338b7ba590394cdbb5651e5eb0b8d4",
+    "selected": {
+      "path": "/Users/rewt/development/rewt/.org/runs/R-621/validation.tap",
+      "sha256": "f371a2d5327cbfd0faa8e7b235cc3afe42299a2d89aad40c927b0e4975bf8d07",
+      "line": 1563,
+      "duration_ms": 199580.020875,
+      "name": "automatic PASS reaches the real queue, lands and closes without waking the supervisor with deferred test evidence and ingest proof: - Report record-check validation not independently executed.",
+      "indent": 0,
+      "result": "not ok",
+      "failure_type": "testCodeFailure",
+      "class": "tap-completed-candidate",
+      "unit": "individual test case, actual Node TAP elapsed wall duration, setup included",
+      "case_number": 190,
+      "source_file": "supervisor/test/autopilot.test.mjs",
+      "historical_candidate": "b470ce271d2aa4fb3de111a3945c8dd64b2a4381",
+      "source_git_blob": "a53e13e1a915ac34779bdb65ecf2c84afe59bcc3",
+      "source_sha256": "56ca76bffe016ab1b1ec7d03761f16318ae08b1f7ee3746f80ccde757ab8384b",
+      "historical_candidate_binding": {
+        "path": "/Users/rewt/development/rewt/.org/runs/R-621/report.md",
+        "sha256": "e2c60f5cde54e0ec7255a7f609b55c5436bb4418878812781f6c9d2bd61e4082",
+        "basis": "Contemporaneous R-621 report binds focused verification to clean rebased candidate; no separate per-case execution receipt retained."
+      },
+      "command": "node test/helpers/run.mjs --file-timeout=480000 --suite-timeout=540000 dispatch/test/dispatch.test.mjs settle/test/round-cap.test.mjs settle/test/settle.test.mjs supervisor/test/autopilot.test.mjs supervisor/test/supervisor.test.mjs",
+      "node_version": "v20.19.4 (historical report)",
+      "raw_duration": "199580.020875",
+      "raw_unit": "milliseconds",
+      "threshold_seconds": "199.580020875",
+      "outcome": "completed assertion failure; liveNativeWorker returned no confirmed worker; not a timeout or cancellation outcome"
+    },
+    "selection_method": "Maximum completed actual individual Node TAP case, regardless of pass or real assertion failure. Parse adjacent result/diagnostic duration_ms; reject skipped/TODO, timeout/cancelled/file wrappers and aggregates. Inspect every >=100s case candidate (60 raw instances), all larger candidates, and machine durations. Duplicate copied logs are not independent observations. Decimal milliseconds / 1000 with no padding/rounding.",
+    "limitations": [
+      "Maximum of the retained scoped census, not all tests ever executed; deleted/missing/truncated logs and unreported cases remain unknown.",
+      "R-621 suite was later interrupted and has no final aggregate. Case 190 already has its complete assertion-failure block and is a completed case, not the interruption duration. Completion does not imply PASS.",
+      "Selected case includes actual setup/child admission and lifecycle work; separate subphase clocks are unavailable. It is not a separately selected admission/teardown timer or fixture-supplied fake duration.",
+      "Historical candidate/source binding uses retained contemporaneous report plus immutable Git source; no independently signed source/receipt binding is claimed.",
+      "Text suffixes scanned: .tap .log .txt .out .err .md .json .jsonl .summary. Source files, archives, profiles and binary files are not direct timing evidence. Repeated archived doc/log copies inflate raw counts.",
+      "Pinned test-file duration dataset and ENG-543 sums are file/aggregate observations. Nested file/suite timing depth is retained, never promoted to case duration. Fabricated healthy-history durations in gate-profile fixtures are not observations.",
+      "Saved gate-watchdog schema contains gate aggregates; old installed releases/other identities are not sources of additional current project case history in this census. No test executed to obtain this measurement."
+    ],
+    "coverage": {
+      "roots": [
+        "/Users/rewt/development/rewt/herdr-brain/.git/lane-validation",
+        "/Users/rewt/development/rewt/.org/evidence",
+        "/Users/rewt/development/rewt/herdr-brain/.git/promote",
+        "/Users/rewt/development/rewt/herdr-brain/.git/release",
+        "/Users/rewt/development/rewt/herdr-brain/docs",
+        "/Users/rewt/development/rewt/herdr-brain/test/helpers/test-durations.json",
+        "/Users/rewt/development/rewt/.org/runs"
+      ],
+      "raw_counts": {
+        "/Users/rewt/development/rewt/herdr-brain/.git/lane-validation:files": 3330,
+        "/Users/rewt/development/rewt/herdr-brain/.git/lane-validation:bytes": 165459370,
+        "duration_lines": 1643629,
+        "tap-completed-candidate": 1436140,
+        "skip-or-todo": 206913,
+        "censored-or-timeout-inspect": 576,
+        "/Users/rewt/development/rewt/.org/evidence:files": 21316,
+        "/Users/rewt/development/rewt/.org/evidence:bytes": 559336109,
+        "/Users/rewt/development/rewt/herdr-brain/.git/promote:files": 978,
+        "/Users/rewt/development/rewt/herdr-brain/.git/promote:bytes": 128881772,
+        "/Users/rewt/development/rewt/herdr-brain/.git/release:files": 40567,
+        "/Users/rewt/development/rewt/herdr-brain/.git/release:bytes": 49482097,
+        "/Users/rewt/development/rewt/herdr-brain/docs:files": 2388,
+        "/Users/rewt/development/rewt/herdr-brain/docs:bytes": 16590762,
+        "/Users/rewt/development/rewt/herdr-brain/test/helpers/test-durations.json:files": 1,
+        "/Users/rewt/development/rewt/herdr-brain/test/helpers/test-durations.json:bytes": 7952,
+        "/Users/rewt/development/rewt/.org/runs:files": 4005,
+        "/Users/rewt/development/rewt/.org/runs:bytes": 41591579
+      },
+      "input_manifest_entries": 12614,
+      "machine_scan_counts": {
+        "paths": 24147,
+        "unique_contents": 22483,
+        "with_duration_key": 2565,
+        "duplicate_contents": 1664
+      },
+      "machine_candidates_at_least_100s": 6361,
+      "larger_machine_exclusions": {
+        "receipt/command/tier/suite/summary aggregate without individual case identity": 2354,
+        "tier execution, not individual case": 86,
+        "wall-stop observation, censored": 12,
+        "derived file/body or phase observation, not individual case": 1923,
+        "suite execution, not individual case": 266,
+        "file execution, not individual case": 507,
+        "file/command observation, not individual case": 46,
+        "test file wrapper/cutoff in derived dataset, not individual case": 6,
+        "file timeout cutoff, censored": 6
+      },
+      "larger_tap_candidates": 40
+    }
+  },
+  "unknowns": [
+    "live inherited environment overrides",
+    "actual current launchd loaded state",
+    "per-child loaded module versions",
+    "p95 silence AND inactivity episode duration",
+    "uncompleted/censored launch and admission durations",
+    "native CLI response latency distribution",
+    "all CPU, memory demand and load factors not retained in these receipts",
+    "legacy saved consumers without an explicit runtime binding"
+  ],
+  "subtraction": "Replace the obsolete timeout enumeration in docs/reference/load-deadlines.md with one link to this reached-consumer register; reuse retained diagnostics instead of another timeout census or benchmark.",
+  "rollback": {
+    "base": "f2d7630e7aadc2dfc80bf608d3a20285ec5aed72",
+    "preimage": "/Users/rewt/development/rewt/.org/evidence/ENG-671/R-943/load-deadlines.before.md",
+    "preimage_sha256": "60f8f43aa9dc2c40b8f857994cb96f4195e4118881331f3dd40a44394702ae07",
+    "method": "Plain git revert of the exact landed documentation/evidence commit; no runtime or immutable receipt rewrite."
+  },
+  "pass_groups_projection": "Current source and two preceding recorded versions; all captured daily completed pass pairs remain in raw archive.",
+  "config_verification": {
+    "verifier": "One Node 20.19.4 lanes/lane.mjs config command in this lane; transcript projection",
+    "dispatch.max_sessions": {
+      "value": 12,
+      "source": "/Users/rewt/development/rewt/herdr-brain/.lane.json"
+    },
+    "validation": {
+      "wall_seconds": 0,
+      "idle_seconds": 900,
+      "tiers": [
+        "fast",
+        "promotion",
+        "release"
+      ],
+      "source": "/Users/rewt/development/rewt/herdr-brain/.lane.validation.json"
+    },
+    "prepare": [],
+    "routes_source": "/Users/rewt/development/rewt/.lane.json",
+    "worktree_root_source": "/Users/rewt/.herdr-monitor/fleet.json"
+  }
+}

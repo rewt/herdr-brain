@@ -442,7 +442,7 @@ async function main() {
       if(preflight){const fresh=preflightContinuation({journal,repo:job.repo,org:job.org,common,root:bundleRelease().root,events});
         if(!fresh||fresh.request_sha256!==preflight.request_sha256||fresh.capability!==preflight.capability)throw Error('original preflight evidence changed before continuation');
         job.preflightContinuations=[...(job.preflightContinuations??[]),{at:new Date().toISOString(),capability:fresh.capability,request_sha256:fresh.request_sha256,terminal_sha256:fresh.terminal_sha256,prior_error:job.error,native_launch_attempted:false}];
-        delete job.error;job.detached_refused=false;job.native_launch_attempted=false;}
+        delete job.error;delete job.failure;job.detached_refused=false;job.native_launch_attempted=false;}
       job.lineInput=input;admission(job.repo,job.org,common);checkStop();job.detached=true;job.recordOnlyNotices=true;job.phase1_protocol=1;save();
     }finally{release();}
     // Durable original request precedes spawn. The child takes the SAME request
@@ -679,7 +679,7 @@ async function main() {
     }
   }
   await bindSession();
-  delete job.error; save();
+  delete job.error;delete job.failure; save();
   outputReceipt();
 }
 function outputReceipt() {
@@ -693,6 +693,7 @@ try { await main(); }
 catch (error) {
   if (job && journal && ownsLock) {
     job.error = error.message;
+    job.failure={code:error.code??null,kind:['DISPATCH_SESSION_CAP','DISPATCH_REVIEW_CAP'].includes(error.code)?'capacity':'guard-or-command',stage:job.stage,observed_at:new Date().toISOString(),native_launch_attempted:job.native_launch_attempted??null,...(error.sessions?{capacity:error.sessions}:{})};
     if(job.detached&&!job.native_launch_attempted&&!job.worker&&!['starting','launching','prompting'].includes(job.stage))job.detached_refused=true;
     save();
     if (job.run) try { note(`incomplete at ${job.stage}: ${error.message}; retry with --retry ${job.run}`); } catch {}
@@ -719,7 +720,7 @@ catch (error) {
   releaseAdmission?.();
   if((opt.retry&&job?.detached||opt.detach&&process.exitCode)&&journal&&ownsLock){
     fs.mkdirSync(`${journal}.driver`,{recursive:true});const fd=fs.openSync(`${journal}.driver/results.jsonl`,'a',0o600);
-    try{fs.writeFileSync(fd,JSON.stringify({at:new Date().toISOString(),journal,stage:job.stage,run:job.run,exit_code:process.exitCode??0,error:job.error??null,native_launch_attempted:job.native_launch_attempted??false})+'\n');fs.fsyncSync(fd);}finally{fs.closeSync(fd);}
+    try{fs.writeFileSync(fd,JSON.stringify({at:new Date().toISOString(),journal,stage:job.stage,run:job.run,exit_code:process.exitCode??0,error:job.error??null,code:job.failure?.code??null,native_launch_attempted:job.native_launch_attempted??null})+'\n');fs.fsyncSync(fd);}finally{fs.closeSync(fd);}
   }
   if (ownsLock) try { if (fs.readFileSync(lock, 'utf8') === String(process.pid)) fs.unlinkSync(lock); } catch {}
   if (contender) try { fs.unlinkSync(contender); } catch {}

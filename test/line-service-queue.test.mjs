@@ -4,6 +4,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
+import {pathToFileURL} from 'node:url';
+import {copyProduct} from '../lib/product-files.mjs';
 import { configFixture } from './helpers/config-home-fixture.mjs';
 import { transact, loadEvents } from '../lib/store.mjs';
 import { fold } from '../lib/state.mjs';
@@ -154,4 +156,26 @@ test('adopted queue source entry requires matching actual implementation and pre
   const forwarded=f.run(['status','--json'],extra); assert.equal(forwarded.status,0,forwarded.stderr); assert.equal(JSON.parse(forwarded.stdout).pinned,true);
   const saved=f.run(['queue-review','R-1'],{...extra,HERDR_BRAIN_ROOT:f.cwd},pinned); assert.equal(saved.status,0,saved.stderr); assert.equal(JSON.parse(saved.stdout).pinned,true);
   assert.equal(fs.readFileSync(f.binding().file,'utf8'),before);
+});
+
+test('inflight queue capability survives a committed development landing while immutable saved tampering and foreign selectors remain held',async t=>{
+  const f=fixture(t),copy=path.join(f.scratch,'development-source');copyProduct(root,copy);
+  const git=args=>{const r=spawnSync('git',['-C',copy,...args],{encoding:'utf8',env:f.env});assert.equal(r.status,0,r.stderr);};
+  git(['init','-qb','main']);git(['config','user.name','Fixture']);git(['config','user.email','fixture@example.invalid']);git(['add','.']);git(['commit','-qm','Captured source']);
+  const helper=await import(pathToFileURL(path.join(copy,'line-service/review-queue.mjs'))),run={owner:{controller:'brain',legacy:false,release:{id:'source',root:copy,commit:null}}};assert.equal(helper.queueConsumer({run,env:{HERDR_BRAIN_ROOT:copy}}),copy);
+  fs.appendFileSync(path.join(copy,'dispatch/session-cap.mjs'),'\n// unrelated committed follow-through\n');git(['add','.']);git(['commit','-qm','Unrelated source landing']);assert.equal(helper.queueConsumer({run,env:{HERDR_BRAIN_ROOT:copy}}),copy);
+  assert.throws(()=>helper.queueConsumer({run,env:{HERDR_BRAIN_ROOT:f.cwd}}),/selector differs/);assert.throws(()=>helper.queueConsumer({run:{owner:{...run.owner,legacy:true}},env:{}}),/ownership is UNKNOWN/);
+  const frozen=await import(pathToFileURL(path.join(f.bundle,'line-service/review-queue.mjs')));fs.appendFileSync(path.join(f.bundle,'dispatch/session-cap.mjs'),'\n// immutable bytes changed\n');assert.throws(()=>frozen.queueConsumer({run,env:{HERDR_BRAIN_ROOT:f.bundle}}),/immutable saved/);
+  assert.equal([...f.context().state.items.values()].some(i=>i.role==='reviewer'),false);
+});
+
+test('typed initial review capacity refusal waits for fresh availability then continues once without a fictitious native attempt',t=>{
+  const f=fixture(t);f.create();let dispatches=0,busy=false;const reason='review cap 3 reached: unknown liveness and uncertain launch remain occupied';
+  const service=()=>createLineService({repo:f.cwd,org:f.org,to:'brain-chat',env:f.env,recordNotice:d=>({id:d.id,state:'record-only'}),capacity:()=>{if(busy)throw Object.assign(Error(reason),{code:'DISPATCH_REVIEW_CAP'});return{cap:3,count:0};},command:(_exe,args)=>{
+    assert.equal(args[0],path.join(root,'dispatch/dispatch.mjs'));dispatches++;
+    return dispatches===1?{status:1,signal:null,stdout:JSON.stringify({result:'failed',code:'DISPATCH_REVIEW_CAP',reason}),stderr:reason}:{status:0,stdout:JSON.stringify({result:'detached',journal:path.join(f.org,'dispatch/new-original.json')}),stderr:''};
+  }});
+  service().pass();assert.equal(dispatches,1);busy=true;service().pass();assert.equal(dispatches,1);busy=false;service().pass();service().pass();assert.equal(dispatches,2);
+  const directory=path.join(f.org,'line-service',createHash('sha256').update(JSON.stringify(f.identity)).digest('hex').slice(0,20)),entry=Object.entries(JSON.parse(fs.readFileSync(path.join(directory,'effects.json'))).actions).find(([k])=>k.startsWith('dispatch:REV-'))[1];
+  assert.equal(entry.history.length,1);assert.equal(JSON.parse(entry.history[0].receipt.stdout).code,'DISPATCH_REVIEW_CAP');assert.equal(entry.result.result,'detached');assert.equal(f.context().events.some(e=>e.type==='run.started'&&e.item.startsWith('REV-')),false);
 });

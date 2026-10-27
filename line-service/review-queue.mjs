@@ -19,6 +19,7 @@ import {producerGroupKey,queueProducerGroup,sameProducerQueue,sameCapturedTarget
 const root = fs.realpathSync(fileURLToPath(new URL('../', import.meta.url)));
 const files = ['line-service/review-queue.mjs', 'line-service/review.mjs','line-service/review-group.mjs','line-service/review-recovery.mjs','line-service/review-resolutions.mjs', 'line-service/phase1.mjs', 'line-service/cutoff.mjs','settle/review-range.mjs', 'bin/org.mjs', 'dispatch/dispatch.mjs','dispatch/preflight.mjs','dispatch/foreground-command.mjs','dispatch/outcome.mjs','dispatch/not-started.mjs','dispatch/request-lock.mjs', 'dispatch/session-cap.mjs', 'dispatch/unlanded-cap.mjs','lanes/lane.mjs'];
 const hashes = files.map(file => createHash('sha256').update(fs.readFileSync(path.join(root, file))).digest('hex'));
+const immutableCode=fs.existsSync(path.join(root,'.release-manifest.json'))||fs.existsSync(path.join(root,'.release-commit'));
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const git = (repo, args) => execFileSync('git', ['--no-optional-locks', '-C', repo, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
 const journalFor = (org, identity) => path.join(org, 'line-service', createHash('sha256').update(JSON.stringify(identity)).digest('hex').slice(0, 20), 'effects.json');
@@ -39,7 +40,11 @@ export function queueConsumer({ run, env = process.env }) {
   // No installed/pinned/saved owner is substituted or rewritten.
   if (env.HERDR_BRAIN_ROOT && fs.realpathSync(env.HERDR_BRAIN_ROOT) !== root) throw Error('queue source selector differs from actual implementation');
   if (!run.owner || run.owner.legacy || run.owner.controller!=='brain') throw Error('source ownership is UNKNOWN; retain owner and existing attempt');
-  for (let i = 0; i < files.length; i++) if (createHash('sha256').update(fs.readFileSync(path.join(root, files[i]))).digest('hex') !== hashes[i]) throw Error('loaded queue/dispatch implementation changed; wait for next real pass');
+  // This actual loaded module implements immutable target/group/dedup checks.
+  // Development main may advance while a request runs: that does not change
+  // its captured tuple or loaded capability. Immutable saved bundles retain
+  // their byte fence; neither selection nor native/source ownership is replaced.
+  if(immutableCode)for (let i = 0; i < files.length; i++) if (createHash('sha256').update(fs.readFileSync(path.join(root, files[i]))).digest('hex') !== hashes[i]) throw Error('immutable saved queue/dispatch implementation changed; retain its owner');
   return root;
 }
 function source({ state, events, org, repo, identity, runId, head, base,env=process.env }) {

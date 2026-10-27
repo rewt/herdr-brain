@@ -25,7 +25,7 @@ import { recordLineNotice,canonicalFailure } from './record-inbox.mjs';
 import { enqueueNamedDecision } from './decision-wake.mjs';
 import { canonical } from '../messages/schema.mjs';
 import { discoverChanges,dispatchInput,phase0Boundary,morningDigest,recordReviewResults,reviewCompletionPlan,recordReviewCompletion,ensureReviewBoundary,canonicalReviewIndex,recordReviewError,recordReviewHealth } from './phase1.mjs';
-import {preflightContinuation} from '../dispatch/preflight.mjs';
+import {preflightContinuation,initialCapacityRefusal} from '../dispatch/preflight.mjs';
 import {observeReviewProgress,recoverServiceReview} from './review-recovery.mjs';
 export { reviewAttempt } from './review.mjs';
 
@@ -341,14 +341,15 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         if (reserved(item) || item.meta.hold || item.meta.held) { note(`dispatch:${item.id}`, 'held or reserved ready item needs judgment'); continue; }
         try {
           const key = `dispatch:${item.id}:${input}`;
-          let continuation;
+          let continuation,retryAdmission;
           if (effects.actions[key]) {
             const prior=effects.actions[key];let result=prior.result;
             if(typeof result==='string')try{result=JSON.parse(result);}catch{}
             if(!result?.journal&&prior.receipt?.stdout)try{result=JSON.parse(prior.receipt.stdout);}catch{}
             if(!result?.journal&&prior.original_outcome?.journal)result={journal:prior.original_outcome.journal};
             if(result?.journal)continuation=preflightContinuation({journal:result.journal,repo,org,common:project.identity,root:fs.realpathSync(sourceRoot),events:snapshot.events});
-            if(!continuation){log({ action: 'dispatch-retained', key, state: prior.state });if(roleIs(item,'REV')&&prior.state!=='complete'&&!prior.original_outcome?.error)note(key,prior.error??'original review launch outcome retained; no duplicate launch',{item:item.id,review:true});continue;}
+            else retryAdmission=initialCapacityRefusal(prior);
+            if(!continuation&&!retryAdmission){log({ action: 'dispatch-retained', key, state: prior.state });if(roleIs(item,'REV')&&prior.state!=='complete'&&!prior.original_outcome?.error)note(key,prior.error??'original review launch outcome retained; no duplicate launch',{item:item.id,review:true});continue;}
           }
           const reviewTarget = isQueueReview(item) ? validateQueuedReview({ item, state: snapshot.state, events: snapshot.events, org, repo,...(continuation?{allowJournal:continuation.journal}:{}) }) : null;
           const route = continuation?.job.route??(reviewTarget ? reviewQueueRoute(config) : routeFor(item, config));
@@ -356,7 +357,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
             agent: name => native(['agent', 'get', name]).agent,
             processInfo: pane => native(['pane', 'process-info', '--pane', pane]).process_info }));
           const occupancy = count(); log({ action: 'capacity', ...occupancy });
-          const dispatched = effect(continuation?`dispatch-preflight:${continuation.token}:${continuation.capability}`:key, () => {
+          const dispatched = effect(continuation?`dispatch-preflight:${continuation.token}:${continuation.key}`:key, () => {
             const fresh = observe(), current = fresh.state.items.get(item.id);
             if (!current || current.closed || dispatchInput({...fresh,item:current,org,identity:project.identity}) !== input || reserved(current) || current.meta.hold || current.meta.held || (!continuation&&(reviewTarget ? reviewQueueRoute(config) : routeFor(current, config)) !== route)) throw Error('dispatch readiness or route changed');
             if(continuation){
@@ -369,7 +370,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
             const target = reviewTarget ? validateQueuedReview({ item: current, state: fresh.state, events: fresh.events, org, repo }) : null;
             writeFileAtomic(brief, target ? reviewQueueBrief(current) : `# ${current.title}\n\n${current.accept.join('\n')}\n\nWork from the existing item/run brief and accepted directions. Self-land OWN source and hand its immutable landed tuple/evidence to record queue-review; never start a parallel settle/lane review. Preserve STOP/HOLD, claims and native guards. Escalate judgment to ${to} through the existing native inbox.\n`, 0o600);
             return JSON.parse(cli('dispatch/dispatch.mjs', [item.id, '--repo', repo, '--org', org, '--lane', `${target ? 'review' : 'line'}-${item.id.toLowerCase()}-${current.runs.length + 1}`, '--route', route, '--brief', brief, ...(target ? ['--base', target.head] : []),'--detach']));
-          });
+          },undefined,undefined,Boolean(retryAdmission));
           // Each original detached journal reserves admission before returning.
           // The next candidate gets a fresh native count; no launch is replayed.
           if (dispatched?.state === 'complete') starts++;

@@ -112,6 +112,15 @@ native attempts still consume review and combined capacity.
 Saved owner/pinned consumers retain their original selection. A matching explicit
 source selector does not fabricate native/run authority. Unknown queue/helper
 capability holds before launch.
+An already loaded development helper keeps its immutable target/group capability
+when unrelated source files land; a global eighteen-file equality check cannot
+invalidate the in-flight request. Immutable saved bundles keep their byte fence.
+Matching source selection, actual run/controller ownership and fresh native,
+record, target/evidence and worktree guards still precede effects. Capacity
+continuations use typed original guard receipts plus positive prelaunch evidence
+and fresh admission, not words such as "unknown" in another session's occupancy
+diagnostics. Real native/identity/ownership refusals stay stopped. An unavailable
+native-launch flag is recorded as null, never defaulted to false.
 
 Every review error is recorded in the existing record inbox on its first
 occurrence, with a durable count and stable deduplication. Each real pass records

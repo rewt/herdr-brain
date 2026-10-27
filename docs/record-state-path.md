@@ -57,6 +57,16 @@ them requires a caller-specific observation/freshness contract. A cached native
 observation alone cannot authorize an effect. The line observer's Git and
 STOP/HOLD checks remain fresh before effects.
 
+The first residual correction reuses the store-supplied, source-checked state in
+the line-service notice, review boundary/error/health/result/completion commit
+callbacks. Review health previously folded the same full history three times
+inside its lock. The ownership reader also consumes the state returned by
+`loadRecord`, retaining its nanosecond cache invalidation, caller isolation and
+fresh Git/fleet/claim checks. No callback or live guard moves, and no external
+observation acquires new authority. The ownership cache control counts actual
+log opens, including descriptor/range reads, rather than assuming the loader
+must use `readFileSync`.
+
 The existing run-timing module writes a diagnostic companion,
 `record-lock.timings.jsonl`, after release. Each line reports monotonic
 `hold_ms` from successful lock-directory acquisition through removal, separate

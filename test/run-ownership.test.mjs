@@ -84,21 +84,21 @@ test('missing records give ownership readers and consumers a named refusal befor
 
 test('ownership reads reuse only the unchanged record fold and keep fresh Git fences', t => {
   const f = fixture(t), run = f.start(), file = path.join(f.org, 'events.jsonl');
-  const read = fs.readFileSync, exec = cp.execFileSync;
+  const open = fs.openSync, exec = cp.execFileSync;
   let reads = 0, probes = 0;
-  fs.readFileSync = function(name, ...args) { if (name === file) reads++; return read.call(this, name, ...args); };
+  fs.openSync = function(name, ...args) { if (name === file) reads++; return open.call(this, name, ...args); };
   cp.execFileSync = function(command, ...args) { if (command === 'git') probes++; return exec.call(this, command, ...args); };
   syncBuiltinESMExports();
   try {
     const first = readOwnedRun(f.org, run), expected = structuredClone(first), firstProbes = probes;
     first.owner.controller = 'caller mutation'; first.meta.changed = true;
     assert.deepEqual(readOwnedRun(f.org, run), expected, 'callers cannot mutate the cached fold');
-    assert.equal(reads, 1, 'unchanged record is read and folded once');
+    assert.equal(reads, 1, 'unchanged record is opened only once; snapshot and range reads share that descriptor');
     assert.equal(firstProbes, 2, 'root discovery combines path queries but still verifies canonical checkout');
     assert.equal(probes, firstProbes * 2, 'the second fence still probes Git');
     const directory = path.join(f.repo, 'nested'); fs.mkdirSync(directory);
     assert.equal(gitProject(directory).identity, gitProject(f.repo).identity, 'subdirectory discovery retains its original semantics');
-  } finally { fs.readFileSync = read; cp.execFileSync = exec; syncBuiltinESMExports(); }
+  } finally { fs.openSync = open; cp.execFileSync = exec; syncBuiltinESMExports(); }
 });
 
 test('ownership fold cache observes rewrites, claim changes, torn tails and live Git identity loss', t => {

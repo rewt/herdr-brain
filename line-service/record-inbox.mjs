@@ -3,7 +3,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { transact } from '../lib/store.mjs';
-import { fold } from '../lib/state.mjs';
 import { validateEvent,canonical } from '../messages/schema.mjs';
 import { recordMessages } from '../messages/operator-inbox.mjs';
 import { validateOperatorText } from '../messages/operator-text.mjs';
@@ -46,9 +45,9 @@ export function reviewErrorFacts(events,binding,org,rows){
 }
 export function recordLineNotice({repo,org,id,boundary,reason,scope={},first_at,audit,counts,env=process.env,kind='fyi',question,reviewError}) {
   const binding=serviceRecordBinding({repo,org,env});
-  const saved=transact(org,events=>{
+  const saved=transact(org,(events,state)=>{
     serviceRecordBinding({repo,org,env});
-    const state=fold(events),messages=recordMessages(events),prior=messages.find(e=>e.envelope.eventId===id)?.envelope;
+    const messages=recordMessages(events),prior=messages.find(e=>e.envelope.eventId===id)?.envelope;
     const refs=[];
     if(scope.run&&state.runs.has(scope.run)){const r=state.runs.get(scope.run);refs.push({orgRef:org,run:r.id,item:r.item});}
     else if(scope.item&&state.items.has(scope.item))refs.push({orgRef:org,item:scope.item});

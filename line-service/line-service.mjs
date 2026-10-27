@@ -245,6 +245,9 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         const observed = current(), evaluations = new Map(observed.events.filter(e => e.type === 'closeout.evaluated').map(e => [e.key, e]));
         const entries = readCloseoutEntries(project.identity).filter(e => {
           if (e.org !== org || e.project !== repo) return false;
+          // Retained legacy/native-held requests keep their existing owner.
+          // A code handoff is not changed input for an old refused effect.
+          if(!cutoff||e.source.seq<=cutoff.seq){timings.closeout_retained++;return false;}
           const prior = evaluations.get(e.key);
           if (prior?.completed) {timings.closeout_retained++;return false;}
           if (!prior && !fs.existsSync(e.cwd)) return false;

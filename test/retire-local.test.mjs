@@ -39,6 +39,29 @@ test('cleanup tail target seal canonicalizes receipt path aliases before classif
   assert.throws(verify,/changed/,'the ordinary reader resolves this receipt to the actual target, so the seal must include it');
 });
 
+test('cleanup tail target seal follows alias additions redirects and ambiguity like the reader',async t=>{
+  const {sealScopedRemovalInputs}=await import('../lib/retire-local.mjs');
+  for(const kind of ['unrelated-alias','alias-addition','redirect-toward','redirect-away','relative-cwd','loose-common','unresolvable']){
+    const f=fixture(t),common=path.join(f.root,'common'),lane=path.join(f.root,'lane'),other=path.join(f.root,'other'),alias=path.join(f.root,'alias');
+    for(const dir of [common,lane,other,alias])fs.mkdirSync(dir);
+    fs.symlinkSync(common,path.join(alias,'common'));fs.symlinkSync(other,path.join(alias,'moving'));
+    const row=path.join(f.occupants,'row.json'),write=data=>fs.writeFileSync(row,JSON.stringify(data));
+    const start={'unrelated-alias':{common:path.join(alias,'common'),cwd:path.join(alias,'moving'),run:'R-9'},'redirect-toward':{common:path.join(alias,'common'),cwd:path.join(alias,'moving'),run:'R-9'},
+      'redirect-away':{common:path.join(alias,'common'),cwd:path.join(alias,'moving'),run:'R-9'},'relative-cwd':{common,cwd:'lane',run:'R-9'},'loose-common':{common:'.git',run:'R-1'}}[kind];
+    if(kind==='redirect-away'){fs.unlinkSync(path.join(alias,'moving'));fs.symlinkSync(lane,path.join(alias,'moving'));}
+    if(kind==='unresolvable'){fs.symlinkSync(path.join(alias,'loop'),path.join(alias,'loop'));write({common,cwd:path.join(alias,'loop','x'),run:'R-9'});}
+    if(start)write(start);
+    const seal=()=>sealScopedRemovalInputs([f.retirement],{common,cwd:lane,runs:['R-1'],items:['ENG-1']});
+    if(kind==='unresolvable'){assert.throws(seal,/ELOOP|loop/i,'an identity the reader cannot resolve refuses');continue;}
+    const verify=seal();
+    if(kind==='unrelated-alias'){write({...start,changed:true});fs.writeFileSync(path.join(f.occupants,'new.json'),JSON.stringify({common:path.join(alias,'common'),cwd:path.join(alias,'moving','sub'),run:'R-8'}));assert.doesNotThrow(verify);continue;}
+    if(kind==='alias-addition'){fs.symlinkSync(lane,path.join(alias,'lane'));fs.writeFileSync(path.join(f.occupants,'new.json'),JSON.stringify({common:path.join(alias,'common'),cwd:path.join(alias,'lane','sub'),run:'R-9'}));}
+    if(kind==='redirect-toward'||kind==='redirect-away'){fs.unlinkSync(path.join(alias,'moving'));fs.symlinkSync(kind==='redirect-toward'?lane:other,path.join(alias,'moving'));}
+    if(kind==='relative-cwd'||kind==='loose-common')write({...start,changed:true});
+    assert.throws(verify,/changed/,kind);
+  }
+});
+
 test('an ignored receipt symlink is sealed without following it', t => {
   const f = fixture(t), link = path.join(f.occupants, 'ignored.json');
   fs.symlinkSync(f.external, link);

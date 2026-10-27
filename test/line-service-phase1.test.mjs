@@ -58,6 +58,16 @@ function fixture(t,{reported=true}={}){
 const diagnostics=f=>fs.readFileSync(path.join(f.directory,'passes.jsonl'),'utf8').trim().split('\n').map(JSON.parse);
 const diagnosticHealth=f=>diagnostics(f).findLast(r=>r.health)?.health;
 
+test('cleanup tail historical requests are independent of the review phase-zero cutoff',t=>{
+  const f=fixture(t),policy=JSON.parse(fs.readFileSync(path.join(f.cwd,'.lane.json')));policy.retirement={closeout_queue:true};fs.writeFileSync(path.join(f.cwd,'.lane.json'),JSON.stringify(policy));
+  const source=transact(f.org,events=>bindCloseoutSources({cwd:f.cwd,org:f.org,events,env:f.env,mutation:{add:[{type:'item.closed',id:'ENG-1',as:'done',completed_run:'R-1'}]}})).added;
+  publishCloseoutEvents({cwd:f.cwd,org:f.org,added:source,start:false,env:f.env});const key=source[0].closeout_targets[0].key;
+  const older=f.context().events.filter(e=>e.type!=='line-service.phase0');fs.writeFileSync(path.join(f.org,'events.jsonl'),older.map(e=>JSON.stringify(e)+'\n').join(''));
+  f.add([{type:'line-service.phase0',id:'late-review-boundary',project:f.identity,repo:f.cwd,org:f.org,source:sourceRoot,main:'main',canonical_head:f.heads[1]}]);
+  const calls=[];createLineService({repo:f.cwd,org:f.org,to:'brain-chat',env:f.env,capacity:()=>({count:0,cap:4}),recordNotice:d=>({id:d.id}),command:(_exe,args)=>{if(args[0].endsWith('supervisor/closeout.mjs')){calls.push(args);return{status:0,stdout:JSON.stringify(args[1]==='refresh'?{created:[]}:{evaluated:[{key,run:'R-1',completed:true}]}),stderr:''};}return{status:0,stdout:'{}',stderr:''};}}).pass();
+  assert.ok(calls.some(a=>a.includes('drain')&&JSON.parse(a[a.indexOf('--keys')+1]).includes(key)),'cleanup must evaluate its valid original binding despite a later review cutoff');
+});
+
 function independentProducer(f){
   fs.writeFileSync(path.join(f.cwd,'independent-source'),'separate owner');f.git(['add','.'],f.cwd);f.git(['commit','-qm','Independent source'],f.cwd);const head=f.git(['rev-parse','HEAD'],f.cwd),dispatch=path.join(f.org,'dispatch/independent.json');
   fs.writeFileSync(dispatch,JSON.stringify({token:'independent',stage:'complete',run:'R-3',item:'ENG-2',org:f.org,common:f.identity,workspace:f.cwd,base:f.heads[1]}));

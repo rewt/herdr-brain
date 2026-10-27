@@ -14,6 +14,22 @@ function fixture(t) {
   return { root, retirement, occupants, external };
 }
 
+test('cleanup tail target seal ignores unrelated receipts but detects matching additions edits and redirects',async t=>{
+  const {sealScopedRemovalInputs}=await import('../lib/retire-local.mjs');assert.equal(typeof sealScopedRemovalInputs,'function');
+  for(const kind of ['unrelated','matching','edit','redirect','malformed']){
+    const f=fixture(t),target=path.join(f.occupants,'target.json'),other=path.join(f.occupants,'other.json');
+    fs.writeFileSync(target,JSON.stringify({common:'/project/.git',run:'R-1',cwd:'/project/lane'}));
+    fs.writeFileSync(other,JSON.stringify({common:'/project/.git',run:'R-2',cwd:'/project/other'}));
+    const verify=sealScopedRemovalInputs([f.retirement],{common:'/project/.git',cwd:'/project/lane',runs:['R-1'],items:['ENG-1']});
+    if(kind==='unrelated'){fs.writeFileSync(other,JSON.stringify({common:'/project/.git',run:'R-2',cwd:'/project/other',changed:true}));fs.writeFileSync(path.join(f.occupants,'new.json'),JSON.stringify({common:'/project/.git',run:'R-3',cwd:'/project/another'}));assert.doesNotThrow(verify);continue;}
+    if(kind==='matching')fs.writeFileSync(path.join(f.occupants,'new.json'),JSON.stringify({common:'/project/.git',run:'R-9',cwd:'/project/lane'}));
+    if(kind==='edit')fs.writeFileSync(target,JSON.stringify({common:'/project/.git',run:'R-1',changed:true}));
+    if(kind==='redirect'){fs.renameSync(target,target+'.old');fs.symlinkSync(target+'.old',target);}
+    if(kind==='malformed')fs.writeFileSync(other,'{unknown');
+    assert.throws(verify,/changed|redirect|invalid|JSON|unknown/);
+  }
+});
+
 test('an ignored receipt symlink is sealed without following it', t => {
   const f = fixture(t), link = path.join(f.occupants, 'ignored.json');
   fs.symlinkSync(f.external, link);

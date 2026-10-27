@@ -98,6 +98,82 @@ function setup(t, { occupied = true, merged = false, terminal = false } = {}) {
 }
 const evaluations = f => [...events(f).filter(e => e.type === 'closeout.evaluated'),...readCloseoutObservations(f.common,f.org,events(f))].sort((a,b)=>(a.seq??a.observed_seq)-(b.seq??b.observed_seq));
 const effects = f => events(f).filter(e => e.type === 'closeout.effect').map(e => e.outcome);
+
+test('cleanup tail publishes every final report and abandonment without closing the item',t=>{
+  for(const outcome of ['done','blocked','needs_human','failed','abandoned']){
+    const f=setup(t,{merged:true});
+    const add=outcome==='abandoned'?[{type:'run.abandoned',id:'R-1'}]:[{type:'report.ingested',run:'R-1',report:{outcome,summary:'Allocation finished'},sha256:'fixture'}];
+    const rows=f.append(add),entry=readCloseoutEntries(f.common).find(e=>e.run==='R-1');
+    assert.ok(entry,`${outcome} must publish an evaluation request`);assert.equal(entry.signal,'ready');
+    assert.equal(fold(events(f)).items.get('ENG-1').closed,undefined);assert.equal(rows[0].closeout_targets[0].run,'R-1');
+  }
+});
+
+function historicalTail(t,{kind='eligible'}={}){
+  const f=setup(t,{merged:true}),raw=events(f);
+  const meta=raw.find(e=>e.type==='run.started').meta;
+  if(kind==='unknown')delete meta.agent_session_id;
+  fs.writeFileSync(f.eventFile,raw.map(e=>JSON.stringify(e)+'\n').join(''));
+  transact(f.org,()=>({add:[{type:'report.ingested',run:'R-1',report:{outcome:'blocked',summary:'old final allocation'},sha256:'old'}]}));
+  if(kind==='working'){f.state.agents[0].agent_status='working';f.save();}
+  if(kind==='dirty')fs.writeFileSync(path.join(f.lane,'unique-uncommitted'),'retain');
+  if(kind==='unlanded')f.git(['reset','--hard',`${f.head}^`]);
+  if(kind==='reused')transact(f.org,()=>({add:[{type:'run.started',id:'R-2',item:'ENG-1',workspace:f.lane,meta:{...meta}}]}));
+  if(kind==='foreign'){f.state.workspaces[0].worktree.repo_key='/foreign/common';f.save();}
+  return f;
+}
+
+test('cleanup tail creates a separate verified historical binding under the paired current policy',async t=>{
+  const f=historicalTail(t),{refreshCloseouts}=await import('../lib/closeout-consumer.mjs');assert.equal(typeof refreshCloseouts,'function');
+  selectCurrentCleanup(f);const before=fs.readFileSync(f.eventFile),result=refreshCloseouts({cwd:f.repo,org:f.org,env:f.env,retirementOptions:f.options});
+  assert.equal(result.created.length,1,JSON.stringify(result));const entry=readCloseoutEntries(f.common)[0];
+  assert.equal(entry.source.type,'cleanup.bound');assert.equal(entry.signal,'landed');assert.equal(entry.panes[0].session,'session');
+  assert.deepEqual(fs.readFileSync(f.eventFile).subarray(0,before.length),before,'original launch and report history stay immutable');
+  assert.equal(refreshCloseouts({cwd:f.repo,org:f.org,env:f.env,retirementOptions:f.options}).created.length,0,'binding is resource-deduplicated');
+  const next=f.drain({keys:[entry.key],sessionsOnly:true});assert.equal(next.evaluated[0]?.sessions_retired,true,JSON.stringify(next));
+  assert.equal(f.drain({keys:[entry.key],retrySafe:true}).evaluated[0]?.completed,true);
+});
+
+test('cleanup tail historical discovery retains working reused foreign unknown dirty and unlanded allocations',async t=>{
+  const {refreshCloseouts}=await import('../lib/closeout-consumer.mjs');assert.equal(typeof refreshCloseouts,'function');
+  for(const kind of ['working','reused','foreign','unknown','dirty','unlanded']){
+    const f=historicalTail(t,{kind}),bytes=fs.readFileSync(f.eventFile),result=refreshCloseouts({cwd:f.repo,org:f.org,env:f.env,retirementOptions:f.options});
+    assert.deepEqual(result.created,[],`${kind}: ${JSON.stringify(result)}`);assert.deepEqual(fs.readFileSync(f.eventFile),bytes);assert.deepEqual(f.read().actions,[]);
+  }
+});
+
+test('cleanup tail observes original absent allocation without inventing process exit or claim release',t=>{
+  const f=setup(t,{merged:true});f.report();const rows=f.append([{type:'item.closed',id:'ENG-1',as:'done',completed_run:'R-1'}]),entry=readCloseoutEntries(f.common).find(e=>e.signal==='landed');
+  const c=f.retirement(f.options).plan(f.lane).close[0];
+  f.append([{type:'closeout.effect',key:entry.key,identity:f.common,run:entry.run,item:entry.item,source:entry.source,effect:'original-lost-reply',outcome:{action:'agent-exit-requested',run:c.run,pane:c.pane,tab_id:c.tab_id,occupant:c.occupant,shell:c.shell}}]);
+  f.state.agents=[];f.state.panes=[];f.state.tabs=[];f.save();const before=f.read().actions.length;
+  const readback=f.drain({keys:[entry.key],retrySafe:true});assert.ok(effects(f).some(e=>e.action==='allocation-absent'),JSON.stringify(readback));
+  assert.equal(effects(f).some(e=>e.action==='exit-observed'),false);assert.equal(effects(f).some(e=>e.action==='closed'),false);
+  assert.equal(readback.evaluated[0]?.completed,false);assert.equal(fs.existsSync(f.lane),true);assert.equal(f.read().actions.length,before);
+  const finish=f.drain({keys:[entry.key],retrySafe:true});assert.equal(finish.evaluated[0]?.completed,true,JSON.stringify(finish));
+});
+
+test('cleanup tail absence readback keeps moved replaced refused and unpreserved original scopes',t=>{
+  for(const kind of ['moved','replaced','refused','unpreserved']){
+    const f=setup(t,{merged:true});f.report();f.append([{type:'item.closed',id:'ENG-1',as:'done',completed_run:'R-1'}]);const entry=readCloseoutEntries(f.common).find(e=>e.signal==='landed'),c=f.retirement(f.options).plan(f.lane).close[0];
+    f.append([{type:'closeout.effect',key:entry.key,identity:f.common,run:entry.run,item:entry.item,source:entry.source,effect:'original-intent',outcome:{action:'agent-exit-requested',run:c.run,pane:c.pane,tab_id:c.tab_id,occupant:c.occupant,shell:c.shell}}]);
+    if(kind==='moved'){f.state.agents[0].pane_id='moved:p';f.state.panes=[];f.state.tabs=[];}
+    if(kind==='replaced'){f.state.agents=[];f.state.panes[0].terminal_id='replacement';}
+    if(kind==='refused')f.append([{type:'closeout.evaluated',key:entry.key,identity:f.common,run:entry.run,item:entry.item,source:entry.source,revision:closeoutRevision(entry,events(f)),completed:false,reason:'EPERM native refusal; retain original'}]);
+    if(kind==='unpreserved'){f.state.agents=[];f.state.panes=[];f.state.tabs=[];f.git(['worktree','remove',f.lane]);}
+    f.save();const bytes=fs.readFileSync(path.join(f.common,'closeout/entries',entry.key+'.json')),before=f.read().actions.length;
+    f.drain({keys:[entry.key],retrySafe:true});assert.equal(effects(f).some(e=>e.action==='allocation-absent'),false,kind);assert.equal(f.read().actions.length,before,kind);
+    assert.deepEqual(fs.readFileSync(path.join(f.common,'closeout/entries',entry.key+'.json')),bytes);
+  }
+});
+
+test('cleanup tail fair serial batches continue independent targets and put attempted failures last',()=>{
+  const sessions=Array.from({length:5},(_,n)=>({key:`s${n}`,signal:'ready',source:{seq:n+1},panes:[{pane:`p${n}`}]})),physical={key:'landed',signal:'landed',source:{seq:10},panes:[]},bookkeeping={key:'book',signal:'ready',source:{seq:11},panes:[]};
+  const result=scheduleLineCloseouts([...sessions,bookkeeping,physical],[],{batch:true,attempts:{s0:2,s1:1}});
+  assert.equal(result.length,7);assert.ok(result.findIndex(x=>x.entry.key==='s0')>result.findIndex(x=>x.entry.key==='s1'));
+  assert.ok(result.findIndex(x=>x.entry.key==='landed')<result.findIndex(x=>x.entry.key==='book'));
+  assert.equal(new Set(result.map(x=>x.entry.key)).size,7);
+});
 function selectCurrentCleanup(f) {
   const directory = path.join(f.org, 'line-service', createHash('sha256').update(JSON.stringify(f.common)).digest('hex').slice(0, 20));
   fs.mkdirSync(directory, { recursive: true });

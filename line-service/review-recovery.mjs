@@ -15,7 +15,7 @@ import {identityRootAt} from '../messages/journal.mjs';
 import {invokeHerdr} from '../supervisor/herdr-edge.mjs';
 import {acquireLock} from '../lanes/promotion-lock.mjs';
 import {protectRecordMutation} from '../lib/record-guard.mjs';
-import {claimedCommitTokens} from '../settle/review-range.mjs';
+import {claimedCommitTokens,declaredSourceRanges} from '../settle/review-range.mjs';
 import {queueConsumer,queueReviewMutation} from './review-queue.mjs';
 import {lineDirectory} from './cutoff.mjs';
 import {reviewDigest as hash,reviewPlain,reviewResolution} from './review-resolutions.mjs';
@@ -71,14 +71,18 @@ export function recoverInactiveReview({repo,org,runId,head,base,resolution,decis
   try{
     guard();
     try{git(repo,['merge-base','--is-ancestor',head,sourceHead]);}catch{throw Error('requested actual source is not landed; no backfill');}
-    if(!/^[a-f0-9]{40}(?:[a-f0-9]{24})?$/.test(head??'')||head===base||!claimedCommitTokens(run.report.artifacts??[]).some(token=>head.startsWith(token)))throw Error('no positively claimed committed source tuple; admission/packet/no-code head is insufficient');
+    if(![head,base].every(value=>/^[a-f0-9]{40}(?:[a-f0-9]{24})?$/.test(value??''))||head===base||!claimedCommitTokens(run.report.artifacts??[]).some(token=>head.startsWith(token)))throw Error('no positively claimed committed source tuple; admission/packet/no-code head is insufficient');
+    for(const range of declaredSourceRanges(run.report.artifacts??[]).filter(r=>head.startsWith(r.head)))if(git(repo,['rev-parse',`${range.head}^{commit}`])!==head||git(repo,['rev-parse',`${range.base}^{commit}`])!==base)throw Error('declared source/base artifact differs from requested immutable tuple');
     git(repo,['merge-base','--is-ancestor',base,head]);const diff=git(repo,['diff','--no-ext-diff','--no-textconv',base,head]);if(!diff)throw Error('requested source has an empty/no-code delta');
     const evidence=path.resolve(org,run.report.file??'');if(evidence!==inside(input.evidence)||hash(reviewPlain(evidence))!==run.report.sha256)throw Error('immutable source report/evidence tuple changed');
     const start=initialEvents.find(e=>e.type==='run.started'&&e.id===runId),dispatch=start?.meta?.dispatch_journal;
     if(!dispatch?.startsWith(path.join(org,'dispatch')+path.sep))throw Error('original source dispatch attribution is missing');
     const saved=JSON.parse(reviewPlain(dispatch));if(saved.run!==runId||saved.item!==item.id||saved.common!==project.identity||saved.org!==org||saved.token!==start.meta.dispatch_attempt||saved.workspace!==run.workspace)throw Error('original source claim/project attribution changed');
+    if(saved.base===head||saved.sourceSelection?.head===head&&saved.sourceSelection?.root&&gitProject(saved.sourceSelection.root).identity===project.identity)throw Error('admission head is not a delivered changed-source review target');
+    const attempts=input.attempts.map(inside).map(original=>({original,bytes:reviewPlain(original)}));
+    for(const attempt of attempts){let prior;try{prior=JSON.parse(attempt.bytes);}catch{continue;}if(prior.run===runId&&(prior.head===head||prior.deliveryRange?.head===head)&&prior.deliveryRange&&(prior.deliveryRange.head!==head||prior.deliveryRange.base!==base))throw Error('archived settle deliveryRange differs from requested immutable source tuple');}
     const target={head,base,reportHash:run.report.sha256,evidence,diff_sha256:hash(diff),dispatch,scope:{base,commits:git(repo,['rev-list','--reverse',`${base}..${head}`]).split('\n').filter(Boolean),claims:[head],unresolved:[],deferred:false}};
-    const files=[...new Set([resolution,evidence,inside(input.inactive.evidence),...input.attempts.map(inside)])].map(file=>({original:file,bytes:reviewPlain(file)}));
+    const files=[...new Map([...new Set([resolution,evidence,inside(input.inactive.evidence)])].map(file=>[file,{original:file,bytes:reviewPlain(file)}]).concat(attempts.map(f=>[f.original,f]))).values()];
     const known=initialEvents.find(e=>(e.type==='change.reviewed'&&e.item===item.id&&e.head===head)||(e.type==='review.verdict'&&e.run===runId&&(e.reviewed_head??e.head)===head));
     const verdict=known?.verdict??known?.review?.verdict??files.map(f=>completedVerdict(f.bytes,head)).find(Boolean);if(verdict)return{result:'review_preserved',item:item.id,head,verdict};
     const prior=reviewResolution({events:initialEvents,org,item:item.id,head});if(prior){if(prior.event.id!==id)throw Error('one inactive replacement budget already spent');return{result:'review_queued',review_item:prior.event.review_item,source_item:item.id,head,existing:true};}

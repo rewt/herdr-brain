@@ -24,6 +24,7 @@ import {recordOwnLanding} from '../lib/landing-receipt.mjs';
 import {noticeLock} from '../supervisor/notice-lock.mjs';
 import {readReport} from '../lib/report.mjs';
 import {recoverInactiveReview} from '../line-service/review-recovery.mjs';
+import {claimedCommitTokens} from '../settle/review-range.mjs';
 
 const hash=b=>createHash('sha256').update(b).digest('hex');
 function fixture(t,{reported=true}={}){
@@ -88,6 +89,25 @@ test('permanent recovery archive guards block only their exact change and cannot
   const found=discoverChanges({...c,pendingOnly:true});assert.ok(found.changes.some(x=>x.target.head===f.heads[1]));
   const target=found.changes.find(x=>x.target.head===f.heads[1]).target;assert.equal(reviewAttempt(c.item,{...c,target}),null);
   assert.throws(()=>reviewAttempt(c.item,{...c,target:event.target}),/manifest changed/);
+});
+
+function sourceArtifact(f,artifact){
+  const text=`---\nrun: R-1\noutcome: done\nsummary: Actual committed source.\nartifacts:\n  - "${artifact}"\n---\n`,events=f.context().events,event=events.find(e=>e.type==='report.ingested'&&e.run==='R-1');
+  fs.writeFileSync(f.file,text);event.sha256=hash(text);event.report.artifacts=[artifact];fs.writeFileSync(path.join(f.org,'events.jsonl'),events.map(e=>JSON.stringify(e)+'\n').join(''));
+}
+test('permanent recovery composes the actual source HEAD base lane artifact with its archived settle deliveryRange',t=>{
+  const f=recoveryFixture(t),head=f.heads[0];sourceArtifact(f,`source: ${head}; base: ${f.base}; lane: line-eng-226-1`);
+  fs.writeFileSync(f.attempt,JSON.stringify({run:'R-1',item:'ENG-1',head,mainHead:f.base,deliveryRange:{head,base:f.base},stage:'reviewing'}));
+  assert.deepEqual(claimedCommitTokens(f.context().run.report.artifacts),[head]);
+  const result=recoverInactiveReview(f.args);assert.equal(result.result,'review_queued');const q=f.context().state.items.get(result.review_item);
+  assert.equal(q.meta.review_target.head,head);assert.equal(q.meta.review_target.base,f.base);assert.equal(q.meta.review_target.reportHash,hash(fs.readFileSync(f.file)));
+});
+test('permanent recovery source composition never promotes packet admission base-only or conflicting range context into a source claim',t=>{
+  const head='a'.repeat(40),base='b'.repeat(40);assert.deepEqual(claimedCommitTokens([`packet: ${head}; base: ${base}`,`admission: ${head}`,`base: ${base}`,`source selection: ${head}`]),[]);
+  const f=recoveryFixture(t);sourceArtifact(f,`source: ${f.heads[0]}; base: ${f.heads[1]}; lane: source`);assert.throws(()=>recoverInactiveReview(f.args),/declared source\/base/);
+  sourceArtifact(f,`source: ${f.heads[0]}; base: ${f.base}; lane: source`);fs.writeFileSync(f.attempt,JSON.stringify({run:'R-1',item:'ENG-1',head:f.heads[0],deliveryRange:{head:f.heads[0],base:f.heads[1]}}));assert.throws(()=>recoverInactiveReview(f.args),/deliveryRange/);
+  fs.writeFileSync(f.attempt,JSON.stringify({run:'R-1',head:f.heads[0],stage:'reviewing'}));const dispatch=path.join(f.org,'dispatch/source.json'),saved=JSON.parse(fs.readFileSync(dispatch));saved.base=f.heads[0];fs.writeFileSync(dispatch,JSON.stringify(saved));
+  assert.throws(()=>recoverInactiveReview(f.args),/admission/);assert.equal(f.context().events.some(e=>e.type==='review.recovery-intent'),false);
 });
 
 test('phase1 owes every landed build commit after the boundary even after item close and source worktree cleanup',t=>{

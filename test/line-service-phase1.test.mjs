@@ -217,7 +217,8 @@ test('phase1 cleanup identity survives unrelated main landings and competing kic
 });
 
 test('phase1 pending pre-effect closeout source handoff continues its original keys instead of becoming complete',t=>{
-  const f=fixture(t),added=transact(f.org,events=>bindCloseoutSources({cwd:f.cwd,org:f.org,events,mutation:{add:[{type:'item.closed',id:'ENG-1',as:'done',completed_run:'R-1'}]}})).added;
+  const f=fixture(t),policy=JSON.parse(fs.readFileSync(path.join(f.cwd,'.lane.json'),'utf8'));policy.retirement={closeout_queue:true};fs.writeFileSync(path.join(f.cwd,'.lane.json'),JSON.stringify(policy));
+  const added=transact(f.org,events=>bindCloseoutSources({cwd:f.cwd,org:f.org,events,env:f.env,mutation:{add:[{type:'item.closed',id:'ENG-1',as:'done',completed_run:'R-1'}]}})).added;
   publishCloseoutEvents({cwd:f.cwd,org:f.org,added,start:false,env:f.env});
   const key=added[0].closeout_targets.find(t=>t.signal==='landed').key,calls=[];
   const service=createLineService({repo:f.cwd,org:f.org,to:'brain-chat',env:f.env,capacity:()=>({count:0,cap:4}),recordNotice:data=>({id:data.id,state:'record-only'}),command:(_exe,args)=>{

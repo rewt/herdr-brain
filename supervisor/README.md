@@ -666,11 +666,12 @@ FIFO applies within each target and across targets for the same explicit
 paths; `project` is the Git common directory. Watch and record-bound promotion
 supply these from their actual run and namespace. IDs and prose never supply
 ordering authority. Conflicting known correlation or an explicitly changed Herdr
-transport for the same ID refuses. A missing correlation on either side is a
-conservative compatibility barrier: it waits for earlier notices, and newer
-notices wait for it. Saved callers adopt existing metadata without rewriting it;
-new callers cannot retroactively make old notices independent. Other legacy
-producers keep this barrier until they provide authoritative correlation.
+transport for the same ID refuses. Pending legacy notices without correlation
+retain recipient and live-alias FIFO; they do not hold unrelated recipients.
+Same-run cross-recipient order uses explicit canonical correlation only, never
+run numbers inferred from IDs or prose. Saved callers adopt existing metadata
+without rewriting it. Producers requiring cross-recipient same-run order must
+supply authoritative correlation when enqueuing.
 
 Live aliases resolving to the same native occupant share ordering. The same
 global drain lock serializes input even across processes, with fresh alias and
@@ -679,6 +680,8 @@ or lost/negative/invalid acknowledgement leaves `sending` uncertain, with its
 attempted occupant durably recorded. It blocks its target, actual aliases and
 same-run successors; proven independent runs may progress. Legacy ambiguous
 retries without definite no-input or inspected recovery remain uncertain too.
+An uncertain attempt without a saved occupant remains a global barrier until
+its actual outcome is inspected; missing run metadata never clears that hold.
 Acknowledged notices are not replayed. No prompt acknowledgement proves model
 consumption or exactly-once model effects.
 The helper exits 0 for acknowledged delivery or a handled policy result, 3 when pending with an owner, and

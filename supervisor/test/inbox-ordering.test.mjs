@@ -98,17 +98,45 @@ test('equal run numbers in different actual record scopes remain independent', a
   assert.equal((await f.drain('b')).delivered, true); assert.equal(f.state('a'), 'pending');
 });
 
-for (const legacy of ['first', 'second']) test(`an uncorrelated legacy ${legacy} entry is a compatibility barrier`, async t => {
+for (const legacy of ['first', 'second', 'both']) test(`uncorrelated legacy ${legacy} entries retain recipient FIFO without holding independent recipients`, async t => {
   const f = fixture(t); f.write('modes', { A: 'typed' });
-  f.add('a', 'A', legacy === 'first' ? undefined : 'R-1');
-  f.add('b', 'B', legacy === 'second' ? undefined : 'R-2');
-  assert.equal((await f.drain('b', { waitSeconds: .2 })).delivered, false);
-  assert.deepEqual(f.sent(), []);
+  f.add('a', 'A', legacy !== 'second' ? undefined : 'R-1');
+  f.add('a-next', 'A', 'R-3');
+  f.add('alias', 'alias', 'R-4');
+  f.add('b', 'B', legacy !== 'first' ? undefined : 'R-2');
+  assert.equal((await f.drain('b')).delivered, true);
+  assert.deepEqual(readInbox(f.inbox).map(e => e.state), ['pending', 'pending', 'pending', 'sent']);
+  assert.deepEqual(f.sent().map(args => args[2]), ['B']);
   // A new caller adopting an old ID must not retrospectively add metadata.
-  if (legacy === 'first') f.add('a', 'A', 'R-1');
-  assert.equal(Boolean(readInbox(f.inbox)[legacy === 'first' ? 0 : 1].correlation), false);
+  if (legacy !== 'second') f.add('a', 'A', 'R-1');
+  assert.equal(Boolean(readInbox(f.inbox)[legacy === 'second' ? 3 : 0].correlation), false);
   f.write('modes', {}); await f.drain();
+  assert.deepEqual(f.sent().map(args => args[2]), ['B', 'A', 'A', 'alias']);
+});
+
+test('a legacy ambiguous attempt without an occupant holds all recipients until inspected recovery', async t => {
+  const f = fixture(t); f.add('legacy', 'A'); f.add('b', 'B', 'R-2');
+  fs.appendFileSync(f.inbox, JSON.stringify({ type: 'sending', id: 'legacy' }) + '\n');
+  fs.appendFileSync(f.inbox, JSON.stringify({ type: 'retry', id: 'legacy', may_have_delivered: true }) + '\n');
+  assert.equal((await f.drain('b', { waitSeconds: .15 })).delivered, false);
+  assert.equal(f.state('legacy'), 'uncertain'); assert.deepEqual(f.sent(), []);
+  assert.equal(fs.readFileSync(f.inbox, 'utf8').trim().split('\n').map(JSON.parse).some(e => e.type === 'sent'), false);
+  resolveNotice(f.inbox, 'legacy', false);
+  await f.drain();
   assert.deepEqual(f.sent().map(args => args[2]), ['A', 'B']);
+});
+
+test('a legacy ambiguous attempt with a saved occupant holds its recipient and aliases without replay', async t => {
+  const f = fixture(t); f.add('legacy', 'A'); f.add('next', 'A', 'R-2');
+  f.add('alias', 'alias', 'R-3'); f.add('b', 'B', 'R-4');
+  fs.appendFileSync(f.inbox, JSON.stringify({ type: 'sending', id: 'legacy',
+    occupant: JSON.stringify(['fake:A', 'terminal-A', 'session-A', 'fake', f.root]) }) + '\n');
+  assert.equal((await f.drain('b')).delivered, true);
+  assert.deepEqual(readInbox(f.inbox).map(e => e.state), ['uncertain', 'pending', 'pending', 'sent']);
+  assert.deepEqual(f.sent().map(args => args[2]), ['B']);
+  f.add('legacy', 'A', 'R-99');
+  assert.equal(readInbox(f.inbox)[0].correlation, null);
+  assert.equal(f.state('legacy'), 'uncertain');
 });
 
 test('live aliases share FIFO and concurrent drainers serialize native input to their actual occupant', async t => {

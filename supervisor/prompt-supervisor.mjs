@@ -213,10 +213,11 @@ const runKey = entry => /^R-\d+$/.test(entry.correlation?.run ?? '') &&
   [entry.correlation?.project, entry.correlation?.record].every(v => typeof v === 'string' && path.isAbsolute(v))
   ? JSON.stringify([entry.correlation.project, entry.correlation.record, entry.correlation.run]) : null;
 function dependent(prior, entry, current, lookup) {
-  // Unknown legacy order is a barrier in BOTH directions. In particular, an
-  // old ambiguous attempt without a saved occupant cannot be bypassed safely.
-  return !runKey(prior) || !runKey(entry) ||
-    prior.to === entry.to || runKey(prior) === runKey(entry) ||
+  // Missing run metadata does not make a pending legacy callback a global
+  // head. Keep its recipient/alias FIFO without inventing a run from prose or
+  // IDs. An ambiguous attempt without a saved occupant still holds globally.
+  const priorRun = runKey(prior), currentRun = runKey(entry);
+  return prior.to === entry.to || Boolean(priorRun && priorRun === currentRun) ||
     prior.state === 'uncertain' && !occupantIdentity(prior.attempt_occupant) ||
     Boolean(current && (sameOccupant(lookup(prior).occupant, current) ||
       prior.state === 'uncertain' && sameOccupant(prior.attempt_occupant, current)));

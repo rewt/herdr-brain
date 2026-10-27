@@ -51,7 +51,7 @@ function source({ state, events, org, repo, identity, runId, head, base,env=proc
   queueConsumer({ run,env });
   const discovered=discoverChanges({state,events,org,repo,identity});
   const choices=discovered.changes.filter(c=>c.run.id===runId&&(!head||c.target.head===head));
-  if(choices.length!==1)throw Error(`landed change target missing/ambiguous: ${discovered.holds.filter(h=>h.run===runId).map(h=>h.reason).join('; ')}`);
+  if(choices.length!==1)throw Error(`landed change target missing/ambiguous: ${discovered.holds.filter(h=>!h.run||h.run===runId).map(h=>h.reason).join('; ')||'source is not actually landed after the recorded boundary; historical, unlanded or absent source is not a new target'}`);
   const {target,cutoff,authorization}=choices[0];
   if(base&&base!==target.base)throw Error('review base differs from captured landed change');
   try { git(repo, ['merge-base', '--is-ancestor', target.head, 'HEAD']); }

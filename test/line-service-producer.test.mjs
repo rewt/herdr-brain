@@ -76,10 +76,11 @@ test('producer review creation and dispatch require actual post-cutoff landing w
   assert.ok(g.calls.some(a=>a[1]==='ENG-3'));assert.equal(g.events().some(e=>e.role==='reviewer'),false);
 });
 
-test('producer old reported and manual review history creates no review debt or native notice',t=>{
+test('producer old reported source skips cheaply while an unresolved manual review records one error without a native notice',t=>{
   const f=fixture(t,{before:[{type:'item.added',id:'REV-90',role:'reviewer',title:'Old manual review',meta:{}}]});f.build({historical:true});
   const before=f.events().length;f.service().pass();f.service().pass();
-  assert.equal(f.calls.length,0);assert.equal(f.messages().length,0);assert.ok(f.events().slice(before).every(e=>e.type==='line-service.review-health'&&e.owed===0));
+  assert.equal(f.calls.length,0);assert.equal(f.messages().length,1);assert.match(f.messages()[0].envelope.payload.service_notice.reason,/legacy\/manual.*UNKNOWN/);
+  assert.ok(f.events().slice(before).filter(e=>e.type==='line-service.review-health').every(e=>e.owed===0));assert.equal(f.events().filter(e=>e.type==='line-service.review-error').length,2);
   assert.equal(fs.existsSync(inboxPath({org:f.org})),false);
 });
 

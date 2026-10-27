@@ -543,6 +543,99 @@ test('idle original reviewer resumes one prompt only after exact session and pro
   assert.equal(JSON.parse(fs.readFileSync(f.journal)).run,'R-886');assert.equal(f.context().events.some(e=>e.type==='review.recovery-completed'),false);
 });
 
+function interruptedReviewDelivery(t,stage){
+  const f=recordedPartialFixture(t);f.recover();f.d.fail(stage==='watch'?'watch':'screen');
+  const dispatch=(args=[],env={})=>f.d.dispatch(['--retry',f.journal,...args],{env:{...f.d.env,HERDR_BRAIN_ROOT:fs.realpathSync(sourceRoot),...env}});
+  const first=dispatch(['--continue-review']);assert.equal(first.status,1,first.stderr);assert.equal(promptCalls(f.d).length,0);
+  fs.unlinkSync(path.join(f.d.root,'fail'));
+  const saved=JSON.parse(fs.readFileSync(f.journal));assert.equal(saved.stage,stage);assert.equal(saved.native_launch_attempted,true);assert.ok(saved.launchProcess?.identity);
+  const events=f.context().events,claims=events.filter(e=>e.type==='run.claimed'),verdict=events.find(e=>e.type==='change.reviewed');
+  const retained=()=>{
+    const current=JSON.parse(fs.readFileSync(f.journal)),c=f.context();
+    for(const key of ['token','run','workspace','reviewQueue','reviewQueueBrief','ownership','worker','launchProcess','to','routeConfig'])assert.deepEqual(current[key],saved[key],key);
+    if(saved.watcher)assert.deepEqual(current.watcher,saved.watcher);
+    assert.deepEqual(c.events.filter(e=>e.type==='run.claimed'),claims);assert.deepEqual(c.events.find(e=>e.seq===verdict.seq),verdict);
+    assert.deepEqual(c.state.items.get('REV-4').runs,['R-886']);assert.equal([...c.state.items.values()].filter(i=>i.role==='reviewer').length,2);
+    assert.equal(c.events.some(e=>e.type==='review.recovery-completed'),false);assert.equal(f.d.calls().filter(c=>c.type==='lane'&&c.a[0]==='dispatch').length,1);
+  };
+  return{...f,dispatch,saved,retained};
+}
+
+// Change the observation, never the saved launch identity. This models PID
+// reuse and an unavailable native source on both supported process sources.
+function continuationNativeFault(f,kind){
+  const hook=path.join(f.d.root,'continuity-fault.mjs');
+  fs.writeFileSync(hook,`import fs from 'node:fs';
+import cp from 'node:child_process';
+import {syncBuiltinESMExports} from 'node:module';
+if(process.argv[1]===${JSON.stringify(path.join(sourceRoot,'dispatch/dispatch.mjs'))}){
+ const pid=${f.saved.launchProcess.pid},kind=${JSON.stringify(kind)},read=fs.readFileSync,exec=cp.spawnSync;
+ fs.readFileSync=function(file,...args){
+  if(String(file)==='/proc/'+pid+'/stat'){
+   if(kind==='unknown')throw Error('injected native source unavailable');
+   const text=String(read.call(this,file,...args)),start=text.lastIndexOf(') ')+2,fields=text.slice(start).trim().split(/\\s+/);fields[19]=String(Number(fields[19])+1);return text.slice(0,start)+fields.join(' ')+'\\n';
+  }
+  return read.call(this,file,...args);
+ };
+ cp.spawnSync=function(file,args,options){
+  if(String(file).includes('/process-source-')&&args.at(-1)===String(pid)){
+   if(kind==='unknown')return{status:1,stdout:'',stderr:'injected native source unavailable'};
+   const r=exec.call(this,file,args,options);if(r.status===0)r.stdout=r.stdout.trim().split('\\n').map(line=>{const row=JSON.parse(line);row.identity=row.identity.replace(/\\d+$/,n=>String(Number(n)+1));return JSON.stringify(row);}).join('\\n')+'\\n';return r;
+  }
+  return exec.call(this,file,args,options);
+ };syncBuiltinESMExports();
+}`);
+  return{NODE_OPTIONS:`${f.d.env.NODE_OPTIONS??''} --import=${hook}`};
+}
+
+for(const stage of ['watch','prompt'])for(const kind of ['working','birth','unknown'])test(`continuation retry from ${stage} retains the original attempt when native is ${kind}`,t=>{
+  const f=interruptedReviewDelivery(t,stage),workers=path.join(f.d.root,'workers');let env={};
+  if(kind==='working'){const agents=JSON.parse(fs.readFileSync(workers));agents[f.saved.worker.agentName].agent_status='working';fs.writeFileSync(workers,JSON.stringify(agents));}
+  else env=continuationNativeFault(f,kind);
+  const watches=f.d.calls().filter(c=>c.type==='watch').length,result=f.dispatch([],env);
+  assert.equal(result.status,1,result.stderr);assert.match(result.stderr,kind==='unknown'?/unavailable/:/changed or is active/);
+  assert.equal(promptCalls(f.d).length,0);assert.equal(f.d.calls().filter(c=>c.type==='watch').length,watches);f.retained();
+  const current=JSON.parse(fs.readFileSync(f.journal));assert.deepEqual(current.reviewContinuations,f.saved.reviewContinuations);assert.deepEqual(current.watcher,f.saved.watcher);
+});
+
+for(const stage of ['watch','prompt'])test(`continuation retry from ${stage} delivers one original prompt to a qualified idle worker`,t=>{
+  const f=interruptedReviewDelivery(t,stage),result=f.dispatch();assert.equal(result.status,0,result.stderr);f.retained();
+  const saved=JSON.parse(fs.readFileSync(f.journal));assert.equal(saved.stage,'complete');assert.equal(promptCalls(f.d).length,1);assert.deepEqual(saved.reviewContinuations,f.saved.reviewContinuations);
+  assert.equal(f.d.calls().filter(c=>c.type==='watch').length,stage==='watch'?2:1);assert.equal(f.dispatch().status,1);assert.equal(f.dispatch(['--resend']).status,1);assert.equal(promptCalls(f.d).length,1);
+});
+
+test('continuation retry of an interrupted bound-unprompted proof keeps its watcher and refuses recovery overrides',t=>{
+  const f=interruptedReviewDelivery(t,'prompt'),agents=Object.values(JSON.parse(fs.readFileSync(path.join(f.d.root,'workers')))),original=agents[0];
+  const result=f.recover({call:(_exe,args)=>JSON.stringify({result:args[1]==='list'?{agents}:{agent:original}}),readProcess:()=>({ok:true,value:f.saved.launchProcess})});
+  const proof=f.context().events.find(e=>e.seq===result.proof);assert.equal(proof.kind,'bound-unprompted-original');
+  f.d.fail('screen');const interrupted=f.dispatch(['--continue-review']);assert.equal(interrupted.status,1,interrupted.stderr);fs.unlinkSync(path.join(f.d.root,'fail'));
+  const before=JSON.parse(fs.readFileSync(f.journal));assert.equal(before.stage,'prompt');assert.equal(before.reviewContinuations.length,2);assert.equal(promptCalls(f.d).length,0);
+  for(const flags of [['--resend'],['--accept-delivered'],['--fresh'],['--adopt',original.name]]){
+    const retry=f.dispatch(flags);assert.equal(retry.status,1);assert.match(retry.stderr,/cannot change launch or delivery recovery/);assert.equal(promptCalls(f.d).length,0);
+  }
+  const workers=path.join(f.d.root,'workers'),values=JSON.parse(fs.readFileSync(workers));values[original.name].agent_status='working';fs.writeFileSync(workers,JSON.stringify(values));
+  assert.equal(f.dispatch().status,1);assert.equal(promptCalls(f.d).length,0);values[original.name].agent_status='idle';fs.writeFileSync(workers,JSON.stringify(values));
+  const resumed=f.dispatch();assert.equal(resumed.status,0,resumed.stderr);f.retained();assert.equal(promptCalls(f.d).length,1);
+  assert.deepEqual(JSON.parse(fs.readFileSync(f.journal)).reviewContinuations,before.reviewContinuations);assert.equal(f.context().events.filter(e=>e.type==='review.original-continuation').length,2);
+});
+
+test('continuation retry rechecks native status at delivery after the hook screen observation',t=>{
+  const f=interruptedReviewDelivery(t,'prompt'),herdr=path.join(f.d.root,'bin/herdr');
+  fs.writeFileSync(herdr,fs.readFileSync(herdr,'utf8').replace("if(a[0]==='pane' && a[1]==='read') {","if(a[0]==='pane' && a[1]==='read') { for(const w of Object.values(workers))w.agent_status='working';save();"));
+  const result=f.dispatch();assert.equal(result.status,1);assert.match(result.stderr,/changed or is active before prompt/);assert.equal(promptCalls(f.d).length,0);f.retained();
+  assert.equal(JSON.parse(fs.readFileSync(f.journal)).sessionBinding,undefined);
+});
+
+test('continuation retry never resends an uncertain original prompt',t=>{
+  const f=interruptedReviewDelivery(t,'prompt');f.d.fail('prompt-lost-reply');
+  const result=f.dispatch();assert.equal(result.status,1);assert.match(result.stderr,/lost prompt reply/);assert.equal(promptCalls(f.d).length,1);
+  const saved=JSON.parse(fs.readFileSync(f.journal));assert.equal(saved.stage,'prompting');fs.unlinkSync(path.join(f.d.root,'fail'));
+  for(const flags of [[],['--resend'],['--accept-delivered'],['--continue-review']]){
+    const retry=f.dispatch(flags);assert.equal(retry.status,1);assert.match(retry.stderr,/UNKNOWN or progressed/);assert.equal(promptCalls(f.d).length,1);
+  }
+  assert.deepEqual(JSON.parse(fs.readFileSync(f.journal)),saved);f.retained();
+});
+
 test('original worker continuation refuses UNKNOWN native flags changed claim reports STOP and overlapping captures',t=>{
   for(const kind of ['true','unknown','claim','report','STOP','overlap']){
     const f=recordedPartialFixture(t);

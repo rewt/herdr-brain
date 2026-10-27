@@ -60,10 +60,21 @@ let preflight;
 let reviewContinuation;
 function originalReviewContinuation(saved){
   const events=loadEvents(saved.org).events,proof=originalPrestartProof({events,org:saved.org,common:saved.common,journal,job:saved,requestHash:reviewDigest(reviewPlain(journal))});
-  const zero=proof?.kind==='typed-pre-native-worker-barrier'&&saved.stage==='worker'&&saved.native_launch_attempted===false&&!saved.worker&&!saved.launchProcess&&!saved.sessionBinding;
-  const idle=proof?.kind==='bound-unprompted-original'&&['watch','prompt'].includes(saved.stage)&&saved.native_launch_attempted===true&&saved.worker&&!saved.sessionBinding;
-  if(proof?.type!=='review.original-continuation'||(!zero&&!idle)||saved.release?.root!==bundleRelease().root||saved.reviewContinuations?.some(c=>c.original_prestart_seq===proof.seq))throw Error('original review continuation is UNKNOWN, progressed or already consumed');
+  if(proof?.type!=='review.original-continuation'){
+    if(opt['continue-review']||saved.reviewContinuations?.length)throw Error('original review continuation proof is UNKNOWN');
+    return null;
+  }
+  const consumed=saved.reviewContinuations?.some(c=>c.original_prestart_seq===proof.seq&&c.request_sha256===proof.request_sha256);
+  const zero=!consumed&&proof.kind==='typed-pre-native-worker-barrier'&&saved.stage==='worker'&&saved.native_launch_attempted===false&&!saved.worker&&!saved.launchProcess&&!saved.sessionBinding;
+  const idle=(consumed||proof.kind==='bound-unprompted-original')&&['watch','prompt'].includes(saved.stage)&&saved.native_launch_attempted===true&&saved.worker?.agentSessionId&&saved.launchProcess?.identity&&!saved.sessionBinding;
+  if((!zero&&!idle)||saved.release?.root!==bundleRelease().root)throw Error('original review continuation is UNKNOWN or progressed; retain the original attempt');
   return proof;
+}
+function checkReviewContinuationNative(){
+  if(!reviewContinuation)return;
+  if(!job.worker?.agentSessionId||!job.launchProcess?.identity)throw Error('original unprompted native continuity is UNKNOWN');
+  const native=observeNative();
+  if(!['idle','done'].includes(native.status)||native.session!==job.worker.agentSessionId||native.process.pid!==job.launchProcess.pid||native.process.identity!==job.launchProcess.identity)throw Error('original unprompted native process/session changed or is active before prompt');
 }
 const atomic = (file, value) => {
   const temp = `${file}.${process.pid}.tmp`;
@@ -216,7 +227,7 @@ function observeNative() {
     const checked = readNative(after);
     if (checked.pid !== native.pid || checked.identity !== native.identity) throw Error('native process changed during observation');
   }
-  return { process: native, session: after.agent_session?.value };
+  return { process: native, session: after.agent_session?.value, status: after.agent_status };
 }
 function captureLaunchProcess() {
   // Pin once alongside the original worker identity, before its receipt and
@@ -297,7 +308,6 @@ async function main() {
     return;
   }
   if (opt.retry) {
-    if(opt['continue-review']&&(opt.detach||opt['continue-preflight']||opt.adopt||opt.fresh||opt.resend||opt['accept-delivered']||opt['recover-run']))throw Error('original review continuation cannot change launch or delivery recovery');
     if (positionals.length || ['lane', 'route', 'brief', 'report', 'reuse', 'base', 'extra', 'awaited', 'awaited-step', 'unblocks'].some((key) => opt[key] !== undefined)) {
       throw new Error('--retry uses the saved request; do not supply new work flags');
     }
@@ -306,7 +316,10 @@ async function main() {
     const saved = JSON.parse(fs.readFileSync(journal, 'utf8'));
     if (saved.org !== fs.realpathSync(opt.org)) throw new Error('retry belongs to a different record');
     if(resolvedNotStarted({events:loadEvents(saved.org).events,org:saved.org,common:saved.common,journal}))throw Error('original request archived NOT STARTED; never retry it; only the existing line may use its changed input');
-    if(opt['continue-review'])reviewContinuation=originalReviewContinuation(saved);
+    // A consumed proof still governs delivery after interruption. The saved
+    // request and immutable archive, rather than an optional flag, select it.
+    if(saved.reviewQueue||saved.reviewContinuations?.length||opt['continue-review'])reviewContinuation=originalReviewContinuation(saved);
+    if(reviewContinuation&&(opt.detach||opt['continue-preflight']||opt.adopt||opt.fresh||opt.resend||opt['accept-delivered']||opt['recover-run']||opt['from-run']))throw Error('original review continuation cannot change launch or delivery recovery');
     if(opt['continue-preflight']){
       preflight=preflightContinuation({journal,repo:saved.repo,org:saved.org,common:saved.common,root:bundleRelease().root,events:loadEvents(saved.org).events});
       if(!preflight)throw Error('original preflight has no positive original prelaunch continuation; retain unknown/native/foreign/spent request');
@@ -450,11 +463,10 @@ async function main() {
     checkStop();const fresh=originalReviewContinuation(job);
     if(fresh.seq!==reviewContinuation.seq)throw Error('original continuation proof changed');
     if(git(['status','--porcelain=v1'],job.workspace))throw Error('original review continuation worktree is dirty');
-    if(fresh.kind==='bound-unprompted-original'){
-      const agent=liveWorker(job.worker),native=observeNative();
-      if(!['idle','done'].includes(agent.agent_status)||native.session!==job.worker.agentSessionId||native.process.pid!==job.launchProcess.pid||native.process.identity!==job.launchProcess.identity)throw Error('original unprompted native process/session changed or is active');
+    if(job.worker)checkReviewContinuationNative();
+    if(!job.reviewContinuations?.some(c=>c.original_prestart_seq===fresh.seq)){
+      job.reviewContinuations=[...(job.reviewContinuations??[]),{original_prestart_seq:fresh.seq,request_sha256:fresh.request_sha256,kind:fresh.kind}];save();
     }
-    job.reviewContinuations=[...(job.reviewContinuations??[]),{original_prestart_seq:fresh.seq,request_sha256:fresh.request_sha256,kind:fresh.kind}];save();
   }
   if(opt.detach||opt['continue-preflight']){
     if(!preflight&&(opt.retry||job.stage!=='open'||job.detached))throw Error('--detach is only for one new frozen request; never resubmit a saved launch');
@@ -666,11 +678,7 @@ async function main() {
     }
     if (job.stage === 'prompting' && !opt.resend) throw new Error('prompt delivery outcome is unknown; inspect worker, then --accept-delivered or --resend only if delivery did not land');
     if (job.stage === 'prompt' || (job.stage === 'prompting' && opt.resend)) {
-      const agent=liveWorker(job.worker);
-      if(reviewContinuation?.kind==='bound-unprompted-original'){
-        const native=observeNative();
-        if(!['idle','done'].includes(agent.agent_status)||native.session!==job.worker.agentSessionId||native.process.pid!==job.launchProcess.pid||native.process.identity!==job.launchProcess.identity)throw Error('original unprompted native process/session changed or is active before prompt');
-      }
+      liveWorker(job.worker);
       if (job.declared.harness === 'codex') {
         const screen = command(['herdr'], ['pane', 'read', job.worker.pane, '--source', 'visible', '--format', 'text']);
         const dialog = hookReviewDialog(screen);
@@ -698,6 +706,7 @@ async function main() {
       const producer = job.operatorRecordCommand ? `For OPERATOR-addressed status/fyi/done/questions, store an envelope in the owning record with this explicit source command: ${job.operatorRecordRoot ? `HERDR_BRAIN_ROOT=${quote(job.operatorRecordRoot)} ` : ''}ORG_DIR=${quote(job.org)} ORG_ACTOR=${quote(job.worker.agentName)} ${job.operatorRecordCommand.map(quote).join(' ')} messages send --id ${quote(`${job.run}:operator:STABLE_NOTICE_ID`)} --kind notice --run ${quote(job.run)} --item ${quote(job.item)} --summary '<one-line summary>'${wording}. Reuse the stable ID for a retry; use kind fyi for fyi and question/request for judgment, with --correlation THREAD and --reply-to ID when applicable. Pull messages digest on demand with the same source command. Ordinary OPERATOR-addressed messages are record-only and never typed into an operator pane. Only an actual pending human question already explicitly operator_reserved in the record, referenced with --question HUM-n, pushes once through the existing native inbox and Brain Chat filtering. Routine T2 questions do not become reserved. Internal owned report/watch callbacks and project T2/BrainChat delivery retain their existing native paths and recipients; retain the watcher. Do not fabricate native bindings or change pins, saved jobs or long-lived sessions.${composition}` : '';
       const prompt = `You are run ${job.run} on org item ${job.item}. Read ${job.brief} (the ask) and ${run.brief_path} (the record context and report template), then do the work. Write the report to ${run.report_path}; the report's run field is ${job.run}.\n\n${owner}${producer ? `\n\n${producer}` : ''}\n\n${validation}${job.reviewQueueBrief ? `\n\n${job.reviewQueueBrief}` : ''}${job.extra ? `\n\n${job.extra}` : ''}`;
       if (job.detached || job.reviewQueue) checkStop();
+      checkReviewContinuationNative();
       prepareSessionBinding(run);
       job.stage = 'prompting'; save();
       herdr(['agent', 'prompt', job.worker.agentName, prompt]);

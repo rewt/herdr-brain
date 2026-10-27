@@ -39,6 +39,11 @@ function changeReviewAttempt(item,{org,identity,events,state,repo,effects,target
   const resolution=reviewResolution({events,org,item:item.id,head:target.head}),archivedItems=new Set(resolution?.event.archived_review_items??[]);
   capturedRun??=target.source_group?.run;
   const runs=new Set(capturedRun?[capturedRun]:item.runs.filter(id=>(state.runs.get(id)?.report?.artifacts??[]).some(a=>typeof a==='string'&&a.includes(target.head)))),group=producerGroupKey(item.id,capturedRun,target.reportHash),covered=new Set(capturedReviewCommits(target));
+  const producerEvidence=file=>{
+    if(target.evidence_kind!=='native-landings/v1'||file!==target.evidence)return false;
+    const value=read(file);if(value?.schema!=='native-landings/v1'||JSON.stringify(value)!==JSON.stringify(target.landed_evidence)||sha(fs.readFileSync(file))!==target.reportHash)throw Error('bound native producer evidence changed; retain it');
+    return true;
+  };
   const tokens=new Set([item.id,...item.runs]);
   const heads=value=>{
     const out=new Set();const visit=(v,key='')=>{if(typeof v==='string'&&/head|commit|reviewed/i.test(key)&&!/^base$/i.test(key)&&commit(v))out.add(v);else if(Array.isArray(v))for(const x of v)visit(x,key);else if(v&&typeof v==='object')for(const[k,x]of Object.entries(v))visit(x,k);};visit(value);return out;
@@ -55,7 +60,7 @@ function changeReviewAttempt(item,{org,identity,events,state,repo,effects,target
     // A producer's explicit current-source review locator is evidence of an
     // attempt, including outside-org manual receipts. Never probe another
     // identity to turn unreadability into absence.
-    if(typeof artifact==='string'&&/review|settle/i.test(artifact)&&/\.json(?:$|[ #])/.test(artifact)&&path.isAbsolute(artifact.split(/[ #]/)[0])&&!archivedReviewFile(resolution,artifact.split(/[ #]/)[0]))return 'same-change source-owner review reference UNKNOWN; retain without external probe';
+    if(typeof artifact==='string'&&/review|settle/i.test(artifact)&&/\.json(?:$|[ #])/.test(artifact)&&path.isAbsolute(artifact.split(/[ #]/)[0])&&!producerEvidence(artifact.split(/[ #]/)[0])&&!archivedReviewFile(resolution,artifact.split(/[ #]/)[0]))return 'same-change source-owner review reference UNKNOWN; retain without external probe';
   }
   for(const e of events){
     if(e.type==='change.reviewed'&&e.item===item.id&&(covered.has(e.head)||!capturedOriginal&&group&&(e.review_group_key??queueProducerGroup(state.items.get(e.review_item)))===group))return 'recorded same-change/producer-group verdict';
@@ -94,7 +99,7 @@ function changeReviewAttempt(item,{org,identity,events,state,repo,effects,target
     // Receipt attribution is scoped to its source run/head. An unrelated old
     // directory or opaque filename is never a project-wide review hold.
     if(runs.has(id))for(const entry of entries(evidence))if(/review|settle/i.test(entry.name)&&entry.name.endsWith('.json')){
-      const file=path.join(evidence,entry.name);if(archivedReviewFile(resolution,file))continue;const value=read(file);if(matches(value,id))return 'same-change source-owner review receipt/UNKNOWN';
+      const file=path.join(evidence,entry.name);if(producerEvidence(file)||archivedReviewFile(resolution,file))continue;const value=read(file);if(matches(value,id))return 'same-change source-owner review receipt/UNKNOWN';
     }
     for(const root of new Set([repo,run.workspace].filter(Boolean))){
       if(!fs.existsSync(root))continue;

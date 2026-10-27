@@ -89,7 +89,7 @@ function changeReviewAttempt(item,{org,identity,events,state,repo,effects,target
     if(e.type==='note.added'&&e.decision&&tokens.has(e.id)&&/review/i.test(e.text??'')){
       // The validated archival authorization is not another independent
       // attempt. Every other decision, including later holds, still counts.
-      if(e.seq===resolution?.event.decision_seq)continue;
+      if(resolution?.authorized_decision_seqs?.includes(e.seq))continue;
       const named=(e.text.match(/\b[a-f0-9]{40,64}\b/g)??[]);
       const atNote=item.runs.filter(id=>(state.runs.get(id)?.started.seq??Infinity)<e.seq).at(-1);
       if(named.some(h=>covered.has(h))||!named.length&&(runs.has(e.id)||(e.text.match(/\bR-\d+\b/g)??[]).some(id=>runs.has(id))||e.id===item.id&&runs.has(atNote)&&(state.runs.get(atNote)?.report?.seq??Infinity)<e.seq))return 'recorded same-change independent review hold';

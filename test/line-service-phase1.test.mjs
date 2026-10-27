@@ -161,6 +161,37 @@ test('permanent R858 authorization exempts only its exact validated note and ret
   }
 });
 
+function predecessorPreparationFixture(t){
+  const f=recoveryFixture(t),head=f.heads[0];sourceArtifact(f,`source: ${head}; base: ${f.base}; lane: line-eng-226-1`);
+  const original=path.join(f.org,'settle/R-1.json'),copy=path.join(f.org,'evidence/retained-copies/R-1.json'),outcomes=path.join(f.org,'evidence/retained-copies/OUTCOMES.md');fs.mkdirSync(path.dirname(copy),{recursive:true});fs.renameSync(f.attempt,original);fs.writeFileSync(original,JSON.stringify({run:'R-1',item:'ENG-1',head,deliveryRange:{head,base:f.base},stage:'reviewing',review:null,qualification:'UNKNOWN',error:'canonical w3PD repository guard refused before reviewer creation'}));fs.copyFileSync(original,copy);fs.writeFileSync(outcomes,'Original review never created; full old refusal retained.\n');
+  f.input.attempts=[copy];f.input.inactive.evidence=outcomes;fs.writeFileSync(f.resolution,JSON.stringify(f.input));f.add([{type:'item.updated',id:'ENG-1',fields:{meta:{review_pending:true,review_hold:{head,qualification:'UNKNOWN'}}}},{type:'item.closed',id:'ENG-1',as:'done'}]);
+  const rows=f.context().events;rows.find(e=>e.type==='line-service.phase0').canonical_head=f.heads[1];fs.writeFileSync(path.join(f.org,'events.jsonl'),rows.map(e=>JSON.stringify(e)+'\n').join(''));f.git(['worktree','remove',f.workspace],f.cwd);
+  let lists=0;assert.throws(()=>recoverInactiveReview({...f.args,call:(exe,args)=>{if(args[0]==='agent'&&args[1]==='list'&&++lists===2)throw Error('staged inventory boundary before completion');return f.call(exe,args);}}),/staged inventory/);
+  const old=f.context().events.find(e=>e.type==='review.recovery-intent'),manifest=path.join(f.org,'evidence/review-recovery/fixture-recovery/manifest.json'),archive=fs.readFileSync(manifest),originalBytes=fs.readFileSync(original),decision=f.context().events.find(e=>e.seq===f.args.decisionSeq),newId='fixture-original-paths';
+  transact(f.org,()=>({add:[{type:'note.added',id:'ENG-1',decision:true,text:`Exact inactive review correction ENG-1 R-1 head${head} base${f.base}: correct preparation fixture-recovery intent${old.seq} which listed archive copies. Preserve its unused intent/archive and decision; authorize corrected ${newId} original paths under ONE replacement total. No native launch or journal/report rewrite.`}]}),{actor:f.a.name});const decisionSeq=f.context().events.at(-1).seq,resolution=path.join(f.org,'correct-original-paths.json');fs.writeFileSync(resolution,JSON.stringify({...f.input,attempts:[original]}));
+  const callback=path.join(f.org,'retirement/occupants/R-1-watcher.json');fs.mkdirSync(path.dirname(callback),{recursive:true});fs.writeFileSync(callback,JSON.stringify({kind:'watcher',run:'R-1',retained_callback:true}));
+  return{...f,original,originalBytes,old,manifest,archive,decision,callback,newId,corrected:{...f.args,id:newId,resolution,decisionSeq,predecessorPreparation:'fixture-recovery'}};
+}
+
+test('predecessor preparation composes the full retained R858-shaped archive-copy correction and both authorization notes under one normal-route replacement',t=>{
+  const f=predecessorPreparationFixture(t),callback=fs.readFileSync(f.callback),result=recoverInactiveReview(f.corrected),c=f.context(),q=c.state.items.get(result.review_item),completed=c.events.find(e=>e.type==='review.recovery-completed');
+  assert.equal(completed.id,f.newId);assert.equal(completed.predecessor_preparation.id,f.old.id);assert.equal(completed.predecessor_preparation.intent_seq,f.old.seq);assert.equal(q.meta.review_round_cap,1);assert.equal(q.meta.review_target.head,f.heads[0]);assert.equal(validateQueuedReview({...c,item:q}).head,f.heads[0]);assert.equal(c.events.filter(e=>e.type==='review.recovery-completed').length,1);assert.equal(recoverInactiveReview(f.corrected).review_item,q.id);assert.equal([...f.context().state.items.values()].filter(i=>i.role==='reviewer').length,1);
+  assert.deepEqual(fs.readFileSync(f.original),f.originalBytes);assert.deepEqual(fs.readFileSync(f.manifest),f.archive);assert.deepEqual(fs.readFileSync(f.callback),callback);assert.deepEqual(c.events.find(e=>e.seq===f.old.seq),f.old);assert.deepEqual(c.events.find(e=>e.seq===f.decision.seq),f.decision);assert.equal(c.state.items.get('ENG-1').meta.review_hold.qualification,'UNKNOWN');assert.equal(c.events.some(e=>e.type==='change.reviewed'),false);
+});
+
+test('predecessor preparation refuses changed archives callers completed or competing budgets and independent current holds without another reviewer',t=>{
+  for(const kind of ['archive','caller','spent','competing','hold','original-progress']){
+    const f=predecessorPreparationFixture(t);let args=f.corrected;
+    if(kind==='archive')fs.appendFileSync(f.manifest,'changed');
+    if(kind==='caller'){const a={...f.a,terminal_id:'different-terminal',agent_session:{value:'different-session'}};args={...args,call:(_exe,x)=>JSON.stringify({result:x[0]==='agent'&&x[1]==='list'?{agents:[a]}:{agent:a}})};}
+    if(kind==='spent')f.add([{type:'review.recovery-completed',id:f.old.id,item:'ENG-1',run:'R-1',target:f.old.target,project:f.identity,org:f.org}]);
+    if(kind==='competing')f.add([{type:'review.recovery-intent',id:'other-preparation',predecessor_preparation:{id:f.old.id},item:'ENG-1',run:'R-1',target:f.old.target,project:f.identity}]);
+    if(kind==='hold')f.add([{type:'note.added',id:'ENG-1',decision:true,text:`Independent review hold for ${f.heads[0]} remains unresolved.`}]);
+    if(kind==='original-progress')fs.appendFileSync(f.original,'new native progress');
+    assert.throws(()=>recoverInactiveReview(args),/predecessor|archive|manifest|caller|budget|UNKNOWN|hold|source|review|recovery|native|session|terminal/i,kind);assert.equal([...f.context().state.items.values()].some(i=>i.role==='reviewer'),false,kind);assert.deepEqual(fs.readFileSync(f.callback),Buffer.from(JSON.stringify({kind:'watcher',run:'R-1',retained_callback:true})),kind);
+  }
+});
+
 test('phase1 owes every landed build commit after the boundary even after item close and source worktree cleanup',t=>{
   const f=fixture(t);f.add([{type:'item.closed',id:'ENG-1',as:'done'}]);f.git(['worktree','remove','--force',f.workspace],f.cwd);
   const found=discoverChanges(f.context());assert.deepEqual(found.changes.map(c=>c.target.head),[f.heads[1]]);

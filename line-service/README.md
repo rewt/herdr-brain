@@ -355,6 +355,18 @@ native landed worker/claim binds their source. Unrecognized/manual receipts,
 native/qualification/stage markers, changed proof bytes and actual launch
 journals remain held; a receipt name, later HEAD or claimed green is insufficient.
 
+The existing supervisor-bound `queue-review --recover-inactive` accepts
+`--predecessor-preparation UNUSED_ID` for one exact archive-copy input correction.
+It requires the same actual canonical native caller, identical source tuple,
+original decision/intent/archive, and a newer scoped decision linking both IDs
+and the old intent. Every old attempt byte must be represented by the corrected
+original named settle files. The old preparation must have no completed review
+or effects, and another preparation cannot claim its one replacement budget.
+Both decisions and all old bytes remain immutable. Dedup exempts only these two
+validated authorization notes; new independent holds, actual UNKNOWN/native
+progress, completed verdicts and archive/source/claim/CAS changes still refuse.
+There is no native launch in recovery, and no callback/journal/report rewrite.
+
 ```sh
 node line-service/line-service.mjs --digest --org /OWN/RECORD --since 2026-10-27T00:00:00Z
 ```

@@ -18,7 +18,7 @@ import {protectRecordMutation} from '../lib/record-guard.mjs';
 import {claimedCommitTokens,declaredSourceRanges} from '../settle/review-range.mjs';
 import {queueConsumer,queueReviewMutation} from './review-queue.mjs';
 import {lineDirectory} from './cutoff.mjs';
-import {reviewDigest as hash,reviewPlain,reviewResolution} from './review-resolutions.mjs';
+import {reviewDigest as hash,reviewPlain,reviewResolution,reviewPredecessor} from './review-resolutions.mjs';
 import {serviceRecordBinding} from './record-inbox.mjs';
 import {discoverChanges,capturedProducerTarget} from './phase1.mjs';
 import {sameCapturedTarget,sameProducerQueue,capturedReviewCommits} from './review-group.mjs';
@@ -166,7 +166,7 @@ export function recoverServiceReview({repo,org,reviewId,env=process.env,call=inv
     },{actor:'line-service',strictTail:true,lockOptions:{recover:false}}).result;
   }finally{release?.();requestLock?.release();}
 }
-export function recoverInactiveReview({repo,org,runId,head,base,resolution,decisionSeq,id,role,cwd=process.cwd(),env=process.env,call=invokeHerdr}){
+export function recoverInactiveReview({repo,org,runId,head,base,resolution,decisionSeq,id,role,predecessorPreparation,cwd=process.cwd(),env=process.env,call=invokeHerdr}){
   if(role!=='supervisor'||!/^[-a-zA-Z0-9_]{1,80}$/.test(id??'')||!Number.isSafeInteger(decisionSeq))throw Error('inactive review recovery needs actual supervisor mode, stable id and scoped decision sequence');
   const project=gitProject(repo);if(project.checkout!==project.canonical)throw Error('review recovery needs actual canonical supervisor checkout');repo=project.canonical;org=fs.realpathSync(org);
   if(fs.realpathSync(findOrgDir({cwd:repo,env:{...env,ORG_DIR:''}})??'')!==org)throw Error('review recovery record/project binding differs');
@@ -179,11 +179,13 @@ export function recoverInactiveReview({repo,org,runId,head,base,resolution,decis
   if(!run||run.item!==input.item||!run.report||!roleIs(item,'ENG')||roleIs(initialState.items.get(item.parent),'REV')||item.meta.review_fix_of)throw Error('review recovery needs an actual reported source build, not a packet or correction review chain');
   const owned=readOwnedRun(org,runId);requireController(owned,'brain');assertOwner(owned,{owner:run.owner,generation:run.owner_generation});queueConsumer({run,env});
   const sourceHead=git(repo,['rev-parse','HEAD']);
+  let verifyPreparation=()=>{};
   const guard=()=>{
     native();queueConsumer({run,env});assertOwner(readOwnedRun(org,runId),{owner:run.owner,generation:run.owner_generation});
     if(gitProject(repo).identity!==project.identity||git(repo,['rev-parse','HEAD'])!==sourceHead||git(repo,['status','--porcelain=v1']))throw Error('review recovery source/head/clean CAS changed');
     for(const file of [path.join(lineDirectory(org,project.identity),'STOP'),path.join(repo,'.lane/supervisor/STOP'),path.join(repo,'.lane/supervisor/HOLD')])if(fs.existsSync(file))throw Error('STOP/HOLD prevents review recovery');
     if(hash(reviewPlain(resolution))!==hash(inputBytes))throw Error('inactive resolution evidence changed');
+    verifyPreparation(loadEvents(org).events);
   };
   const verifyInactive=(state)=>{
     const raw=JSON.parse(call('herdr',['agent','list']));if(raw.error||!Array.isArray(raw.result?.agents))throw Error('native reviewer inventory is unavailable; retain attempt');
@@ -218,6 +220,9 @@ export function recoverInactiveReview({repo,org,runId,head,base,resolution,decis
     const prior=reviewResolution({events:initialEvents,org,item:item.id,head});if(prior){if(prior.event.id!==id)throw Error('one inactive replacement budget already spent');return{result:'review_queued',review_item:prior.event.review_item,source_item:item.id,head,existing:true};}
     const decision=initialEvents.find(e=>e.seq===decisionSeq&&e.type==='note.added'&&e.decision&&e.by===binding.native.name&&[item.id,runId].includes(e.id)&&e.text.includes(item.id)&&e.text.includes(head));
     if(!decision)throw Error('recovery needs the actual native supervisor scoped decision; no authority inferred from metadata');
+    const predecessorArgs={org,project:project.identity,item:item.id,run:runId,target,caller:binding.native,id,decisionSeq,predecessor:predecessorPreparation,attempts:attempts.map(f=>({original:f.original,sha256:hash(f.bytes)}))},predecessor=predecessorPreparation?reviewPredecessor({...predecessorArgs,events:initialEvents}):undefined;
+    if(predecessor&&predecessor.inactive_kind!==input.inactive.kind)throw Error('predecessor input correction cannot change its native inactivity disposition');
+    if(predecessor)verifyPreparation=events=>{if(JSON.stringify(reviewPredecessor({...predecessorArgs,caller:native(),events}))!==JSON.stringify(predecessor))throw Error('predecessor preparation/archive changed at the mutation boundary');};
     verifyInactive(initialState);
     const effects=[];
     const serviceDirs=fs.existsSync(path.join(org,'line-service'))?fs.readdirSync(path.join(org,'line-service'),{withFileTypes:true}).filter(e=>e.isDirectory()):[];
@@ -226,12 +231,12 @@ export function recoverInactiveReview({repo,org,runId,head,base,resolution,decis
       for(const [key,value]of Object.entries(journal.actions??{}))if(/review/i.test(key)&&((key.includes(item.id)&&JSON.stringify(value).includes(head))||JSON.stringify(value).includes(runId))){effects.push({file,key,sha256:hash(JSON.stringify(value))});used=true;}
       if(used&&!files.some(f=>f.original===file))files.push({original:file,bytes});
     }
-    const request={id,item:item.id,run:runId,target,decision_seq:decisionSeq,resolution_sha256:hash(inputBytes),files:files.map(f=>({original:f.original,sha256:hash(f.bytes)})),effects};
+    const request={id,item:item.id,run:runId,target,decision_seq:decisionSeq,resolution_sha256:hash(inputBytes),files:files.map(f=>({original:f.original,sha256:hash(f.bytes)})),effects,...(predecessor?{predecessor_preparation:predecessor}:{})};
     const requestHash=hash(JSON.stringify(request));
     transact(org,events=>{guard();const old=events.find(e=>e.type==='review.recovery-intent'&&e.id===id);if(old&&old.request_sha256!==requestHash)throw Error('stable review recovery id has different source/evidence');return protectRecordMutation({org,events,state:fold(events),command:'queue-review recovery',mutation:{add:old?[]:[{type:'review.recovery-intent',...request,request_sha256:requestHash,project:project.identity,native_caller:native()}]}});},{actor:binding.native.name,strictTail:true,lockOptions:{recover:false}});
     const archiveDir=path.join(org,'evidence/review-recovery',id);fs.mkdirSync(archiveDir,{recursive:true});
     const archived=files.map((f,i)=>{guard();const archive=path.join(archiveDir,`${i}-${path.basename(f.original)}`);immutable(archive,f.bytes);return{original:f.original,archive,sha256:hash(f.bytes)};});
-    const manifest={id,item:item.id,run:runId,target,request_sha256:requestHash,files:archived,effects},manifestBytes=Buffer.from(JSON.stringify(manifest,null,2)+'\n'),manifestFile=path.join(archiveDir,'manifest.json');immutable(manifestFile,manifestBytes);const fd=fs.openSync(archiveDir,'r');try{fs.fsyncSync(fd);}finally{fs.closeSync(fd);}
+    const manifest={id,item:item.id,run:runId,target,request_sha256:requestHash,files:archived,effects,...(predecessor?{predecessor_preparation:predecessor}:{})},manifestBytes=Buffer.from(JSON.stringify(manifest,null,2)+'\n'),manifestFile=path.join(archiveDir,'manifest.json');immutable(manifestFile,manifestBytes);const fd=fs.openSync(archiveDir,'r');try{fs.fsyncSync(fd);}finally{fs.closeSync(fd);}
     const final=transact(org,events=>{
       guard();const state=fold(events);verifyInactive(state);if(state.runs.get(runId)?.report.sha256!==run.report.sha256)throw Error('source report changed before archival completion');
       if(events.some(e=>e.type==='change.reviewed'&&e.item===item.id&&e.head===head))return{add:[],result:{result:'review_preserved',item:item.id,head}};
@@ -239,7 +244,7 @@ export function recoverInactiveReview({repo,org,runId,head,base,resolution,decis
       for(const effect of effects){const current=JSON.parse(reviewPlain(effect.file));if(hash(JSON.stringify(current.actions?.[effect.key]))!==effect.sha256)throw Error('original review effect progressed before resolution; no replacement');}
       const old=events.find(e=>e.type==='review.recovery-completed'&&e.item===item.id&&e.target?.head===head);if(old)return{add:[],result:{result:'review_queued',review_item:old.review_item,existing:true}};
       const archivedItems=[...state.items.values()].filter(q=>q.meta.review_source_item===item.id&&q.meta.review_target?.head===head).map(q=>q.id);
-      const event={type:'review.recovery-completed',id,item:item.id,run:runId,target,project:project.identity,org,decision_seq:decisionSeq,native_caller:native(),archive:{file:manifestFile,sha256:hash(manifestBytes)},archived_review_items:archivedItems,replacement_cap:1,prior_caps_preserved:true,seq:events.at(-1).seq+1};
+      const event={type:'review.recovery-completed',id,item:item.id,run:runId,target,project:project.identity,org,decision_seq:decisionSeq,native_caller:native(),archive:{file:manifestFile,sha256:hash(manifestBytes)},archived_review_items:archivedItems,replacement_cap:1,prior_caps_preserved:true,...(predecessor?{predecessor_preparation:predecessor}:{}),seq:events.at(-1).seq+1};
       const projected=[...events,event],queued=queueReviewMutation({state:fold(projected),events:projected,org,repo,runId,head,base,env:{...env,ORG_ACTOR:binding.native.name},recoveryBinding:{...binding,native:event.native_caller}});event.review_item=queued.result.review_item;
       const retired=archivedItems.flatMap(qid=>[{type:'item.closed',id:qid,as:'dropped',note:`Inactive review attempt archived by ${id}; no verdict claimed. One exact-change replacement ${event.review_item}; original evidence/cap retained.`},
         ...state.items.get(qid).runs.filter(rid=>!state.runs.get(rid).report&&!state.runs.get(rid).abandoned).map(rid=>({type:'run.abandoned',id:rid,note:`Inactive review attempt archived by ${id}; no verdict or product completion claimed.`}))]);

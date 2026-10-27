@@ -412,6 +412,25 @@ test('permanent review verdict accepts the actual PASS sentence and bold FAIL pr
   }
 });
 
+test('full-bold R3404-shaped immutable verdict records FAIL and one Major on its original feature scope while preserving the separate fixture PASS',t=>{
+  const f=fixture(t),target=partialReview(f,'REV-1204',{head:f.heads[0],base:f.base,run:'R-3404'});
+  partialReview(f,'REV-1203',{head:f.heads[1],base:f.heads[0],run:'R-3403',verdict:'PASS'});
+  const text='---\nrun: R-3404\noutcome: done\nsummary: Reviewed the captured initial feature.\nproposals: []\n---\n\n**Verdict: FAIL.**\n\n- [Major] codec.mjs:41 - decoded aggregate objects passed as paths\n',parsed=readReport(text),file=path.join(f.org,'reports/R-3404.md'),owner=f.context().run.owner;
+  assert.deepEqual(parsed.errors,[]);fs.writeFileSync(file,text);
+  f.add([{type:'run.claimed',run:'R-3404',record:f.org,project:f.identity,owner},{type:'report.ingested',run:'R-3404',file:'reports/R-3404.md',sha256:hash(text),report:parsed.report}]);
+  const before=f.context(),peer=before.events.find(e=>e.type==='change.reviewed'&&e.review_run==='R-3403'),env=installedService(f),release=noticeLock(path.join(f.directory,'pass.lock'));
+  try{const result=recordReviewResults({repo:f.cwd,org:f.org,runId:'R-3404',env});assert.equal(result.added.filter(e=>e.type==='change.reviewed').length,1);assert.equal(recordReviewResults({repo:f.cwd,org:f.org,runId:'R-3404',env}).added.length,0);}finally{release();}
+  const c=f.context(),facts=c.events.filter(e=>e.type==='change.reviewed'&&e.review_run==='R-3404');assert.equal(facts.length,1);assert.equal(facts[0].verdict,'FAIL');assert.equal(facts[0].head,f.heads[0]);assert.equal(facts[0].base,f.base);assert.deepEqual(facts[0].covered_commits,[f.heads[0]]);assert.equal(facts[0].report_sha256,hash(text));assert.equal(facts[0].findings.length,1);assert.equal(facts[0].findings[0].severity,'major');
+  const fixes=[...c.state.items.values()].filter(i=>i.meta.review_fix_of===`ENG-1:${f.heads[0]}`);assert.equal(fixes.length,1);assert.equal(fixes[0].meta.review_round_cap,1);assert.equal(fixes[0].meta.severity,'major');assert.deepEqual(c.events.find(e=>e.type==='change.reviewed'&&e.review_run==='R-3403'),peer);assert.deepEqual(c.state.items.get('REV-1204').meta.review_target,target);assert.equal(c.state.items.get('REV-1204').closed,null);assert.equal(fs.readFileSync(file,'utf8'),text);assert.deepEqual(c.state.runs.get('R-3404').owner,owner);
+});
+
+test('full-bold verdict refuses conflicting frontmatter quoted fenced malformed and indented declarations without changing scope or creating another review',t=>{
+  const f=fixture(t),target=partialReview(f,'REV-1204',{head:f.heads[0],base:f.base,run:'R-3404'}),c=f.context(),run=c.state.runs.get('R-3404'),report={outcome:'done',proposals:[],extra:{verdict:'PASS'}};
+  assert.throws(()=>reviewResultEvents({...c,run,report,body:'**Verdict: FAIL.**',sha256:'a'.repeat(64)}),/ambiguous/);
+  for(const body of ['> **Verdict: FAIL.**','```text\n**Verdict: FAIL.**\n```','    **Verdict: FAIL.**','**Verdict: FAIL.','**Verdict: UNKNOWN.**'])assert.throws(()=>reviewResultEvents({...c,run,report:{...report,extra:{}},body,sha256:'a'.repeat(64)}),/explicit|ambiguous/);
+  assert.deepEqual(f.context().state.items.get('REV-1204').meta.review_target,target);assert.equal(f.context().events.some(e=>e.type==='change.reviewed'),false);assert.equal([...f.context().state.items.values()].filter(i=>i.role==='reviewer').length,1);
+});
+
 test('phase1 current service records an old selected consumers immutable review result without changing its owner or pin',t=>{
   const f=fixture(t),target=discoverChanges(f.context()).changes[0].target,key=`ENG-1:${target.head}`;
   const text='---\nrun: R-2\noutcome: done\nsummary: Actual immutable review.\nverdict: FAIL\nproposals:\n  - role: engineer\n    title: Fix the source\n    why: Resolve the Major.\n---\n- [Major] source-1:1 - broken invariant\n';

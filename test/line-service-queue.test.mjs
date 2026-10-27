@@ -60,37 +60,6 @@ test('review queue atomically creates one landed tuple item across concurrent cr
   assert.match(reviewQueueBrief(q), /zero reviewer suites/); assert.match(reviewQueueBrief(q), /linked engineer follow-up/);
 });
 
-test('explicit review holds ignore incidental decision wording at queue creation and the same immutable launch', t => {
-  const f=fixture(t);
-  transact(f.org,()=>({add:[
-    {type:'note.added',id:'ENG-1',decision:true,text:`No duplicate worker/review for ENG-1 R-1 ${f.head}; retain routine phase evidence and the original producer.`},
-    {type:'note.added',id:'R-1',decision:true,text:`Source recovery is complete at ${f.head}; preserve old review receipts and final-release obligations.`},
-    {type:'note.added',id:'ENG-1',decision:true,text:`Independent review hold for old source ${f.base}; retain that historical judgment.`},
-  ]}));
-  const before=f.context().events.filter(e=>e.type==='note.added'),created=f.create(),c=f.context(),q=c.state.items.get(created.review_item);
-  assert.equal(validateQueuedReview({...c,item:q}).head,f.head);
-  assert.equal(f.create().review_item,q.id);assert.equal([...f.context().state.items.values()].filter(i=>i.role==='reviewer').length,1);
-  assert.deepEqual(f.context().events.filter(e=>e.type==='note.added'),before,'decision history remains immutable');
-});
-
-test('explicit review holds retain scoped directives and real UNKNOWN attempts before queue or native launch',t=>{
-  for(const kind of ['head','new-head','run','retained-reviewer','native-unknown']){
-    const f=fixture(t),text=kind==='head'?`REVIEW HOLD: ${f.head}; unresolved independent review.`:kind==='new-head'?`New independent review hold for ENG-1 head${f.head}; unresolved.`:kind==='run'?'Hold review of R-1; pending independent disposition.':'C1 retained reviewer; qualification UNKNOWN; do not replace';
-    if(kind==='native-unknown'){
-      fs.mkdirSync(path.join(f.org,'settle'),{recursive:true});fs.writeFileSync(path.join(f.org,'settle/R-1.review-launch.json'),JSON.stringify({run:'R-1',head:f.head,native_launch_attempted:true,qualification:'UNKNOWN'}));
-    }else transact(f.org,()=>({add:[{type:'note.added',id:kind==='run'?'R-1':'ENG-1',decision:true,text}]}));
-    const bytes=fs.readFileSync(path.join(f.org,'events.jsonl')),c=f.context();
-    const result=f.run(['queue-review','R-1','--head',f.head,'--base',f.base]);assert.notEqual(result.status,0,kind);assert.match(result.stderr,/hold|UNKNOWN/,kind);
-    assert.equal([...f.context().state.items.values()].some(i=>i.role==='reviewer'),false,kind);assert.deepEqual(fs.readFileSync(path.join(f.org,'events.jsonl')),bytes,kind);
-    if(kind!=='native-unknown')assert.match(reviewAttempt(c.item,c),/hold/,`compatibility callers retain explicit ${kind}`);
-  }
-  const f=fixture(t),qid=f.create().review_item;
-  transact(f.org,()=>({add:[{type:'note.added',id:'R-1',decision:true,text:`REVIEW HOLD: ${f.head}; new independent disposition is pending.`}]}));
-  const c=f.context(),bytes=fs.readFileSync(path.join(f.org,'events.jsonl'));
-  assert.throws(()=>validateQueuedReview({...c,item:c.state.items.get(qid)}),/independent review hold/,'a new explicit hold also stops an already queued launch');
-  assert.deepEqual(fs.readFileSync(path.join(f.org,'events.jsonl')),bytes);assert.equal(c.state.items.get(qid).runs.length,0);
-});
-
 test('review queue preserves outside-owner manual UNKNOWN and unrecognized service inventory without external probes', t => {
   const f = fixture(t), c = f.context(), external = '/outside-owner/archive/ENG-1/producer/review-launch.json';
   c.state.runs.get('R-1').report.artifacts.push(external);

@@ -9,7 +9,7 @@ import { discoverArchive } from '../lib/archive.mjs';
 import { checkFleetRecord, FleetError } from '../lib/fleet.mjs';
 import { forwardRelease, bundleRelease, projectEnvironment } from '../lib/releases.mjs';
 import {
-  UserError, findOrgDir, initOrg, isOrgDir, loadEvents, now as clock, readConfig, transact, writeFileAtomic, writer,
+  UserError, findOrgDir, initOrg, isOrgDir, loadEvents, loadRecord, now as clock, readConfig, transact, writeFileAtomic, writer,
 } from '../lib/store.mjs';
 import {
   BUDGET_KEYS, attention, blockedBy, blockersOf, fold, isResolved, itemStatus, laterRuns, nextItemId, nextRunId, openRuns,
@@ -167,8 +167,8 @@ function openOrg({ readOnly = false } = {}) {
       ? `${dir} is not an initialized record (run: record init ${dir})`
       : 'no record found: run record init, or set ORG_DIR');
   }
-  const { events, tornTail } = loadEvents(dir);
-  return { dir, events, tornTail, state: fold(events), config: readConfig(dir), now: clock() };
+  const { events, tornTail, state } = loadRecord(dir);
+  return { dir, events, tornTail, state, config: readConfig(dir), now: clock() };
 }
 
 function view(ctx) {
@@ -187,8 +187,7 @@ function mutate(ctx, fn, authority) {
     warnedUnattributed = true;
     err('record: recorded as human but unattributed (no ORG_ACTOR, no terminal). An agent session sets ORG_ACTOR=<its session name>.\n');
   }
-  const res = transact(ctx.dir, (events) => {
-    const state = fold(events);
+  const res = transact(ctx.dir, (events, state) => {
     return bindCloseoutSources({ org: ctx.dir, events, mutation: protectRecordMutation({ org: ctx.dir, events, state, mutation: fn(state, events), command: process.argv[2], ...authority }) });
   }, {
     at: ctx.now,

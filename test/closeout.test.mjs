@@ -33,6 +33,9 @@ import { outstandingEffects } from '../lib/run-owner.mjs';
 import { readCloseoutOwnerStatus } from '../lib/closeout-code.mjs';
 import { prepareCloseoutPacket, readCloseoutCapabilities } from '../lib/closeout-packet.mjs';
 import {createLineService,sourceRoot} from '../line-service/line-service.mjs';
+import { gitProject } from '../lib/project.mjs';
+import { readProjectPolicy } from '../lib/config-policy.mjs';
+import { kickCloseout } from '../lib/closeout.mjs';
 
 const cli = fileURLToPath(new URL('../bin/org.mjs', import.meta.url));
 const closer = fileURLToPath(new URL('../supervisor/closeout.mjs', import.meta.url));
@@ -93,6 +96,97 @@ function setup(t, { occupied = true, merged = false, terminal = false } = {}) {
 }
 const evaluations = f => events(f).filter(e => e.type === 'closeout.evaluated');
 const effects = f => events(f).filter(e => e.type === 'closeout.effect').map(e => e.outcome);
+function selectCurrentCleanup(f) {
+  const directory = path.join(f.org, 'line-service', createHash('sha256').update(JSON.stringify(f.common)).digest('hex').slice(0, 20));
+  fs.mkdirSync(directory, { recursive: true });
+  const file = path.join(directory, 'installation.json');
+  const receipt = { repo: f.repo, org: f.org, source: sourceRoot, node: process.execPath,
+    file: path.join(directory, 'service.plist'), target: `gui/${process.getuid()}/dev.herdr.line.${path.basename(directory)}` };
+  fs.writeFileSync(file, JSON.stringify(receipt));
+  fs.writeFileSync(path.join(f.repo, '.lane.json'), JSON.stringify({ retirement: { closeout_queue: false, line_service_cleanup: true } }));
+  return { file, receipt, directory };
+}
+
+test('current cleanup selection suppresses the frozen c160 kick and binds future sources for the named current closer', t => {
+  const f = setup(t, { occupied: false }), project = gitProject(f.repo);
+  selectCurrentCleanup(f);
+  const legacy = JSON.parse(fs.readFileSync(new URL('./fixtures/closeout-c160-selection.json', import.meta.url)));
+  const policy = new Function('readProjectPolicy', 'fs', `return (${legacy.policy})`)(readProjectPolicy, fs);
+  const kick = new Function('closeoutPolicy', 'closeoutRecordMatches', 'queueTransaction', `return (${legacy.kick})`)(
+    policy, () => true, () => { throw Error('legacy kick reached queue/spawn'); });
+  assert.equal(policy(f.repo), false);
+  assert.deepEqual(kick(project, f.org), { evaluated: [] });
+  assert.equal(closeoutPolicy(f.repo, 'report.ingested'), true);
+  const source = f.report()[0];
+  assert.equal(source.closeout_targets.length, 1);
+  f.land();
+  assert.equal(kickCloseout(project, f.org, { env: f.env }).owned_by, 'line-service');
+  assert.equal(fs.existsSync(path.join(f.common, 'closeout/worker.log')), false);
+  assert.equal(f.drain().owned_by, 'line-service');
+  const keys = readCloseoutEntries(f.common).map(e => e.key);
+  assert.ok(keys.includes(source.closeout_targets[0].key));
+  const result = f.drain({ keys });
+  assert.ok(result.evaluated.some(e => e.completed), JSON.stringify(result));
+  assertRemoved(f);
+});
+
+test('current cleanup selection keeps defaults opt-outs malformed foreign and redirected declarations safe and lossless', t => {
+  const f = setup(t, { occupied: false, terminal: true }), selected = selectCurrentCleanup(f);
+  const entries = readCloseoutEntries(f.common), keys = entries.map(e => e.key);
+  const files = entries.map(e => path.join(f.common, 'closeout/entries', `${e.key}.json`));
+  const bytes = files.map(file => fs.readFileSync(file)), record = fs.readFileSync(f.eventFile);
+  const policyFile = path.join(f.repo, '.lane.json');
+  for (const retirement of [{}, { closeout_queue: false }, { closeout_queue: false, line_service_cleanup: false }]) {
+    fs.writeFileSync(policyFile, JSON.stringify({ retirement }));
+    assert.equal(closeoutPolicy(f.repo, 'report.ingested'), false);
+    if (retirement.closeout_queue === false) assert.equal(f.drain({ keys }).disabled, true);
+  }
+  for (const retirement of [{ line_service_cleanup: true }, { closeout_queue: true, line_service_cleanup: true },
+    { closeout_queue: false, line_service_cleanup: 'true' }]) {
+    fs.writeFileSync(policyFile, JSON.stringify({ retirement }));
+    assert.throws(() => closeoutPolicy(f.repo), /invalid|requires|boolean/);
+  }
+  selectCurrentCleanup(f);
+  for (const change of [{ source: f.repo }, { repo: f.lane }, { org: f.scratch }, { node: '/foreign/node' },
+    { target: 'foreign' }, { file: path.join(f.scratch, 'service.plist') }]) {
+    fs.writeFileSync(selected.file, JSON.stringify({ ...selected.receipt, ...change }));
+    assert.throws(() => f.drain({ keys }), /ownership is UNKNOWN/);
+  }
+  fs.unlinkSync(selected.file);
+  assert.equal(closeoutPolicy(f.repo), false, 'no declared current owner means no fallback consumer');
+  const redirected = path.join(f.scratch, 'installation.json');
+  fs.writeFileSync(redirected, JSON.stringify(selected.receipt)); fs.symlinkSync(redirected, selected.file);
+  assert.throws(() => f.drain({ keys }), /redirected/);
+  fs.unlinkSync(selected.file); fs.writeFileSync(selected.file, '{');
+  assert.throws(() => closeoutPolicy(f.repo), /JSON/);
+  assert.deepEqual(fs.readFileSync(f.eventFile), record);
+  files.forEach((file, i) => assert.deepEqual(fs.readFileSync(file), bytes[i]));
+  assert.deepEqual(f.read().actions, []);
+});
+
+test('current cleanup selection retains HOLD native refusal and original unknown effects without rewriting queued bytes', t => {
+  for (const kind of ['HOLD', 'native', 'unknown']) {
+    const f = setup(t, { merged: true }); selectCurrentCleanup(f); f.report();
+    const source = f.append([{ type: 'item.closed', id: 'ENG-1', as: 'done', completed_run: 'R-1' }])[0];
+    const entry = readCloseoutEntries(f.common).find(e => e.key === source.closeout_targets[0].key);
+    if (kind === 'HOLD') hold(f);
+    if (kind === 'native') f.options.command = () => { throw Error('native refusal EPERM'); };
+    if (kind === 'unknown') {
+      const candidate = f.retirement(f.options).plan(f.lane).close[0];
+      f.append([{ type: 'closeout.effect', key: entry.key, identity: f.common, run: 'R-1', item: 'ENG-1', source: entry.source,
+        effect: 'original-intent', outcome: { action: 'agent-exit-requested', run: candidate.run, pane: candidate.pane,
+          tab_id: candidate.tab_id, occupant: candidate.occupant, shell: candidate.shell } }]);
+    }
+    const file = path.join(f.common, 'closeout/entries', `${entry.key}.json`), before = fs.readFileSync(file);
+    const result = f.drain({ keys: [entry.key], sessionsOnly: true, retrySafe: true });
+    assert.equal(result.evaluated[0]?.completed, false, JSON.stringify(result));
+    assert.match(result.evaluated[0].reason, /HOLD|held|EPERM|native|unresolved/i);
+    assert.deepEqual(fs.readFileSync(file), before);
+    assert.deepEqual(f.read().actions, []);
+    assert.equal(fs.existsSync(f.lane), true);
+  }
+});
+
 test('cleanup handoff packet preserves every queue byte and original birth identity across live unknown later and absent owners', t => {
   for (const kind of ['original', 'later', 'absent']) {
     const f = setup(t, { occupied: false, terminal: true });

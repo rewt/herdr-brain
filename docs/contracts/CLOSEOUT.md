@@ -632,3 +632,97 @@ an evidence contract, not authorization to run a tier in the design lane.
   original binding once, and retains explicit installed-release pins. Finally
   verify both BCH stable files byte-for-byte and exercise their unchanged flags,
   outputs, exact-evidence refusal and replay behavior.
+
+## Temporary current-line cleanup selection (ENG-649)
+
+Canonical project policy can explicitly pair `retirement.closeout_queue=false`
+with `retirement.line_service_cleanup=true`. The latter must be boolean and may
+only be true with the former false. c160 reads the first field and suppresses
+its automatic kick. Current source enables binding/publication and named drains
+only if the project's existing line installation matches its actual canonical
+project, independently discovered record, physical source root, Node executable,
+plist path and launch target. Missing installation stays disabled; malformed,
+foreign or redirected installation stays held. Defaults and explicit opt-out
+are unchanged. An unnamed current drain/kick delegates to the line; no new
+consumer is spawned. This receipt selects a scheduler, never effect authority.
+
+Future current-source report/ready/review/landing/recovery events receive their
+normal durable bindings under this pair. Old events lacking bindings are never
+retroactively rebound; use supported named recovery after original owner/outcome
+guards permit it. Existing queue bytes/keys, unresolved effects, original process
+birth identity, claims, callbacks, source-code fences, STOP/HOLD, archives and
+session-versus-physical separation retain their normal contracts. A later owner,
+absent lock or expired deadline never proves an original outcome or release.
+
+### Owning-project handback and revert
+
+These are owner-only commands, **not worker execution instructions**.
+Supervisor-herdr applies its own Brain settings; supervisor-opus alone applies
+BCH settings and the two approved c160 process stops. Run from the actual owning
+canonical checkout, with its existing native identity/record and pinned Node.
+Do not set another actor, copy an installation receipt or change a pin, saved
+job, symlink, lock or ownership clock. The already installed current service must
+execute this landed source; no restart, installation or adoption is authorized.
+If its recorded source differs, hold and route to the owner.
+
+1. Retain the owning project's existing policy view and exact prior values/absence
+   of both flags (including provenance), using the normal command:
+
+   ```sh
+   /Users/rewt/.nvm/versions/node/v20.19.4/bin/node /Users/rewt/development/rewt/herdr-brain/bin/org.mjs config --json
+   ```
+
+2. Suppress legacy respawn first, through the supported audited project command:
+
+   ```sh
+   /Users/rewt/.nvm/versions/node/v20.19.4/bin/node /Users/rewt/development/rewt/herdr-brain/bin/org.mjs config set retirement.closeout_queue false --scope project --who-asked ENG-649
+   ```
+
+   Normal pin forwarding remains enabled. The legacy policy parser accepts this
+   boolean and ignores the new field. Read back with `config --json`; stop if it
+   did not reach the canonical selected project policy.
+
+3. Supervisor-opus performs only its already approved exact LIVE c160 drain
+   process stops (72823, child of 74449, and 74449), under its actual existing
+   native/process-birth guards. This source packet provides no signal command
+   or additional authority. Do not reclassify these as stale/dead, or clear old
+   UNKNOWN 91833/50557 evidence. Brain's owner handles only its own exceptions.
+   A refusal stops that effect; preserve it in QUIET-ASKS-20261027.md without
+   alternate execution. No second liveness premise is requested here.
+
+4. Select the existing current line, after the approved stop effects are resolved:
+
+   ```sh
+   /Users/rewt/.nvm/versions/node/v20.19.4/bin/node /Users/rewt/development/rewt/herdr-brain/bin/org.mjs config set retirement.line_service_cleanup true --scope project --who-asked ENG-649
+   /Users/rewt/.nvm/versions/node/v20.19.4/bin/node /Users/rewt/development/rewt/herdr-brain/bin/org.mjs config --json
+   ```
+
+   Let the existing current line use its ordinary source-bound named closer and
+   supported recovery. It keeps original unknown effects and claims held, never
+   replaces an UNKNOWN attempt, and makes no blanket retry. No new watchdog or
+   manual session close. A saved service receipt alone proves no running service
+   health, original claim release or actual native outcome.
+
+Exact policy revert to the former ordinary `closeout_queue=true` with the new
+field absent (the Brain source policy at this change's base), in safe order:
+
+```sh
+/Users/rewt/.nvm/versions/node/v20.19.4/bin/node /Users/rewt/development/rewt/herdr-brain/bin/org.mjs config set retirement.line_service_cleanup --unset --scope project --who-asked ENG-649
+/Users/rewt/.nvm/versions/node/v20.19.4/bin/node /Users/rewt/development/rewt/herdr-brain/bin/org.mjs config set retirement.closeout_queue true --scope project --who-asked ENG-649
+```
+
+For an owning project whose retained pre-change values differ, first set
+`retirement.line_service_cleanup false`, then restore `closeout_queue` to the
+retained boolean (or `config set retirement.closeout_queue --unset` if absent),
+then restore `line_service_cleanup` to its retained boolean or unset it. Preserve
+all other retirement settings. A former true selection requires its former
+false closeout_queue. Restore through these same supported audited commands,
+with `--scope project --who-asked ENG-649`, after owner review: restoring the old
+queue policy can re-enable old kicks. No policy revert undoes native stops or
+clears effects/locks; no worker runs it.
+
+Source landing and offline proof do not complete live M1. Actual finished
+sessions must remain below five for two hours on the existing line, without
+hand closing. Stable release/adoption, full release coverage and both-project
+live proof remain with their existing coordinators. One asynchronous record
+queue-review receives the immutable landed base/head and producer evidence.

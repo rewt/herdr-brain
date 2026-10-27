@@ -122,7 +122,7 @@ test('permanent review route falls back to the existing review route without rep
   const config=structuredClone(ROUTE_PRESET);delete config.routes.reviewer;delete config.selection_policy.by_task_class.review;
   config.routes.review={kind:'codex',model:'fixture-reviewer',effort:'max'};
   assert.equal(reviewQueueRoute(config),'review');
-  config.selection_policy.by_task_class.review='review-sol-max';assert.equal(reviewQueueRoute(config),'review-sol-max');
+  config.selection_policy.by_task_class.review='review-codex';assert.equal(reviewQueueRoute(config),'review-codex');
   delete config.selection_policy.by_task_class.review;delete config.routes.review;assert.throws(()=>reviewQueueRoute(config),/unknown task class: review/);
   config.routes.review={kind:'invalid'};assert.throws(()=>reviewQueueRoute(config),/route|kind/);
 });

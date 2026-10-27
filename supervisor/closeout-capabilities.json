@@ -1,0 +1,8 @@
+{
+  "schema": "closeout-capabilities/v1",
+  "named_sessions": true,
+  "zero_elapsed_budget": true,
+  "owner_status_read_only": true,
+  "handoff_packet_read_only": true,
+  "shared_retirement_owner": true
+}

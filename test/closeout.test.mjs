@@ -31,6 +31,7 @@ import { stopFixtureInbox } from './helpers/inbox.mjs';
 import { retirementStatus, renderRetirementStatus } from '../lib/retire-status.mjs';
 import { outstandingEffects } from '../lib/run-owner.mjs';
 import { readCloseoutOwnerStatus } from '../lib/closeout-code.mjs';
+import { prepareCloseoutPacket, readCloseoutCapabilities } from '../lib/closeout-packet.mjs';
 import {createLineService,sourceRoot} from '../line-service/line-service.mjs';
 
 const cli = fileURLToPath(new URL('../bin/org.mjs', import.meta.url));
@@ -92,6 +93,104 @@ function setup(t, { occupied = true, merged = false, terminal = false } = {}) {
 }
 const evaluations = f => events(f).filter(e => e.type === 'closeout.evaluated');
 const effects = f => events(f).filter(e => e.type === 'closeout.effect').map(e => e.outcome);
+test('cleanup handoff packet preserves every queue byte and original birth identity across live unknown later and absent owners', t => {
+  for (const kind of ['original', 'later', 'absent']) {
+    const f = setup(t, { occupied: false, terminal: true });
+    const keys = readCloseoutEntries(f.common).map(e => e.key);
+    const lock = path.join(f.common, 'closeout/consumer.lock');
+    const owner = { pid: 91833, identity: '1793081341:121264', token: 'original',
+      argv: [process.execPath, '/installed/c160/supervisor/closeout.mjs', 'drain', '--keys', JSON.stringify(keys), '--deadline', '1'] };
+    fs.mkdirSync(lock, { recursive: true });
+    fs.writeFileSync(path.join(lock, 'owner.json'), JSON.stringify(owner));
+    const originalFile = path.join(f.scratch, 'original-owner.json');
+    fs.writeFileSync(originalFile, JSON.stringify(readCloseoutOwnerStatus({ cwd: f.repo, org: f.org, env: f.env })));
+    if (kind === 'later') fs.writeFileSync(path.join(lock, 'owner.json'), JSON.stringify({ ...owner, pid: 92400, identity: 'new-birth', token: 'later' }));
+    if (kind === 'absent') fs.rmSync(lock, { recursive: true });
+    const directory = path.join(f.common, 'closeout/entries'), extra = 'b'.repeat(64) + '.json';
+    const opaque = Buffer.from([0, 255, 10, 123]);
+    fs.writeFileSync(path.join(directory, extra), opaque);
+    const before = new Map(fs.readdirSync(directory).map(n => [n, fs.readFileSync(path.join(directory, n))]));
+    const record = fs.readFileSync(f.eventFile), status = fs.readFileSync(originalFile);
+    const packet = prepareCloseoutPacket({ cwd: f.repo, org: f.org, env: f.env, originalFile,
+      candidateRoot: fileURLToPath(new URL('../', import.meta.url)) });
+    assert.deepEqual(packet.keys, keys); assert.equal(packet.effects, 0); assert.equal(packet.effects_authorized, false);
+    assert.equal(packet.original_outcome, 'UNKNOWN'); assert.equal(packet.original_release, 'UNKNOWN');
+    assert.deepEqual(packet.original.claims.consumer.owner, owner);
+    assert.deepEqual(Buffer.from(packet.original.base64, 'base64'), status);
+    assert.equal(packet.queue.length, before.size);
+    for (const entry of packet.queue) {
+      assert.deepEqual(Buffer.from(entry.base64, 'base64'), before.get(entry.name));
+      assert.equal(entry.sha256, createHash('sha256').update(before.get(entry.name)).digest('hex'));
+      assert.deepEqual(fs.readFileSync(path.join(directory, entry.name)), before.get(entry.name));
+    }
+    assert.equal(packet.current_claims.consumer.liveness, 'UNKNOWN');
+    assert.equal(packet.current_claims.consumer.state, kind === 'absent' ? 'absent' : 'stored');
+    if (kind === 'later') assert.equal(packet.current_claims.consumer.owner.token, 'later');
+    assert.equal(packet.candidate.supported, true);
+    assert.equal(packet.phases.length, 2); assert.ok(packet.phases[0].argv.includes('--sessions-only'));
+    assert.equal(packet.phases[1].argv.includes('--sessions-only'), false);
+    assert.deepEqual(fs.readFileSync(f.eventFile), record); assert.deepEqual(f.read().actions, []);
+    if (kind === 'original') {
+      const reply = spawnSync(process.execPath, [closer, 'packet', '--repo', f.repo, '--org', f.org,
+        '--original', originalFile, '--candidate', fileURLToPath(new URL('../', import.meta.url))], { env: f.env, encoding: 'utf8' });
+      assert.equal(reply.status, 0, reply.stderr); assert.equal(JSON.parse(reply.stdout).effects_authorized, false);
+    }
+  }
+});
+
+test('cleanup handoff packet refuses partial foreign ambiguous or redirected preparations without acquiring claims', t => {
+  const f = setup(t, { occupied: false, terminal: true });
+  const keys = readCloseoutEntries(f.common).map(e => e.key), lock = path.join(f.common, 'closeout/consumer.lock');
+  fs.mkdirSync(lock, { recursive: true });
+  fs.writeFileSync(path.join(lock, 'owner.json'), JSON.stringify({ pid: 91833, identity: 'kernel-birth', token: 'original',
+    argv: [process.execPath, '/installed/c160/supervisor/closeout.mjs', 'drain', '--keys', JSON.stringify(keys)] }));
+  const original = readCloseoutOwnerStatus({ cwd: f.repo, org: f.org, env: f.env }), originalFile = path.join(f.scratch, 'original.json');
+  const options = { cwd: f.repo, org: f.org, env: f.env, originalFile, candidateRoot: fileURLToPath(new URL('../', import.meta.url)) };
+  for (const kind of ['foreign', 'missing-birth', 'ambiguous', 'partial']) {
+    const changed = structuredClone(original);
+    if (kind === 'foreign') changed.org = f.scratch;
+    if (kind === 'missing-birth') delete changed.claims.consumer.owner.identity;
+    if (kind === 'ambiguous') changed.claims.consumer.owner.argv.push('--keys', JSON.stringify(keys));
+    if (kind === 'partial') changed.claims.consumer.owner.argv[4] = JSON.stringify([...keys, 'a'.repeat(64)]);
+    fs.writeFileSync(originalFile, JSON.stringify(changed));
+    assert.throws(() => prepareCloseoutPacket(options), /different project|birth|exact named|every original/);
+  }
+  fs.writeFileSync(originalFile, JSON.stringify(original));
+  const file = path.join(f.common, 'closeout/entries', keys[0] + '.json'), retained = path.join(f.scratch, 'retained.json');
+  fs.renameSync(file, retained); fs.symlinkSync(retained, file);
+  assert.throws(() => prepareCloseoutPacket(options), /symbolic|regular|ELOOP/);
+  assert.deepEqual(f.read().actions, []);
+  assert.equal(fs.existsSync(path.join(f.common, 'closeout/queue.lock')), false);
+});
+
+test('cleanup handoff capability binds current clean code and holds an old undeclared code root without executing it', t => {
+  const f = setup(t, { occupied: false, terminal: true }), current = readCloseoutCapabilities();
+  assert.equal(current.supported, true); assert.equal(current.capabilities.shared_retirement_owner, true);
+  // A small committed pre-declaration product models the c160 closed parser;
+  // no installed release, project pin or saved job is read or changed.
+  const old = path.join(f.scratch, 'old-code'); fs.mkdirSync(path.join(old, 'supervisor'), { recursive: true });
+  fs.writeFileSync(path.join(old, 'supervisor/closeout.mjs'), `import {parseArgs} from 'node:util';\nparseArgs({allowPositionals:true,options:{keys:{type:'string'},deadline:{type:'string'},'no-restart':{type:'boolean'},repo:{type:'string'},org:{type:'string'}}});\n`);
+  f.git(['init', '-qb', 'main'], old); f.git(['config', 'user.name', 'Old code'], old); f.git(['config', 'user.email', 'old@example.invalid'], old);
+  f.git(['add', '.'], old); f.git(['commit', '-qm', 'Pre-declaration parser'], old);
+  const observed = readCloseoutCapabilities(old);
+  assert.equal(observed.supported, false); assert.equal(observed.capabilities, null);
+  const keys = readCloseoutEntries(f.common).map(e => e.key), lock = path.join(f.common, 'closeout/consumer.lock');
+  fs.mkdirSync(lock, { recursive: true });
+  fs.writeFileSync(path.join(lock, 'owner.json'), JSON.stringify({ pid: 91833, identity: 'original-birth', token: 'original',
+    argv: [process.execPath, '/installed/c160/supervisor/closeout.mjs', 'drain', '--keys', JSON.stringify(keys)] }));
+  const originalFile = path.join(f.scratch, 'original.json');
+  fs.writeFileSync(originalFile, JSON.stringify(readCloseoutOwnerStatus({ cwd: f.repo, org: f.org, env: f.env })));
+  const packet = prepareCloseoutPacket({ cwd: f.repo, org: f.org, env: f.env, originalFile, candidateRoot: old });
+  assert.deepEqual(packet.keys, keys); assert.deepEqual(packet.phases, []); assert.equal(packet.effects_authorized, false);
+  for (const flag of ['--sessions-only', '--retry-safe', '--owner']) {
+    const reply = spawnSync(process.execPath, [path.join(old, 'supervisor/closeout.mjs'), 'drain', flag], { env: f.env, encoding: 'utf8' });
+    assert.notEqual(reply.status, 0); assert.match(reply.stderr, /Unknown option/);
+  }
+  fs.writeFileSync(path.join(old, 'supervisor/closeout-capabilities.json'), JSON.stringify(current.capabilities));
+  assert.throws(() => readCloseoutCapabilities(old), /inventory mismatch/);
+  assert.deepEqual(f.read().actions, []);
+});
+
 test('closeout owner status preserves the retained legacy owner and refuses to turn old outcomes or an expired deadline into release',t=>{
   const f=setup(t,{occupied:false}),directory=path.join(f.common,'closeout'),owner={pid:91833,identity:'1793081341:121264',token:'original-consumer',at:'2026-10-27T06:09:02.691Z',argv:[process.execPath,'/installed/c160/supervisor/closeout.mjs','drain','--keys',JSON.stringify(['a'.repeat(64)]),'--deadline','1793079848822','--no-restart']};
   f.append([{type:'closeout.code-handoff',identity:f.common,keys:['a'.repeat(64)],old:{code:{root:'/installed/c160'},epoch:{tip:'d937'}},current:{code:{root:'/installed/c160'},epoch:{tip:'00e'}}},{type:'closeout.evaluated',key:'a'.repeat(64),identity:f.common,completed:true}]);

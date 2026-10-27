@@ -483,6 +483,59 @@ must never be two executors. Opt-out or downgrade also requires an orderly
 owner-controlled transfer, rather than starting legacy cleanup over a live
 drain. Lane workers do not manage real schedules or another identity's files.
 
+### Preparing an old/current owner handoff
+
+The installed c160 CLI predates `--sessions-only`, `--retry-safe`, and
+`status --owner`. Do not send newer options to an old drain, reinterpret its
+expired deadline as completion, or alter the installed release. Both session
+retirement and physical cleanup continue through the **same** finite closer,
+consumer claim and shared retirement owner. No second cleanup engine is needed.
+
+The current source provides two read-only preparation commands:
+
+```sh
+node supervisor/closeout.mjs capabilities
+node supervisor/closeout.mjs packet --repo PROJECT --org RECORD \
+  --original RETAINED-ORIGINAL-OWNER-STATUS.json --candidate VERIFIED-CODE-ROOT
+```
+
+`capabilities` verifies the physical code identity and its bundled
+`supervisor/closeout-capabilities.json` declaration without executing a different
+code root. Missing declarations mean unsupported/unknown, never inferred support
+from a path or release label. This declaration is distributed runtime data, not
+project policy or a release/adoption receipt. Native acceptance remains separate.
+
+`packet` requires a retained `closeout-owner-status/v1` observation of the
+**original** consumer with PID, kernel birth, token and exact named drain keys.
+Do not substitute a later observation or manufacture this artifact if the
+original was not captured. It binds the project/record, embeds the original
+snapshot bytes and every currently queued JSON file byte (including unrelated
+or unreadable-as-JSON entries), hashes them, and observes current claims twice.
+Missing named entries, redirected files or changing inputs refuse preparation.
+It acquires no lock, observes no process, sends no native command, changes no
+queue/record, and starts no successor. The packet is a transient preparation
+projection, not a completion/release receipt or an executable recovery manifest.
+
+The packet **always** leaves original outcome/release UNKNOWN and effect
+authority false. A later stored owner, absent claim, complete evaluation or old
+worker log does not prove the original command terminal/outcome or exact claim
+release. Only the actual project owner can provide that proof and inspect any
+surviving children, then adopt the candidate under existing release rules.
+Fresh native/source/claim/STOP/HOLD/callback/archive guards still apply. Pending
+v1 entries retain the existing named migration requirement; packet creation
+does not migrate or rebind anything.
+
+For supported candidate code, the packet lists two conditional argument arrays
+for that **same owner** and original exact key set. The session phase uses
+`--sessions-only --retry-safe --no-restart --deadline 0`; it can report
+`sessions_retired: true` while keeping `completed: false` and the physical
+request queued. The physical phase omits `--sessions-only` and observes fresh
+guards without replaying an UNKNOWN exit/close intent. Neither array authorizes
+execution, overrides the project pin, forces a successor, changes an ownership
+clock, or gates unrelated landing, review or READY admission. Unsupported old
+code gets no phase arrays. No worker installs, signals, restarts or unlinks
+claims as part of this preparation.
+
 The new handoff is safety-critical: do **not** add an ignorable field to a
 `closeout-entry/v1` request and expect old consumers to enforce it. Use a
 `closeout-entry/v2` execution envelope in the same entries directory, preserving

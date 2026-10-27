@@ -212,7 +212,9 @@ parent `MONITOR_SUPERVISOR_AGENT` first, then its effective dispatch/route launc
 env value (later route entries win), then the target project's effective
 `promote.to` through supported policy discovery. Child-only launcher env does
 not mutate the parent environment. Missing/unreadable address policy yields an
-UNKNOWN address in the footer, with no invented recipient or new readiness gate.
+UNKNOWN address in the legacy footer, with no invented recipient. New line
+assignments require a real supported exception address in their execution
+contract before spawn; existing saved requests keep their original behavior.
 New requests save this address decision for retries; already-delivered prompts,
 saved ordinary recipients and runtime/claim bindings remain unchanged. Older
 installed entries or saved prompts may retain the legacy `supervisor-herdr`
@@ -221,6 +223,18 @@ identity's owner supplies its actual address. The exception address is separate
 from the new dispatch's ordinary report destination. A bootstrap supervisor forwards
 ordinary follow-up to the existing owner; it does not repeat intake or review.
 The core stays foreground and never calls a model.
+
+New `--detach` line requests capture the selected short worker/reviewer guidance
+and required execution contract in existing run metadata. `record start` renders
+the role page once with purpose/outcome/scope/unchanged/evidence, the existing
+item/report premise-attempt-check-result ledger, and actual project/lane/route
+fields. Before native launch, dispatch verifies the materialized brief and its
+recorded execution binding. The actual prompt includes that exact brief once;
+it tells the worker not to reload it or the role page. This replaces repeated
+line-ask/footer/report workflow prose for new line requests. Advisory estimates
+never gate a spawn, and cold briefs invent no worker identity. See
+[worker guidance and the owner packet](../supervisor/WORKER-BRIEF.md).
+Saved jobs, watchers and UNKNOWN native/review attempts are never upgraded.
 
 New source dispatches also pin their actual Node/record CLI command and matching
 `HERDR_BRAIN_ROOT` in the request

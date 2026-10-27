@@ -417,7 +417,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
             }
             const brief = path.join(directory, `${digest(key)}.ask.md`);
             const target = reviewTarget ? validateQueuedReview({ item: current, state: fresh.state, events: fresh.events, org, repo }) : null;
-            writeFileAtomic(brief, target ? reviewQueueBrief(current) : `# ${current.title}\n\n${current.accept.join('\n')}\n\nWork from the existing item/run brief and accepted directions. Self-land OWN source and hand its immutable landed tuple/evidence to record queue-review; never start a parallel settle/lane review. Preserve STOP/HOLD, claims and native guards. Escalate judgment to ${to} through the existing native inbox.\n`, 0o600);
+            writeFileAtomic(brief, target ? reviewQueueBrief(current) : `# ${current.title}\n\n${current.accept.join('\n')}\n\nWork from the existing item fields/notes and accepted directions. The generated execution brief supplies role guidance and project routing.\n`, 0o600);
             return JSON.parse(cli('dispatch/dispatch.mjs', [item.id, '--repo', repo, '--org', org, '--lane', `${target ? 'review' : 'line'}-${item.id.toLowerCase()}-${current.runs.length + 1}`, '--route', route, '--brief', brief, ...(target ? ['--base', target.head] : []),'--detach']));
           },undefined,undefined,Boolean(retryAdmission));
           // Each original detached journal reserves admission before returning.

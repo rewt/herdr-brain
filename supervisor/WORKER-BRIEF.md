@@ -1,25 +1,35 @@
-# Worker brief template
+# Worker execution brief
 
-Item/run and route: the actual recorded assignment.
-Outcome: the concrete result and acceptance criteria.
-Scope: exact files/areas, dependencies and held/reserved boundaries.
-Evidence: selected affected checks, or why no execution applies.
+New line assignments capture one short [worker](roles/worker.md) or
+[reviewer](roles/reviewer.md) page in existing run metadata. The generated brief
+contains that page once, and dispatch delivers the brief inline once, without
+asking the worker to reload it. Saved requests and delivered briefs keep their
+original behavior. AGENTS.md remains the native instruction entry point;
+technical references are consulted when needed.
 
-**Engineer:** use your claimed lane; land finished source under the current waiver
-with lane promote TOPIC --expected-head FULL_SHA, then report immutable landed
-base/head and evidence. Rebase moved main in your lane and bind the new head.
-No report-first promotion flag or pre-main test/review readiness stage.
-Run selected focused checks once; preserve red, rerun only failing/affected checks
-after correction. Hand back through the one existing review-queue path.
+The required contract names purpose, outcome, scope, unchanged boundaries,
+evidence selection and the existing item/report premise-attempt-check-result
+ledger. It binds the actual project, record, lane, workspace and assigned route,
+the configured review route, brain-chat and the supported PROJECT SUPERVISOR
+address. Item fields/notes and the full ask retain detailed scope and evidence;
+the page adds no duplicate ledger or failure-count automation. Missing execution,
+scope or routing fields refuse a new line spawn, listing all missing fields.
+Budget, time and size estimates remain advisory. Native identity is recorded
+after launch, never invented in a cold brief.
 
-**Reviewer:** captured immutable diff/evidence only; one async post-code judgment,
-cap1, zero tests/build/install/prepare/probe suites and no edits. Give concrete
-findings/verdict, preserving uncertainty. About30 minutes is advisory. One formal
-fix, no automatic re-review chain.
+Act and log within the named contract. Routine progress, check output, already-red
+main, bounded retries, receipts, review completion and queue status never become
+operator questions. Reserved pending asks alone use the existing push-once inbox;
+ordinary operator envelopes remain in the record. A native refusal stops its
+effect; independent work continues. Existing routes remain in place.
 
-Keep native identity, claims/generation, Git/source/CAS/FF, STOP/HOLD, archives and
-the existing watcher. Native refusal stops that effect; independent work continues.
-Replies go to brain-chat; exceptions to the PROJECT SUPERVISOR at the recorded
-address. Never type into an operator/quiet pane.
-Use AGENTS.md as the short worker instruction page; consult technical references
-only when needed. This template grants no new authority.
+Codex/Sol is the provisional default judge, with no family superiority claim.
+New judgment-heavy/outward work uses ONE other-family post-code review through an
+owner-selected supported reviewer route, async/cap1/zero suites. A fresh reframe
+uses the contract and ledger, not the old trajectory; a failed reframe reshapes
+the item. Harness/model strings remain opaque to core. Missing selections need
+the owning policy packet, not invented dispatch flags or a second review.
+
+See [the owner policy packet](ROLE-BRIEF-OWNER-PACKET.md) for current adoption
+boundaries. This page grants no authority to change native, reserved or identity
+holds, saved jobs, pins or services.

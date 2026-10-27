@@ -32,6 +32,7 @@ import {lockRequest} from './request-lock.mjs';
 import {resolvedNotStarted} from './not-started.mjs';
 import {originalPrestartProof,reviewDigest,reviewPlain} from '../line-service/review-resolutions.mjs';
 import {checkDispatchEligibility,launchDigest} from './launch-guard.mjs';
+import { createWorkerBrief, validateWorkerBrief, validateLineExecution, lineWorkerPrompt } from '../lib/worker-brief.mjs';
 
 const local = (file) => fileURLToPath(new URL(file, import.meta.url));
 const { values: opt, positionals } = parseArgs({ usage: "Usage: node dispatch/dispatch.mjs ITEM --lane TOPIC --route ROUTE --brief FILE [OPTIONS] | --retry R-n|JOURNAL | --status R-n|JOURNAL\nAdmission counts running native workers/reviewers and durable uncertain starts under dispatch.max_sessions. Unlanded lifecycle history is diagnostic only. --from-run retains same-item/current-run guards; --unblocks records a genuine landing dependency and never bypasses native capacity.", allowPositionals: true, options: {
@@ -404,6 +405,10 @@ async function main() {
     const declared = resolveRoute(config, { route: opt.route });
     resolveLaunchRoute(config, { route: opt.route });
     const declaredFields = { harness: declared.kind, model: declared.model ?? null, effort: declared.effort ?? null };
+    const exceptionAddress = projectExceptionAddress(repo, config, opt.route);
+    const workerBrief = opt.detach ? createWorkerBrief({ item, ask: brief, askText: fs.readFileSync(brief, 'utf8'), extra: opt.extra,
+      project: repo, org, lane: opt.lane, route: opt.route, harness: declared.kind,
+      reviewRoute: reviewQueue ? opt.route : reviewQueueRoute(config), exception: exceptionAddress }) : undefined;
     if (opt.reuse) checkReuse(json(record(['show', opt.reuse, '--json'])), { lane: opt.lane, route: opt.route, declared: declaredFields });
     const common = fs.realpathSync(git(['rev-parse', '--path-format=absolute', '--git-common-dir'], repo));
     unlandedAdmission({ repo, org, common, item: item.id, fromRun: opt['from-run'], unblocks: opt.unblocks });
@@ -420,7 +425,7 @@ async function main() {
       ...(reviewQueue ? { reviewQueue, reviewQueueBrief: reviewQueueBrief(item) } : {}),
       brief, report: opt.report ?? null, to: opt.to ?? null,
       base: git(['rev-parse', `${opt.base ?? 'HEAD'}^{commit}`], repo), extra: opt.extra ?? '', reuse: opt.reuse ?? null, fromRun: opt['from-run'] ?? null, unblocks: opt.unblocks ?? null,
-      declared: declaredFields, exceptionAddress: projectExceptionAddress(repo, config, opt.route),
+      declared: declaredFields, exceptionAddress, ...(workerBrief ? { workerBrief } : {}),
       stage: 'open', run: null,native_launch_attempted:false,...(opt.detach?{phase1_protocol:1,detachedRequested:true}:{}) };
     // Only routing fields are frozen. Lifecycle paths keep their original config provenance.
     job.routeConfig = path.join(directory, `${token}.routes.json`);
@@ -524,6 +529,10 @@ async function main() {
     }
   }
   if (job.stage === 'start') {
+    if (job.workerBrief) {
+      job.workerBrief.workspace = job.workspace;
+      validateWorkerBrief(job.workerBrief, { execution: true });
+    }
     if (job.fromRun) checkOrigin(job.fromRun, json(record(['show', job.item, '--json'])));
     if (job.reuse) checkReuse(json(record(['show', job.reuse, '--json'])), job);
     // Save the pending start's item/exception reservation before spawning its
@@ -543,6 +552,7 @@ async function main() {
       '--workspace', job.workspace, '--meta', `lane=${job.lane}`, '--meta', `dispatch_journal=${journal}`,
       '--meta', `dispatch_attempt=${job.token}`, '--meta', `dispatch_project=${job.common}`, '--meta', `dispatch_record=${job.org}`,
       '--meta', `dispatch_unlanded_admitted=${job.unlandedCap.admission.admitted}`,
+      ...(job.workerBrief ? ['--meta', `worker_brief=${JSON.stringify(job.workerBrief)}`] : []),
       ...(job.unlandedCap.admission.kind === 'review' ? ['--meta', 'dispatch_role=review'] : []),
       ...(job.fromRun ? ['--meta', `dispatch_from_run=${job.fromRun}`] : []),
       ...(job.unblocks ? ['--meta', `dispatch_unblocks=${job.unblocks}`] : []),
@@ -616,6 +626,7 @@ async function main() {
         wait: () => acquireSessionCapLock(common, { check: checkStop }), persist: syncTiming, onError: timingFailure });
       admission(job.repo, job.org, common);
       checkStop();
+      if (job.workerBrief) validateLineExecution({ job, run, brief: fs.readFileSync(run.brief_path, 'utf8') });
       job.stage = 'launching'; save();
       job.native_launch_attempted=true;save();
       const output = lane(['dispatch', job.lane, '--route', job.route, '--route-config', job.routeConfig, '--json', '--memory-checked',
@@ -703,7 +714,8 @@ async function main() {
       const wording = job.operatorPlainText ? ` --happened '<what happened in plain words>' --action '<what you need to do, usually Nothing needed.>' --details ${quote(`${job.item}; ${job.run}; technical references`)}` : '';
       const composition = job.operatorPlainText ? ' EVERY message addressed to the operator must read naturally: one-line headline, what happened, whether you need to do anything, then ONE trailing Details line. Author the main text for a non-agent reader; bare item/run IDs, hashes, receipt/source jargon and shorthand such as bootstrap5 or record-only belong only in Details. A pending reserved decision must say a decision is needed, never Nothing needed. Internal agent coordination and owned callbacks keep their technical contracts.' : '';
       const producer = job.operatorRecordCommand ? `For OPERATOR-addressed status/fyi/done/questions, store an envelope in the owning record with this explicit source command: ${job.operatorRecordRoot ? `HERDR_BRAIN_ROOT=${quote(job.operatorRecordRoot)} ` : ''}ORG_DIR=${quote(job.org)} ORG_ACTOR=${quote(job.worker.agentName)} ${job.operatorRecordCommand.map(quote).join(' ')} messages send --id ${quote(`${job.run}:operator:STABLE_NOTICE_ID`)} --kind notice --run ${quote(job.run)} --item ${quote(job.item)} --summary '<one-line summary>'${wording}. Reuse the stable ID for a retry; use kind fyi for fyi and question/request for judgment, with --correlation THREAD and --reply-to ID when applicable. Pull messages digest on demand with the same source command. Ordinary OPERATOR-addressed messages are record-only and never typed into an operator pane. Only an actual pending human question already explicitly operator_reserved in the record, referenced with --question HUM-n, pushes once through the existing native inbox and Brain Chat filtering. Routine T2 questions do not become reserved. Internal owned report/watch callbacks and project T2/BrainChat delivery retain their existing native paths and recipients; retain the watcher. Do not fabricate native bindings or change pins, saved jobs or long-lived sessions.${composition}` : '';
-      const prompt = `You are run ${job.run} on org item ${job.item}. Read ${job.brief} (the ask) and ${run.brief_path} (the record context and report template), then do the work. Write the report to ${run.report_path}; the report's run field is ${job.run}.\n\n${owner}${producer ? `\n\n${producer}` : ''}\n\n${validation}${job.reviewQueueBrief ? `\n\n${job.reviewQueueBrief}` : ''}${job.extra ? `\n\n${job.extra}` : ''}`;
+      const prompt = job.workerBrief ? lineWorkerPrompt({ job, run, brief: fs.readFileSync(run.brief_path, 'utf8'), producer, node: process.execPath, laneCLI: local('../lanes/lane.mjs') })
+        : `You are run ${job.run} on org item ${job.item}. Read ${job.brief} (the ask) and ${run.brief_path} (the record context and report template), then do the work. Write the report to ${run.report_path}; the report's run field is ${job.run}.\n\n${owner}${producer ? `\n\n${producer}` : ''}\n\n${validation}${job.reviewQueueBrief ? `\n\n${job.reviewQueueBrief}` : ''}${job.extra ? `\n\n${job.extra}` : ''}`;
       prepareSessionBinding(run);
       job.stage = 'prompting'; save();
       checkReviewContinuationNative();

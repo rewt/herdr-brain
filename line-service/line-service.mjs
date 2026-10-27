@@ -24,7 +24,7 @@ import { roleIs } from '../lib/roles.mjs';
 import { recordLineNotice,canonicalFailure } from './record-inbox.mjs';
 import { enqueueNamedDecision } from './decision-wake.mjs';
 import { canonical } from '../messages/schema.mjs';
-import { discoverChanges,dispatchInput,phase0Boundary,morningDigest,recordReviewResults } from './phase1.mjs';
+import { discoverChanges,dispatchInput,phase0Boundary,morningDigest,recordReviewResults,reviewCompletionPlan,recordReviewCompletion } from './phase1.mjs';
 import {preflightContinuation} from '../dispatch/preflight.mjs';
 export { reviewAttempt } from './review.mjs';
 
@@ -217,11 +217,17 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       // review verdicts and physical cleanup. The record owns the conditional
       // current-run/report/blocker/reopen transaction; there is no override.
       snapshot = current();
+      for(const item of snapshot.state.items.values())if(isQueueReview(item)&&!item.closed){
+        const run=snapshot.state.runs.get(item.runs.at(-1));if(!run?.report||run.report.outcome!=='done')continue;
+        try{const plan=reviewCompletionPlan({events:snapshot.events,state:snapshot.state,runId:run.id});effect(`review-complete:${run.id}:${plan.token}`,()=>recordReviewCompletion({repo,org,runId:run.id,env:childEnv}),undefined,undefined,true);}
+        catch(e){note(`review-complete:${run.id}`,e.message,{item:item.id,run:run.id});}
+      }
+      snapshot=current();
       let closeSteps=0;
       for (const item of [...snapshot.state.items.values()].sort((a,b)=>(snapshot.state.runs.get(b.runs.at(-1))?.report?.seq??0)-(snapshot.state.runs.get(a.runs.at(-1))?.report?.seq??0))) {
         if(expired()||closeSteps>=maxStepsPerStage)break;
         const run = snapshot.state.runs.get(item.runs.at(-1));
-        if (item.closed || run?.report?.outcome !== 'done' || run.abandoned || !run.workspace || !fs.existsSync(run.workspace) ||
+        if (item.closed || isQueueReview(item) || run?.report?.outcome !== 'done' || run.abandoned || !run.workspace || !fs.existsSync(run.workspace) ||
             !run.owner || run.owner.legacy || run.owner.controller !== 'brain') continue;
         try {
           if (identify(run.workspace).identity !== project.identity) continue;

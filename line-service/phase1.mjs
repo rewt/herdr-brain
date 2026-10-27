@@ -4,7 +4,7 @@ import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {reviewScope,claimedCommitTokens} from '../settle/review-range.mjs';
-import {nextItemId,fold,extendFold,itemStatus} from '../lib/state.mjs';
+import {nextItemId,fold,extendFold,itemStatus,blockersOf,releases} from '../lib/state.mjs';
 import {roleIs} from '../lib/roles.mjs';
 import {transact} from '../lib/store.mjs';
 import {readReport} from '../lib/report.mjs';
@@ -13,6 +13,38 @@ import {protectRecordMutation} from '../lib/record-guard.mjs';
 import {serviceRecordBinding} from './record-inbox.mjs';
 import {reviewResolution} from './review-resolutions.mjs';
 import {resolvedDispatchInput} from '../dispatch/not-started.mjs';
+import {bindCloseoutSources,publishCloseoutEvents} from '../lib/closeout.mjs';
+
+export function reviewCompletionPlan({events,state,runId}){
+  const run=state.runs.get(runId),item=state.items.get(run?.item),key=item?.meta.review_key;
+  if(!run?.report||run.abandoned||!roleIs(item,'REV')||!key||item.meta.review_round_cap!==1||item.runs.at(-1)!==runId||run.report.outcome!=='done')throw Error('review completion needs its current immutable done report');
+  if(item.closed)return{closed:true};
+  if(item.meta.operator_reserved||item.meta.reserved||item.meta.hold||item.meta.held||['security','funds-and-chain','publish','delete-data','licensing','priorities'].includes(item.meta.category)||run.report.blockers?.length||(run.report.questions??run.report.extra?.questions)?.length||
+    [...state.items.values()].some(q=>q.parent===item.id&&roleIs(q,'HUM')&&!q.closed)||item.runs.some(id=>id!==runId&&!state.runs.get(id)?.report&&!state.runs.get(id)?.abandoned))throw Error('review completion needs judgment for held/reserved report scope');
+  const fact=events.find(e=>e.type==='change.reviewed'&&e.review_run===runId&&e.review_item===item.id&&e.review_key===key&&e.head===item.meta.review_target?.head&&e.report_sha256===run.report.sha256);
+  if(!fact||!['PASS','FAIL','NEEDS-WORK'].includes(fact.verdict))throw Error('review completion needs its typed exact-target verdict');
+  if(item.outcome&&item.outcome.run!==runId||events.some(e=>e.type==='item.closed'&&e.id===item.id&&e.seq>run.report.seq))throw Error('review completion was superseded or reopened; retain judgment');
+  const blockers=blockersOf(state,item.id);
+  for(const id of blockers){const child=state.items.get(id);if(releases(state,id,itemStatus(state,id,new Set(),item.id)))continue;
+    if(!roleIs(child,'ENG')||child.parent!==item.id||child.created.run!==runId||child.meta.review_fix_of!==key)throw Error('review completion has an unresolved independent blocker');}
+  const ids=new Set([item.id,...blockers]),revision=Math.max(fact.seq,...events.filter(e=>['item.updated','item.closed','item.reopened','link.added','link.removed'].includes(e.type)&&[e.id,e.blocker,e.blocked].some(id=>ids.has(id))).map(e=>e.seq));
+  return{run,item,fact,token:hash(JSON.stringify([runId,run.report.sha256,fact.seq,revision])),closed:false};
+}
+
+// Finishing a judgment does not finish its linked product corrections. The
+// ordinary closeout queue still owns all callback/native/archive retirement.
+export function recordReviewCompletion({repo,org,runId,env=process.env}){
+  const guard=()=>{const b=serviceRecordBinding({repo,org,env});for(const f of [path.join(b.directory,'STOP'),path.join(repo,'.lane/supervisor/STOP'),path.join(repo,'.lane/supervisor/HOLD')])if(fs.existsSync(f))throw Error('STOP/HOLD prevents review completion');return b;};
+  guard();
+  const result=transact(org,events=>{
+    guard();const state=fold(events),p=reviewCompletionPlan({events,state,runId});if(p.closed)return{add:[]};
+    const owned=readOwnedRun(org,runId);requireController(owned,'brain');assertOwner(owned,{owner:p.run.owner,generation:p.run.owner_generation});
+    const file=path.resolve(org,p.run.report.file??'');if(!file.startsWith(org+path.sep)||hash(fs.readFileSync(file))!==p.run.report.sha256)throw Error('immutable review completion bytes changed');
+    const mutation=protectRecordMutation({org,state,events,command:'line-service completed review',mutation:{add:[{type:'item.closed',id:p.item.id,as:'done',completed_run:runId,review_verdict:p.fact.seq,note:`Independent ${p.fact.verdict} judgment recorded for ${p.fact.review_key}; linked corrections remain owned and open. Preserve callbacks, HOLD, archives and guarded physical retirement.`}]}});
+    return bindCloseoutSources({cwd:repo,org,events,env,mutation});
+  },{actor:'line-service',strictTail:true,lockOptions:{recover:false}});
+  publishCloseoutEvents({cwd:repo,org,added:result.added,start:false,env});return{review_closed:result.added.some(e=>e.type==='item.closed'),run:runId};
+}
 
 const hash=b=>createHash('sha256').update(b).digest('hex');
 const git=(repo,args)=>execFileSync('git',['--no-optional-locks','-C',repo,...args],{encoding:'utf8',timeout:10000,stdio:['ignore','pipe','pipe'],maxBuffer:32*1024*1024}).trim();

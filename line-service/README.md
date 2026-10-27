@@ -211,6 +211,16 @@ Only an actual pending explicitly reserved human question naming its decider can
 use the existing one-shot native decision pointer, with the original stronger
 session binding. Record errors have no native fallback.
 
+A typed exact-target verdict completes the current review task independently
+of its linked engineer corrections. The service conditionally closes that
+immutable done review and publishes its ordinary closeout target, even while
+its own fix proposal remains open. It never closes the source or fix item.
+Missing/contradictory verdicts, ownership changes, reopened reviews, human
+questions and independent blockers remain held. Retirement checks the typed
+verdict/closure against the current run and retains all native occupant,
+source/integration, callback, HOLD and archive guards. A FAIL reviewer may retire;
+its product correction remains separately owned without a second review chain.
+
 ```sh
 node line-service/line-service.mjs --digest --org /OWN/RECORD --since 2026-10-27T00:00:00Z
 ```

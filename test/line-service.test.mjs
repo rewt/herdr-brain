@@ -97,7 +97,7 @@ test('priority READY dispatch uses existing admission and retains its one effect
   assert.equal(call.options.env.MONITOR_SUPERVISOR_AGENT, 'supervisor-test');
 });
 test('standing order changes the next native dispatch and skips held, reserved, dependent and unselected proposals',t=>{
-  const f=fixture(t),a=f.add('Stable Brain',1),b=f.add('Rehearsal',9999),ready=f.add('Independent normal work',-1);
+  const f=fixture(t),a=f.add('Stable Brain',1),b=f.add('Rehearsal',9999),ready=f.add('Independent normal work',0);
   const goal=f.record(['add','Standing outcomes','--goal']).split(' ')[0];
   const setOrder=order=>f.record(['set',goal,`meta.queue_order=${JSON.stringify(order)}`]);
   setOrder(['stable','rehearsal']);

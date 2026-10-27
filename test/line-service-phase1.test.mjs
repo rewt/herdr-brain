@@ -471,6 +471,21 @@ test('continuity discovery producer and index failures preserve diagnostics whil
   }
 });
 
+test('an older review error row without a provable boundary is retained and counted while bound counters still record once per key',t=>{
+  const f=fixture(t),env=installedService(f);f.add([{type:'item.closed',id:'ENG-1',as:'done'}]);
+  const legacyKey='b'.repeat(64),legacy={first_at:'2026-10-26T00:00:00.000Z',reason:'old reason',scope:{},state:'recorded',id:`line-record-${legacyKey}`,count:3,review:true,review_count_recorded:0};
+  const file=path.join(f.directory,'effects.json'),audit=path.join(f.directory,'passes.jsonl');
+  fs.writeFileSync(file,JSON.stringify({identity:f.identity,org:f.org,actions:{},record_notices:{[legacyKey]:legacy}}));
+  const service=createLineService({repo:f.cwd,org:f.org,to:'brain-chat',env,capacity:()=>({cap:0,count:0}),command:(_exe,args)=>({status:1,stdout:'',stderr:'selected helper cannot certify immutable review target'})});
+  service.pass();service.pass();service.pass();
+  const rows=fs.readFileSync(audit,'utf8').trim().split('\n').map(JSON.parse),events=f.context().events,typed=events.filter(e=>e.type==='line-service.review-error'),repeats=events.filter(e=>e.type==='line-service.review-error-counts');
+  assert.equal(rows.some(r=>r.action==='review-error-counter-held'),false,'one unbound row never fails the batch');
+  assert.equal(rows.findLast(r=>r.action==='pass-complete').timing.review_error_unbound,1);
+  assert.equal(typed.some(e=>e.key===legacyKey),false);assert.equal(typed.length,1);assert.equal(repeats.length,2,'one aggregate event per later batch, not one per repeat');
+  assert.equal(morningDigest({events}).review_errors.occurrences,3);
+  const saved=JSON.parse(fs.readFileSync(file)).record_notices[legacyKey];assert.equal(saved.review_count_recorded,0);assert.equal(saved.count,3);assert.equal(saved.boundary,undefined);
+});
+
 test('continuity base notices retain identity and recorded state across recurrence audit interruption and batched counter replay',t=>{
   const f=fixture(t),env=installedService(f);f.add([{type:'item.closed',id:'ENG-1',as:'done'}]);
   const boundary=`review:ENG-1:${f.heads[1]}`,reason='selected helper native refusal; preserve original attempt',scope={},key=hash(canonical([boundary,reason,scope])),id=`line-record-${key}`,first_at='2026-10-26T00:00:00.000Z';
@@ -490,7 +505,7 @@ test('continuity base notices retain identity and recorded state across recurren
   // The checkpoint failure itself also has a retained review-health delta.
   const interruptedKeys=new Set(interruptedRows.filter(r=>r.notice_record).map(r=>r.notice_record.key));assert.ok(interruptedKeys.has(key));assert.equal(last.timing.notice_audit_replayed,interruptedKeys.size);assert.equal(last.timing.review_error_batches,1);
   assert.equal(calls,1,'replay must retain the prior held effect rather than requeue it');
-  const counts=f.context().events.filter(e=>e.type==='line-service.review-error'&&e.key===key);assert.equal(Math.max(...counts.map(e=>e.count)),6);assert.equal(new Set(counts.map(e=>e.id)).size,counts.length);
+  const typed=f.context().events.filter(e=>e.type==='line-service.review-error'&&e.key===key),repeats=f.context().events.filter(e=>e.type==='line-service.review-error-counts'&&key in e.counts);assert.equal(typed.length,1);assert.equal(Math.max(...typed.map(e=>e.count),...repeats.map(e=>e.counts[key])),6);assert.equal(new Set(repeats.map(e=>e.id)).size,repeats.length);
   service.pass();assert.equal(calls,1);assert.equal(JSON.parse(fs.readFileSync(file)).record_notices[key].count,7);assert.equal(deliveries,0);
 });
 

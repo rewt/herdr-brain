@@ -139,7 +139,10 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       const audit=path.join(directory,'passes.jsonl'),restored=replayNoticeAudit(audit,effects),pendingErrors=new Map();let noticesDirty=false,counterFailed=false;
       timings.notice_audit_replayed=restored.length;
       const errorRow=(key,e)=>({key,count:e.count,boundary:e.boundary,reason:e.reason,scope:e.scope});
-      for(const [key,e]of Object.entries(effects.record_notices??{}))if(e.review&&(e.review_count_recorded??0)<e.count)pendingErrors.set(key,errorRow(key,e));
+      // An older row that cannot prove its canonical boundary stays retained and
+      // counted; it never fails the batch for every other bound counter.
+      timings.review_error_unbound=0;
+      for(const [key,e]of Object.entries(effects.record_notices??{}))if(e.review&&(e.review_count_recorded??0)<e.count){try{noticeBoundary(key,e);pendingErrors.set(key,errorRow(key,e));}catch{timings.review_error_unbound++;}}
       const save = () => {effects.notice_audit_offset=fs.statSync(audit,{throwIfNoEntry:false})?.size??0;writeFileAtomic(journal, JSON.stringify(effects, null, 2) + '\n', 0o600);timings.effects_journal_writes++;noticesDirty=false;};
       const flushErrors=()=>{
         if(!pendingErrors.size||counterFailed)return;

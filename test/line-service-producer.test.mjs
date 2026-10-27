@@ -81,7 +81,7 @@ test('producer old reported source skips cheaply while an unresolved manual revi
   const f=fixture(t,{before:[{type:'item.added',id:'REV-90',role:'reviewer',title:'Old manual review',meta:{}}]});f.build({historical:true});
   const before=f.events().length;f.service().pass();f.service().pass();
   assert.equal(f.calls.length,0);assert.equal(f.messages().length,1);assert.match(f.messages()[0].envelope.payload.service_notice.reason,/legacy\/manual.*UNKNOWN/);
-  assert.ok(f.events().slice(before).filter(e=>e.type==='line-service.review-health').every(e=>e.owed===0));assert.equal(f.events().filter(e=>e.type==='line-service.review-error').length,2);
+  assert.ok(f.events().slice(before).filter(e=>e.type==='line-service.review-health').every(e=>e.owed===0));assert.equal(f.events().filter(e=>e.type==='line-service.review-error').length,1);assert.equal(morningDigest({events:f.events()}).review_errors.occurrences,2);
   assert.equal(fs.existsSync(inboxPath({org:f.org})),false);
 });
 
@@ -118,7 +118,7 @@ test('useful error persistence records first errors immediately and batches repe
 
 test('useful error persistence replays only durable notice deltas after a lost journal checkpoint without duplicate envelopes counters or native effects',t=>{
   const f=fixture(t);f.add([{type:'item.added',id:'REV-1',role:'reviewer',title:'Retained manual review',meta:{}}]);const journal=path.join(f.directory,'effects.json');f.service().pass();const checkpoint=fs.readFileSync(journal);f.service().pass();fs.writeFileSync(journal,checkpoint);f.service().pass();
-  const notices=Object.values(JSON.parse(fs.readFileSync(journal)).record_notices);assert.equal(notices.length,1);assert.equal(notices[0].count,3);assert.equal(f.messages().length,1);const errors=f.events().filter(e=>e.type==='line-service.review-error');assert.deepEqual(errors.map(e=>e.count),[1,2,3]);assert.equal(new Set(errors.map(e=>e.id)).size,3);assert.equal(morningDigest({events:f.events()}).review_errors.occurrences,3);assert.equal(f.calls.length,0);assert.equal(fs.existsSync(inboxPath({org:f.org})),false);
+  const notices=Object.values(JSON.parse(fs.readFileSync(journal)).record_notices);assert.equal(notices.length,1);assert.equal(notices[0].count,3);assert.equal(f.messages().length,1);const errors=f.events().filter(e=>e.type==='line-service.review-error'),repeats=f.events().filter(e=>e.type==='line-service.review-error-counts');assert.deepEqual(errors.map(e=>e.count),[1]);assert.deepEqual(repeats.map(e=>e.counts[errors[0].key]),[2,3]);assert.equal(new Set(repeats.map(e=>e.id)).size,2);assert.equal(morningDigest({events:f.events()}).review_errors.occurrences,3);assert.equal(f.calls.length,0);assert.equal(fs.existsSync(inboxPath({org:f.org})),false);
   const log=path.join(f.directory,'passes.jsonl'),record={key:'a'.repeat(64),entry:{id:'line-record-'+ 'a'.repeat(64),count:4,first_at:'2026-10-27T01:00:00Z',last_at:'2026-10-27T01:00:01Z',boundary:'dispatch:REV-1',reason:'different reason',scope:{},review:true,state:'recording'}};fs.appendFileSync(log,JSON.stringify({action:'hold',notice_record:record})+'\n');assert.throws(()=>f.service().pass(),/notice audit.*inconsistent/);assert.equal(f.messages().length,1);assert.equal(f.calls.length,0);
 });
 

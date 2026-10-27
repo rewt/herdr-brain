@@ -25,14 +25,24 @@ export function serviceRecordBinding({repo,org,env=process.env}) {
   const root=identityRootAt(c.identity);if(!root)throw Error('service identity root is UNKNOWN');
   return {...c,identityName:path.basename(root),epoch:digest({identity:c.identity,org:c.org,installed_at:c.installation.at,source:c.installation.source,node:c.installation.node,target:c.installation.target})};
 }
+// One typed event per error key at its first occurrence; later repeats are one
+// aggregate counts event per batch, never one more event per key per pass.
 export function reviewErrorFacts(events,binding,org,rows){
-  return rows.flatMap(row=>{
+  const known=new Map(),first=new Map(),fresh=[],counts={};
+  for(const e of events){
+    if(e.type==='line-service.review-error'){if(!first.has(e.key))first.set(e.key,e);known.set(e.key,Math.max(known.get(e.key)??0,Number.isSafeInteger(e.count)?e.count:1));}
+    else if(e.type==='line-service.review-error-counts'&&e.counts&&typeof e.counts==='object')for(const [key,count]of Object.entries(e.counts))if(Number.isSafeInteger(count))known.set(key,Math.max(known.get(key)??0,count));
+  }
+  for(const row of rows){
     const {key,count,boundary,reason,scope}=row;
     if(!Number.isSafeInteger(count)||count<1||key!==digest([boundary,reason,scope]))throw Error('review error counter/source is inconsistent');
-    const event={type:'line-service.review-error',id:`${key}:${count}`,project:binding.identity,org,key,count,boundary,reason,scope},prior=events.find(e=>e.type===event.type&&e.id===event.id);
-    if(prior&&Object.keys(event).some(k=>canonical(prior[k])!==canonical(event[k])))throw Error('review error counter id has different source/content');
-    return prior?[]:[event];
-  });
+    const event={type:'line-service.review-error',id:`${key}:${count}`,project:binding.identity,org,key,count,boundary,reason,scope},prior=first.get(key);
+    if(!prior){fresh.push(event);first.set(key,event);known.set(key,count);continue;}
+    for(const k of ['type','project','org','key','boundary','reason','scope'])if(canonical(prior[k])!==canonical(event[k]))throw Error('review error counter id has different source/content');
+    if(count>(known.get(key)??0)){counts[key]=count;known.set(key,count);}
+  }
+  const keys=Object.keys(counts).sort(),aggregate=keys.length?[{type:'line-service.review-error-counts',id:digest([binding.identity,org,keys.map(k=>[k,counts[k]])]),project:binding.identity,org,counts:Object.fromEntries(keys.map(k=>[k,counts[k]]))}]:[];
+  return [...fresh,...aggregate];
 }
 export function recordLineNotice({repo,org,id,boundary,reason,scope={},first_at,audit,counts,env=process.env,kind='fyi',question,reviewError}) {
   const binding=serviceRecordBinding({repo,org,env});

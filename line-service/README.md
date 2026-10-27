@@ -350,7 +350,11 @@ disposition and does not mutate an earlier immutable report.
 Each hold fsyncs a compact notice delta to the existing pass audit. Full effects
 snapshots are checkpointed at stage/pre-effect and final boundaries, rather than
 once or twice per historical hold. First review errors and their one record
-inbox envelope share a transaction; repeated cumulative counters are batched.
+inbox envelope share a transaction. Repeats add no per-key event: each batch
+writes at most one `line-service.review-error-counts` event with the new
+cumulative counts. An older journal row that cannot prove its boundary is kept,
+counted as `review_error_unbound` in pass timings and skipped; it never fails
+the batch.
 The digest counts occurrences across these checkpoints, retaining older events.
 A lost checkpoint replays only exact validated notice deltas and stable message
 IDs, never native effects or launches. Every new record mutation still checks

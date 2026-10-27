@@ -380,7 +380,9 @@ export function morningDigest({events,since,now=new Date().toISOString()}) {
     const end=Date.parse(now);if(end>previous&&[...partial.items.values()].some(i=>itemStatus(partial,i.id)==='ready')&&![...partial.runs.values()].some(r=>!r.report&&!r.abandoned))idle+=(end-previous)/3600000;
   }
   const health=events.findLast(e=>e.type==='line-service.review-health'),before=new Map(),through=new Map();
-  for(const e of events)if(e.type==='line-service.review-error'){const count=Number.isSafeInteger(e.count)?e.count:1;through.set(e.key,Math.max(through.get(e.key)??0,count));if(!inWindow(e))before.set(e.key,Math.max(before.get(e.key)??0,count));}
+  const counted=(e,key,count)=>{through.set(key,Math.max(through.get(key)??0,count));if(!inWindow(e))before.set(key,Math.max(before.get(key)??0,count));};
+  for(const e of events)if(e.type==='line-service.review-error')counted(e,e.key,Number.isSafeInteger(e.count)?e.count:1);
+  else if(e.type==='line-service.review-error-counts'&&e.counts&&typeof e.counts==='object')for(const [key,count]of Object.entries(e.counts))if(Number.isSafeInteger(count))counted(e,key,count);
   const errors=[...through].map(([key,count])=>({key,count:count-(before.get(key)??0)})).filter(e=>e.count>0);
   return {since:since??null,through:now,landings,reviews,findings:reviews.flatMap(r=>r.findings??[]),holds,idle_hours:idle,review_health:health??null,
     review_errors:{unique:errors.length,occurrences:errors.reduce((n,e)=>n+e.count,0),scope:'Durable cumulative typed error counts within this window; batched checkpoints preserve raw hold audit and prior events.'},scope:'Record-observed facts; unknown exact landing/idle intervals stay null.'};

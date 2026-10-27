@@ -444,8 +444,9 @@ test('original partial continuation holds overlap active native owners altered e
 
 function recordedPartialFixture(t){
   const f=originalPartialFixture(t),id='R-886',meta={lane:f.job.lane,route:f.job.route,...f.job.declared,dispatch_project:f.identity,dispatch_record:f.org,dispatch_journal:f.journal,dispatch_attempt:f.job.token,dispatch_role:'review'};
+  const sourceOwner=f.context().run.owner,owner={...sourceOwner,release:{...sourceOwner.release,root:fs.realpathSync(sourceRoot)}};
   f.add([{type:'run.started',id,item:'REV-4',workspace:f.job.workspace,brief_path:path.join(f.org,`runs/${id}/brief.md`),report_path:path.join(f.org,`runs/${id}/report.md`),meta},
-    {type:'run.claimed',run:id,project:f.identity,record:f.org,owner:f.context().run.owner}]);
+    {type:'run.claimed',run:id,project:f.identity,record:f.org,owner}]);
   const run=f.context().state.runs.get(id);f.job={...f.job,run:id,stage:'worker',ownership:{owner:run.owner,generation:run.owner_generation}};fs.writeFileSync(f.journal,JSON.stringify(f.job));
   const pass=()=>{f.effects.pass_number++;f.effects.review_progress=observeReviewProgress({...f.context(),pass:f.effects.pass_number,previous:f.effects.review_progress}).progress;fs.writeFileSync(f.effectFile,JSON.stringify(f.effects));};
   const recover=(extra={})=>{pass();pass();const cwd=process.cwd(),release=noticeLock(path.join(f.directory,'pass.lock'));process.chdir(f.cwd);try{return recoverServiceReview({repo:f.cwd,org:f.org,reviewId:'REV-4',env:f.env,call:()=>JSON.stringify({result:{agents:[]}}),...extra});}finally{process.chdir(cwd);release();}};

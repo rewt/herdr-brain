@@ -545,7 +545,7 @@ test('a drain owner this caller may not signal still counts as running', async (
 });
 
 test('two concurrent enqueue commands share one drain; direct promote waits for the gate and then proceeds', async (t) => {
-  const f = fixture(t); f.lane('first'); f.lane('second');
+  const f = fixture(t); f.lane('first'); f.lane('second'); f.lane('direct');
   const marker = path.join(f.root, 'gate');
   const release = path.join(f.root, 'gate-release');
   const command = `${process.execPath} -e 'const fs=require("fs"); fs.writeFileSync(${JSON.stringify(marker)}, "ready"); while(!fs.existsSync(${JSON.stringify(release)})) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 20)'`;
@@ -553,7 +553,9 @@ test('two concurrent enqueue commands share one drain; direct promote waits for 
   const first = f.launch(['first', '--validate', command]);
   await waitForFile(marker, () => true, { timeoutMs: 30000 });
   const waiting = watchPromotionLock(f.root, f.env, path.join(f.repo, '.git/lane-promote.lock'));
-  const direct = spawnChild(t, process.execPath, [LANE, 'promote', 'second'], { cwd: f.repo, env: f.env });
+  // Either waiter may acquire the promotion lock next. Queue cleanup must not
+  // remove the direct caller's lane before that caller acquires the lock.
+  const direct = spawnChild(t, process.execPath, [LANE, 'promote', 'direct'], { cwd: f.repo, env: f.env });
   const exited = waitForExit(direct);
   await waitForFile(waiting);
   assert.equal(direct.exitCode, null, 'contending promotion is waiting for the held lock');
@@ -566,6 +568,7 @@ test('two concurrent enqueue commands share one drain; direct promote waits for 
   await waitForChange([f.queue.file], () => f.results().length === 2, { timeoutMs: 30000 });
   assert.deepEqual(f.results().map((r) => r.topic), ['first', 'second']);
   assert.ok(f.results().every((r) => r.outcome === 'promoted'));
+  for (const topic of ['first', 'second', 'direct']) assert.equal(f.git(['show', `main:${topic}.txt`]), topic);
 });
 
 test('enqueue during the empty-worker handoff always starts a new drain', async (t) => {

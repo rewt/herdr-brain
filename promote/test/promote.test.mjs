@@ -33,7 +33,7 @@ const CLI = fileURLToPath(new URL('../promote.mjs', import.meta.url));
 const LANE = fileURLToPath(new URL('../../lanes/lane.mjs', import.meta.url));
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const quietFake = `
-if (args[0]==='agent' && args[1]==='get') {console.log(JSON.stringify({result:{agent:{agent:'claude',agent_status:'idle',pane_id:'fake:supervisor'}}}));process.exit(0);}
+if (args[0]==='agent' && args[1]==='get') {console.log(JSON.stringify({result:{agent:{agent:'claude',agent_status:'idle',pane_id:'fake:supervisor',terminal_id:'fake:supervisor-terminal'}}}));process.exit(0);}
 if (args[0]==='pane' && args[1]==='read') {console.log(process.env.PROMOTE_TEST_COMPOSER && fs.existsSync(process.env.PROMOTE_TEST_COMPOSER) ? fs.readFileSync(process.env.PROMOTE_TEST_COMPOSER,'utf8') : '────────────────────\\n❯ \\n────────────────────');process.exit(0);}
 `;
 async function until(fn) {
@@ -538,17 +538,26 @@ test('a drain owner this caller may not signal still counts as running', async (
   fs.rmSync(lock, { recursive: true });
 });
 
-test('two concurrent enqueue commands share one drain; direct promote refuses if its lock wait expires during the gate', async (t) => {
+test('two concurrent enqueue commands share one drain; direct promote waits for the gate and then proceeds', async (t) => {
   const f = fixture(t); f.lane('first'); f.lane('second');
   const marker = path.join(f.root, 'gate');
-  const command = `${process.execPath} -e 'require("fs").writeFileSync(${JSON.stringify(marker)}, "ready"); Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 1800)'`;
-  f.launch(['first', '--validate', command]);
+  const release = path.join(f.root, 'gate-release');
+  const command = `${process.execPath} -e 'const fs=require("fs"); fs.writeFileSync(${JSON.stringify(marker)}, "ready"); while(!fs.existsSync(${JSON.stringify(release)})) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 20)'`;
+  f.onCleanup(async () => { fs.writeFileSync(release, 'release'); });
+  const first = f.launch(['first', '--validate', command]);
   await waitForFile(marker, () => true, { timeoutMs: 30000 });
-  const waiting = watchPromotionLock(f.root, f.env, path.join(f.repo, '.git/lane-promote.lock'), { expire: true });
-  const direct = spawnSync(process.execPath, [LANE, 'promote', 'second'], { cwd: f.repo, env: f.env, encoding: 'utf8' });
-  assert.notEqual(direct.status, 0); assert.match(direct.stderr, /lane-promote.lock/);
-  assert.ok(fs.existsSync(waiting));
-  f.launch(['second']); await waitForChange([f.queue.file], () => f.results().length === 2, { timeoutMs: 30000 });
+  const waiting = watchPromotionLock(f.root, f.env, path.join(f.repo, '.git/lane-promote.lock'));
+  const direct = spawnChild(t, process.execPath, [LANE, 'promote', 'second'], { cwd: f.repo, env: f.env });
+  const exited = waitForExit(direct);
+  await waitForFile(waiting);
+  assert.equal(direct.exitCode, null, 'contending promotion is waiting for the held lock');
+  const queued = f.launch(['second']);
+  assert.equal(queued.worker.already_running, true, 'the second enqueue starts no competing drain');
+  assert.equal(JSON.parse(fs.readFileSync(path.join(f.queue.directory, 'worker.lock/owner.json'), 'utf8')).pid, first.worker.pid);
+  fs.writeFileSync(release, 'release');
+  const result = await exited;
+  assert.equal(result.code, 0, result.stderr);
+  await waitForChange([f.queue.file], () => f.results().length === 2, { timeoutMs: 30000 });
   assert.deepEqual(f.results().map((r) => r.topic), ['first', 'second']);
   assert.ok(f.results().every((r) => r.outcome === 'promoted'));
 });

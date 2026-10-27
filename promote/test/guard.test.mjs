@@ -198,10 +198,11 @@ import cp from 'node:child_process';
 import { syncBuiltinESMExports } from 'node:module';
 import { withPromotionGuard } from ${JSON.stringify(pathToFileURL(path.join(f.repo, 'promote/guard.mjs')).href)};
 const guard = ${JSON.stringify(f.guard)}, config = ${JSON.stringify(path.join(f.repo, '.supervisor.json'))};
-const original = cp.execFileSync; let git = 0, admitted = 0;
+let admitted = 0;
+withPromotionGuard({ ...guard, run: undefined, expectedHead: undefined, existingWorker: false }, () => admitted++);
+const original = cp.execFileSync; let git = 0;
 cp.execFileSync = function(command, ...args) { if(command === 'git') { git++; throw Error('disabled request inspected Git'); } return original.call(this, command, ...args); };
 syncBuiltinESMExports();
-withPromotionGuard({ ...guard, run: undefined, expectedHead: undefined, existingWorker: false }, () => admitted++);
 for (const policy of [undefined, {}, {enabled:false,cohort:'green-pass'}, {enabled:true,cohort:'unknown'}]) {
   if (policy === undefined) fs.rmSync(config, {force:true}); else fs.writeFileSync(config, JSON.stringify({autopilot:policy}));
   assert.throws(() => withPromotionGuard(guard), {message:'AUTOPILOT_DISABLED: pilot disabled before integration; nothing merged'});

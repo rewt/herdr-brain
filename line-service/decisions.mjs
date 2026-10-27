@@ -271,7 +271,10 @@ export function decisionRestoreMutation({events,state,key}){
     if(change.type==='link.added')links=links.filter(l=>l.blocker!==change.blocker||l.blocked!==change.blocked);
     else if(!links.some(l=>l.blocker===change.blocker&&l.blocked===change.blocked))links.push(before.links.find(l=>l.blocker===change.blocker&&l.blocked===change.blocked)??{blocker:change.blocker,blocked:change.blocked});
   }
-  return{add:[{type:'decision.restored',id:event.id,key,archive:event.archive,items:[before.subject],links}],result:{restored:true}};
+  const undo=[...event.link_changes].reverse().map(change=>({type:change.type==='link.added'?'link.removed':'link.added',blocker:change.blocker,blocked:change.blocked}));
+  // Expose every transferred edge to the EXISTING promotion write guard. The
+  // final snapshot restores original link provenance after the guarded inverses.
+  return{add:[...undo,{type:'decision.restored',id:event.id,key,archive:event.archive,items:[before.subject],links}],result:{restored:true}};
 }
 
 // Owner activation is a supported, explicit local effect. No pins, runtime or

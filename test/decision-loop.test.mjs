@@ -12,6 +12,7 @@ import {transact,loadRecord} from '../lib/store.mjs';
 import {gitProject} from '../lib/project.mjs';
 import {createHash} from 'node:crypto';
 import {createWorkerBrief,lineWorkerPrompt,renderWorkerBrief} from '../lib/worker-brief.mjs';
+import {protectRecordMutation} from '../lib/record-guard.mjs';
 
 const config={routes:{unblock:{kind:'codex'},review:{kind:'claude'},engineer:{kind:'codex'}}};
 const owner=identity=>({controller:'brain',legacy:false,release:{id:'source',commit:null,root:sourceRoot,identity}});
@@ -200,4 +201,25 @@ test('a real native refusal is preserved by the existing effects journal and nev
   assert.equal(f.load().events.filter(e=>e.type==='decision.applied').length,0);
   const journal=JSON.parse(fs.readFileSync(path.join(serviceDirectory(f.org,f.identity),'effects.json')));
   assert.ok(Object.values(journal.actions).some(e=>e.state==='held'&&/native ownership/.test(e.error)));
+});
+
+test('supersede rollback preserves a successor promotion guard after exact dependency transfer',t=>{
+  const f=diskFixture(t);
+  f.add({type:'item.added',id:'ENG-2',role:'engineer',title:'Exact successor',meta:{}},
+    {type:'item.added',id:'ENG-3',role:'engineer',title:'Unfinished dependent',meta:{}},
+    {type:'link.added',blocker:'ENG-1',blocked:'ENG-3'},
+    {type:'run.started',id:'R-3',item:'ENG-2',workspace:f.repo,meta:{}});
+  f.service().pass();const item=[...f.load().state.items.values()].find(isDecision),request=item.meta.decision_request;
+  f.add({type:'run.started',id:'R-2',item:item.id,workspace:f.repo,meta:{agent:'judge-fixture',pane:'w1:p1',worker_workspace:'w1',terminal_id:'terminal',agent_session_id:'session',harness:'codex'}},
+    {type:'run.claimed',run:'R-2',record:f.org,project:f.identity,owner:owner(f.identity)});
+  f.report('R-2','done',{decision:{version:1,key:request.key,action:'supersede',category:'design',reason:'Preserve unfinished scope under its exact successor.',successor:'ENG-2'}});
+  f.service().pass();const loaded=f.load(),events=loaded.events.filter(e=>e.type!=='decision.consequence'),state=fold(events);
+  assert.ok(state.links.some(l=>l.blocker==='ENG-2'&&l.blocked==='ENG-3'));
+  const mutation=decisionRestoreMutation({events,state,key:request.key});
+  fs.mkdirSync(path.join(f.identity,'promote'),{recursive:true});
+  fs.writeFileSync(path.join(f.identity,'promote','queue.json'),JSON.stringify({identity:f.identity,pending:[{id:'owned-successor-promotion',run:'R-3',org:f.org}],results:[]}));
+  assert.throws(()=>protectRecordMutation({org:f.org,events,state,mutation,command:'exact decision restore'}),/promotion write guard REFUSED/);
+  fs.unlinkSync(path.join(f.identity,'promote','queue.json'));
+  const restored=fold([...events,...mutation.add]);assert.ok(restored.links.some(l=>l.blocker==='ENG-1'&&l.blocked==='ENG-3'));
+  assert.ok(!restored.links.some(l=>l.blocker==='ENG-2'&&l.blocked==='ENG-3'));
 });

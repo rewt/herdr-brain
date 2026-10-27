@@ -6,12 +6,16 @@ import { configFixture } from './helpers/config-home-fixture.mjs';
 import { homeBindings, homeProject, readConfigJSON } from '../lib/config-home.mjs';
 
 function countRecordReads(record, action) {
-  const open = fs.openSync; let reads = 0;
+  const open = fs.openSync, read = fs.readFileSync; let reads = 0;
   fs.openSync = function(file, ...args) {
     if (typeof file === 'string' && path.resolve(file) === path.join(record, 'events.jsonl')) reads++;
     return open.call(this, file, ...args);
   };
-  try { action(); return reads; } finally { fs.openSync = open; }
+  fs.readFileSync = function(file, ...args) {
+    if (typeof file === 'string' && path.resolve(file) === path.join(record, 'events.jsonl')) reads++;
+    return read.call(this, file, ...args);
+  };
+  try { action(); return reads; } finally { fs.openSync = open; fs.readFileSync = read; }
 }
 
 test('config verification cache reuses stable physical evidence and never exports mutable authority', async t => {

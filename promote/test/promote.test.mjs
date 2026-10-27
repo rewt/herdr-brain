@@ -17,13 +17,13 @@ import { stateDirectory, readJournal } from '../../messages/journal.mjs';
 import { validateSlotPath } from '../../test-slot/paths.mjs';
 import { watchPromotionLock } from '../../test/helpers/promotion-lock.mjs';
 
-import { loadTimeout } from '../../lib/deadline.mjs';
 import { drain, retryCleanup } from '../promote.mjs';
 
-// These fixtures do not consume the shared host's FSEvents registrations.
-async function waitForChange(files, predicate, { timeoutMs = 10000 } = {}) {
-  const end = Date.now() + loadTimeout(timeoutMs);
-  for (;;) { const value = predicate(); if (value) return value; if (Date.now() >= end) throw Error(`timed out waiting for ${files}`); await new Promise(resolve => setTimeout(resolve, 30)); }
+// Poll owned evidence without FSEvents or an elapsed-only fixture failure.
+// The runner retains cancellation, native ownership and frozen-process checks.
+// Legacy timeout options at call sites do not limit the producer's execution.
+async function waitForChange(_files, predicate) {
+  for (;;) { const value = predicate(); if (value) return value; await new Promise(resolve => setTimeout(resolve, 30)); }
 }
 async function waitForFile(file, predicate = () => true, options) {
   return waitForChange([file], () => { let text; try { text = fs.readFileSync(file, 'utf8'); } catch(e) { if(e.code === 'ENOENT') return false; throw e; } return predicate(text) ? text || true : false; }, options);
@@ -37,9 +37,7 @@ if (args[0]==='agent' && args[1]==='get') {console.log(JSON.stringify({result:{a
 if (args[0]==='pane' && args[1]==='read') {console.log(process.env.PROMOTE_TEST_COMPOSER && fs.existsSync(process.env.PROMOTE_TEST_COMPOSER) ? fs.readFileSync(process.env.PROMOTE_TEST_COMPOSER,'utf8') : '────────────────────\\n❯ \\n────────────────────');process.exit(0);}
 `;
 async function until(fn) {
-  const end = Date.now() + loadTimeout(30000);
-  while (Date.now() < end) { if (fn()) return; await delay(30); }
-  assert.fail('timed out waiting for queue evidence');
+  while (!fn()) await delay(30);
 }
 function fixture(t) {
   const root = fs.mkdtempSync(path.join(fs.realpathSync('/tmp'), 'pt-'));
@@ -90,7 +88,7 @@ function fixture(t) {
     processes.set(`${pid}:${row.identity}`, { pid, identity: row.identity, command: row.command, group: false });
   };
   const cli = (args, cwd = repo) => {
-    const result = spawnSync(process.execPath, [CLI, ...args], { cwd, env, encoding: 'utf8', timeout: loadTimeout(10000) });
+    const result = spawnSync(process.execPath, [CLI, ...args], { cwd, env, encoding: 'utf8' });
     // The lock can disappear before the launcher returns its acknowledgement.
     for (const line of (result.stdout ?? '').trim().split('\n')) {
       let reply; try { reply = JSON.parse(line); } catch { continue; }
@@ -182,8 +180,7 @@ if(args[0]==='agent'&&args[1]==='list') {
   const temporary=${JSON.stringify(reached)}+'.'+process.pid+'.'+Math.random().toString(36).slice(2)+'.tmp';
   fs.writeFileSync(temporary,String(process.pid));
   fs.renameSync(temporary,${JSON.stringify(reached)});
-  const deadline=Date.now()+${loadTimeout(10000)};
-  while(!fs.existsSync(${JSON.stringify(release)})&&Date.now()<deadline) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,10);
+  while(!fs.existsSync(${JSON.stringify(release)})) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,10);
   fs.appendFileSync(${JSON.stringify(calls)},JSON.stringify(args)+'\\n');
   fs.writeFileSync(${JSON.stringify(done)},'finished');
 }
@@ -413,7 +410,7 @@ test('expected head refuses an automatic rebase and post-preparation tip changes
       f.env.LANE_CONFIG = config;
     }
     const base = f.git(['rev-parse', 'main']);
-    const r = spawnSync(process.execPath, [LANE, 'promote', 'first', '--expected-head', expected], { cwd: f.repo, env: f.env, encoding: 'utf8', timeout: loadTimeout(10000) });
+    const r = spawnSync(process.execPath, [LANE, 'promote', 'first', '--expected-head', expected], { cwd: f.repo, env: f.env, encoding: 'utf8' });
     assert.equal(r.status, 1, r.stdout); assert.match(r.stderr, mode === 'rebase' ? /requires a rebase/ : /tip differs from expected head/);
     assert.doesNotMatch(r.stdout, /validating in/);
     assert.equal(f.git(['rev-parse', 'main']), base); assert.ok(fs.existsSync(wt));

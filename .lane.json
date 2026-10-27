@@ -59,6 +59,21 @@
       "effort": "xhigh",
       "args": [],
       "use": "Legacy route name: independent fixed-commit Sol xhigh review. New reviews never use max; one async post-code review, no reviewer suites. Saved attempts retain frozen settings."
+    },
+    "pstack-pilot-coordinator": {
+      "kind": "claude",
+      "model": "opus",
+      "effort": "high",
+      "env": [
+        "ORCH_STORE=/Users/rewt/.herdr-monitor/rewt/pstack-trial/store"
+      ],
+      "args": [
+        "--plugin-dir",
+        "/Users/rewt/.herdr-monitor/rewt/pstack-trial/open-pstack/plugins/pstack",
+        "--append-system-prompt-file",
+        "/Users/rewt/.herdr-monitor/rewt/pstack-trial/sheet.md"
+      ],
+      "use": "ONE unscored operator-approved pilot coordinator, session-only pinned pstack. Not an engineering default or a service."
     }
   }
 }

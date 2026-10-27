@@ -347,6 +347,14 @@ the actual installed service/pass ownership. Passive pass timings include full
 journal write counts, notice attempts and counter batches; no extra benchmark,
 watcher or elapsed worker stop is needed.
 
+Producer validation receipts are distinct from independent review attempts.
+Only source-bound lane-validation identities (including red or unrun truth),
+exact existing foreign review/closeout record copies, and read-only diagnostics
+linked to that positive producer evidence receive that distinction. The actual
+native landed worker/claim binds their source. Unrecognized/manual receipts,
+native/qualification/stage markers, changed proof bytes and actual launch
+journals remain held; a receipt name, later HEAD or claimed green is insufficient.
+
 ```sh
 node line-service/line-service.mjs --digest --org /OWN/RECORD --since 2026-10-27T00:00:00Z
 ```

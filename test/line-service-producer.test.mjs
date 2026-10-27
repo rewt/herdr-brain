@@ -100,7 +100,7 @@ test('producer lost record reply recovers the same immutable envelope without na
   const f=fixture(t);f.add([{type:'item.added',id:'ENG-1',role:'engineer',title:'Ready',meta:{}}]);let lost=true;
   const recordNotice=data=>{const result=recordLineNotice(data);if(lost){lost=false;throw Error('lost record acknowledgment');}return result;};
   const capacity=()=>{throw Object.assign(Error('same native capacity hold'),{code:'DISPATCH_SESSION_CAP'});};
-  f.service({recordNotice,capacity}).pass();f.service({recordNotice,capacity}).pass();assert.equal(f.messages().length,1);
+  for(let n=0;n<4;n++)f.service({recordNotice,capacity}).pass();assert.equal(f.messages().length,1,'third occurrence sends, fourth resolves the deliberately lost reply');
   assert.equal(Object.values(JSON.parse(fs.readFileSync(path.join(f.directory,'effects.json'))).record_notices)[0].state,'recorded');assert.equal(fs.existsSync(inboxPath({org:f.org})),false);
 });
 

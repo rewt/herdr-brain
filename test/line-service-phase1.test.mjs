@@ -288,6 +288,23 @@ test('landing-before-report retains an original UNKNOWN attempt and refuses admi
   }
 });
 
+test('actual native producer receipt shapes distinguish red or unrun validation proofs and foreign record witnesses from this producers review attempts',t=>{
+  const f=fixture(t,{reported:false});unreportedNativeLandings(f);const directory=path.join(f.org,'evidence/ENG-1/R-1');fs.mkdirSync(directory,{recursive:true});
+  const write=(name,v)=>{const file=path.join(directory,name);fs.writeFileSync(file,JSON.stringify(v,null,2)+'\n');return file;};
+  const gate1=write('gate-34.json',{schema:'lane-validation/v1',key:'1'.repeat(64),head:f.heads[0],branch:'lane/source',node_version:'v20.19.4',executed:true,exit_code:1}),gate2=write('gate-35.json',{schema:'lane-validation/v1',key:'2'.repeat(64),head:f.heads[1],branch:'lane/source',node_version:'v20.19.4',executed:false,exit_code:null});
+  const proof=write('automatic-review-progress-proof.json',{run:'R-1',head:f.heads[0],base:f.base,gate:gate1,landing:path.join(directory,'landing-34.json'),focused:{pass:0,fail:1,unselected:9}});
+  write('review-capacity-proof.json',{run:'R-1',source:f.heads,checks:[{file:gate1},{file:gate2}],native_effects:'Offline fixture controls only; no live review attempt.'});
+  write('actual-native-review-attempt-diagnosis.json',{run:'R-1',scope:'read-only actual exact source attempt detector; no queue/native/test/effect',target:{head:f.heads[1],base:f.base,evidence_kind:'native-landings/v1'},reason:'same-change source-owner review receipt/UNKNOWN',scoped_evidence_reads:[proof]});
+  const foreign=independentProducer(f);f.add([{type:'item.added',id:'REV-40',role:'reviewer',title:'Other source review',meta:{review_source_item:'ENG-2',review_source_run:'R-3'}},{type:'run.started',id:'R-40',item:'REV-40',workspace:f.cwd},{type:'change.reviewed',item:'ENG-2',head:foreign,review_item:'REV-40',review_run:'R-40',verdict:'PASS'},{type:'item.closed',id:'REV-40',as:'done'},{type:'closeout.effect',identity:f.identity,run:'R-40',item:'REV-40',outcome:{action:'exit-observed'}}]);
+  const rows=f.context().events,verdict=rows.find(e=>e.type==='change.reviewed'&&e.review_run==='R-40'),closed=rows.find(e=>e.type==='item.closed'&&e.id==='REV-40'),effect=rows.find(e=>e.type==='closeout.effect'&&e.run==='R-40');
+  write('autonomous-review-other-native-receipt.json',{run:'R-1',target:{run:'R-40',item:'REV-40',review:{seq:verdict.seq,item:'ENG-2',head:foreign}},source_binding:closed,native_effects:[effect]});
+  const before=process.cwd(),env={...installedService(f),ORG_ACTOR:'line-service'};process.chdir(f.cwd);
+  try{const result=queueReviewMutation({...f.context(),runId:'R-1',env});f.add(result.add);const c=f.context(),q=c.state.items.get(result.result.review_item);assert.deepEqual(validateQueuedReview({...c,item:q}),q.meta.review_target);assert.equal(c.run.report,null);assert.equal(c.events.find(e=>e.seq===verdict.seq).verdict,'PASS');
+    const unknown=write('manual-review-unknown.json',{run:'R-1',head:f.heads[1],gate:gate2,checks:[{file:gate2}],qualification:'UNKNOWN',native_launch_attempted:true});assert.throws(()=>validateQueuedReview({...c,item:q}),/UNKNOWN|attempt/,'a real/unknown attempt cannot borrow a producer gate as absence proof');fs.unlinkSync(unknown);
+    fs.writeFileSync(gate1,JSON.stringify({schema:'lane-validation/v1',head:foreign,branch:'lane/source',executed:true}));assert.throws(()=>validateQueuedReview({...c,item:q}),/UNKNOWN|attempt|producer evidence/,'foreign or changed evidence is retained');
+  }finally{process.chdir(before);}
+});
+
 test('permanent group preserves R3388-shaped active intermediate and held final without a duplicate or false whole-source coverage',t=>{
   const f=fixture(t);partialReview(f,'REV-1200',{head:f.heads[0],base:f.base,run:'R-3400'});partialReview(f,'REV-1201',{head:f.heads[1],base:f.heads[0],held:true});
   f.add([{type:'change.reviewed',item:'ENG-90',head:f.base,verdict:'PASS',review_item:'REV-666',review_run:'R-666',findings:[]}]);

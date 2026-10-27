@@ -10,6 +10,8 @@ import { projectPin, selectRelease } from '../lib/releases.mjs';
 import { roleIs } from '../lib/roles.mjs';
 import {reviewResolution,archivedReviewFile,reviewDigest} from './review-resolutions.mjs';
 import {producerGroupKey,queueProducerGroup,sameProducerQueue,capturedReviewCommits} from './review-group.mjs';
+import {canonical} from '../messages/schema.mjs';
+import {effectiveWorkerIdentity} from '../lib/worker-identity.mjs';
 
 const codeRoot = fs.realpathSync(fileURLToPath(new URL('../', import.meta.url)));
 const capabilityFiles = ['line-service/review.mjs','line-service/review-group.mjs', 'settle/settle.mjs', 'supervisor/supervisor.mjs'];
@@ -39,8 +41,27 @@ function changeReviewAttempt(item,{org,identity,events,state,repo,effects,target
   const resolution=reviewResolution({events,org,item:item.id,head:target.head}),archivedItems=new Set(resolution?.event.archived_review_items??[]);
   capturedRun??=target.source_group?.run;
   const runs=new Set(capturedRun?[capturedRun]:item.runs.filter(id=>(state.runs.get(id)?.report?.artifacts??[]).some(a=>typeof a==='string'&&a.includes(target.head)))),group=producerGroupKey(item.id,capturedRun,target.reportHash),covered=new Set(capturedReviewCommits(target));
+  const sourceRun=state.runs.get(capturedRun),worker=effectiveWorkerIdentity(sourceRun,state),nativeHeads=new Set(events.filter(e=>e.type==='change.landed'&&e.project===identity&&e.item===item.id&&e.run===capturedRun&&e.landed_at&&e.producer?.agent&&e.producer?.session&&!worker.identity_conflict&&e.producer.agent===worker.agent&&e.producer.pane===worker.pane&&e.producer.terminal===worker.terminal_id&&e.producer.session===worker.agent_session_id&&e.producer.ownership_generation===sourceRun?.owner_generation).map(e=>e.head)),ownerEvidence=path.join(org,'evidence',item.id,capturedRun??'UNKNOWN'),proofCache=new Map();
+  const runtimeAttempt=v=>['stage','review','reviewer','verdict','qualification','native_launch_attempted','worker','launchProcess','deliveryRange','review_item','review_run'].some(k=>Object.hasOwn(v,k));
+  const producerProof=(file,seen=new Set())=>{
+    if(!file.startsWith(ownerEvidence+path.sep)||seen.has(file))return false;if(proofCache.has(file))return proofCache.get(file);seen.add(file);
+    const v=read(file);if(!v||v.run!==capturedRun||runtimeAttempt(v))return false;
+    // A copied foreign reviewer outcome is an observation, not an attempt for
+    // its observer's build. Bind every copied row to the actual existing record.
+    const t=v.target,q=state.items.get(t?.item),judgment=events.find(e=>e.seq===t?.review?.seq&&e.type==='change.reviewed'&&e.review_run===t?.run&&e.review_item===t?.item&&e.item===t?.review?.item&&e.head===t?.review?.head);
+    if(judgment&&q?.meta.review_source_item&&!(q.meta.review_source_item===item.id&&q.meta.review_source_run===capturedRun)&&Array.isArray(v.native_effects)&&v.native_effects.length&&v.native_effects.every(row=>row.type==='closeout.effect'&&row.run===t.run&&row.identity===identity&&events.some(e=>e.seq===row.seq&&canonical(e)===canonical(row)))&&v.source_binding&&events.some(e=>e.seq===v.source_binding.seq&&canonical(e)===canonical(v.source_binding))){proofCache.set(file,true);return true;}
+    const gates=[v.gate,v.body_verdict?.gate,...(Array.isArray(v.checks)?v.checks.map(c=>c.file??c.gate):Object.entries(v.checks??{}).filter(([k])=>/^gate\d+$/.test(k)).map(([,x])=>x))].filter(x=>typeof x==='string'),declared=[v.head,v.source,v.correction,v.body_verdict?.source].flat().filter(commit);
+    if(gates.length&&(v.focused&&typeof v.focused==='object'||v.checks&&typeof v.checks==='object'||v.body_verdict&&typeof v.body_verdict==='object')&&(!v.native_effects||typeof v.native_effects==='string')&&gates.every(file=>{
+      if(!file.startsWith(ownerEvidence+path.sep))return false;const gate=read(file);
+      // Receipt identity, not green readiness: red and explicitly unrun source
+      // validation are both producer evidence, never independent verdicts.
+      return gate?.schema==='lane-validation/v1'&&/^[a-f0-9]{64}$/.test(gate.key??'')&&nativeHeads.has(gate.head)&&declared.includes(gate.head)&&gate.branch===`lane/${sourceRun.meta.lane}`&&typeof gate.executed==='boolean'&&typeof gate.node_version==='string';
+    })){proofCache.set(file,true);return true;}
+    const diagnostic=typeof v.scope==='string'&&v.scope.startsWith('read-only ')&&t?.evidence_kind==='native-landings/v1'&&nativeHeads.has(t.head)&&Array.isArray(v.scoped_evidence_reads)&&v.scoped_evidence_reads.length&&v.scoped_evidence_reads.every(f=>typeof f==='string'&&producerProof(f,new Set(seen)));
+    proofCache.set(file,Boolean(diagnostic));return Boolean(diagnostic);
+  };
   const producerEvidence=file=>{
-    if(target.evidence_kind!=='native-landings/v1'||file!==target.evidence)return false;
+    if(target.evidence_kind!=='native-landings/v1'||file!==target.evidence)return producerProof(file);
     const value=read(file);if(value?.schema!=='native-landings/v1'||JSON.stringify(value)!==JSON.stringify(target.landed_evidence)||sha(fs.readFileSync(file))!==target.reportHash)throw Error('bound native producer evidence changed; retain it');
     return true;
   };

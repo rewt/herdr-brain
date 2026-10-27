@@ -97,7 +97,7 @@ test('watch, request and promotion suites mirror fixtures without writing defaul
     import {spawnSync} from 'node:child_process';
     delete process.env.BRAIN_SHADOW_ROOT; delete process.env.NODE_TEST_CONTEXT;
     process.env.HERDR_TEST_OFFLINE_ROOT = ${JSON.stringify(f.offline)};
-    const result = spawnSync(process.execPath, ['--test', ${JSON.stringify(`--test-name-pattern=${pattern}`)}, ...${JSON.stringify(files)}], {env: process.env, encoding: 'utf8'});
+    const result = spawnSync(process.execPath, ['--test', '--test-reporter=tap', ${JSON.stringify(`--test-name-pattern=${pattern}`)}, ...${JSON.stringify(files)}], {env: process.env, encoding: 'utf8'});
     process.stdout.write(result.stdout); process.stderr.write(result.stderr);
     process.exitCode = result.status ?? 1;
   `;

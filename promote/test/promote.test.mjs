@@ -1,6 +1,7 @@
 import { fixtureEnvironment } from '../../test/helpers/fixture-environment.mjs';
 import { healthyMemoryEnvironment } from '../../test/helpers/promotion-memory-fixture.mjs';
-import test from '../../test/helpers/bounded-test.mjs';
+import test, { currentTest } from '../../test/helpers/bounded-test.mjs';
+import { waitForChange, until, producerOutcome } from '../../test/helpers/producer-wait.mjs';
 import { spawnChild, waitForExit, childProcessEntry } from '../../test/helpers/child.mjs';
 import { registerProcess, killProcess, lookupProcess } from '../../test/helpers/processes.mjs';
 import assert from 'node:assert/strict';
@@ -19,12 +20,6 @@ import { watchPromotionLock } from '../../test/helpers/promotion-lock.mjs';
 
 import { drain, retryCleanup } from '../promote.mjs';
 
-// Poll owned evidence without FSEvents or an elapsed-only fixture failure.
-// The runner retains cancellation, native ownership and frozen-process checks.
-// Legacy timeout options at call sites do not limit the producer's execution.
-async function waitForChange(_files, predicate) {
-  for (;;) { const value = predicate(); if (value) return value; await new Promise(resolve => setTimeout(resolve, 30)); }
-}
 async function waitForFile(file, predicate = () => true, options) {
   return waitForChange([file], () => { let text; try { text = fs.readFileSync(file, 'utf8'); } catch(e) { if(e.code === 'ENOENT') return false; throw e; } return predicate(text) ? text || true : false; }, options);
 }
@@ -36,9 +31,6 @@ const quietFake = `
 if (args[0]==='agent' && args[1]==='get') {console.log(JSON.stringify({result:{agent:{agent:'claude',agent_status:'idle',pane_id:'fake:supervisor',terminal_id:'fake:supervisor-terminal'}}}));process.exit(0);}
 if (args[0]==='pane' && args[1]==='read') {console.log(process.env.PROMOTE_TEST_COMPOSER && fs.existsSync(process.env.PROMOTE_TEST_COMPOSER) ? fs.readFileSync(process.env.PROMOTE_TEST_COMPOSER,'utf8') : '────────────────────\\n❯ \\n────────────────────');process.exit(0);}
 `;
-async function until(fn) {
-  while (!fn()) await delay(30);
-}
 function fixture(t) {
   const root = fs.mkdtempSync(path.join(fs.realpathSync('/tmp'), 'pt-'));
   const repo = path.join(root, 'project'); fs.mkdirSync(repo);
@@ -84,7 +76,9 @@ function fixture(t) {
     assert.ok(current.ok, current.error);
     const row = current.value;
     // A short-lived acknowledged worker may already be gone or replaced.
-    if (!row || /^Z/.test(row.state) || row.command !== `${process.execPath} ${CLI} --drain --repo ${repo}`) return;
+    if (!row || /^Z/.test(row.state) || row.command !== `${process.execPath} ${CLI} --drain --repo ${repo}`) {
+      processes.set(`${pid}:exited`, { pid, exited: true }); return;
+    }
     processes.set(`${pid}:${row.identity}`, { pid, identity: row.identity, command: row.command, group: false });
   };
   const cli = (args, cwd = repo) => {
@@ -108,19 +102,42 @@ function fixture(t) {
   };
   const results = () => queue.load().results;
   const messages = () => fs.existsSync(notices) ? fs.readFileSync(notices, 'utf8').trim().split('\n').filter(Boolean).map(JSON.parse) : [];
-  const waitForWorkers = () => waitForChange([queue.directory], () => [...processes.values()].every(entry => {
-    const current = lookupProcess(entry.pid);
-    if (!current.ok) return false; // Unknown still waits; only confirmed exit completes.
-    const row = current.value;
-    return !row || /^Z/.test(row.state) || row.identity !== entry.identity || row.command !== entry.command;
-  }), { timeoutMs: 30000 });
+  const producer = () => producerOutcome([...processes.values()], lookupProcess);
+  const options = extra => ({ producer, signal: t.signal, ...extra });
+  const wait = (files, predicate, extra) => waitForChange(files, predicate, options(extra));
+  const waitUntil = (predicate, extra) => until(predicate, options(extra));
+  const waitFile = (file, predicate, extra) => waitForFile(file, predicate, options(extra));
+  const waitForWorkers = () => waitUntil(() => {
+    const outcome = producer();
+    if (outcome.state === 'unknown') throw Error(`Cannot confirm fixture workers: ${outcome.detail}`);
+    return outcome.state === 'exited';
+  });
+  // Notice delivery outlives queue accounting. Pin its actual owner separately
+  // rather than mistaking the promotion worker's exit for delivery failure.
+  const inboxProducer = file => {
+    let entry;
+    return () => {
+      if (entry) return producerOutcome([entry], lookupProcess);
+      let owner;
+      try { owner = JSON.parse(fs.readFileSync(`${file}.owner.lock/owner.json`, 'utf8')); }
+      catch (error) { if (error.code !== 'ENOENT' && !(error instanceof SyntaxError)) throw error; return producer(); }
+      const current = lookupProcess(owner.pid);
+      if (!current.ok) return { state: 'unknown', detail: current.error };
+      const row = current.value;
+      const expected = [process.execPath, fileURLToPath(new URL('../../supervisor/prompt-supervisor.mjs', import.meta.url)), '--inbox', file, '--owner-worker'];
+      if (!Array.isArray(owner.argv) || expected.some((arg, i) => owner.argv[i] !== arg)) return { state: 'unknown', detail: 'inbox owner argv mismatch' };
+      if (!row || /^Z/.test(row.state) || row.command !== owner.argv.join(' ')) return { state: 'exited', detail: `inbox owner PID ${owner.pid}` };
+      entry = { pid: row.pid, identity: row.identity, command: row.command };
+      return { state: 'live' };
+    };
+  };
   let cleanupProcesses = async () => {};
   let foreignInboxes = [];
   let cleanupPromise;
   const cleanup = () => cleanupPromise ??= (async () => {
     try {
       await cleanupProcesses();
-      await until(() => !fs.existsSync(path.join(queue.directory, 'worker.lock')));
+      await waitUntil(() => !fs.existsSync(path.join(queue.directory, 'worker.lock')), { description: 'worker lock removal during teardown' });
       // A record-backed notice has a different owner from the Git inbox. Stop
       // every actual destination after senders finish and before removing files.
       const data = queue.load();
@@ -141,14 +158,15 @@ function fixture(t) {
       // Wait for each pinned birth identity, not the lock or a reusable PID.
       await waitForWorkers();
     } finally {
-      for (const entry of processes.values()) killProcess(entry);
+      for (const entry of processes.values()) if (!entry.exited) killProcess(entry);
     }
     fs.rmSync(root, { recursive: true, force: true });
     assert.equal(foreignInboxes.length, 0, 'fixture inbox stays inside its owned root');
   })();
   t.after(cleanup);
   return { root, repo, env, git, lane, cli, launch, queue, results, messages, herdr, cleanup, waitForWorkers,
-    ownedProcess: (pid) => [...processes.values()].findLast(entry => entry.pid === pid), onCleanup: (fn) => { cleanupProcesses = fn; } };
+    waitForChange: wait, until: waitUntil, waitForFile: waitFile, inboxProducer,
+    ownedProcess: (pid) => [...processes.values()].findLast(entry => entry.pid === pid && !entry.exited), onCleanup: (fn) => { cleanupProcesses = fn; } };
 }
 
 test('queue fixture inherits private temporary slot paths and admits its real validation runner', t => {
@@ -186,7 +204,7 @@ if(args[0]==='agent'&&args[1]==='list') {
 }
 console.log(JSON.stringify({result:{workspaces:[],agents:[]}}));\n`);
   const launched = f.launch(['--resume']);
-  await waitForFile(reached, text => /^[1-9]\d*$/.test(text));
+  await f.waitForFile(reached, text => /^[1-9]\d*$/.test(text));
   assert.equal(fs.existsSync(path.join(f.queue.directory, 'worker.lock')), false, 'catch-up follows the empty-queue lock release');
   assert.ok(f.ownedProcess(launched.worker.pid), 'the returned PID is owned even after its lock disappeared');
   let removed = false;
@@ -237,7 +255,7 @@ test('busy supervisor does not hold completed queue accounting by default', asyn
   const workspace = f.lane('first');
   const target = f.git(['rev-parse', 'HEAD'], workspace);
   const launched = f.launch(['first']);
-  await until(() => f.results().length === 1 && f.queue.load().current === null);
+  await f.until(() => f.results().length === 1 && f.queue.load().current === null);
   const result = f.results()[0];
   assert.equal(result.outcome, 'promoted', result.reason);
   assert.equal(f.git(['rev-parse', 'main']), target);
@@ -248,7 +266,7 @@ test('busy supervisor does not hold completed queue accounting by default', asyn
   const id = 'promote:' + launched.jobs[0].id;
   assert.equal(readInbox(result.inbox).filter(entry => entry.id === id).length, 1, 'one durable notice owns delivery');
   const directory = stateDirectory({ root: f.env.BRAIN_SHADOW_ROOT, identity: 'example', commonDir: fs.realpathSync(path.join(f.repo, '.git')) });
-  await until(() => { try { return fs.readFileSync(path.join(directory, 'shadow.jsonl'), 'utf8').endsWith('\n'); } catch { return false; } });
+  await f.until(() => { try { return fs.readFileSync(path.join(directory, 'shadow.jsonl'), 'utf8').endsWith('\n'); } catch { return false; } }, { producer: f.inboxProducer(result.inbox) });
   const shadow = (await readJournal(directory)).entries[0];
   assert.equal(shadow.payload.legacy.id, id); assert.equal(shadow.shadow.path, 'triage');
   assert.deepEqual(shadow.payload.evidence, { channel: 'promote-queue', validated: true, outcome: 'promoted' });
@@ -258,7 +276,7 @@ test('busy supervisor does not hold completed queue accounting by default', asyn
   const events = fs.readFileSync(result.inbox, 'utf8').trim().split('\n').map(JSON.parse);
   assert.equal(events.filter(entry => entry.id === id && entry.type === 'capped').length, 0, 'zero caller wait preserves the owner window without repeated cap journal entries');
   fs.writeFileSync(f.env.PROMOTE_TEST_COMPOSER, fs.readFileSync(new URL('../../supervisor/test/fixtures/claude-empty.ansi', import.meta.url)));
-  await until(() => readInbox(result.inbox).find(entry => entry.id === id)?.state === 'sent');
+  await f.until(() => readInbox(result.inbox).find(entry => entry.id === id)?.state === 'sent', { producer: f.inboxProducer(result.inbox) });
   assert.equal(f.messages().length, 1, 'retained owner delivers exactly once after input clears');
   assert.equal(f.results().length, 1, 'delivery does not replay promotion accounting');
   assert.equal(f.git(['rev-parse', 'main']), target);
@@ -273,9 +291,9 @@ test('idle supervisor receives a default queued promotion notice without a false
     'const args = process.argv.slice(2); fs.appendFileSync(' + JSON.stringify(calls) + ', JSON.stringify(args) + "\\n");'));
   f.lane('idle-notice');
   f.launch(['idle-notice']);
-  await until(() => f.results().length === 1 && f.queue.load().current === null);
+  await f.until(() => f.results().length === 1 && f.queue.load().current === null);
   const result = f.results()[0];
-  await until(() => readInbox(result.inbox).find(entry => entry.id === result.delivery_id)?.state === 'sent');
+  await f.until(() => readInbox(result.inbox).find(entry => entry.id === result.delivery_id)?.state === 'sent', { producer: f.inboxProducer(result.inbox) });
   const observed = fs.readFileSync(calls, 'utf8').trim().split('\n').map(JSON.parse);
   assert.equal(observed.filter(args => args[0] === 'notification' && args[1] === 'show').length, 0, 'idle input receives no false undelivered alert');
   assert.equal(f.messages().length, 1);
@@ -294,7 +312,7 @@ test('queued promotion waits before validation under low-memory pressure and pro
   const batch = f.queue.load().current;
   assert.equal(batch.jobs[0].id, launched.jobs[0].id);
   const log = path.join(f.queue.directory, 'batches', batch.id, 'train.log');
-  try { await until(() => fs.existsSync(log) && fs.readFileSync(log, 'utf8').includes('waiting; memory pressure')); }
+  try { await f.until(() => fs.existsSync(log) && fs.readFileSync(log, 'utf8').includes('waiting; memory pressure')); }
   catch (error) { throw new Error(`${error.message}\n${fs.existsSync(log) ? fs.readFileSync(log, 'utf8') : 'train log missing'}\n${JSON.stringify(f.queue.load())}`, { cause: error }); }
   assert.match(fs.readFileSync(log, 'utf8'), /available memory 128 MiB/);
   assert.doesNotMatch(fs.readFileSync(log, 'utf8'), /validating in/);
@@ -302,7 +320,7 @@ test('queued promotion waits before validation under low-memory pressure and pro
   assert.equal(fs.existsSync(path.join(f.repo, '.git/lane-promote.lock')), false, 'memory waits leave the promotion lock available');
   assert.equal(f.results().length, 0);
   writeFileAtomic(file, JSON.stringify(healthy));
-  await until(() => f.results().length === 1);
+  await f.until(() => f.results().length === 1);
   assert.equal(f.results()[0].outcome, 'promoted', f.results()[0].reason);
   assert.match(fs.readFileSync(log, 'utf8'), /cleared; proceeding/);
   assert.equal(fs.existsSync(workspace), false);
@@ -335,12 +353,12 @@ for (const mode of ['batch', 'single']) test(`retirement hold: ${mode} promotion
   const calls = path.join(f.root, 'lane-calls.jsonl'), wrapper = path.join(f.root, 'lane-wrapper.mjs');
   fs.writeFileSync(wrapper, `import fs from 'node:fs';import {spawnSync} from 'node:child_process';const a=process.argv.slice(2);fs.appendFileSync(${JSON.stringify(calls)},JSON.stringify(a)+'\\n');const r=spawnSync(process.execPath,[${JSON.stringify(LANE)},...a],{stdio:'inherit'});process.exit(r.status??1);`);
   const launch = () => f.launch(['held-topic', ...(mode === 'single' ? ['--lane-cli', wrapper] : [])]);
-  const launched = launch(); await until(() => f.results().length === 1 && f.results()[0].delivered);
+  const launched = launch(); await f.until(() => f.results().length === 1 && f.results()[0].delivered);
   const result = f.results()[0]; assert.equal(result.outcome, 'promoted', result.reason);
   assert.equal(fs.existsSync(workspace), true); assert.equal(result.cleanup.outcome, 'held'); assert.equal(result.cleanup.state, 'pending');
   assert.match(result.cleanup.last_refusal, /retirement held/); assert.equal(f.git(['rev-parse', 'lane/held-topic']), result.tip);
   if (mode === 'single') assert.deepEqual(fs.readFileSync(calls, 'utf8').trim().split('\n').map(JSON.parse).map(a => a[0]), ['promote']);
-  await until(() => { const current = lookupProcess(launched.worker.pid); return current.ok && (current.value === null || /^Z/.test(current.value.state)); });
+  await f.until(() => { const current = lookupProcess(launched.worker.pid); return current.ok && (current.value === null || /^Z/.test(current.value.state)); });
   // Reuse the foreground retry command; it must finish cleanup without a second gate.
   fs.unlinkSync(hold);
   // Removing the hold changes the cleanup revision, permitting its bounded retry.
@@ -353,10 +371,10 @@ test('promotion notice queues during typing and delivers after clearing without 
   const inbox = path.join(f.repo, '.git/supervisor/inbox.log');
   fs.writeFileSync(f.env.PROMOTE_TEST_COMPOSER, fs.readFileSync(new URL('../../supervisor/test/fixtures/claude-typed.ansi', import.meta.url)));
   f.launch(['first']);
-  await until(() => fs.existsSync(inbox) && readInbox(inbox).length === 1);
+  await f.until(() => fs.existsSync(inbox) && readInbox(inbox).length === 1);
   assert.deepEqual(f.messages(), []); assert.equal(f.queue.load().current.phase, 'completed');
   fs.writeFileSync(f.env.PROMOTE_TEST_COMPOSER, fs.readFileSync(new URL('../../supervisor/test/fixtures/claude-empty.ansi', import.meta.url)));
-  await waitForChange([f.queue.file], () => f.results().length === 1, { timeoutMs: 30000 });
+  await f.waitForChange([f.queue.file], () => f.results().length === 1, { timeoutMs: 30000 });
   assert.equal(f.results()[0].outcome, 'promoted'); assert.equal(f.results()[0].delivered, true);
   assert.equal(f.messages().length, 1); assert.equal(readInbox(inbox)[0].state, 'sent');
 });
@@ -392,7 +410,7 @@ test('expected head survives CLI enqueue and succeeds exactly; a changed binding
   assert.throws(() => enqueue(f.queue, ['first', 'second'], opts), /requires one lane/);
   assert.equal(f.cli(['first', '--expected-head', 'HEAD']).status, 1);
   const request = f.launch(['first', '--expected-head', expected]); assert.equal(request.jobs[0].id, job.id);
-  await waitForChange([f.queue.file], () => f.results().length === 1, { timeoutMs: 30000 });
+  await f.waitForChange([f.queue.file], () => f.results().length === 1, { timeoutMs: 30000 });
   assert.equal(f.results()[0].expectedHead, expected, JSON.stringify(f.results()[0]));
   assert.equal(f.results()[0].tip, expected, JSON.stringify(f.results()[0]));
   assert.equal(f.results()[0].outcome, 'promoted'); assert.equal(f.git(['rev-parse', 'main']), expected);
@@ -439,7 +457,7 @@ for (const mode of ['dirty', 'red', 'conflict']) test(`${mode} refusal is delive
     fs.writeFileSync(path.join(f.repo, 'shared'), 'main\n'); f.git(['add', '.']); f.git(['commit', '-qm', 'main edit']);
   }
   const before = f.git(['rev-parse', `lane/bad`]);
-  f.launch(['bad', 'good']); await waitForChange([f.queue.file], () => f.results().length === 2, { timeoutMs: 30000 });
+  f.launch(['bad', 'good']); await f.waitForChange([f.queue.file], () => f.results().length === 2, { timeoutMs: 30000 });
   assert.equal(f.results()[0].outcome, 'refused', fs.readFileSync(f.results()[0].log, 'utf8')); assert.equal(f.results()[0].delivered, true);
   assert.match(f.results()[0].reason, mode === 'dirty' ? /not clean/ : mode === 'red' ? /validation failed/ : /does not rebase cleanly/);
   assert.equal(f.git(['rev-parse', 'lane/bad']), before);
@@ -464,7 +482,7 @@ test('replay conflict after clean merge-tree preflight names the file in the not
   assert.equal(preflight.status, 0, preflight.stderr);
   assert.match(preflight.stdout, / clean\n$/);
 
-  f.launch(['bad', 'good']); await waitForChange([f.queue.file], () => f.results().length === 2, { timeoutMs: 30000 });
+  f.launch(['bad', 'good']); await f.waitForChange([f.queue.file], () => f.results().length === 2, { timeoutMs: 30000 });
   const refused = f.results()[0];
   const log = fs.readFileSync(refused.log, 'utf8');
   assert.equal(refused.outcome, 'refused', log);
@@ -491,12 +509,12 @@ test('replay conflict after clean merge-tree preflight names the file in the not
 
 test('capped promotion notices retain an owner and resolve lost acknowledgements without replaying input', async (t) => {
   const f = fixture(t); f.lane('first'); f.lane('second'); fs.writeFileSync(path.join(f.root, 'delivery-fail'), '1');
-  f.launch(['first', 'second']); await waitForChange([f.queue.file], () => f.results().length === 2, { timeoutMs: 30000 });
+  f.launch(['first', 'second']); await f.waitForChange([f.queue.file], () => f.results().length === 2, { timeoutMs: 30000 });
   assert.ok(f.results().every((r) => r.outcome === 'promoted' && r.delivered === false && r.delivery_error));
   const inbox = path.join(f.repo, '.git/supervisor/inbox.log');
   assert.ok(fs.existsSync(`${inbox}.owner.lock`));
   const firstId = f.results()[0].delivery_id;
-  await until(() => readInbox(inbox).find(entry => entry.id === firstId)?.state === 'uncertain');
+  await f.until(() => readInbox(inbox).find(entry => entry.id === firstId)?.state === 'uncertain', { producer: f.inboxProducer(inbox) });
   assert.equal(readInbox(inbox).find(entry => entry.id === f.results()[1].delivery_id).state, 'pending');
   // This fake records input before losing its acknowledgement. Inspect that
   // actual fixture evidence, then explicitly dispose the uncertain attempt.
@@ -505,7 +523,7 @@ test('capped promotion notices retain an owner and resolve lost acknowledgements
   assert.ok(f.messages()[0][3].includes(`notice-id=${firstId}`));
   fs.unlinkSync(path.join(f.root, 'delivery-fail'));
   resolveNotice(inbox, firstId, true);
-  await until(() => readInbox(inbox).every((entry) => entry.state === 'sent'));
+  await f.until(() => readInbox(inbox).every((entry) => entry.state === 'sent'), { producer: f.inboxProducer(inbox) });
   const texts = f.messages().map((args) => args[3]);
   assert.equal(texts.length, 2, 'the uncertain input was acknowledged, never replayed');
   assert.ok(texts[0].includes(`notice-id=${firstId}`));
@@ -551,11 +569,11 @@ test('two concurrent enqueue commands share one drain; direct promote waits for 
   const command = `${process.execPath} -e 'const fs=require("fs"); fs.writeFileSync(${JSON.stringify(marker)}, "ready"); while(!fs.existsSync(${JSON.stringify(release)})) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 20)'`;
   f.onCleanup(async () => { fs.writeFileSync(release, 'release'); });
   const first = f.launch(['first', '--validate', command]);
-  await waitForFile(marker, () => true, { timeoutMs: 30000 });
+  await f.waitForFile(marker, () => true, { timeoutMs: 30000 });
   const waiting = watchPromotionLock(f.root, f.env, path.join(f.repo, '.git/lane-promote.lock'));
   const direct = spawnChild(t, process.execPath, [LANE, 'promote', 'second'], { cwd: f.repo, env: f.env });
   const exited = waitForExit(direct);
-  await waitForFile(waiting);
+  await f.waitForFile(waiting, () => true, { producer: () => ({ state: direct.exitCode === null && direct.signalCode === null ? 'live' : 'exited', detail: `direct promotion exit ${direct.exitCode}/${direct.signalCode}` }) });
   assert.equal(direct.exitCode, null, 'contending promotion is waiting for the held lock');
   const queued = f.launch(['second']);
   assert.equal(queued.worker.already_running, true, 'the second enqueue starts no competing drain');
@@ -563,15 +581,15 @@ test('two concurrent enqueue commands share one drain; direct promote waits for 
   fs.writeFileSync(release, 'release');
   const result = await exited;
   assert.equal(result.code, 0, result.stderr);
-  await waitForChange([f.queue.file], () => f.results().length === 2, { timeoutMs: 30000 });
+  await f.waitForChange([f.queue.file], () => f.results().length === 2, { timeoutMs: 30000 });
   assert.deepEqual(f.results().map((r) => r.topic), ['first', 'second']);
   assert.ok(f.results().every((r) => r.outcome === 'promoted'));
 });
 
 test('enqueue during the empty-worker handoff always starts a new drain', async (t) => {
   const f = fixture(t); f.lane('first'); f.lane('second');
-  f.launch(['first']); await waitForChange([f.queue.file], () => f.results().length === 1, { timeoutMs: 30000 });
-  f.launch(['second']); await waitForChange([f.queue.file], () => f.results().length === 2, { timeoutMs: 30000 });
+  f.launch(['first']); await f.waitForChange([f.queue.file], () => f.results().length === 1, { timeoutMs: 30000 });
+  f.launch(['second']); await f.waitForChange([f.queue.file], () => f.results().length === 2, { timeoutMs: 30000 });
   assert.ok(f.results().every((r) => r.outcome === 'promoted'), JSON.stringify(f.results()));
 });
 
@@ -666,7 +684,7 @@ cp.spawnSync=function(cmd,args,options){
   }
   f.launch(['first', '--org', org, '--expected-head', f.git(['rev-parse', 'HEAD'], wt), '--if-current-run', run,
     '--claimed-by', 'brain', '--claim-generation', String(JSON.parse(record(['show', run, '--json'])).owner_generation)]);
-  await waitForChange([f.queue.file], () => f.results().length === 1, { timeoutMs: 30000 });
+  await f.waitForChange([f.queue.file], () => f.results().length === 1, { timeoutMs: 30000 });
   assert.equal(f.results()[0].outcome, 'promoted', f.results()[0].reason);
   if (failVelocity) {
     assert.equal(fs.existsSync(failureMarker), true, 'the velocity note actually failed');
@@ -678,7 +696,7 @@ cp.spawnSync=function(cmd,args,options){
   // Results are durable before the deferred project-wide catch-up begins.
   // Catch-up lists every workspace before applying its retirement plan. Its
   // first observation of "other" does not prove the worker close has happened.
-  const actionText = await waitForFile(calls, text => {
+  const actionText = await f.waitForFile(calls, text => {
     if (!text.endsWith('\n')) return false;
     const actions = text.trim().split('\n').map(JSON.parse);
     return actions.some(a => a[0] === 'tab' && a[1] === 'close' && a[2] === 'w:worker') &&
@@ -723,14 +741,12 @@ if (args[0]==='agent' && args[1]==='prompt') fs.appendFileSync(${JSON.stringify(
 console.log(JSON.stringify({result:{workspaces:[],agents:[]}}));\n`);
   return { marker, release, org };
 }
-function alive(pid) {
-  try { process.kill(pid, 0); return true; } catch (error) { if (error.code === 'ESRCH') return false; throw error; }
-}
 async function killCreated(entry) {
   if (!entry) return;
   const result = killProcess({ ...entry, group: false });
   assert.equal(result.ok, true, `identity lookup failed for ${entry.pid}; no signal sent`);
-  await until(() => !alive(entry.pid));
+  const producer = () => producerOutcome([entry], lookupProcess);
+  await until(() => producer().state === 'exited', { producer, signal: currentTest().signal });
 }
 
 test('crash during batch cleanup resumes without repeating the gate or trusting saved freshness', async (t) => {
@@ -746,7 +762,7 @@ test('crash during batch cleanup resumes without repeating the gate or trusting 
     fs.rmSync(path.join(f.queue.directory, 'worker.lock'), { recursive: true, force: true });
   };
   f.onCleanup(stop);
-  try { await waitForFile(blocked.marker, text => /^[1-9]\d*$/.test(text), { timeoutMs: 30000 }); }
+  try { await f.waitForFile(blocked.marker, text => /^[1-9]\d*$/.test(text), { timeoutMs: 30000 }); }
   catch (error) {
     t.diagnostic(JSON.stringify({ cleanup_wait: f.queue.load().results.map(r => ({ outcome: r.outcome, reason: r.reason })) }));
     throw error;
@@ -792,7 +808,7 @@ while(!fs.existsSync(${JSON.stringify(release)})) Atomics.wait(new Int32Array(ne
     for (const entry of [blockedEntry, gateEntry]) await killCreated(entry);
     fs.rmSync(path.join(f.queue.directory, 'worker.lock'), { recursive: true, force: true });
   });
-  await waitForFile(blocked.marker, text => /^[1-9]\d*$/.test(text), { timeoutMs: 30000 });
+  await f.waitForFile(blocked.marker, text => /^[1-9]\d*$/.test(text), { timeoutMs: 30000 });
   blockedEntry = registerProcess(Number(fs.readFileSync(blocked.marker, 'utf8')), false);
   assert.ok(blockedEntry.command.includes(f.herdr));
   const tip = f.git(['rev-parse', 'lane/first']);
@@ -800,11 +816,11 @@ while(!fs.existsSync(${JSON.stringify(release)})) Atomics.wait(new Int32Array(ne
     env: { ...f.env, LANE_VALIDATE: `${process.execPath} ${script}` }, stdio: ['ignore', 'pipe', 'pipe'] });
   let output = ''; direct.stdout.on('data', (v) => { output += v; }); direct.stderr.on('data', (v) => { output += v; });
   const exited = waitForExit(direct);
-  await waitForFile(ready, text => /^[1-9]\d*$/.test(text), { timeoutMs: 30000 });
+  await f.waitForFile(ready, text => /^[1-9]\d*$/.test(text), { producer: () => ({ state: direct.exitCode === null && direct.signalCode === null ? 'live' : 'exited', detail: `direct promotion exit ${direct.exitCode}/${direct.signalCode}` }) });
   gateEntry = registerProcess(Number(fs.readFileSync(ready, 'utf8')), false);
   assert.ok(gateEntry.command.includes(script));
   fs.writeFileSync(blocked.release, 'release');
-  await waitForChange([f.queue.file], () => f.results().length === 1, { timeoutMs: 30000 });
+  await f.waitForChange([f.queue.file], () => f.results().length === 1, { timeoutMs: 30000 });
   assert.equal(direct.exitCode, null, 'the direct gate is still in progress');
   assert.equal(f.results()[0].outcome, 'promoted'); assert.equal(f.results()[0].delivered, true);
   assert.match(f.results()[0].reason, /lane cleanup:.*lane-promote.lock/);
@@ -815,7 +831,7 @@ while(!fs.existsSync(${JSON.stringify(release)})) Atomics.wait(new Int32Array(ne
   assert.notEqual(close.status, 0); assert.match(close.stderr, /lane-promote.lock/);
   assert.ok(fs.existsSync(waiting));
   fs.writeFileSync(release, 'release'); assert.equal((await exited).code, 0, output);
-  await until(() => !fs.existsSync(path.join(f.queue.directory, 'worker.lock')));
+  await f.until(() => !fs.existsSync(path.join(f.queue.directory, 'worker.lock')));
   f.onCleanup(async () => {});
 });
 

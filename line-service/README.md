@@ -325,6 +325,17 @@ when a final report or later source arrives. Later commits remain visible in
 canonical coverage debt, without a duplicate reviewer, invented coverage or
 product completion. Landing itself makes no test or final-release PASS claim.
 
+Routine notes (including phase evidence/decisions) and notification metadata do
+not make a blocked item eligible for another worker or change a saved request's
+frozen readiness. Actual task/acceptance edits, answered blockers, link changes,
+explicit reopening and the existing bound brief change remain genuine inputs.
+If the original blocked run subsequently lands source, that recovery keeps its
+ownership until an explicit item reopen hands the remaining scope back. A phase
+PASS is not a done report. Every pre-effect check still refuses real task,
+ownership, native, STOP/HOLD or source changes. Already-started uncertain jobs,
+their claims and watchers remain retained; this adds no retry or NOT STARTED
+disposition and does not mutate an earlier immutable report.
+
 ```sh
 node line-service/line-service.mjs --digest --org /OWN/RECORD --since 2026-10-27T00:00:00Z
 ```

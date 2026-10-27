@@ -11,7 +11,7 @@ import {loadEvents,transact} from '../lib/store.mjs';
 import {fold} from '../lib/state.mjs';
 import {gitProject} from '../lib/project.mjs';
 import {createLineService,sourceRoot,serviceDirectory} from '../line-service/line-service.mjs';
-import {discoverChanges,blockedChangeKey,reviewResultEvents,morningDigest,recordReviewResults,canonicalReviewIndex,reviewHealth,ensureReviewBoundary,phase0Boundary} from '../line-service/phase1.mjs';
+import {discoverChanges,blockedChangeKey,dispatchInput,reviewResultEvents,morningDigest,recordReviewResults,canonicalReviewIndex,reviewHealth,ensureReviewBoundary,phase0Boundary} from '../line-service/phase1.mjs';
 import {reviewAttempt,selectedReviewConsumer} from '../line-service/review.mjs';
 import {queueReviewMutation,reviewQueueRoute,validateQueuedReview} from '../line-service/review-queue.mjs';
 import {ROUTE_PRESET} from '../lanes/preset.mjs';
@@ -520,7 +520,20 @@ test('phase1 blocked report requires genuine new input and ignores its own routi
   const own={type:'note.added',id:item.id,seq:run.report.seq+1,by:'line-service',text:'same hold'};
   assert.equal(blockedChangeKey({...c,run,item,events:[...c.events,own]}),null);
   const human={...own,seq:own.seq+1,by:'source-owner',text:'New brief and evidence supplied'};
-  assert.ok(blockedChangeKey({...c,run,item,events:[...c.events,own,human]}));
+  assert.equal(blockedChangeKey({...c,run,item,events:[...c.events,own,human]}),null,'an ordinary note is evidence, not dispatch readiness');
+  const changed={type:'item.updated',id:item.id,seq:human.seq+1,by:'source-owner',fields:{accept:['A genuinely changed task input']}};
+  assert.ok(blockedChangeKey({...c,run,item,events:[...c.events,own,human,changed]}));
+});
+
+test('saved-phase readiness preserves immutable blocked evidence and original source ownership until an explicit current-item handoff while independent READY work remains eligible',t=>{
+  const f=fixture(t,{reported:false}),text='---\nrun: R-1\noutcome: blocked\nsummary: Source phase blocked; full live work remains.\nblockers: []\n---\n';fs.writeFileSync(f.file,text);f.add([{type:'report.ingested',run:'R-1',file:'reports/R-1.md',sha256:hash(text),report:{outcome:'blocked',summary:'Full live work remains',artifacts:[],blockers:[],proposals:[],extra:{}}}]);
+  const original=f.context(),owner=structuredClone(original.run.owner),report=structuredClone(original.run.report);
+  f.add([{type:'note.added',id:'R-1',text:'Bounded source phase complete; 42 comparator controls pass; F2/live gaps remain.',decision:false},{type:'note.added',id:'ENG-1',text:'Phase evidence is retained; no whole-item completion.',decision:true},{type:'item.updated',id:'ENG-1',fields:{meta:{phase_receipt:'owned/phase-receipt.json',notify:'supervisor'}}}]);
+  assert.equal(dispatchInput(f.context()),null,'routine phase facts and decisions cannot release another build');
+  f.add([{type:'item.updated',id:'ENG-1',fields:{accept:['A genuine task input after the blocked report']}}]);assert.ok(dispatchInput(f.context()));
+  unreportedNativeLandings(f);assert.equal(dispatchInput(f.context()),null,'positive later original-owner source retains that recovery, not a new build');
+  f.add([{type:'item.added',id:'ENG-2',role:'engineer',title:'Independent ready work'}]);const independent=f.context();assert.ok(dispatchInput({...independent,item:independent.state.items.get('ENG-2')}));assert.deepEqual(independent.run.report,report);assert.deepEqual(independent.run.owner,owner);assert.equal(fs.readFileSync(f.file,'utf8'),text);assert.equal(independent.item.closed,null);
+  f.add([{type:'item.reopened',id:'ENG-1',note:'Actual owner explicitly hands remaining unfinished scope back to normal work; no done claim.'}]);assert.ok(dispatchInput(f.context()));assert.deepEqual(f.context().run.report,report);assert.equal(f.context().item.closed,null);
 });
 
 test('phase1 valid report ingests with no live pane and retries a transient safe failure while independent starts continue',t=>{

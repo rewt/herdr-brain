@@ -248,8 +248,8 @@ export function blockedChangeKey({events,state,item,run,brief}) {
   if(run?.report?.outcome!=='blocked')return 'ordinary';
   const seq=run.report.seq??0,ids=new Set([item.id,run.id]);
   const inputs=events.filter(e=>e.seq>seq&&e.by!=='line-service'&&!/^\[watch record-only\]/.test(e.text??'')&&(
-    e.type==='note.added'&&ids.has(e.id)||e.type==='question.answered'&&(ids.has(e.id)||state?.items.get(e.id)?.parent===item.id)||
-    e.type==='link.removed'&&(ids.has(e.blocked)||ids.has(e.blocker))||e.type==='item.updated'&&e.id===item.id||
+    e.type==='question.answered'&&(ids.has(e.id)||state?.items.get(e.id)?.parent===item.id)||
+    e.type==='link.removed'&&(ids.has(e.blocked)||ids.has(e.blocker))||e.type==='item.updated'&&e.id===item.id&&Object.keys(e.fields??{}).some(k=>['accept','title'].includes(k))||e.type==='item.reopened'&&e.id===item.id||
     e.type==='item.closed'&&events.some(l=>l.type==='link.added'&&l.blocked===item.id&&l.blocker===e.id)));
   const original=events.find(e=>e.type==='report.ingested'&&e.run===run.id)?.brief_sha256;
   if(!inputs.length&&!(original&&brief&&original!==brief))return null;
@@ -271,6 +271,13 @@ export function capturedProducerTarget({repo,target,whole}){
 export function dispatchInput({events,state,item,org,identity}) {
   if (!item || item.closed || item.kind === 'goal') return null;
   const run = state.runs.get(item.runs.at(-1));
+  if(run?.report?.outcome==='blocked'){
+    // New source on the original reported run is an owned recovery, not whole
+    // product completion or permission to replace that owner. Only the existing
+    // explicit reopen/handoff can return remaining scope to ordinary admission.
+    const source=events.findLast(e=>e.seq>run.report.seq&&(e.type==='change.landed'&&e.run===run.id&&e.item===item.id&&e.landed_at&&e.producer||e.type==='promotion.reconciled'&&e.heads?.some(h=>h.run===run.id)));
+    if(source&&!events.some(e=>e.type==='item.reopened'&&e.id===item.id&&e.seq>source.seq))return null;
+  }
   let brief;
   try { if(run?.brief_path) brief=hash(fs.readFileSync(run.brief_path)); } catch { /* absence is not changed input */ }
   const input=blockedChangeKey({events,state,item,run,brief});

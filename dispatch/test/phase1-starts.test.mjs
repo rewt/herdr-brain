@@ -63,6 +63,21 @@ test('phase1 detached native start keeps one original prompt and its record-only
   }
 });
 
+test('saved-phase frozen request ignores routine predecessor phase evidence but holds a genuinely changed task after native start without retrying its unknown session',async t=>{
+  for(const changed of [false,true]){
+    const f=fixture(t,{lateSession:changed?'late':''}),prior=f.rec(['start',f.item,'--workspace',f.repo]).match(/^(R-\d+) started/m)[1],file=path.join(f.root,'original-blocked.md'),text=`---\nrun: ${prior}\noutcome: blocked\nsummary: Original immutable blocked report.\nblockers: []\n---\n`;
+    fs.writeFileSync(file,text);f.rec(['ingest',file,'--run',prior]);f.rec(['set',f.item,'title=Genuinely changed input']);const owner=f.show(prior).owner;
+    const watch=path.join(f.root,'bin/watch'),record=new URL('../../bin/org.mjs',import.meta.url).pathname;
+    const injection=changed?`const phase=spawnSync(process.execPath,[${JSON.stringify(record)},'set',${JSON.stringify(f.item)},'title=Another actual task change'],{stdio:['ignore','pipe','pipe']});if(phase.status)process.exit(phase.status);`:`for(const a of [['note',${JSON.stringify(prior)},'Bounded source phase42 PASS; full F2/live gaps remain.'],['set',${JSON.stringify(f.item)},'meta.phase_receipt=owned/phase-receipt.json']]){const phase=spawnSync(process.execPath,[${JSON.stringify(record)},...a],{stdio:['ignore','pipe','pipe']});if(phase.status)process.exit(phase.status);}`;
+    fs.writeFileSync(watch,fs.readFileSync(watch,'utf8').replace("} else if(type==='watch') {","} else if(type==='watch') {\n"+injection));
+    const result=f.start(['--detach']);assert.equal(result.status,0,result.stderr);const {journal}=JSON.parse(result.stdout),terminal=await driverResult(journal),job=JSON.parse(fs.readFileSync(journal));assert.equal(job.native_launch_attempted,true);assert.ok(job.watcher.pid);assert.deepEqual(f.show(prior).owner,owner);assert.equal(fs.readFileSync(file,'utf8'),text);assert.equal(f.show(prior).report.outcome,'blocked');
+    assert.equal(fs.readFileSync(path.join(f.org,f.show(prior).report.file),'utf8'),text);
+    if(changed){assert.match(terminal.error,/frozen request/);assert.equal(job.worker.agentSessionId,null);assert.equal(f.calls().filter(c=>c.type==='herdr'&&c.a[0]==='agent'&&c.a[1]==='prompt').length,0);assert.equal(preflightContinuation({journal,repo:f.repo,org:f.org,common:job.common,root:job.release.root,events:[]}),null);}
+    else{assert.equal(terminal.exit_code,0,JSON.stringify(terminal));assert.equal(terminal.stage,'complete');assert.equal(f.calls().filter(c=>c.type==='herdr'&&c.a[0]==='agent'&&c.a[1]==='prompt').length,1);}
+    assert.equal(f.jobs().length,1,'no replacement or second request');
+  }
+});
+
 test('phase1 dispatch memory admission pauses only for proving and does not wait on low-memory ordering',t=>{
   const f=fixture(t),memory=path.join(f.root,'memory.json');fs.writeFileSync(memory,JSON.stringify({available:0,swap_used:1024**3}));f.fail('prepare');
   const result=f.start([],{env:{...f.env,TEST_MEMORY_FILE:memory}});assert.equal(result.status,1);assert.match(result.stderr,/injected prepare/);assert.doesNotMatch(result.stderr,/waiting; memory pressure/);

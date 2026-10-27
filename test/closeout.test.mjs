@@ -133,14 +133,16 @@ test('retirement phase fair selection finds native work among thousands of physi
 });
 
 test('retirement phase retains original unknown exits and a fresh service STOP before any native effect',t=>{
-  for(const kind of ['unknown','stop']){
+  for(const kind of ['unknown','stop','absent']){
     const f=setup(t,{merged:true});f.report();const rows=f.append([{type:'item.closed',id:'ENG-1',as:'done',completed_run:'R-1'}]),entry=rows[0].closeout_targets.find(t=>t.signal==='landed');
     if(kind==='unknown'){
       const candidate=f.retirement(f.options).plan(f.lane).close[0];f.append([{type:'closeout.effect',key:entry.key,identity:f.common,run:'R-1',item:'ENG-1',source:{seq:rows[0].seq,type:'item.closed'},effect:'preserved-original-intent',outcome:{action:'agent-exit-requested',run:candidate.run,pane:candidate.pane,tab_id:candidate.tab_id,occupant:candidate.occupant,shell:candidate.shell}}]);
+    }else if(kind==='absent'){
+      f.state.agents=[];f.state.tabs=[];f.state.panes=[];f.save();
     }else{
       const base=f.options.command;let stopped=false;f.options.command=(exe,args,opt)=>{const result=base(exe,args,opt);if(!stopped&&exe===f.job.herdr){stopped=true;const directory=path.join(f.org,'line-service',createHash('sha256').update(JSON.stringify(f.common)).digest('hex').slice(0,20));fs.mkdirSync(directory,{recursive:true});fs.writeFileSync(path.join(directory,'STOP'),'actual STOP after selection');}return result;};
     }
-    const result=f.drain({keys:[entry.key],sessionsOnly:true,retrySafe:true});assert.equal(result.evaluated[0]?.completed,false);assert.notEqual(result.evaluated[0]?.sessions_retired,true);assert.match(result.evaluated[0].reason,/unresolved native|STOP/);assert.deepEqual(f.read().actions,[]);
+    const result=f.drain({keys:[entry.key],sessionsOnly:true,retrySafe:true});assert.equal(result.evaluated[0]?.completed,false);assert.notEqual(result.evaluated[0]?.sessions_retired,true);assert.match(result.evaluated[0].reason,/unresolved native|STOP|UNKNOWN/);assert.deepEqual(f.read().actions,[]);
   }
 });
 

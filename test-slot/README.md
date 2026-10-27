@@ -218,7 +218,7 @@ The lane promotion adapter runs with timeout retry disabled, so it
 never replays a command chain, including when a leaf declines to retry. Leaf
 wrappers and the release gate command may enable `--retry-timeout-under-load`: a
 nonzero timeout (exit 124, `ETIMEDOUT`, or the Node test runner's timeout marker)
-under measured load above one per available CPU (capacity capped at four) is
+under measured load above `os.availableParallelism()` is
 re-run once within the same top-level execution (retaining any exclusive hold). The log includes
 `TEST_SLOT_TIMEOUT_RETRY` and both attempts. A second timeout counts as failure.
 The retry scope is the wrapped command. This project's shared promotion command spans

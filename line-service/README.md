@@ -301,6 +301,18 @@ callback, STOP/HOLD and archive guards. Uncertain original intents permit only
 their existing outcome readback, never another exit/close attempt. Evaluation
 timings are passive observations of real passes, not benchmarks.
 
+`node supervisor/closeout.mjs status --owner --repo /OWN/PROJECT --org /OWN/RECORD`
+is a read-only compatibility/claim snapshot. It does not acquire/recover a lock,
+probe a process, drain a queue or start a successor. It reports the actual loaded
+source capabilities separately from the normally selected fresh root, whose
+capabilities remain UNKNOWN until that implementation executes. Pins and saved
+requests retain their existing selection. Stored owner tuples and exact receipt
+bytes are preserved; old evaluations, handoffs, logs and elapsed deadlines do not
+establish the original consumer's outcome. Even absent locks leave that outcome
+UNKNOWN. A retained original owner needs its own bound terminal/outcome receipt
+and exact claim release before its owner considers a successor; this status
+observation supplies no native, retry or recovery authority.
+
 ```sh
 node line-service/line-service.mjs --digest --org /OWN/RECORD --since 2026-10-27T00:00:00Z
 ```

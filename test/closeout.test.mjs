@@ -30,6 +30,7 @@ import { enqueue, finishCleanup, retryCleanup, drain as drainPromotions, queueFo
 import { stopFixtureInbox } from './helpers/inbox.mjs';
 import { retirementStatus, renderRetirementStatus } from '../lib/retire-status.mjs';
 import { outstandingEffects } from '../lib/run-owner.mjs';
+import { readCloseoutOwnerStatus } from '../lib/closeout-code.mjs';
 
 const cli = fileURLToPath(new URL('../bin/org.mjs', import.meta.url));
 const closer = fileURLToPath(new URL('../supervisor/closeout.mjs', import.meta.url));
@@ -90,6 +91,23 @@ function setup(t, { occupied = true, merged = false, terminal = false } = {}) {
 }
 const evaluations = f => events(f).filter(e => e.type === 'closeout.evaluated');
 const effects = f => events(f).filter(e => e.type === 'closeout.effect').map(e => e.outcome);
+test('closeout owner status preserves the retained legacy owner and refuses to turn old outcomes or an expired deadline into release',t=>{
+  const f=setup(t,{occupied:false}),directory=path.join(f.common,'closeout'),owner={pid:91833,identity:'1793081341:121264',token:'original-consumer',at:'2026-10-27T06:09:02.691Z',argv:[process.execPath,'/installed/c160/supervisor/closeout.mjs','drain','--keys',JSON.stringify(['a'.repeat(64)]),'--deadline','1793079848822','--no-restart']};
+  f.append([{type:'closeout.code-handoff',identity:f.common,keys:['a'.repeat(64)],old:{code:{root:'/installed/c160'},epoch:{tip:'d937'}},current:{code:{root:'/installed/c160'},epoch:{tip:'00e'}}},{type:'closeout.evaluated',key:'a'.repeat(64),identity:f.common,completed:true}]);
+  for(const name of ['consumer.lock','queue.lock']){fs.mkdirSync(path.join(directory,name),{recursive:true});fs.writeFileSync(path.join(directory,name,'owner.json'),JSON.stringify(owner),{mode:0o600});}
+  fs.writeFileSync(path.join(directory,'worker.log'),'older successor 0 pending false; evaluations complete\n');
+  const before=fs.readFileSync(f.eventFile),claims=['consumer.lock','queue.lock'].map(n=>fs.readFileSync(path.join(directory,n,'owner.json'))),kill=process.kill;
+  process.kill=()=>{throw Error('read-only status must never probe or signal an owner');};
+  let result;try{result=readCloseoutOwnerStatus({cwd:f.repo,org:f.org,env:f.env});}finally{process.kill=kill;}
+  assert.equal(result.schema,'closeout-owner-status/v1');assert.equal(result.effects,0);assert.equal(result.original_outcome,'UNKNOWN');assert.equal(result.original_release,'UNKNOWN');assert.equal(result.claims.consumer.state,'stored');assert.deepEqual(result.claims.consumer.owner,owner);assert.equal(result.claims.consumer.liveness,'UNKNOWN');assert.equal(result.claims.queue.owner.pid,91833);assert.equal(result.source.capabilities.named_sessions,true);assert.equal(result.source.capabilities.zero_elapsed_budget,true);assert.equal(result.successor.capabilities,null,'a source status must not assert capabilities of a different selected root');
+  assert.deepEqual(fs.readFileSync(f.eventFile),before);for(const [i,n]of ['consumer.lock','queue.lock'].entries())assert.deepEqual(fs.readFileSync(path.join(directory,n,'owner.json')),claims[i]);assert.deepEqual(f.read().actions,[]);
+  const reply=spawnSync(process.execPath,[closer,'status','--owner','--repo',f.repo,'--org',f.org],{env:f.env,encoding:'utf8'});assert.equal(reply.status,0,reply.stderr);assert.equal(JSON.parse(reply.stdout).claims.consumer.owner.token,owner.token);assert.deepEqual(fs.readFileSync(f.eventFile),before);
+});
+test('closeout owner status keeps absent claims distinct from original success and rejects foreign records or redirected owner files',t=>{
+  const f=setup(t,{occupied:false}),empty=readCloseoutOwnerStatus({cwd:f.repo,org:f.org,env:f.env});assert.equal(empty.claims.consumer.state,'absent');assert.equal(empty.original_outcome,'UNKNOWN');assert.equal(empty.original_release,'UNKNOWN');
+  const foreign=path.join(f.scratch,'foreign-record');initOrg(foreign);assert.throws(()=>readCloseoutOwnerStatus({cwd:f.repo,org:foreign,env:f.env}),/record.*binding/);
+  const lock=path.join(f.common,'closeout/consumer.lock');fs.mkdirSync(lock,{recursive:true});const file=path.join(f.scratch,'foreign-owner.json');fs.writeFileSync(file,JSON.stringify({pid:91833}));fs.symlinkSync(file,path.join(lock,'owner.json'));assert.throws(()=>readCloseoutOwnerStatus({cwd:f.repo,org:f.org,env:f.env}),/redirected|regular/);assert.equal(fs.readFileSync(file,'utf8'),JSON.stringify({pid:91833}));assert.deepEqual(f.read().actions,[]);
+});
 function assertRemoved(f) {
   assert.equal(fs.existsSync(f.lane), false);
   assert.equal(f.git(['branch', '--list', 'lane/topic']), '');

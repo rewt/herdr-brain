@@ -6,10 +6,11 @@ import { gitProject } from '../lib/project.mjs';
 
 export async function closeoutMain(argv = process.argv.slice(2)) {
   const { positionals, values } = parseArgs({ args: argv, allowPositionals: true, options: {
-    keys: { type: 'string' }, receipt: { type: 'string' }, deadline: { type: 'string' }, 'no-restart': { type: 'boolean' }, 'retry-safe': { type: 'boolean' },'sessions-only':{type:'boolean'},
+    keys: { type: 'string' }, receipt: { type: 'string' }, deadline: { type: 'string' }, 'no-restart': { type: 'boolean' }, 'retry-safe': { type: 'boolean' },'sessions-only':{type:'boolean'}, owner:{type:'boolean'},
     repo: { type: 'string', default: process.cwd() }, org: { type: 'string' }, seq: { type: 'string' }, why: { type: 'string' },
   } });
   const [command, topic] = positionals, cwd = values.repo;
+  if (values.owner && command !== 'status') throw Error('--owner is a read-only status option');
   // Bind both identities before importing any queue/consumer/retirement code.
   const loadedCode = command === 'drain' ? captureCloseoutLaunch(gitProject(cwd)) : undefined;
   const { findOrgDir, loadEvents } = await import('../lib/store.mjs');
@@ -38,7 +39,9 @@ export async function closeoutMain(argv = process.argv.slice(2)) {
     const keys = migrateCloseout({ cwd, org, key: topic, receipt: values.receipt });
     result = joinedCloseoutAttempt({ cwd, org, keys });
   }
-  else if (command === 'status' && positionals.length === 1) result = readCloseoutEntries(gitProject(cwd).identity);
+  else if (command === 'status' && positionals.length === 1) result = values.owner
+    ? (await import('../lib/closeout-code.mjs')).readCloseoutOwnerStatus({cwd,org})
+    : readCloseoutEntries(gitProject(cwd).identity);
   else if (command === 'retry' && positionals.length === 2) result = retryCloseout({ cwd, org, topic, why: values.why });
   else if (command === 'followup-ended' && positionals.length === 2) result = endReviewFollowup({ cwd, org, reviewId: topic, why: values.why });
   else if (command === 'event' && positionals.length === 1) {

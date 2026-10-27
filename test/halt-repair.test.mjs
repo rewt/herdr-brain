@@ -44,6 +44,7 @@ test('zero-ready passes never file a repair and completed idle passes deduplicat
     assert.equal(pass('one').count,1);assert.equal(pass('two').count,2);const third=pass('three');assert.ok(third.item);
     assert.equal(pass('three').item,third.item,'a repeated completed pass is a readback, not a second count');
     assert.equal(pass('four').item,third.item);assert.equal([...f.read().state.items.values()].filter(i=>i.meta.halt_repair).length,1);
+    assert.match(f.read().state.items.get(third.item).accept.join('\n'),/pending status with no producer is a defect and becomes a decision item/);
   }finally{lock();}
   assert.equal(f.read().events.some(e=>e.type==='line-service.halt-pass'),false,'routine counts never enter the event record');
 });

@@ -2,6 +2,7 @@
 // The record transaction deduplicates only the repair intent across lost replies.
 // This module files ordinary engineering work, never grants launch authority.
 import fs from 'node:fs';
+import {uncertainOutcomeDoctrine} from '../lib/uncertain-outcome.mjs';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
 import {transact} from '../lib/store.mjs';
@@ -63,7 +64,7 @@ export function completeHaltPass({repo,org,env,pass,previous,observation,route,a
       const evidence=`Completed pass ${pass}; ${audit}; ${effects}; ready items ${observation.ready.join(', ')}. Original effects and uncertain requests remain authoritative.`;
       add.push({type:'item.added',id:item,kind:'work',role:'engineer',priority:2600,
         title:'Diagnose and repair stalled engineering admission',
-        accept:['Diagnose this exact engineering-idle episode and fix its concrete admission cause through normal native dispatch. Preserve uncertain attempts, item/ancestor/reserved holds, ownership, STOP/HOLD and resource guards.'],
+        accept:['Diagnose this exact engineering-idle episode and fix its concrete admission cause through normal native dispatch. Preserve item/ancestor/reserved holds, ownership, STOP/HOLD and resource guards. '+uncertainOutcomeDoctrine],
         meta:{halt_repair:1,halt_episode:episode,route,purpose:'Restore productive engineering admission for the recorded idle episode.',
           scope:`One bounded diagnosis/fix of episode ${episode}. ${evidence} Do not create recursive halt repairs or take reserved actions. File unrelated work separately.`,
           evidence,halt_evidence:{audit,effects,pass,signature:observation.signature},halt_pass:pass,halt_threshold:after}});

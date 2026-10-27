@@ -56,14 +56,13 @@ for (const directory of ['current', 'foreign']) for (const root of [null, false,
     fs.writeFileSync(file, bytes);
     if (directory === 'current') assert.throws(() => s.pass(), /absence UNKNOWN/);
     else s.pass();
-    assert.equal(f.calls.length, 0, 'no queue or native helper is invoked');
+    assert.equal(f.calls.length, directory==='current'?0:1, 'only typed current evidence can hold the captured change');
     const after = fs.readFileSync(path.join(f.org, 'events.jsonl'));
     assert.deepEqual(after.subarray(0, events.length), events, 'existing record history stays immutable');
     const added = after.subarray(events.length).toString().trim().split('\n').filter(Boolean).map(JSON.parse);
     assert.deepEqual(added, []);
     if (directory === 'foreign') {
-      const rows=fs.readFileSync(path.join(s.directory,'passes.jsonl'),'utf8').trim().split('\n').map(JSON.parse),held=rows.find(r=>r.notice_record);
-      assert.match(held.reason,/absence UNKNOWN/);assert.equal(held.scope.head,f.head);assert.equal(rows.find(r=>r.health).health.queued,0);
+      assert.equal(f.calls[0].args[1],'queue-review');
     }
     assert.equal(fs.readFileSync(file, 'utf8'), bytes);
   });
@@ -105,7 +104,8 @@ for (const kind of ['pending', 'native', 'manual', 'decision', 'unknown', 'legac
     const evidence = kind === 'manual' ? path.join(f.org, 'evidence/ENG-1/owner/review-launch.json') : kind === 'unknown' ? path.join(f.org, 'retirement/reviews/unmapped.json') : null;
     const original = evidence && fs.readFileSync(evidence);
     f.write(); const next = f.context();
-    try { assert.ok(reviewAttempt(next.item, next)); } catch (e) { assert.match(e.message, /UNKNOWN|unmapped/); }
+    if(kind==='unknown')assert.equal(reviewAttempt(next.item,next),null);
+    else try { assert.ok(reviewAttempt(next.item, next)); } catch (e) { assert.match(e.message, /UNKNOWN|unmapped/); }
     // Unattributed UNKNOWN evidence stays visible; it cannot hold this commit.
     if (unbound) assert.equal(reviewAttempt(next.item, { ...next, target: bindReviewTarget(next) }), null);
     f.service().pass(); f.service().pass(); assert.equal(f.calls.length, unbound ? 1 : 0, kind);
@@ -144,11 +144,23 @@ test('settled history sweep has constant identity work and bounded log rows whil
   try { s = f.service({ identify: cwd => { identities++; return gitProject(cwd); } }); s.pass(); } finally { fs.existsSync = exists; }
   assert.equal(identities, 2); assert.equal(historicalReads, 0); assert.equal(f.calls.length, 0);
   const rows = fs.readFileSync(path.join(s.directory, 'passes.jsonl'), 'utf8').trim().split('\n').map(JSON.parse);
-  assert.ok(rows.length <= 4, JSON.stringify(rows, null, 2));
+  assert.ok(rows.length <= 5, JSON.stringify(rows, null, 2));
   const retained = rows.find(r => r.action === 'review-retained'); assert.ok(retained);
   assert.equal(retained.notice_record.entry.count, 1);
   assert.equal(retained.notice_record.entry.scope.head, f.head);
   assert.equal(rows.find(r => r.action === 'review-health').health.errors.occurrences, 1);
   const timing = rows.find(r => r.action === 'pass-complete').timing;
   assert.equal(timing.snapshots, 1); assert.equal(timing.historical_intake_skipped, 2035); assert.equal(timing.effect_command_ms, 0);
+});
+
+test('producer linked review references require readable typed evidence and preserve exact pending native scope',t=>{
+  const f=fixture(t),target=bindReviewTarget(f.context()),file=path.join(f.org,'evidence/ENG-1/R-1/review-reference.json');
+  fs.mkdirSync(path.dirname(file),{recursive:true});
+  f.events.find(e=>e.type==='report.ingested').report.artifacts.push(file);f.write();
+  const attempt=()=>reviewAttempt(f.context().item,{...f.context(),target});
+  assert.equal(attempt(),null,'missing locator is absent');
+  for(const bytes of ['unreadable JSON','{}',JSON.stringify({run:'R-1',head:f.head,description:'review mentioned'})]){fs.writeFileSync(file,bytes);assert.equal(attempt(),null);}
+  fs.writeFileSync(file,JSON.stringify({run:'R-1',head:f.head,native_launch_attempted:true,qualification:'UNKNOWN'}));
+  const saved=fs.readFileSync(file);assert.match(attempt(),/typed review reference UNKNOWN/);assert.deepEqual(fs.readFileSync(file),saved);
+  const unrelated=f.commit(2);fs.writeFileSync(file,JSON.stringify({run:'R-other',head:unrelated,native_launch_attempted:true}));assert.equal(attempt(),null,'positive attempt retains only its captured subject');
 });

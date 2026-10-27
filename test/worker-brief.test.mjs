@@ -7,6 +7,7 @@ import { renderBrief } from '../lib/render.mjs';
 import { productFiles } from '../lib/product-files.mjs';
 import { createWorkerBrief, validateWorkerBrief, runWorkerBrief, renderWorkerBrief, validateLineExecution, compatibleLineBrief, lineWorkerPrompt } from '../lib/worker-brief.mjs';
 import { fileURLToPath } from 'node:url';
+import {uncertainOutcomeDoctrine} from '../lib/uncertain-outcome.mjs';
 
 function assignment({ role = 'engineer', address = 'supervisor-herdr', project = '/brain', extra = '' } = {}) {
   const item = { id: role === 'reviewer' ? 'REV-1' : 'ENG-1', title: 'Deliver the named change', role,
@@ -29,6 +30,10 @@ function assignment({ role = 'engineer', address = 'supervisor-herdr', project =
   const prompt = brief => lineWorkerPrompt({ job, run, brief, node: '/node20', laneCLI: '/brain/lanes/lane.mjs', producer: 'Use the pinned owning record messages command.' });
   return { input, contract, state, run, job, render, prompt };
 }
+
+test('producer linked doctrine reaches current worker reviewer and decision guidance without changing saved contracts',()=>{
+  for(const role of ['engineer','reviewer']){const f=assignment({role});assert.ok(f.contract.guidance.text.includes(uncertainOutcomeDoctrine));assert.ok(f.prompt(f.render()).includes(uncertainOutcomeDoctrine));}
+});
 
 for (const [project, address] of [['/brain', 'supervisor-herdr'], ['/bch', 'supervisor-opus']]) test(`actual brief and prompt carry one role page with isolated ${address} routing`, () => {
   const f = assignment({ project, address, extra: 'Keep the check focused.' }), brief = f.render(), prompt = f.prompt(brief);

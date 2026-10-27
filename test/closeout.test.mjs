@@ -99,6 +99,26 @@ function setup(t, { occupied = true, merged = false, terminal = false } = {}) {
 const evaluations = f => [...events(f).filter(e => e.type === 'closeout.evaluated'),...readCloseoutObservations(f.common,f.org,events(f))].sort((a,b)=>(a.seq??a.observed_seq)-(b.seq??b.observed_seq));
 const effects = f => events(f).filter(e => e.type === 'closeout.effect').map(e => e.outcome);
 
+test('producer linked ordinary native exit and close publish exact completion links and passive stage timings',t=>{
+  const f=setup(t,{merged:true});f.report();const rows=f.append([{type:'item.closed',id:'ENG-1',as:'done',completed_run:'R-1'}]),entry=rows[0].closeout_targets.find(t=>t.signal==='landed');
+  const result=f.drain({keys:[entry.key]});assert.equal(result.evaluated[0].completed,true,JSON.stringify(result));
+  const all=events(f),statuses=all.filter(e=>e.type==='closeout.producer-status'&&e.key===entry.key);
+  assert.ok(statuses.some(e=>e.producer.action==='agent-exit-requested'&&e.status==='complete'));
+  assert.ok(statuses.some(e=>e.producer.action==='shell-close-requested'&&e.status==='complete'));
+  for(const status of statuses)assert.ok(all.some(e=>e.seq===status.completion.seq&&e.type===status.completion.type));
+  assert.ok(result.evaluated[0].stages.apply_ms>=0);assert.ok(result.evaluated[0].stages.remove_lane_ms>=0);
+  const before=f.read().actions.length;assert.deepEqual(f.drain({keys:[entry.key]}).evaluated,[]);assert.equal(f.read().actions.length,before);
+});
+
+test('producer linked unresolved native waits do not replay or reobserve after manual retry or elapsed time',t=>{
+  const f=setup(t,{merged:true});f.report();const rows=f.append([{type:'item.closed',id:'ENG-1',as:'done',completed_run:'R-1'}]),entry=rows[0].closeout_targets.find(t=>t.signal==='landed');
+  f.append([{type:'closeout.effect',key:entry.key,identity:f.common,run:'R-1',item:'ENG-1',source:{seq:rows[0].seq,type:'item.closed'},effect:'original-intent',outcome:{action:'agent-exit-requested',run:'R-1',pane:'w:p',tab_id:'w:t',occupant:['worker','codex','w:p','w',f.lane,'term','session'],shell:{pid:1,identity:'shell',command:'[zsh]'}}}]);
+  const first=f.drain({keys:[entry.key]});assert.equal(first.evaluated[0].completed,false);
+  const calls=f.herdrCalls().length;f.append([{type:'closeout.retry',identity:f.common,keys:[entry.key],why:'old manual retry cannot resolve a missing runtime producer'}]);
+  assert.deepEqual(f.drain({keys:[entry.key],retrySafe:true}).evaluated,[]);assert.equal(f.herdrCalls().length,calls);assert.deepEqual(f.read().actions,[]);
+  const wait=events(f).findLast(e=>e.type==='closeout.waiting'&&e.key===entry.key&&e.revision!==undefined);assert.match(wait.waiting.defect,/no existing runtime transport/);
+});
+
 test('cleanup tail publishes every final report and abandonment without closing the item',t=>{
   for(const outcome of ['done','blocked','needs_human','failed','abandoned']){
     const f=setup(t,{merged:true});

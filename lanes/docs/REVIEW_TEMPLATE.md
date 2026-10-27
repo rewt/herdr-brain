@@ -175,3 +175,5 @@ output. The planning target is advisory and never ends productive review. Record
 unavailable evidence explicitly. Native permission, ownership and interruption
 refusals remain binding. The foreground command observes this private file;
 an interrupted foreground does not prove that the Herdr session stopped.
+
+An uncertain attempt blocks only its own subject (that lane, head or recipient) until its completion is recorded. Whatever completes or fails (a worker, a command, the runtime reporting an exit) writes its status to the record, linked to the queue entry waiting on it; nothing waits on a manual command, a timer or a re-check. A pending status with no producer is a defect and becomes a decision item. Elapsed time never proves absence or completion. A native refusal is a recorded status and becomes a decision item. Unlanded work, claims, STOP/HOLD and outward actions stay protected.

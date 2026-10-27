@@ -16,7 +16,7 @@ import { readOwnedRun, requireController, assertOwner } from '../lib/run-owner.m
 import { loadDiscoveredRoutes, resolveLaunchRoute, selectRoute } from '../lanes/routes.mjs';
 import { checkSessionCap,dispatchPool } from '../dispatch/session-cap.mjs';
 import { noticeLock } from '../supervisor/notice-lock.mjs';
-import { readCloseoutEntries, closeoutRevision, safeCloseoutRetry,closeoutOutcomeObservation,scheduleLineCloseouts,closeoutEvaluations,lineServiceOwnsCleanup } from '../lib/closeout.mjs';
+import { readCloseoutEntries, closeoutRevision, scheduleLineCloseouts,closeoutEvaluations,lineServiceOwnsCleanup } from '../lib/closeout.mjs';
 import { parseArgs, isMain } from '../lib/cli-help.mjs';
 import { reviewAttempt, readServiceJournal } from './review.mjs';
 import { queueConsumer, isQueueReview, validateQueuedReview, reviewQueueBrief, reviewQueueRoute } from './review-queue.mjs';
@@ -32,6 +32,10 @@ import {haltObservation,completeHaltPass} from './halt-repair.mjs';
 import {itemLaunchHold} from '../lib/item-launch-hold.mjs';
 import {queuePolicy,queueClass,queueSelected,orderQueue} from './priority-order.mjs';
 import {isDecision,decisionActivation,decisionRoute,decisionBrief,decisionCandidates,queueDecision,applyDecision,observeDecisionConsequences} from './decisions.mjs';
+import {outcomeFailure} from '../lib/uncertain-outcome.mjs';
+import {queueOutcomeDecision} from './outcome-decision.mjs';
+import {registerCloseoutWait,closeoutWait,closeoutWaitState} from '../lib/closeout-status.mjs';
+import {transact} from '../lib/store.mjs';
 export { reviewAttempt } from './review.mjs';
 
 export const sourceRoot = fileURLToPath(new URL('../', import.meta.url));
@@ -189,8 +193,8 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
           result.successor.reason==='fresh drain required' && JSON.stringify(result.successor.keys)===JSON.stringify(result.restart.keys);
         if (effects.actions[key]) {
           const prior = effects.actions[key];
-          const unsafe=/EPERM|EACCES|native refusal|foreign|identity|reserved|HOLD|supervisor judgment/i.test(prior.error??'');
-          if(!safe||prior.state==='complete'&&!pendingHandoff(prior.result)||unsafe&&!outcomeReadback){
+          const failure=prior.failure??outcomeFailure(prior);
+          if(!safe||prior.state==='complete'&&!pendingHandoff(prior.result)||failure.kind==='fence'||prior.state!=='complete'&&!outcomeReadback){
             log({ action: 'effect-retained', key, state: prior.state });
             if (prior.state !== 'complete') note(key, prior.error ?? 'prior failed/uncertain effect retained; inspect its existing receipt, do not replay');
             return prior;
@@ -204,7 +208,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         // Existing failed/uncertain effects above keep their normal authority.
         if(before&&!before(fresh))return;
         const prior=effects.actions[key],history=prior?[...(prior.history??[]),Object.fromEntries(Object.entries(prior).filter(([k])=>k!=='history'))]:[];
-        const entry = effects.actions[key] = { state: 'started', at: now(),...(history.length?{history}:{}), ...(binding ? { review_target: binding, review_operation: operation } : {}) }; save();
+        const entry = effects.actions[key] = { state: 'started',owner:'line-service',subject:key, at: now(),...(history.length?{history}:{}), ...(binding ? { review_target: binding, review_operation: operation } : {}) }; save();
         try {
           entry.result = run(fresh); entry.state = 'complete';
           if (['escalate', 'failed', 'stopped', 'judge_promotion'].includes(entry.result?.result)) {
@@ -215,7 +219,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
           const deferred = entry.result?.evaluated?.filter(row => !row.completed&&!row.sessions_retired);
           if (deferred?.length) { entry.state = 'held'; entry.error = deferred.map(row => `${row.run}: ${row.reason}`).join('; '); }
         }
-        catch (e) { entry.state = 'held'; entry.error = e.message; entry.receipt = e.receipt; }
+        catch (e) { entry.state = 'held'; entry.error = e.message; entry.receipt = e.receipt;entry.failure=outcomeFailure(e); }
         entry.finished_at = now(); save(); log({ action: 'effect', key, ...entry });
         if (entry.state === 'held') note(key, entry.error);
         return entry;
@@ -276,8 +280,13 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         try{
           reviewLock=noticeLock(path.join(directory,`review-change-${digest([item.id,target.head])}.lock`),{recover:false});
           const ignoreService={file:journal,key,target,operation:'record-queue'};
+          if(effects.review_reference_observed?.[key])continue;
           const attempt=reviewAttempt(item,{org,identity:project.identity,events:snapshot.events,state:snapshot.state,repo,effects,cache:reviewCache,target,capturedRun:run.id,ignoreService});
-          if(attempt){note(key,attempt,{item:item.id,run:run.id,head:target.head,review:true},false,{action:'review-retained',item:item.id,head:target.head});continue;}
+          if(attempt){
+            effects.review_reference_observed??={};effects.review_reference_observed[key]={owner:'line-service',target,attempt};save();
+            if(attempt.includes('UNKNOWN')){effects.outcome_decisions??={};effects.outcome_decisions[key]??=queueOutcomeDecision({repo,org,env:childEnv,check:{key,subject:{item:item.id,run:run.id,head:target.head},defect:'Typed original review attempt has no linked completion producer in this record.',attempt}});save();}
+            note(key,attempt,{item:item.id,run:run.id,head:target.head,review:true},false,{action:'review-retained',item:item.id,head:target.head});continue;
+          }
           queueConsumer({run,env:childEnv});reviewSteps++;
           effect(key,()=>{
             const fresh=observe(),checked=discoverChanges({events:fresh.events,state:fresh.state,repo,org,identity:project.identity}).changes.find(c=>c.item.id===item.id&&c.target.head===target.head);
@@ -333,7 +342,12 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
             note(`source-complete:${run.id}`, 'T2 source completion needs supervisor judgment: held/reserved item or report blockers/questions; no explicit-judgment override used'); continue;
           }
           closeSteps++;
-          effect(`source-complete:${run.id}:${run.report.sha256}`, () => {
+          const key=`source-complete:${run.id}:${run.report.sha256}`,prior=effects.actions[key],landed=snapshot.events.findLast(e=>e.type==='change.landed'&&e.project===project.identity&&e.run===run.id&&e.item===item.id&&e.landed_at&&e.producer?.ownership_generation===run.owner_generation);
+          if(prior?.state==='held'&&(!landed||prior.source_producer_seq===landed.seq)){
+            effects.outcome_decisions??={};
+            effects.outcome_decisions[key]??=queueOutcomeDecision({repo,org,env:childEnv,check:{key,subject:{item:item.id,run:run.id,report:run.report.sha256},defect:'Retained source completion has no linked actual landing producer; no timer, recheck or replay.'}});save();continue;
+          }
+          const completed=effect(key, () => {
             const bound = guardRun(run.id), ownership = requireController(readOwnedRun(org, run.id), 'brain');
             if (bound.item.closed) return { retained: 'already source-complete' };
             if (bound.run.report.outcome !== 'done' || reserved(bound.item) || bound.item.meta.hold || bound.item.meta.held ||
@@ -349,7 +363,8 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
               `Routine conditional source completion of current done report ${run.id} (${run.report.sha256}); clean source ${head} integrated at ${tip}. Preserve existing independent review/verdict holds, callbacks, HOLD, archives and next final-release/Major-correction obligations; physical cleanup is separate.`];
             return { source_head: head, integrated_tip: tip, report_sha256: run.report.sha256, ownership,
               command: [process.execPath, path.join(sourceRoot, 'bin/org.mjs'), ...args], close: cli('bin/org.mjs', args, { receipt: true }) };
-          },undefined,undefined,true);
+          },undefined,undefined,true,Boolean(landed));
+          if(completed&&landed){completed.source_producer_seq=landed.seq;save();}
         } catch (e) { note(`source-complete:${run.id}`, `T2 source completion needs supervisor judgment: ${e.message}`); }
       }
       // Mechanical rules/cleanup run first. Judgment is ordinary record work;
@@ -380,22 +395,33 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       }catch(e){note('closeout-binding',e.message);}
       try {
         const observed = current(), evaluationRows=closeoutEvaluations(project.identity,org,observed.events),evaluations = new Map(evaluationRows.map(e => [e.key, e]));
-        const entries = readCloseoutEntries(project.identity).filter(e => {
+        const ownedEntries=readCloseoutEntries(project.identity);
+        for(const e of ownedEntries){const prior=evaluations.get(e.key);if(e.org!==org||e.project!==repo||!prior||prior.completed)continue;
+          if(!closeoutWait(e,prior,observed.events)){transact(org,events=>({add:registerCloseoutWait(e,prior,events,ownedEntries)}),{actor:'line-service'});stale=true;}
+        }
+        const linked=current();
+        const entries = ownedEntries.filter(e => {
           if (e.org !== org || e.project !== repo) return false;
           // Historical requests retain their exact owner/source. Neither a
           // review cutoff nor a new code epoch clears an original refusal.
           const prior = evaluations.get(e.key);
           if (prior?.completed) {timings.closeout_retained++;return false;}
           if (!prior && !fs.existsSync(e.cwd)) return false;
-          if(prior&&/EPERM|EACCES|native refusal|foreign|identity|reserved|HOLD/i.test(prior.reason??'')&&!closeoutOutcomeObservation(prior,{entry:e,events:observed.events})){timings.closeout_retained++;return false;}
-          return !prior||closeoutRevision(e,observed.events,observed.state)>(prior.revision??0)||safeCloseoutRetry(prior,{entry:e,events:observed.events})||
-            closeoutOutcomeObservation(prior,{entry:e,events:observed.events});
+          if(prior){
+            const wait=closeoutWait(e,prior,linked.events),status=closeoutWaitState(wait,linked.events);
+            if(['defect','failed'].includes(status)){
+              effects.outcome_decisions??={};const key=`closeout:${e.key}`;
+              effects.outcome_decisions[key]??=queueOutcomeDecision({repo,org,env:childEnv,check:{key,subject:{item:e.item,run:e.run,key:e.key,head:e.head,source:e.source},wait,status}});save();stale=true;
+            }
+            if(status!=='complete'){timings.closeout_retained++;return false;}
+          }
+          return !prior||closeoutRevision(e,linked.events,linked.state)>(prior.revision??0);
         });
         effects.closeout_attempts??={};
         let attempt=Math.max(0,...Object.values(effects.closeout_attempts));
         for(const {entry,sessionsOnly}of scheduleLineCloseouts(entries,evaluationRows,{batch:true,attempts:effects.closeout_attempts})){
           if(expired())break;
-          const revision=closeoutRevision(entry,observed.events,observed.state),outcomeReadback=closeoutOutcomeObservation(evaluations.get(entry.key),{entry,events:observed.events});
+          const revision=closeoutRevision(entry,linked.events,linked.state),outcomeReadback=Boolean(evaluations.get(entry.key)&&closeoutWaitState(closeoutWait(entry,evaluations.get(entry.key),linked.events),linked.events)==='complete');
           effect(`closeout:${sessionsOnly?'sessions':'physical'}:${digest([entry.key,revision])}`,()=>JSON.parse(cli('supervisor/closeout.mjs',['drain','--repo',repo,'--org',org,'--keys',JSON.stringify([entry.key]),'--no-restart','--retry-safe','--deadline','0',...(sessionsOnly?['--sessions-only']:[])])),undefined,undefined,true,outcomeReadback);
           effects.closeout_attempts[entry.key]=++attempt;save();
         }
@@ -421,11 +447,15 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       snapshot = current();
       for(const [key,entry]of Object.entries(effects.actions))if(key.startsWith('dispatch:')&&(entry.state!=='complete'||entry.result?.result==='detached'&&entry.original_outcome?.status!=='dispatch-complete')){
         const item=key.split(':')[1];
+        if(entry.recorded_dispatch_status)continue;
         try{
-          const outcome=originalDispatchOutcome({repo,org,common:project.identity,item,brief:path.join(directory,`${digest(key)}.ask.md`),journal:entry.original_outcome?.journal??entry.result?.journal,events:snapshot.events});
-          if(JSON.stringify(outcome)!==JSON.stringify(entry.original_outcome)){entry.original_outcome=outcome;save();log({action:'dispatch-outcome-readback',key,...outcome});}
-          if(outcome.status==='unknown')note(key,outcome.reason,{item});
-          else if(outcome.error)note(key,outcome.error,{item});
+          const outcome=entry.original_outcome??originalDispatchOutcome({repo,org,common:project.identity,item,brief:path.join(directory,`${digest(key)}.ask.md`),journal:entry.result?.journal,events:snapshot.events});
+          if(!entry.original_outcome){entry.original_outcome=outcome;save();log({action:'dispatch-outcome-readback',key,...outcome});}
+          const status=snapshot.events.findLast(e=>e.type==='dispatch.completed'&&e.project===project.identity&&e.journal===outcome.journal&&e.attempt===outcome.producer?.attempt&&e.item===item);
+          if(status){entry.recorded_dispatch_status=status;save();log({action:'dispatch-linked-status',key,status});}
+          else if(!outcome.producer&&!['not-started','dispatch-complete'].includes(outcome.status)){
+            effects.outcome_decisions??={};effects.outcome_decisions[key]??=queueOutcomeDecision({repo,org,env:childEnv,check:{key,subject:{item,journal:outcome.journal??null},defect:'Original dispatch has no linked command-completion producer; no launch/file polling fallback.',outcome}});save();
+          }
         }catch(e){note(key,e.message,{item});}
       }
       const { config } = loadDiscoveredRoutes({ cwd: repo, env: childEnv });
@@ -466,6 +496,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
             dispatchKey=original.prejournal_recovery?.key??key;
             const prior=effects.actions[dispatchKey];
             if(!prior)throw Error('pre-journal recovery intent has UNKNOWN outcome; retain owner');
+            if(prior.original_outcome?.producer&&!prior.recorded_dispatch_status){log({action:'dispatch-producer-pending',key:dispatchKey});continue;}
             let result=prior.result;
             if(typeof result==='string')try{result=JSON.parse(result);}catch{}
             if(!result?.journal&&prior.receipt?.stdout)try{result=JSON.parse(prior.receipt.stdout);}catch{}
@@ -501,7 +532,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
             const target = reviewTarget ? validateQueuedReview({ item: current, state: fresh.state, events: fresh.events, org, repo }) : null;
             writeFileAtomic(brief, target ? reviewQueueBrief(current) : isDecision(current) ? decisionBrief(current) : `# ${current.title}\n\n${current.accept.join('\n')}\n\nWork from the existing item fields/notes and accepted directions. The generated execution brief supplies role guidance and project routing.\n`, 0o600);
             return JSON.parse(cli('dispatch/dispatch.mjs', [item.id, '--repo', repo, '--org', org, '--lane', `${target ? 'review' : 'line'}-${item.id.toLowerCase()}-${current.runs.length + 1}`, '--route', route, '--brief', brief, ...(target ? ['--base', target.head] : []),'--detach']));
-          },undefined,undefined,Boolean(retryAdmission),false,fresh=>{
+          },undefined,undefined,Boolean(retryAdmission),Boolean(retryAdmission),fresh=>{
             if(queueSelection(fresh.state)===selection)return true;
             log({action:'queue-selection-changed',item:item.id,stage:'after-capacity'});
             return false;
@@ -544,7 +575,13 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       checkpointNotices();
       if(performance.now()-passStarted>600000)note('long-pass','line pass exceeded ten minutes',{},true);
       checkpointNotices();const duration_ms = performance.now() - passStarted;
-      log({ action: 'pass-complete', starts,timing: { ...timings, duration_ms, other_scan_and_guard_ms: Math.max(0, duration_ms - timings.effect_command_ms - timings.record_snapshot_ms) } });
+      for(const [key,entry]of Object.entries(effects.actions))if((entry.failure??outcomeFailure(entry)).kind==='fence')try{
+        effects.outcome_decisions??={};effects.outcome_decisions[key]??=queueOutcomeDecision({repo,org,env:childEnv,check:{key,subject:{item:key.split(':')[1],effect:key},failure:entry.failure??outcomeFailure(entry),receipt:entry.receipt}});save();
+      }catch(e){note(key,e.message);}
+      const finalEvents=current().events,waits=finalEvents.filter(e=>e.type==='closeout.waiting'&&e.identity===project.identity),pending=waits.filter(w=>closeoutWaitState(w,finalEvents)!=='complete');
+      log({ action: 'pass-complete', starts,unknown_open:pending.length,unknown_oldest_min:pending.length?Math.max(0,...pending.map(w=>(Date.parse(now())-Date.parse(w.at))/60000)):0,
+        unknown_settled:waits.length-pending.length,unknown_escalated:Object.keys(effects.outcome_decisions??{}).length,
+        timing: { ...timings, duration_ms, other_scan_and_guard_ms: Math.max(0, duration_ms - timings.effect_command_ms - timings.record_snapshot_ms) } });
       return { result: 'pass-complete', directory };
     } finally { try{checkpointNotices?.();}finally{try{heartbeat('finished');}finally{release();}} }
   }

@@ -28,6 +28,14 @@ const read = (file, missing = null) => {
   return JSON.parse(fs.readFileSync(file, 'utf8'));
 };
 const missingJournal = Symbol('missing service journal');
+// A path/name is a locator, not a native attempt. Only readable typed content
+// can retain its captured subject. Current effect-journal loading stays strict.
+export const typedReviewAttempt = v => Boolean(v&&typeof v==='object'&&!Array.isArray(v)&&(
+  v.native_launch_attempted===true||v.worker||v.reviewer||v.launchProcess||
+  ['settle','review','reviewer'].includes(v.kind)||
+  typeof v.stage==='string'&&(v.run||v.item||v.head)||
+  (v.qualification||v.native_qualification||v.verdict)&&(v.run||v.item)));
+const reference = file => {try{return read(file);}catch{return null;}};
 export function readServiceJournal(file) {
   const saved = read(file, missingJournal);
   if (saved === missingJournal) return null;
@@ -63,7 +71,8 @@ const namesCommit=(text,head)=>{
   return false;
 };
 
-function changeReviewAttempt(item,{org,identity,events,state,repo,effects,target,ignoreService,ignoreQueue,capturedRun,capturedOriginal=false,ignoreQueues=[]}) {
+function changeReviewAttempt(item,{org,identity,events,state,repo,effects,target,ignoreService,ignoreQueue,capturedRun,capturedOriginal=false,ignoreQueues=[],references=[]}) {
+  const reference=file=>{references.push(file);try{return read(file);}catch{return null;}};
   const resolution=reviewResolution({events,org,item:item.id,head:target.head}),archivedItems=new Set(resolution?.event.archived_review_items??[]);
   capturedRun??=target.source_group?.run;
   const runs=new Set(capturedRun?[capturedRun]:item.runs.filter(id=>(state.runs.get(id)?.report?.artifacts??[]).some(a=>typeof a==='string'&&a.includes(target.head)))),group=producerGroupKey(item.id,capturedRun,target.reportHash),covered=new Set(capturedReviewCommits(target));
@@ -71,7 +80,7 @@ function changeReviewAttempt(item,{org,identity,events,state,repo,effects,target
   const runtimeAttempt=v=>['stage','review','reviewer','verdict','qualification','native_launch_attempted','worker','launchProcess','deliveryRange','review_item','review_run'].some(k=>Object.hasOwn(v,k));
   const producerProof=(file,seen=new Set())=>{
     if(!file.startsWith(ownerEvidence+path.sep)||seen.has(file))return false;if(proofCache.has(file))return proofCache.get(file);seen.add(file);
-    const v=read(file);if(!v||runtimeAttempt(v))return false;
+    const v=reference(file);if(!v||runtimeAttempt(v))return false;
     if(producerReviewObservation(v,{events,state,item:item.id,run:capturedRun,identity,nativeHeads})){proofCache.set(file,true);return true;}
     if(v.run!==capturedRun)return false;
     // A copied foreign reviewer outcome is an observation, not an attempt for
@@ -116,7 +125,10 @@ function changeReviewAttempt(item,{org,identity,events,state,repo,effects,target
     // A producer's explicit current-source review locator is evidence of an
     // attempt, including outside-org manual receipts. Never probe another
     // identity to turn unreadability into absence.
-    if(typeof artifact==='string'&&/review|settle/i.test(artifact)&&/\.json(?:$|[ #])/.test(artifact)&&path.isAbsolute(artifact.split(/[ #]/)[0])&&!producerEvidence(artifact.split(/[ #]/)[0])&&!archivedReviewFile(resolution,artifact.split(/[ #]/)[0]))return 'same-change source-owner review reference UNKNOWN; retain without external probe';
+    if(typeof artifact==='string'&&/review|settle/i.test(artifact)&&/\.json(?:$|[ #])/.test(artifact)&&path.isAbsolute(artifact.split(/[ #]/)[0])){
+      const file=artifact.split(/[ #]/)[0],value=reference(file);
+      if(typedReviewAttempt(value)&&matches(value,id)&&!producerEvidence(file)&&!archivedReviewFile(resolution,file))return 'same-change source-owner typed review reference UNKNOWN';
+    }
   }
   for(const e of events){
     if(e.type==='change.reviewed'&&e.item===item.id&&(covered.has(e.head)||!capturedOriginal&&group&&(e.review_group_key??queueProducerGroup(state.items.get(e.review_item)))===group))return 'recorded same-change/producer-group verdict';
@@ -140,13 +152,14 @@ function changeReviewAttempt(item,{org,identity,events,state,repo,effects,target
   if(pending(effects?.actions,ignoreService?.file))return 'existing same-change service intent/result';
   for(const dir of ['retirement/occupants','retirement/reviews','settle'])for(const entry of entries(path.join(org,dir))){
     if(!entry.name.endsWith('.json'))continue;const file=path.join(org,dir,entry.name);if(archivedReviewFile(resolution,file))continue;const hint=entry.name.match(/R-\d+/)?.[0];let value;
-    try{value=read(path.join(org,dir,entry.name));}catch(e){if(runs.has(hint))throw e;continue;}
+    value=reference(path.join(org,dir,entry.name));
     if(value?.kind==='watcher')continue;
-    if(matches(value,hint))return `existing same-change ${dir} attempt/UNKNOWN`;
+    if(typedReviewAttempt(value)&&matches(value,hint))return `existing same-change ${dir} attempt/UNKNOWN`;
   }
   for(const entry of entries(path.join(org,'line-service')))if(entry.isDirectory()){
     // An unreadable or unrecognized journal cannot prove this change is absent.
-    const file=path.join(org,'line-service',entry.name,'effects.json'),current=entry.name===sha(JSON.stringify(identity)).slice(0,20);let saved;try{saved=readServiceJournal(file);}catch(e){if(current)throw e;throw Error(`unrecognized service review inventory; absence UNKNOWN: ${file}`);}
+    const file=path.join(org,'line-service',entry.name,'effects.json');let saved;try{saved=readServiceJournal(file);}catch{continue;}
+    if(file!==ignoreService?.file)references.push(file);
     if(pending(saved?.actions,file))return 'existing same-change service intent/result';
   }
   for(const id of item.runs){
@@ -155,7 +168,7 @@ function changeReviewAttempt(item,{org,identity,events,state,repo,effects,target
     // Receipt attribution is scoped to its source run/head. An unrelated old
     // directory or opaque filename is never a project-wide review hold.
     if(runs.has(id))for(const entry of entries(evidence))if(/review|settle/i.test(entry.name)&&entry.name.endsWith('.json')){
-      const file=path.join(evidence,entry.name);if(producerEvidence(file)||archivedReviewFile(resolution,file))continue;const value=read(file);if(matches(value,id))return 'same-change source-owner review receipt/UNKNOWN';
+      const file=path.join(evidence,entry.name),value=reference(file);if(!typedReviewAttempt(value)||producerEvidence(file)||archivedReviewFile(resolution,file))continue;if(matches(value,id))return 'same-change source-owner review receipt/UNKNOWN';
     }
     for(const root of new Set([repo,run.workspace].filter(Boolean))){
       if(!fs.existsSync(root))continue;
@@ -164,17 +177,17 @@ function changeReviewAttempt(item,{org,identity,events,state,repo,effects,target
         if(entries(dir).some(e=>e.name.startsWith(target.head.slice(0,7))))return 'existing same-change direct review output';
       }
       for(const entry of entries(root))if(entry.isDirectory()&&entry.name.startsWith('.lane-review-')){
-        for(const file of ['request.json','review.json','manifest.json']){let value;try{value=read(path.join(root,entry.name,file));}catch{continue;}if(matches(value))return 'existing same-change private native attempt';}
+        for(const file of ['request.json','review.json','manifest.json']){const value=reference(path.join(root,entry.name,file));if(typedReviewAttempt(value)&&matches(value))return 'existing same-change private native attempt';}
       }
     }
   }
   return null;
 }
 
-export function reviewAttempt(item, { org, identity, events, state, repo, effects, cache = new Map(), ignoreService, ignoreQueue, capturedRun,target,capturedOriginal,ignoreQueues }) {
-  if(target)return changeReviewAttempt(item,{org,identity,events,state,repo,effects,target,ignoreService,ignoreQueue,capturedRun,capturedOriginal,ignoreQueues});
+export function reviewAttempt(item, { org, identity, events, state, repo, effects, cache = new Map(), ignoreService, ignoreQueue, capturedRun,target,capturedOriginal,ignoreQueues,references }) {
+  if(target)return changeReviewAttempt(item,{org,identity,events,state,repo,effects,target,ignoreService,ignoreQueue,capturedRun,capturedOriginal,ignoreQueues,references});
   const cached = (kind, file, fn) => { const key = `${kind}:${file}`; if (!cache.has(key)) cache.set(key, fn()); return cache.get(key); };
-  const readFile = file => cached('file', file, () => read(file));
+  const readFile = file => cached('file', file, () => reference(file));
   const list = file => cached('directory', file, () => entries(file));
   const runs = new Set(item.runs), tokens = new Set([item.id, ...runs]);
   if (state && [...state.items.values()].some(candidate => candidate.id !== ignoreQueue && roleIs(candidate, 'REV') &&
@@ -188,16 +201,16 @@ export function reviewAttempt(item, { org, identity, events, state, repo, effect
     (/review/i.test(key) && contains(value, tokens)) || (value?.result?.result === 'review_pending' && contains(value, tokens));
   });
   if (pending(effects?.actions, ignoreService?.file)) return 'existing service review intent/result';
-  for (const id of runs) if (readFile(path.join(org, 'settle', `${id}.json`)) || readFile(path.join(org, 'settle', `${id}.review-launch.json`))) return `existing settle ${id}`;
+  for (const id of runs) if (typedReviewAttempt(readFile(path.join(org, 'settle', `${id}.json`))) || typedReviewAttempt(readFile(path.join(org, 'settle', `${id}.review-launch.json`)))) return `existing settle ${id}`;
   for (const [relative, reason] of [['retirement/occupants', 'existing native reviewer'], ['retirement/reviews', 'existing review receipt'], ['settle', 'existing consumer review receipt']]) {
     for (const entry of list(path.join(org, relative))) {
       if (!entry.name.endsWith('.json')) continue;
       const value = readFile(path.join(org, relative, entry.name));
       if (relative === 'retirement/occupants' && value?.kind === 'watcher') continue;
-      if (contains(value, tokens)) return reason;
+      if (typedReviewAttempt(value)&&contains(value, tokens)) return reason;
       // Unknown native/review records cannot prove absence. Auxiliary routing
       // snapshots and positively foreign run receipts are not review attempts.
-      if (value && !value.run && !value.item) {
+      if (typedReviewAttempt(value) && !value.run && !value.item) {
         const named = /^(R-\d+)(?:\.|$)/.exec(entry.name)?.[1];
         if (named && runs.has(named)) return reason;
         if (!named || !state?.runs.has(named)) throw Error(`unmapped review inventory: ${relative}/${entry.name}`);
@@ -205,18 +218,18 @@ export function reviewAttempt(item, { org, identity, events, state, repo, effect
     }
   }
   for (const entry of list(path.join(org, 'line-service'))) if (entry.isDirectory()) {
-    const file = path.join(org, 'line-service', entry.name, 'effects.json'), saved = cached('service-journal', file, () => readServiceJournal(file));
+    const file = path.join(org, 'line-service', entry.name, 'effects.json'), saved = cached('service-journal', file, () => {try{return readServiceJournal(file);}catch{return null;}});
     if (pending(saved?.actions, file)) return 'existing service review intent/result';
   }
   const scanEvidence = directory => {
     for (const entry of list(directory)) {
       const file = path.join(directory, entry.name);
-      if (entry.isSymbolicLink()) throw Error(`unreadable/redirected source-owner review inventory: ${file}`);
+      if (entry.isSymbolicLink()) continue;
       if (entry.isDirectory()) { const found = scanEvidence(file); if (found) return found; }
-      else if (/review|settle/i.test(entry.name) && !/\.(?:mjs|js|cjs)$/.test(entry.name)) return `source-owner/direct review evidence retained: ${file}`;
+      else if (/review|settle/i.test(entry.name) && typedReviewAttempt(readFile(file))) return `source-owner/direct typed review evidence retained: ${file}`;
       else if (entry.name.endsWith('.json')) {
         const value = readFile(file);
-        if (/review|reviewer|qualification/i.test(JSON.stringify(value))) return `source-owner review receipt/uncertainty retained: ${file}`;
+        if (typedReviewAttempt(value)&&contains(value,tokens)) return `source-owner review receipt/uncertainty retained: ${file}`;
       }
     }
     return null;
@@ -230,9 +243,9 @@ export function reviewAttempt(item, { org, identity, events, state, repo, effect
     if (Object.keys(run.report?.extra ?? {}).some(key => /review|verdict|qualification/i.test(key))) return `report retains review/qualification uncertainty for ${id}`;
     const artifacts = run.report?.artifacts ?? [];
     for (const artifact of artifacts) if (typeof artifact === 'string' && path.isAbsolute(artifact) && /review|settle/i.test(path.basename(artifact))) {
-      return `bound source-owner review reference retained without probing another owner: ${artifact}`;
+      if(typedReviewAttempt(readFile(artifact)))return `bound source-owner typed review reference retained: ${artifact}`;
     } else if (typeof artifact === 'string' && path.isAbsolute(artifact) && artifact.endsWith('.json') && !path.resolve(artifact).startsWith(path.resolve(org) + path.sep)) {
-      throw Error(`outside-record producer inventory is UNKNOWN; retain its owner, no external probe: ${artifact}`);
+      if(typedReviewAttempt(readFile(artifact)))return `outside-record typed review reference retained: ${artifact}`;
     }
     const roots = new Set([repo, run.workspace].filter(Boolean));
     for (const root of roots) {

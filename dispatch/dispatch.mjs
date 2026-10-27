@@ -32,6 +32,8 @@ import {resolvedNotStarted} from './not-started.mjs';
 import {originalPrestartProof,reviewDigest,reviewPlain} from '../line-service/review-resolutions.mjs';
 import {checkDispatchEligibility,launchDigest} from './launch-guard.mjs';
 import { createWorkerBrief, validateWorkerBrief, validateLineExecution, compatibleLineBrief, lineWorkerPrompt, projectExceptionAddress } from '../lib/worker-brief.mjs';
+import {outcomeFailure} from '../lib/uncertain-outcome.mjs';
+import {recordDispatchCompletion} from './completion.mjs';
 
 const local = (file) => fileURLToPath(new URL(file, import.meta.url));
 const { values: opt, positionals } = parseArgs({ usage: "Usage: node dispatch/dispatch.mjs ITEM --lane TOPIC --route ROUTE --brief FILE [OPTIONS] | --retry R-n|JOURNAL | --status R-n|JOURNAL\nAdmission counts running native workers/reviewers and durable uncertain starts under dispatch.max_sessions. Unlanded lifecycle history is diagnostic only. --from-run retains same-item/current-run guards; --unblocks records a genuine landing dependency and never bypasses native capacity.", allowPositionals: true, options: {
@@ -106,6 +108,7 @@ function command(argv, args, cwd = job?.repo ?? path.resolve(opt.repo)) {
   });
   if (result.error || result.status !== 0) {
     const error = new Error(`${argv[0]} ${args[0]}: ${(result.stderr || result.stdout || result.error?.message || `exit ${result.status}`).trim()}`);
+    error.code=outcomeFailure({code:result.error?.code,receipt:result}).code;
     error.recordRefusal = !result.error && !result.signal && result.status === 1 &&
       result.stderr.trim().split('\n').at(-1).startsWith('record: ');
     if(argv===laneCLI&&!result.error&&!result.signal)try{
@@ -408,7 +411,7 @@ async function main() {
       brief, report: opt.report ?? null, to: opt.to ?? null,
       base: git(['rev-parse', `${opt.base ?? 'HEAD'}^{commit}`], repo), extra: opt.extra ?? '', reuse: opt.reuse ?? null, fromRun: opt['from-run'] ?? null, unblocks: opt.unblocks ?? null,
       declared: declaredFields, exceptionAddress, ...(workerBrief ? { workerBrief } : {}),
-      stage: 'open', run: null,native_launch_attempted:false,...(opt.detach?{phase1_protocol:1,detachedRequested:true}:{}) };
+      stage: 'open', run: null,native_launch_attempted:false,completion_protocol:1,...(opt.detach?{phase1_protocol:1,detachedRequested:true}:{}) };
     // Only routing fields are frozen. Lifecycle paths keep their original config provenance.
     job.routeConfig = path.join(directory, `${token}.routes.json`);
     atomic(job.routeConfig, mergeRoutesConfig([config]));
@@ -733,7 +736,7 @@ try { await main(); }
 catch (error) {
   if (job && journal && ownsLock) {
     job.error = error.message;
-    job.failure={code:error.code??null,kind:['DISPATCH_SESSION_CAP','DISPATCH_REVIEW_CAP','DISPATCH_DECISION_CAP'].includes(error.code)?'capacity':'guard-or-command',stage:job.stage,observed_at:new Date().toISOString(),native_launch_attempted:job.native_launch_attempted??null,...(error.sessions?{capacity:error.sessions}:{}),...(error.launch_input?{launch_input:error.launch_input}:{})};
+    job.failure={...outcomeFailure(error),kind:['DISPATCH_SESSION_CAP','DISPATCH_REVIEW_CAP','DISPATCH_DECISION_CAP'].includes(error.code)?'capacity':outcomeFailure(error).kind,stage:job.stage,observed_at:new Date().toISOString(),native_launch_attempted:job.native_launch_attempted??null,...(error.sessions?{capacity:error.sessions}:{}),...(error.launch_input?{launch_input:error.launch_input}:{})};
     if(job.detached&&!job.native_launch_attempted&&!job.worker&&!['starting','launching','prompting'].includes(job.stage))job.detached_refused=true;
     save();
     if (job.run) try { note(`incomplete at ${job.stage}: ${error.message}; retry with --retry ${job.run}`); } catch {}
@@ -762,6 +765,7 @@ catch (error) {
     fs.mkdirSync(`${journal}.driver`,{recursive:true});const fd=fs.openSync(`${journal}.driver/results.jsonl`,'a',0o600);
     try{fs.writeFileSync(fd,JSON.stringify({at:new Date().toISOString(),journal,stage:job.stage,run:job.run,exit_code:process.exitCode??0,error:job.error??null,code:job.failure?.code??null,native_launch_attempted:job.native_launch_attempted??null})+'\n');fs.fsyncSync(fd);}finally{fs.closeSync(fd);}
   }
+  if(job&&journal&&ownsLock&&(job.stage==='complete'||process.exitCode))try{recordDispatchCompletion({job,journal,exitCode:process.exitCode??0});}catch(error){process.stderr.write(`dispatch: completion status could not be recorded: ${error.message}\n`);process.exitCode??=1;}
   if (ownsLock) try { if (fs.readFileSync(lock, 'utf8') === String(process.pid)) fs.unlinkSync(lock); } catch {}
   if (contender) try { fs.unlinkSync(contender); } catch {}
 }

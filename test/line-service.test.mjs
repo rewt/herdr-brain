@@ -335,3 +335,13 @@ test('conditional source completion retains an exact needs-judgment refusal once
   const effects = JSON.parse(fs.readFileSync(path.join(f.activeService.directory, 'effects.json'))), entry = Object.entries(effects.actions).find(([key]) => key.startsWith(`source-complete:${done.run}:`))[1];
   assert.equal(entry.state, 'held'); assert.notEqual(entry.receipt.status, 0); assert.match(entry.receipt.stderr, /supervisor judgment/);
 });
+
+test('producer linked source completion retains an old held effect without fabricating a landing and queues one defect',t=>{
+  const f=fixture(t),done=completedSource(f);f.activeService=f.service({command:done.command});
+  const run=f.show(done.run),directory=f.activeService.directory,file=path.join(directory,'effects.json'),key=`source-complete:${done.run}:${run.report.sha256}`;
+  fs.writeFileSync(path.join(directory,'installation.json'),JSON.stringify({at:'2026-10-27T00:00:00Z',repo:f.repo,org:f.org,source:sourceRoot,node:process.execPath,file:path.join(directory,'service.plist'),target:`gui/${process.getuid()}/dev.herdr.line.${path.basename(directory)}`}));
+  fs.writeFileSync(file,JSON.stringify({identity:gitProject(f.repo).identity,org:f.org,actions:{[key]:{state:'held',at:'2026-10-26T00:00:00Z',error:'reported head was not integrated'}},notices:{}}));
+  f.activeService.pass();f.activeService.pass();assert.equal(f.show(done.item).closed,null);
+  const saved=JSON.parse(fs.readFileSync(file));assert.equal(saved.actions[key].state,'held');assert.equal(Object.keys(saved.outcome_decisions).length,1);
+  assert.equal(f.calls.filter(c=>c.args[1]==='close').length,0);assert.equal(fs.readFileSync(done.saved,'utf8'),done.review);
+});

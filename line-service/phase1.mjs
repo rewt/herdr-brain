@@ -10,7 +10,7 @@ import {transact} from '../lib/store.mjs';
 import {readReport} from '../lib/report.mjs';
 import {readOwnedRun,requireController,assertOwner} from '../lib/run-owner.mjs';
 import {protectRecordMutation} from '../lib/record-guard.mjs';
-import {serviceRecordBinding} from './record-inbox.mjs';
+import {serviceRecordBinding,reviewErrorFacts} from './record-inbox.mjs';
 import {reviewResolution} from './review-resolutions.mjs';
 import {resolvedDispatchInput} from '../dispatch/not-started.mjs';
 import {bindCloseoutSources,publishCloseoutEvents} from '../lib/closeout.mjs';
@@ -166,9 +166,12 @@ export function publishLandedReviewEvidence(target){
 }
 
 export function recordReviewError({repo,org,key,count,boundary,reason,scope,env=process.env}){
+  return recordReviewErrors({repo,org,rows:[{key,count,boundary,reason,scope}],env});
+}
+export function recordReviewErrors({repo,org,rows,env=process.env}){
   serviceRecordBinding({repo,org,env});
-  return transact(org,events=>{const b=serviceRecordBinding({repo,org,env}),id=`${key}:${count}`;
-    return protectRecordMutation({org,events,state:fold(events),command:'line-service review error',mutation:{add:events.some(e=>e.type==='line-service.review-error'&&e.id===id)?[]:[{type:'line-service.review-error',id,project:b.identity,org,key,count,boundary,reason,scope}]}});
+  return transact(org,events=>{const b=serviceRecordBinding({repo,org,env});
+    return protectRecordMutation({org,events,state:fold(events),command:'line-service review error',mutation:{add:reviewErrorFacts(events,b,org,rows)}});
   },{actor:'line-service',strictTail:true,lockOptions:{recover:false}});
 }
 
@@ -376,7 +379,9 @@ export function morningDigest({events,since,now=new Date().toISOString()}) {
     }
     const end=Date.parse(now);if(end>previous&&[...partial.items.values()].some(i=>itemStatus(partial,i.id)==='ready')&&![...partial.runs.values()].some(r=>!r.report&&!r.abandoned))idle+=(end-previous)/3600000;
   }
-  const health=events.findLast(e=>e.type==='line-service.review-health'),errors=events.filter(e=>e.type==='line-service.review-error'&&inWindow(e));
+  const health=events.findLast(e=>e.type==='line-service.review-health'),before=new Map(),through=new Map();
+  for(const e of events)if(e.type==='line-service.review-error'){const count=Number.isSafeInteger(e.count)?e.count:1;through.set(e.key,Math.max(through.get(e.key)??0,count));if(!inWindow(e))before.set(e.key,Math.max(before.get(e.key)??0,count));}
+  const errors=[...through].map(([key,count])=>({key,count:count-(before.get(key)??0)})).filter(e=>e.count>0);
   return {since:since??null,through:now,landings,reviews,findings:reviews.flatMap(r=>r.findings??[]),holds,idle_hours:idle,review_health:health??null,
-    review_errors:{unique:new Set(errors.map(e=>e.key)).size,occurrences:errors.length,scope:'Typed review errors since this capability; prior raw journals remain preserved.'},scope:'Record-observed facts; unknown exact landing/idle intervals stay null.'};
+    review_errors:{unique:errors.length,occurrences:errors.reduce((n,e)=>n+e.count,0),scope:'Durable cumulative typed error counts within this window; batched checkpoints preserve raw hold audit and prior events.'},scope:'Record-observed facts; unknown exact landing/idle intervals stay null.'};
 }

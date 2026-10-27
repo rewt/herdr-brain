@@ -24,7 +24,7 @@ import { roleIs } from '../lib/roles.mjs';
 import { recordLineNotice,canonicalFailure } from './record-inbox.mjs';
 import { enqueueNamedDecision } from './decision-wake.mjs';
 import { canonical } from '../messages/schema.mjs';
-import { discoverChanges,dispatchInput,phase0Boundary,morningDigest,recordReviewResults,reviewCompletionPlan,recordReviewCompletion,ensureReviewBoundary,canonicalReviewIndex,recordReviewError,recordReviewHealth } from './phase1.mjs';
+import { discoverChanges,dispatchInput,phase0Boundary,morningDigest,recordReviewResults,reviewCompletionPlan,recordReviewCompletion,ensureReviewBoundary,canonicalReviewIndex,recordReviewErrors,recordReviewHealth } from './phase1.mjs';
 import {preflightContinuation,initialCapacityRefusal} from '../dispatch/preflight.mjs';
 import {observeReviewProgress,recoverServiceReview} from './review-recovery.mjs';
 export { reviewAttempt } from './review.mjs';
@@ -35,6 +35,19 @@ const read = file => {
   try { return JSON.parse(fs.readFileSync(file, 'utf8')); }
   catch (e) { if (e.code === 'ENOENT') return null; throw e; }
 };
+function replayNoticeAudit(file,effects){
+  const stat=fs.lstatSync(file,{throwIfNoEntry:false});if(!stat)return[];
+  if(!stat.isFile()||fs.realpathSync(file)!==file)throw Error('notice audit is redirected');
+  const offset=effects.notice_audit_offset??stat.size;if(!Number.isSafeInteger(offset)||offset<0||offset>stat.size)throw Error('notice audit checkpoint is inconsistent');
+  const bytes=Buffer.alloc(stat.size-offset),fd=fs.openSync(file,fs.constants.O_RDONLY|fs.constants.O_NOFOLLOW);try{let n=0;while(n<bytes.length){const got=fs.readSync(fd,bytes,n,bytes.length-n,offset+n);if(!got)throw Error('notice audit changed during read');n+=got;}}finally{fs.closeSync(fd);}
+  const text=bytes.toString('utf8');if(text&&!text.endsWith('\n'))throw Error('notice audit tail is incomplete; preserve it');
+  const restored=new Set();for(const line of text.split('\n').filter(Boolean)){const row=JSON.parse(line),notice=row.notice_record;if(!notice)continue;const {key,entry}=notice;
+    if(!entry||key!==createHash('sha256').update(canonical([entry.boundary,entry.reason,entry.scope])).digest('hex')||entry.id!==`line-record-${key}`||!Number.isSafeInteger(entry.count)||entry.count<1||!Number.isFinite(Date.parse(entry.first_at)))throw Error('notice audit source/count is inconsistent');
+    effects.record_notices??={};const prior=effects.record_notices[key];if(prior&&prior.first_at!==entry.first_at)throw Error('notice audit first occurrence is inconsistent');
+    if(!prior||entry.count>prior.count){effects.record_notices[key]={...entry,state:prior?.state==='recorded'?'recorded':'recording',...(prior?.record?{record:prior.record}:{}),review_count_recorded:prior?.review_count_recorded??0};restored.add(key);}
+  }
+  return [...restored];
+}
 export const serviceDirectory = (org, identity) => path.join(org, 'line-service', digest(identity).slice(0, 20));
 export function reserved(item) {
   return item.role === 'human' || item.meta.operator_reserved || item.meta.reserved ||
@@ -105,34 +118,50 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
   };
   function pass() {
     const release = noticeLock(path.join(directory, 'pass.lock'));
-    let effects;
+    let effects,checkpointNotices;
     const passAt=now(),heartbeat=phase=>writeFileAtomic(path.join(directory,'heartbeat.json'),JSON.stringify({at:now(),started_at:passAt,project:project.identity,source:sourceRoot,phase,pid:process.pid})+'\n',0o600);
     heartbeat('starting');
     try {
       const passStarted = performance.now();
       let workStarted=workClock();const expired=()=>workClock()-workStarted>=passBudgetMs;
-      timings = { snapshots: 0, record_snapshot_ms: 0, effect_command_ms: 0, historical_intake_skipped: 0, historical_review_skipped: 0, closeout_retained: 0 };
+      timings = { snapshots: 0, record_snapshot_ms: 0, effect_command_ms: 0, historical_intake_skipped: 0, historical_review_skipped: 0, closeout_retained: 0,effects_journal_writes:0,notice_record_attempts:0,review_error_batches:0 };
       effects = read(journal) ?? { identity: project.identity, org, actions: {}, notices: {} };
       if (effects.identity !== project.identity || effects.org !== org) throw Error('effect journal project binding changed');
-      const save = () => writeFileAtomic(journal, JSON.stringify(effects, null, 2) + '\n', 0o600);
+      const audit=path.join(directory,'passes.jsonl'),restored=replayNoticeAudit(audit,effects),pendingErrors=new Map();let noticesDirty=false,counterFailed=false;
+      timings.notice_audit_replayed=restored.length;
+      const errorRow=(key,e)=>({key,count:e.count,boundary:e.boundary,reason:e.reason,scope:e.scope});
+      for(const [key,e]of Object.entries(effects.record_notices??{}))if(e.review&&(e.review_count_recorded??0)<e.count)pendingErrors.set(key,errorRow(key,e));
+      const save = () => {effects.notice_audit_offset=fs.statSync(audit,{throwIfNoEntry:false})?.size??0;writeFileAtomic(journal, JSON.stringify(effects, null, 2) + '\n', 0o600);timings.effects_journal_writes++;noticesDirty=false;};
+      const flushErrors=()=>{
+        if(!pendingErrors.size||counterFailed)return;
+        try{timings.review_error_batches++;recordReviewErrors({repo,org,rows:[...pendingErrors.values()],env:childEnv});for(const [key,row]of pendingErrors)effects.record_notices[key].review_count_recorded=row.count;pendingErrors.clear();noticesDirty=true;}
+        catch(e){counterFailed=true;log({action:'review-error-counter-held',error:e.message});}
+      };
+      checkpointNotices=()=>{flushErrors();if(noticesDirty)save();};
       if(effects.pass_number!==undefined&&(!Number.isSafeInteger(effects.pass_number)||effects.pass_number<0))throw Error('service pass counter is inconsistent');
       effects.pass_number=(effects.pass_number??0)+1;save();
       let snapshot, stale = true, reviewCache = new Map();
       const current = () => { if (stale) { snapshot = observe(); stale = false; reviewCache = new Map(); } return snapshot; };
+      const deliverNotice=(key,entry)=>{
+        if(entry.state==='recorded')return;
+        try{
+          timings.notice_record_attempts++;
+          const receipt=recordNotice({repo,org,id:entry.id,boundary:entry.boundary,reason:entry.reason,scope:entry.scope,first_at:entry.first_at,audit,counts:`${journal}#record_notices/${key}`,env:childEnv,...(entry.review?{reviewError:errorRow(key,entry)}:{})});
+          entry.state='recorded';entry.record={id:receipt.id,state:receipt.state};if(receipt.review_error_recorded){entry.review_count_recorded=entry.count;pendingErrors.delete(key);}
+        }catch(e){entry.state='record-uncertain';entry.error=e.message;log({action:'record-inbox-held',canonical_key:key,error:e.message});}
+        noticesDirty=true;
+      };
       const note = (boundary, reason, scope = {}, force = false) => {
         const scoped=scope.item??/^dispatch:([A-Z]+-\d+)/.exec(boundary)?.[1],review=scope.review===true||/^review|DISPATCH_REVIEW/i.test(boundary)||roleIs(snapshot?.state.items.get(scoped),'REV');
         const normalized=canonicalFailure(reason),key=createHash('sha256').update(canonical([boundary,normalized,scope])).digest('hex');
-        log({ action: 'hold', boundary, reason, canonical_key:key,scope });
         effects.record_notices??={};
         const prior=effects.record_notices[key],entry=effects.record_notices[key]=prior??{first_at:now(),reason:normalized,scope,boundary,state:'recording',id:`line-record-${key}`,count:0};
-        entry.count++;entry.last_at=now();save();
-        if(review){entry.review=true;save();try{recordReviewError({repo,org,key,count:entry.count,boundary,reason:normalized,scope,env:childEnv});}catch(e){log({action:'review-error-counter-held',key,error:e.message});}}
+        entry.count++;entry.last_at=now();if(review){entry.review=true;pendingErrors.set(key,errorRow(key,entry));}noticesDirty=true;
+        // The compact fsynced delta precedes the record mutation. A lost full
+        // checkpoint replays notice counts only, never native effect intents.
+        log({action:'hold',boundary,reason,canonical_key:key,scope,notice_record:{key,entry}});
         if(!force&&!review&&entry.count<alertAfter)return;
-        if(entry.state==='recorded')return;
-        try {
-          const receipt=recordNotice({repo,org,id:entry.id,boundary,reason:entry.reason,scope:entry.scope,first_at:entry.first_at,audit:path.join(directory,'passes.jsonl'),counts:`${journal}#record_notices/${key}`,env:childEnv});
-          entry.state='recorded';entry.record={id:receipt.id,state:receipt.state};save();
-        } catch (e) { entry.state='record-uncertain';entry.error=e.message;save();log({ action:'record-inbox-held',canonical_key:key,error:e.message }); }
+        deliverNotice(key,entry);
       };
       const effect = (key, run, binding, operation, safe=false, outcomeReadback=false) => {
         const pendingHandoff = result => key.startsWith('closeout:') && Array.isArray(result?.evaluated) && result.evaluated.length===0 &&
@@ -148,6 +177,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
           }
         }
         if(expired())return;
+        checkpointNotices();
         observe();
         stale = true;
         const prior=effects.actions[key],history=prior?[...(prior.history??[]),Object.fromEntries(Object.entries(prior).filter(([k])=>k!=='history'))]:[];
@@ -169,6 +199,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       };
       log({ action: 'pass-start', pid: process.pid, identity: project.identity, source: sourceRoot,source_head:sourceGit(sourceRoot,['rev-parse','HEAD']) });
       try { snapshot = current(); } catch (e) { log({ action: 'pass-held', reason: e.message }); return { held: e.message, directory }; }
+      for(const key of restored){const entry=effects.record_notices[key];if(entry.review||entry.count>=alertAfter)deliverNotice(key,entry);}
       let intakeSteps=0;
       for (const run of snapshot.state.runs.values()) {
         if(expired()||intakeSteps>=maxStepsPerStage)break;
@@ -187,7 +218,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       }
       snapshot=current();
       let cutoff;try{cutoff=phase0Boundary(snapshot.events,{repo,org,identity:project.identity});}catch{
-        try{ensureReviewBoundary({repo,org,env:childEnv});stale=true;snapshot=current();cutoff=phase0Boundary(snapshot.events,{repo,org,identity:project.identity});}catch(e){note('review-cutoff',e.message);}
+        try{checkpointNotices();ensureReviewBoundary({repo,org,env:childEnv});stale=true;snapshot=current();cutoff=phase0Boundary(snapshot.events,{repo,org,identity:project.identity});}catch(e){note('review-cutoff',e.message);}
       }
       const recordedReviews=new Set(snapshot.events.filter(e=>e.type==='change.reviewed').map(e=>e.review_run));let resultSteps=0;
       for(const run of snapshot.state.runs.values()){
@@ -205,7 +236,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
           if(expired()||recoveries>=maxStepsPerStage)break;const q=snapshot.state.items.get(id),target=q.meta.review_target;
           const held=effects.review_recovery_holds?.[id],capability='original-scope-continuation/v1',productHold=held&&/partial\/ambiguous producer|historical\/partial target/.test(held.reason);
           if(held?.signature===observed.progress[id].signature&&!(productHold&&held.capability!==capability))continue;
-          try{const result=recoverServiceReview({repo,org,reviewId:id,env:childEnv,call:(_exe,args)=>JSON.stringify({result:native(args)})});log({action:'review-progress-resolution',item:id,...result});if(['review_queued','original_prestart_ready'].includes(result.result))stale=true;}
+          try{checkpointNotices();const result=recoverServiceReview({repo,org,reviewId:id,env:childEnv,call:(_exe,args)=>JSON.stringify({result:native(args)})});log({action:'review-progress-resolution',item:id,...result});if(['review_queued','original_prestart_ready'].includes(result.result))stale=true;}
           catch(e){effects.review_recovery_holds??={};if(/EPERM|EACCES|native refusal|identity|reserved|HOLD|STOP|UNKNOWN|partial|ambiguous/i.test(e.message))effects.review_recovery_holds[id]={signature:observed.progress[id].signature,reason:e.message,capability};save();note(`review-progress:${id}`,e.message,{item:id,review:true});}
           recoveries++;
         }
@@ -233,6 +264,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         finally{reviewLock?.();}
       }
       if(index)try{
+        checkpointNotices();
         const errors=Object.values(effects.record_notices??{}).filter(e=>e.review),health=recordReviewHealth({repo,org,index,passId:`${directory}:${effects.pass_number}`,errorCounts:{unique:errors.length,occurrences:errors.reduce((n,e)=>n+e.count,0)},env:childEnv});
         log({action:'review-health',owed:health.owed,queued:health.queued,running:health.running,done:health.done,missing_queue:health.missing_queue,gap_passes:health.gap_passes,errors:health.errors});
         for(const gap of health.attribution_gaps)note(`review-attribution:${gap.head}`,gap.reason,{item:gap.item,run:gap.run,head:gap.head,review:true});
@@ -387,11 +419,12 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
           note(`dispatch:${item.id}`, e.message);
         }
       }
-      const duration_ms = performance.now() - passStarted;
-      if(duration_ms>600000)note('long-pass','line pass exceeded ten minutes',{},true);
+      checkpointNotices();
+      if(performance.now()-passStarted>600000)note('long-pass','line pass exceeded ten minutes',{},true);
+      checkpointNotices();const duration_ms = performance.now() - passStarted;
       log({ action: 'pass-complete', starts,timing: { ...timings, duration_ms, other_scan_and_guard_ms: Math.max(0, duration_ms - timings.effect_command_ms - timings.record_snapshot_ms) } });
       return { result: 'pass-complete', directory };
-    } finally { try{heartbeat('finished');}finally{release();} }
+    } finally { try{checkpointNotices?.();}finally{try{heartbeat('finished');}finally{release();}} }
   }
   return { pass, directory, log };
 }

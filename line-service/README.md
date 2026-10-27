@@ -336,6 +336,17 @@ ownership, native, STOP/HOLD or source changes. Already-started uncertain jobs,
 their claims and watchers remain retained; this adds no retry or NOT STARTED
 disposition and does not mutate an earlier immutable report.
 
+Each hold fsyncs a compact notice delta to the existing pass audit. Full effects
+snapshots are checkpointed at stage/pre-effect and final boundaries, rather than
+once or twice per historical hold. First review errors and their one record
+inbox envelope share a transaction; repeated cumulative counters are batched.
+The digest counts occurrences across these checkpoints, retaining older events.
+A lost checkpoint replays only exact validated notice deltas and stable message
+IDs, never native effects or launches. Every new record mutation still checks
+the actual installed service/pass ownership. Passive pass timings include full
+journal write counts, notice attempts and counter batches; no extra benchmark,
+watcher or elapsed worker stop is needed.
+
 ```sh
 node line-service/line-service.mjs --digest --org /OWN/RECORD --since 2026-10-27T00:00:00Z
 ```

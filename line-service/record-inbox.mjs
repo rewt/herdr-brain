@@ -25,7 +25,16 @@ export function serviceRecordBinding({repo,org,env=process.env}) {
   const root=identityRootAt(c.identity);if(!root)throw Error('service identity root is UNKNOWN');
   return {...c,identityName:path.basename(root),epoch:digest({identity:c.identity,org:c.org,installed_at:c.installation.at,source:c.installation.source,node:c.installation.node,target:c.installation.target})};
 }
-export function recordLineNotice({repo,org,id,boundary,reason,scope={},first_at,audit,counts,env=process.env,kind='fyi',question}) {
+export function reviewErrorFacts(events,binding,org,rows){
+  return rows.flatMap(row=>{
+    const {key,count,boundary,reason,scope}=row;
+    if(!Number.isSafeInteger(count)||count<1||key!==digest([boundary,reason,scope]))throw Error('review error counter/source is inconsistent');
+    const event={type:'line-service.review-error',id:`${key}:${count}`,project:binding.identity,org,key,count,boundary,reason,scope},prior=events.find(e=>e.type===event.type&&e.id===event.id);
+    if(prior&&Object.keys(event).some(k=>canonical(prior[k])!==canonical(event[k])))throw Error('review error counter id has different source/content');
+    return prior?[]:[event];
+  });
+}
+export function recordLineNotice({repo,org,id,boundary,reason,scope={},first_at,audit,counts,env=process.env,kind='fyi',question,reviewError}) {
   const binding=serviceRecordBinding({repo,org,env});
   const saved=transact(org,events=>{
     serviceRecordBinding({repo,org,env});
@@ -44,7 +53,8 @@ export function recordLineNotice({repo,org,id,boundary,reason,scope={},first_at,
         service_notice:{boundary,reason,scope,audit,counts}}};
     validateEvent(envelope);validateOperatorText(envelope.payload.summary,envelope.payload.operator_text);
     if(prior&&canonical(prior)!==canonical(envelope))throw Error('service stable message id has different content/source/target');
-    return protectRecordMutation({org,events,state,command:'messages',mutation:{add:prior?[]:[{type:'session.message.v1',envelope}],result:prior??envelope}});
+    const errors=reviewError?reviewErrorFacts(events,binding,org,[reviewError]):[];
+    return protectRecordMutation({org,events,state,command:'messages',mutation:{add:[...errors,...(prior?[]:[{type:'session.message.v1',envelope}])],result:prior??envelope}});
   },{actor:'line-service',strictTail:true,lockOptions:{recover:false}});
-  return {id:saved.result.eventId,recorded:true,state:'record-only',envelope:saved.result,binding};
+  return {id:saved.result.eventId,recorded:true,state:'record-only',envelope:saved.result,binding,...(reviewError?{review_error_recorded:true}:{})};
 }

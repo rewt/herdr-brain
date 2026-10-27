@@ -16,6 +16,7 @@ import { queueReviewMutation,validateQueuedReview } from '../line-service/review
 import { recordMessages } from '../messages/operator-inbox.mjs';
 import { readInbox,inboxPath } from '../supervisor/prompt-supervisor.mjs';
 import { noticeLock } from '../supervisor/notice-lock.mjs';
+import {morningDigest} from '../line-service/phase1.mjs';
 
 function fixture(t,{cutoff=true,before=[]}={}) {
   const f=configFixture(t,{custom:true}),org=f.env.ORG_DIR,identity=gitProject(f.cwd).identity,directory=lineDirectory(org,identity);
@@ -101,6 +102,24 @@ test('producer lost record reply recovers the same immutable envelope without na
   const capacity=()=>{throw Object.assign(Error('same native capacity hold'),{code:'DISPATCH_SESSION_CAP'});};
   f.service({recordNotice,capacity}).pass();f.service({recordNotice,capacity}).pass();assert.equal(f.messages().length,1);
   assert.equal(Object.values(JSON.parse(fs.readFileSync(path.join(f.directory,'effects.json'))).record_notices)[0].state,'recorded');assert.equal(fs.existsSync(inboxPath({org:f.org})),false);
+});
+
+test('useful error persistence records first errors immediately and batches repeated counters and large journal checkpoints by stage rather than hold count',t=>{
+  const f=fixture(t),number=24;f.add(Array.from({length:number},(_,n)=>({type:'item.added',id:`REV-${n+1}`,role:'reviewer',title:'Retained manual review',meta:{}})));
+  const journal=path.join(f.directory,'effects.json');fs.writeFileSync(journal,JSON.stringify({identity:f.identity,org:f.org,actions:{},notices:{},fixture_padding:'x'.repeat(10*1024*1024)}));
+  const open=fs.openSync,close=fs.closeSync,flush=fs.fsyncSync,rename=fs.renameSync,handles=new Map();let fullWrites=0,recordCommits=0;
+  fs.openSync=(file,...args)=>{const fd=open(file,...args);handles.set(fd,path.resolve(String(file)));return fd;};fs.closeSync=fd=>{handles.delete(fd);return close(fd);};fs.fsyncSync=fd=>{if(handles.get(fd)===path.join(f.org,'events.jsonl'))recordCommits++;return flush(fd);};fs.renameSync=(from,to)=>{if(path.resolve(String(to))===journal)fullWrites++;return rename(from,to);};
+  try{
+    f.service().pass();assert.ok(fullWrites<=5,`first pass used ${fullWrites} full writes for ${number} holds`);assert.ok(recordCommits<=number+3,`first notice and typed error share the same record mutation: ${recordCommits}`);assert.equal(f.events().filter(e=>e.type==='line-service.review-error').length,number);assert.equal(f.messages().length,number);
+    fullWrites=0;recordCommits=0;f.service().pass();assert.ok(fullWrites<=5,`repeat pass used ${fullWrites} full writes`);assert.ok(recordCommits<=3,`repeat counters are one batch, not ${number} mutations: ${recordCommits}`);assert.equal(f.messages().length,number);assert.equal(morningDigest({events:f.events()}).review_errors.occurrences,number*2);
+  }finally{fs.openSync=open;fs.closeSync=close;fs.fsyncSync=flush;fs.renameSync=rename;}
+  assert.equal(f.calls.length,0);assert.equal(fs.existsSync(inboxPath({org:f.org})),false);assert.ok(Object.values(JSON.parse(fs.readFileSync(journal)).record_notices).every(n=>n.count===2&&n.state==='recorded'));
+});
+
+test('useful error persistence replays only durable notice deltas after a lost journal checkpoint without duplicate envelopes counters or native effects',t=>{
+  const f=fixture(t);f.add([{type:'item.added',id:'REV-1',role:'reviewer',title:'Retained manual review',meta:{}}]);const journal=path.join(f.directory,'effects.json');f.service().pass();const checkpoint=fs.readFileSync(journal);f.service().pass();fs.writeFileSync(journal,checkpoint);f.service().pass();
+  const notices=Object.values(JSON.parse(fs.readFileSync(journal)).record_notices);assert.equal(notices.length,1);assert.equal(notices[0].count,3);assert.equal(f.messages().length,1);const errors=f.events().filter(e=>e.type==='line-service.review-error');assert.deepEqual(errors.map(e=>e.count),[1,2,3]);assert.equal(new Set(errors.map(e=>e.id)).size,3);assert.equal(morningDigest({events:f.events()}).review_errors.occurrences,3);assert.equal(f.calls.length,0);assert.equal(fs.existsSync(inboxPath({org:f.org})),false);
+  const log=path.join(f.directory,'passes.jsonl'),record={key:'a'.repeat(64),entry:{id:'line-record-'+ 'a'.repeat(64),count:4,first_at:'2026-10-27T01:00:00Z',last_at:'2026-10-27T01:00:01Z',boundary:'dispatch:REV-1',reason:'different reason',scope:{},review:true,state:'recording'}};fs.appendFileSync(log,JSON.stringify({action:'hold',notice_record:record})+'\n');assert.throws(()=>f.service().pass(),/notice audit.*inconsistent/);assert.equal(f.messages().length,1);assert.equal(f.calls.length,0);
 });
 
 test('producer only actual named pending reserved decisions enqueue once after durable intent and persistent decider rate limit',t=>{

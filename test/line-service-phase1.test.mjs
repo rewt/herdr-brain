@@ -244,6 +244,49 @@ function partialReview(f,id,{head,base,run,verdict,held=false}){
   f.add(rows);return target;
 }
 
+function unreportedNativeLandings(f){
+  const actor=structuredClone(f.observation.agents[0]);actor.cwd=f.workspace;
+  f.add([{type:'run.updated',id:'R-1',meta:{agent:actor.name,pane:actor.pane_id,worker_workspace:actor.workspace_id,terminal_id:actor.terminal_id,agent_session_id:actor.agent_session.value}}]);
+  const env={...f.env,HERDR_ENV:'1',HERDR_PANE_ID:actor.pane_id,HERDR_WORKSPACE_ID:actor.workspace_id,CODEX_THREAD_ID:actor.agent_session.value};
+  recordOwnLanding({canonical:f.cwd,workspace:f.workspace,base:f.base,head:f.heads[1],landedAt:'2026-10-27T07:00:00.000Z',env,call:()=>JSON.stringify({result:{agent:actor}})});
+  return actor;
+}
+
+test('landing-before-report queues one immutable whole native producer group and validates normal review admission without inventing a producer report',t=>{
+  const f=fixture(t,{reported:false});unreportedNativeLandings(f);const c=f.context(),change=discoverChanges(c).changes[0];assert.ok(change);assert.equal(change.target.evidence_kind,'native-landings/v1');assert.deepEqual(change.target.source_group.owned_commits,f.heads);assert.equal(change.target.base,f.base);assert.equal(c.run.report,null);
+  const before=process.cwd(),env=installedService(f);process.chdir(f.cwd);
+  try{const result=queueReviewMutation({...c,runId:'R-1',head:change.target.head,base:change.target.base,env:{...env,ORG_ACTOR:'line-service'}});f.add(result.add);const fresh=f.context(),q=fresh.state.items.get(result.result.review_item);assert.equal(q.meta.review_round_cap,1);assert.deepEqual(validateQueuedReview({...fresh,item:q}),q.meta.review_target);assert.equal(fresh.run.report,null);assert.equal(fresh.item.closed,null);assert.equal(queueReviewMutation({...fresh,runId:'R-1',env:{...env,ORG_ACTOR:'line-service'}}).add.length,0);
+    const bytes=fs.readFileSync(q.meta.review_target.evidence);assert.equal(hash(bytes),q.meta.review_target.reportHash);const proof=JSON.parse(bytes);assert.equal(proof.schema,'native-landings/v1');assert.equal(proof.producer_report,null);assert.equal(proof.validation,'No test or final-release PASS inferred from landing.');assert.equal(proof.landings.length,2);
+    const health=reviewHealth({...fresh,index:canonicalReviewIndex(fresh)});assert.equal(health.owed,1);assert.equal(health.queued,1);assert.equal(health.queued_commits,2);assert.equal(health.missing_queue,0);assert.equal(health.attribution_gaps.length,0);
+  }finally{process.chdir(before);}
+});
+
+test('landing-before-report keeps a captured native group immutable across later report and source while exposing uncovered commits without another queue item',t=>{
+  const f=fixture(t,{reported:false});unreportedNativeLandings(f);const before=process.cwd(),env={...installedService(f),ORG_ACTOR:'line-service'};process.chdir(f.cwd);
+  try{const result=queueReviewMutation({...f.context(),runId:'R-1',env});f.add(result.add);const original=structuredClone(f.context().state.items.get(result.result.review_item).meta.review_target),bytes=fs.readFileSync(original.evidence);
+    fs.writeFileSync(path.join(f.workspace,'later-fix'),'later committed source');f.git(['add','.']);f.git(['commit','-qm','Later source']);const later=f.git(['rev-parse','HEAD']);f.git(['merge','--ff-only',later],f.cwd);
+    f.add([{type:'change.landed',item:'ENG-1',run:'R-1',head:later,base:f.heads[1],project:f.identity,landed_at:'2026-10-27T07:01:00.000Z'}, {type:'report.ingested',run:'R-1',file:'reports/R-1.md',sha256:hash(f.report),report:{outcome:'done',artifacts:[...f.heads,later].map(h=>`Commit: ${h}`),blockers:[],extra:{},proposals:[]}}]);
+    const fresh=f.context(),q=fresh.state.items.get(result.result.review_item);assert.deepEqual(validateQueuedReview({...fresh,item:q}),original);assert.deepEqual(fs.readFileSync(original.evidence),bytes);assert.equal(queueReviewMutation({...fresh,runId:'R-1',env}).add.length,0);const health=reviewHealth({...fresh,index:canonicalReviewIndex(fresh)});assert.equal(health.queued_commits,2);assert.ok(health.coverage_gaps.some(g=>g.head===later&&g.retained));assert.equal([...fresh.state.items.values()].filter(i=>i.role==='reviewer').length,1);
+    fs.appendFileSync(original.evidence,'altered');assert.throws(()=>validateQueuedReview({...fresh,item:q}),/changed|evidence/);
+  }finally{process.chdir(before);}
+});
+
+test('landing-before-report actual source queue command is reached by the installed model-free pass while independent native capacity remains authoritative',t=>{
+  const f=fixture(t,{reported:false});unreportedNativeLandings(f);const env=installedService(f),calls=[],before=process.cwd();process.chdir(f.cwd);
+  try{createLineService({repo:f.cwd,org:f.org,to:'brain-chat',env,maxStarts:1,capacity:()=>{throw Object.assign(Error('review pool is occupied'),{code:'DISPATCH_REVIEW_CAP'});},command:(exe,args,options)=>{calls.push(args);if(args[1]==='queue-review')return spawnSync(exe,args,options);assert.equal(args[0].endsWith('dispatch.mjs'),false,'capacity prevents a native launch');return{status:0,stdout:'{}',stderr:''};}}).pass();}
+  finally{process.chdir(before);}
+  assert.equal(calls.filter(a=>a[1]==='queue-review').length,1);const c=f.context(),q=[...c.state.items.values()].filter(i=>i.role==='reviewer');assert.equal(q.length,1);assert.equal(q[0].meta.review_target.evidence_kind,'native-landings/v1');assert.equal(c.run.report,null);assert.equal(c.events.some(e=>e.type==='run.started'&&e.item===q[0].id),false);assert.equal(c.events.findLast(e=>e.type==='line-service.review-health').queued,1);
+});
+
+test('landing-before-report retains an original UNKNOWN attempt and refuses admission-only foreign or unqualified ownership as positive source evidence',t=>{
+  for(const kind of ['unknown','admission','foreign','unqualified']){
+    const f=fixture(t,{reported:false});
+    if(kind==='unknown'){unreportedNativeLandings(f);fs.mkdirSync(path.join(f.org,'settle'),{recursive:true});fs.writeFileSync(path.join(f.org,'settle/R-1.json'),JSON.stringify({run:'R-1',item:'ENG-1',head:f.heads[1],qualification:'UNKNOWN'}));}
+    else f.add([{type:'change.landed',item:'ENG-1',run:'R-1',head:kind==='admission'?f.base:f.heads[1],base:f.base,project:kind==='foreign'?'/foreign/.git':f.identity,landed_at:'2026-10-27T07:00:00.000Z'}]);
+    const before=process.cwd();process.chdir(f.cwd);try{assert.throws(()=>queueReviewMutation({...f.context(),runId:'R-1',env:{...f.env,ORG_ACTOR:'line-service',HERDR_ENV:'',HERDR_PANE_ID:''}}),/UNKNOWN|source|ownership|landed|target/);assert.equal([...f.context().state.items.values()].some(i=>i.role==='reviewer'),false);}finally{process.chdir(before);}
+  }
+});
+
 test('permanent group preserves R3388-shaped active intermediate and held final without a duplicate or false whole-source coverage',t=>{
   const f=fixture(t);partialReview(f,'REV-1200',{head:f.heads[0],base:f.base,run:'R-3400'});partialReview(f,'REV-1201',{head:f.heads[1],base:f.heads[0],held:true});
   f.add([{type:'change.reviewed',item:'ENG-90',head:f.base,verdict:'PASS',review_item:'REV-666',review_run:'R-666',findings:[]}]);

@@ -13,7 +13,7 @@ import { effectiveWorkerIdentity } from '../lib/worker-identity.mjs';
 import { nativeSender } from '../messages/operator-inbox.mjs';
 import { selectRoute,resolveLaunchRoute } from '../lanes/routes.mjs';
 import { reviewAttempt } from './review.mjs';
-import { discoverChanges,capturedProducerTarget } from './phase1.mjs';
+import { discoverChanges,capturedProducerTarget,publishLandedReviewEvidence } from './phase1.mjs';
 import {producerGroupKey,queueProducerGroup,sameProducerQueue,sameCapturedTarget,capturedReviewCommits} from './review-group.mjs';
 import {originalPrestartProof,reviewPlain,reviewDigest} from './review-resolutions.mjs';
 
@@ -50,7 +50,7 @@ export function queueConsumer({ run, env = process.env }) {
 }
 function source({ state, events, org, repo, identity, runId, head, base,env=process.env,originalCapture }) {
   const run = state.runs.get(runId), item = run && state.items.get(run.item);
-  if (!run || !item || !roleIs(item, 'ENG') || !run.report) throw Error('review queue needs an immutable reported build run');
+  if (!run || !item || !roleIs(item, 'ENG')) throw Error('review queue needs an owned immutable landed build source');
   if (roleIs(state.items.get(item.parent), 'REV')) throw Error('linked formal correction retains its original review; no automatic re-review chain');
   const current = readOwnedRun(org, run.id);
   requireController(current, 'brain'); assertOwner(current, { owner: run.owner, generation: run.owner_generation });
@@ -95,6 +95,7 @@ export function queueReviewMutation({ state, events, org, repo, runId, head, bas
   }
   const prior = reviewAttempt(item, { state, events, org, repo, identity, target,capturedRun:run.id, ignoreService: ignoreIntent(org, identity, item, target) });
   if (prior) throw Error(`item review already retained: ${prior}`);
+  publishLandedReviewEvidence(target);
   const id = nextItemId(state, { kind: 'work', role: 'reviewer' });
   // The source reference is metadata, not a blocking review-child edge: source
   // completion/build admission must not wait for this post-code review.
@@ -138,5 +139,5 @@ export function validateQueuedReview({ item, state, events, org, repo, allowRun,
 
 export function reviewQueueBrief(item) {
   const t = item.meta.review_target;
-  return `# Independent review of ${item.meta.review_source_item}\n\nCaptured immutable HEAD ${t.head}, base ${t.base}. Evidence ${t.evidence}; report SHA256 ${t.reportHash}; diff SHA256 ${t.diff_sha256}. This is ONE whole producer report/source group, including its intermediate and final delivered commits: ${(t.source_group?.owned_commits??t.scope?.commits??[t.head]).join(', ')}. Other attributed commits in the immutable range are context and retain their independent reviews. Read the original ask and complete bound producer evidence. Inspect this exact committed diff, independently of later source/cleanup. No build, test, check, prepare, install, model/API or source mutation commands; zero reviewer suites. Do not start another review or invoke settle/lane review. Write the normal record report with outcome done and verdict PASS or FAIL. Use one markdown bullet per finding: - [Major] path:line - explanation or - [Minor] path:line - explanation. With no findings say so. Unsupported claims and Major findings must be explicit. Propose any formal correction as a linked engineer follow-up under this review, preserving the original source item and final-release Major obligations; cap1, no re-review chain. Existing held/native attempts remain immutable.\n`;
+  return `# Independent review of ${item.meta.review_source_item}\n\nCaptured immutable HEAD ${t.head}, base ${t.base}. Evidence ${t.evidence}; producer evidence SHA256 ${t.reportHash}; diff SHA256 ${t.diff_sha256}. This is ONE whole landed producer group at capture, including its intermediate and delivered commits: ${(t.source_group?.owned_commits??t.scope?.commits??[t.head]).join(', ')}. ${t.evidence_kind==='native-landings/v1'?'Native post-FF source/claim receipts bind this capture before the final producer report. No test PASS or whole-product completion is inferred; later source is separate visible coverage debt. ':''}Other attributed commits in the immutable range are context and retain their independent reviews. Read the original ask and complete bound producer evidence. Inspect this exact committed diff, independently of later source/cleanup. No build, test, check, prepare, install, model/API or source mutation commands; zero reviewer suites. Do not start another review or invoke settle/lane review. Write the normal record report with outcome done and verdict PASS or FAIL. Use one markdown bullet per finding: - [Major] path:line - explanation or - [Minor] path:line - explanation. With no findings say so. Unsupported claims and Major findings must be explicit. Propose any formal correction as a linked engineer follow-up under this review, preserving the original source item and final-release Major obligations; cap1, no re-review chain. Existing held/native attempts remain immutable.\n`;
 }

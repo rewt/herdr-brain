@@ -313,6 +313,18 @@ UNKNOWN. A retained original owner needs its own bound terminal/outcome receipt
 and exact claim release before its owner considers a successor; this status
 observation supplies no native, retry or recovery authority.
 
+Positive post-FF `change.landed` facts also feed the existing review queue before
+the producer's final report. Each immutable evidence snapshot includes the
+actual native worker, current Brain claim, original dispatch, named landed
+commits and their whole range at capture. A pathname, admission head or routine
+phase note cannot substitute for that evidence. The ordinary queue command and
+review route retain the actual selected-consumer and native-capacity guards.
+There is one queue item for that producer group; an existing UNKNOWN/manual or
+partial attempt still prevents another. The captured scope is never retargeted
+when a final report or later source arrives. Later commits remain visible in
+canonical coverage debt, without a duplicate reviewer, invented coverage or
+product completion. Landing itself makes no test or final-release PASS claim.
+
 ```sh
 node line-service/line-service.mjs --digest --org /OWN/RECORD --since 2026-10-27T00:00:00Z
 ```

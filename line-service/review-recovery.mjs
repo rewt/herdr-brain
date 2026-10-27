@@ -74,7 +74,7 @@ export function recoverServiceReview({repo,org,reviewId,env=process.env,call=inv
   const binding=serviceRecordBinding({repo,org,env}),project=gitProject(repo),journalFile=path.join(binding.directory,'effects.json'),effects=JSON.parse(reviewPlain(journalFile)),progress=effects.review_progress?.[reviewId];
   if(!progress||progress.pass!==effects.pass_number||progress.stable_passes<2)throw Error('review has no unchanged original-request proof across real passes');
   const initial=loadEvents(org).events,state=fold(initial),q=state.items.get(reviewId),source=state.items.get(q?.meta.review_source_item),run=state.runs.get(q?.meta.review_source_run);
-  if(!q||!source||!run?.report||q.closed||q.runs.some(id=>state.runs.get(id)?.report)||!roleIs(q,'REV')||q.meta.review_round_cap!==1)throw Error('review progressed/completed or is not an owned normal queue attempt');
+  if(!q||!source||!run||!run.report&&q.meta.review_target?.evidence_kind!=='native-landings/v1'||q.closed||q.runs.some(id=>state.runs.get(id)?.report)||!roleIs(q,'REV')||q.meta.review_round_cap!==1)throw Error('review progressed/completed or is not an owned normal queue attempt');
   const peers=[...state.items.values()].filter(i=>sameProducerQueue(i,source.id,run.id));
   const journal=progress.journal;if(path.dirname(journal)!==path.join(org,'dispatch'))throw Error('original review request is outside its owning record');
   const bytes=reviewPlain(journal),job=JSON.parse(bytes),target=q.meta.review_target,id=`service-${hash(JSON.stringify([source.id,run.id,target.reportHash,target.head])).slice(0,48)}`;

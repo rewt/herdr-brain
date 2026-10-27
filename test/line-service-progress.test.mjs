@@ -13,16 +13,18 @@ import {queueReviewMutation,validateQueuedReview} from '../line-service/review-q
 import {observeReviewProgress,recoverServiceReview} from '../line-service/review-recovery.mjs';
 import {reviewResolution} from '../line-service/review-resolutions.mjs';
 import {checkSessionCap} from '../dispatch/session-cap.mjs';
+import {recordOwnLanding} from '../lib/landing-receipt.mjs';
 const hash=v=>createHash('sha256').update(v).digest('hex');
 
-function fixture(t,{started=false,phase='open'}={}){
+function fixture(t,{started=false,phase='open',native=false}={}){
   const f=configFixture(t,{custom:true}),org=f.env.ORG_DIR,identity=gitProject(f.cwd).identity,base=f.git('rev-parse','HEAD');fs.writeFileSync(path.join(f.cwd,'code.mjs'),'export const source=1;\n');f.git('add','code.mjs');f.git('commit','-qm','Actual landed source');const head=f.git('rev-parse','HEAD');
   const owner={controller:'brain',legacy:false,release:{id:'source',root:sourceRoot,commit:null,identity:gitProject(sourceRoot).identity}},sourceDispatch=path.join(org,'dispatch/source.json');fs.mkdirSync(path.dirname(sourceDispatch),{recursive:true});fs.writeFileSync(sourceDispatch,JSON.stringify({token:'source',stage:'complete',item:'ENG-1',run:'R-1',repo:f.cwd,org,common:identity,workspace:f.cwd,base}));
   const text=`---\nrun: R-1\noutcome: done\nsummary: Landed source.\nartifacts:\n  - "Commit: ${head}"\n---\n`;fs.writeFileSync(path.join(org,'reports/R-1.md'),text);
   const add=rows=>transact(org,()=>({add:rows})),context=()=>{const events=loadEvents(org).events;return{events,state:fold(events),org,repo:f.cwd,identity};};
   add([{type:'line-service.phase0',id:'boundary',project:identity,repo:f.cwd,org,main:'main',canonical_head:base},{type:'item.added',id:'ENG-1',role:'engineer',title:'Source'},
     {type:'run.started',id:'R-1',item:'ENG-1',workspace:f.cwd,meta:{dispatch_journal:sourceDispatch,dispatch_attempt:'source',dispatch_project:identity}}, {type:'run.claimed',run:'R-1',project:identity,record:org,owner},
-    {type:'report.ingested',run:'R-1',file:'reports/R-1.md',sha256:hash(text),report:{outcome:'done',artifacts:[`Commit: ${head}`],extra:{},blockers:[],proposals:[]}}]);
+    ...(!native?[{type:'report.ingested',run:'R-1',file:'reports/R-1.md',sha256:hash(text),report:{outcome:'done',artifacts:[`Commit: ${head}`],extra:{},blockers:[],proposals:[]}}]:[])]);
+  if(native){const a=f.observation.agents[0];add([{type:'run.updated',id:'R-1',meta:{agent:a.name,pane:a.pane_id,worker_workspace:a.workspace_id,terminal_id:a.terminal_id,agent_session_id:a.agent_session.value}}]);recordOwnLanding({canonical:f.cwd,workspace:f.cwd,base,head,landedAt:'2026-10-27T07:00:00.000Z',env:{...f.env,HERDR_ENV:'1',HERDR_PANE_ID:a.pane_id,HERDR_WORKSPACE_ID:a.workspace_id,CODEX_THREAD_ID:a.agent_session.value},call:()=>JSON.stringify({result:{agent:a}})});}
   const env={...f.env,ORG_ACTOR:'line-service',HERDR_BRAIN_ROOT:sourceRoot};for(const k of ['HERDR_ENV','HERDR_PANE_ID','CODEX_THREAD_ID'])delete env[k];const before=process.cwd();process.chdir(f.cwd);let queued;try{queued=queueReviewMutation({...context(),runId:'R-1',env});add(queued.add);}finally{process.chdir(before);}
   const qid=queued.result.review_item,target=context().state.items.get(qid).meta.review_target,workspace=path.join(f.scratch,'review-lane');f.git('worktree','add','-qb','lane/review-one',workspace);
   const journal=path.join(org,'dispatch/original.json'),worker={agentName:'reviewer',pane:'review:p',workspaceId:'review-w',terminalId:'review-terminal',agentSessionId:'review-session'},job={token:'original',repo:f.cwd,org,common:identity,release:{root:sourceRoot,protocol:1},item:qid,lane:'review-one',workspace,reviewQueueProtocol:1,reviewQueue:target,stage:started?'complete':phase,run:started?'R-2':null,...(started?{worker,launchProcess:{pid:44444,identity:'original-birth'},native_launch_attempted:true}:{})};fs.writeFileSync(journal,JSON.stringify(job));
@@ -35,6 +37,10 @@ function fixture(t,{started=false,phase='open'}={}){
   const invoke=extra=>{const cwd=process.cwd(),release=noticeLock(path.join(directory,'pass.lock'));process.chdir(f.cwd);try{return recoverServiceReview({...args,...extra});}finally{process.chdir(cwd);release();}};
   return{...f,org,identity,head,owner,target,qid,job,journal,effects,effectFile,directory,workspace,worker,env,add,context,pass,invoke,calls,agents,setLateLive:v=>{lateLive=v;lists=0;}};
 }
+
+test('landing-before-report unchanged prestart recovery preserves native evidence and one replacement budget without requiring a later final report',t=>{
+  const f=fixture(t,{native:true}),bytes=fs.readFileSync(f.journal),evidence=fs.readFileSync(f.target.evidence);assert.equal(f.context().state.runs.get('R-1').report,null);f.pass();f.pass();const result=f.invoke(),c=f.context(),q=c.state.items.get(result.review_item);assert.notEqual(q.id,f.qid);assert.equal(q.meta.review_round_cap,1);assert.deepEqual(q.meta.review_target,f.target);assert.deepEqual(fs.readFileSync(f.journal),bytes);assert.deepEqual(fs.readFileSync(f.target.evidence),evidence);assert.equal(c.events.filter(e=>e.type==='review.recovery-completed').length,1);assert.equal(validateQueuedReview({...c,item:q}).head,f.head);assert.equal(c.events.some(e=>e.type==='change.reviewed'),false);
+});
 
 test('automatic progress archives an unchanged serialized pre-start request once without inventing a zero launch and queues its exact whole group',t=>{
   const f=fixture(t),bytes=fs.readFileSync(f.journal);fs.mkdirSync(f.journal+'.driver');fs.writeFileSync(f.journal+'.driver/results.jsonl','Original timeout/unknown receipt; preserve.\n');assert.equal(f.pass().candidates.length,0);assert.throws(()=>f.invoke(),/unchanged original-request proof/);assert.deepEqual(f.pass().candidates,[f.qid]);

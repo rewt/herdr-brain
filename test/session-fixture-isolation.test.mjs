@@ -43,6 +43,10 @@ test('fake-native fixture isolates adopted home and fleet reads and restores its
     assert.equal((await f.apply()).apply.state, 'observed');
     assert.equal(f.read().calls.filter(a => a[0] === 'agent' && a[1] === 'start').length, 1);
     assert.deepEqual(reads, []);
+    const sibling = fixture(child, 'supervisor');
+    assert.notEqual(sibling.env.HOME, f.env.HOME);
+    assert.equal(process.env.HOME, sibling.env.HOME);
+    assert.deepEqual(reads, []);
   });
   for (const [key, value] of Object.entries(inherited)) assert.equal(process.env[key], value);
 });

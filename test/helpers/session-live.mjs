@@ -89,18 +89,26 @@ else if (a[0] === 'pane' && a[1] === 'run') {
 } else { save();console.error('unexpected fake CLI '+JSON.stringify(a));process.exit(1); }
 `;
 export const document = m => `## Manifest\n\`\`\`json\n${JSON.stringify(m)}\n\`\`\`\n`;
+const environmentOwners = new WeakSet();
 export function fixture(t, role = 'chat', kind = 'claude') {
   const scratch = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'live-session-')));
   // Fleet isolation alone does not isolate adopted configuration: homeProject
   // also discovers HOME/.herdr-monitor, including from canonicalProject calls
   // that use process.env. Keep both in-process and child reads in this fixture.
-  const before = { HOME: process.env.HOME, HERDR_MONITOR_FLEET: process.env.HERDR_MONITOR_FLEET };
+  // A single test can create several fixtures. Its after hooks run in creation
+  // order, so restore the caller once, before removing any fixture homes.
+  if (!environmentOwners.has(t)) {
+    environmentOwners.add(t);
+    const before = { HOME: process.env.HOME, HERDR_MONITOR_FLEET: process.env.HERDR_MONITOR_FLEET };
+    t.after(() => {
+      for (const [key, value] of Object.entries(before)) {
+        if (value === undefined) delete process.env[key]; else process.env[key] = value;
+      }
+    });
+  }
   const home = path.join(scratch, 'home'); fs.mkdirSync(home);
   Object.assign(process.env, { HOME: home, HERDR_MONITOR_FLEET: path.join(scratch, 'fleet') });
   t.after(() => {
-    for (const [key, value] of Object.entries(before)) {
-      if (value === undefined) delete process.env[key]; else process.env[key] = value;
-    }
     fs.rmSync(scratch, { recursive: true, force: true });
   });
   const cwd = path.join(scratch, 'repo'); fs.mkdirSync(cwd);

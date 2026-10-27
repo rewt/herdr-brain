@@ -52,6 +52,7 @@ for (const stale of [false, true]) test(`watcher lock never publishes empty or p
     observations++;
   };
   t.mock.method(fs, 'writeFileSync', (file, data, options) => {
+    if (!String(file).endsWith('.tmp')) return write(file, data, options);
     const fd = fs.openSync(file, options.flag);
     try {
       observe();
@@ -101,4 +102,132 @@ test('watcher cleans up a failed partial staging write without publishing a lock
   });
   assert.throws(() => acquireWatcherLock(options), error => error === failure);
   assert.deepEqual(fs.readdirSync(directory), []);
+});
+
+test('two stale takers both prove death but only the guarded taker can remove and replace the lock', t => {
+  const { directory, rows, options } = fixture(t);
+  acquireWatcherLock(options); rows.delete(101);
+  const lock = path.join(directory, fs.readdirSync(directory)[0]);
+  rows.set(303, { pid: 303, identity: 'other-birth', state: 'S' });
+  const unlink = fs.unlinkSync;
+  let interleaved = false, deadReads = 0;
+  const readProcess = pid => {
+    if (pid === 101) deadReads++;
+    return options.readProcess(pid);
+  };
+  t.mock.method(fs, 'unlinkSync', file => {
+    if (file === lock && !interleaved) {
+      interleaved = true;
+      // Both old-code takers have passed the byte equality check here. The
+      // second used to publish, then lose its winning lock to this unlink.
+      assert.throws(() => acquireWatcherLock({ ...options, pid: 303, readProcess }), /another watcher/);
+      assert.equal(JSON.parse(fs.readFileSync(lock)).pid, 101);
+    }
+    return unlink(file);
+  });
+  const release = acquireWatcherLock({ ...options, pid: 202, readProcess });
+  assert.ok(interleaved); assert.equal(deadReads, 2);
+  assert.deepEqual(JSON.parse(fs.readFileSync(lock)), { pid: 202, identity: 'own-birth' });
+  assert.deepEqual(fs.readdirSync(directory), [path.basename(lock)]);
+  release(); assert.deepEqual(fs.readdirSync(directory), []);
+});
+
+function abandoned(t, owner = { pid: 404, identity: 'dead-birth' }) {
+  const f = fixture(t);
+  acquireWatcherLock(f.options); f.rows.delete(101);
+  const lock = path.join(f.directory, fs.readdirSync(f.directory)[0]), guard = `${lock}.reclaim`;
+  const token = '11111111-1111-1111-1111-111111111111';
+  fs.mkdirSync(guard);
+  const file = path.join(guard, `${token}.json`);
+  fs.writeFileSync(file, JSON.stringify({ ...owner, token }));
+  return { ...f, lock, guard, file };
+}
+
+for (const variant of ['dead', 'reused', 'empty', 'after-unlink', 'after-publication']) test(`watcher recovers abandoned reclamation (${variant})`, t => {
+  const f = abandoned(t);
+  if (variant === 'reused') f.rows.set(404, { pid: 404, identity: 'new-birth', state: 'S' });
+  if (variant === 'empty') fs.unlinkSync(f.file);
+  if (variant === 'after-unlink') fs.unlinkSync(f.lock);
+  if (variant === 'after-publication') fs.writeFileSync(f.lock, JSON.stringify({ pid: 404, identity: 'dead-birth' }));
+  const release = acquireWatcherLock({ ...f.options, pid: 202 });
+  assert.deepEqual(JSON.parse(fs.readFileSync(f.lock)), { pid: 202, identity: 'own-birth' });
+  release();
+  // A crash after removing the public lock needs no takeover guard for the
+  // next fresh publisher. Its subsequent stale takeover recovers the orphan.
+  if (variant === 'after-unlink') {
+    acquireWatcherLock({ ...f.options, pid: 202 }); f.rows.delete(202);
+    acquireWatcherLock({ ...f.options, pid: 101, readProcess: pid => ({ ok: true, value: pid === 101 ? { pid, identity: 'returned-birth', state: 'S' } : null }) })();
+  }
+  assert.deepEqual(fs.readdirSync(f.directory), []);
+});
+
+for (const variant of ['live', 'unknown', 'malformed', 'legacy-live']) test(`watcher retains ${variant} reclamation state`, t => {
+  const f = abandoned(t, { pid: 202, identity: 'own-birth' });
+  if (variant === 'malformed') fs.writeFileSync(f.file, '{');
+  if (variant === 'legacy-live') fs.writeFileSync(f.file, JSON.stringify({ pid: 202, token: path.basename(f.file, '.json') }));
+  const before = fs.readFileSync(f.lock, 'utf8'), guardBefore = fs.readFileSync(f.file, 'utf8');
+  const readProcess = pid => variant === 'unknown' && pid === 202 ? { ok: false, error: 'fixture denied' } : f.options.readProcess(pid);
+  assert.throws(() => acquireWatcherLock({ ...f.options, pid: 101, readProcess: pid => pid === 101
+    ? { ok: true, value: { pid, identity: 'new-birth', state: 'S' } } : readProcess(pid) }), /another watcher|identity|JSON|property/);
+  assert.equal(fs.readFileSync(f.lock, 'utf8'), before);
+  assert.equal(fs.readFileSync(f.file, 'utf8'), guardBefore);
+  assert.deepEqual(fs.readdirSync(f.directory).sort(), [path.basename(f.lock), path.basename(f.guard)].sort());
+});
+
+test('delayed recovery cannot remove the replacement guard or its winning public lock', t => {
+  const f = abandoned(t), unlink = fs.unlinkSync;
+  f.rows.set(303, { pid: 303, identity: 'other-birth', state: 'S' });
+  let interleaved = false, winner;
+  t.mock.method(fs, 'unlinkSync', file => {
+    if (file === f.file && !interleaved) {
+      interleaved = true;
+      winner = acquireWatcherLock({ ...f.options, pid: 303 });
+      assert.equal(JSON.parse(fs.readFileSync(f.lock)).pid, 303);
+    }
+    return unlink(file);
+  });
+  assert.throws(() => acquireWatcherLock({ ...f.options, pid: 202 }), /watcher lock changed/);
+  assert.ok(interleaved);
+  assert.deepEqual(JSON.parse(fs.readFileSync(f.lock)), { pid: 303, identity: 'other-birth' });
+  assert.deepEqual(fs.readdirSync(f.directory), [path.basename(f.lock)]);
+  winner(); assert.deepEqual(fs.readdirSync(f.directory), []);
+});
+
+test('a reclaimer paused after deletion cannot remove a newly published nonempty guard', t => {
+  const f = abandoned(t), unlink = fs.unlinkSync, rmdir = fs.rmdirSync;
+  f.rows.set(303, { pid: 303, identity: 'other-birth', state: 'S' });
+  let interleaved = false, winner, replacementObserved = false;
+  t.mock.method(fs, 'unlinkSync', file => {
+    const result = unlink(file);
+    if (file === f.file && !interleaved) {
+      interleaved = true;
+      winner = acquireWatcherLock({ ...f.options, pid: 303 });
+    } else if (file === f.lock && interleaved && !replacementObserved) {
+      // Resume the delayed old guard's rmdir while the new guard is held.
+      assert.throws(() => rmdir(f.guard), { code: 'ENOTEMPTY' });
+      const entries = fs.readdirSync(f.guard);
+      assert.equal(entries.length, 1);
+      assert.equal(JSON.parse(fs.readFileSync(path.join(f.guard, entries[0]))).pid, 303);
+      replacementObserved = true;
+    }
+    return result;
+  });
+  assert.throws(() => acquireWatcherLock({ ...f.options, pid: 202 }), /watcher lock changed/);
+  assert.ok(replacementObserved);
+  assert.deepEqual(JSON.parse(fs.readFileSync(f.lock)), { pid: 303, identity: 'other-birth' });
+  winner(); assert.deepEqual(fs.readdirSync(f.directory), []);
+});
+
+test('a failed reclamation-owner write preserves the stale lock and removes private staging', t => {
+  const f = abandoned(t), write = fs.writeFileSync;
+  fs.rmSync(f.guard, { recursive: true });
+  const before = fs.readFileSync(f.lock, 'utf8');
+  const failure = Object.assign(Error('fixture guard write failure'), { code: 'EIO' });
+  t.mock.method(fs, 'writeFileSync', (file, data, options) => {
+    write(file, data.slice(0, 1), options);
+    throw failure;
+  });
+  assert.throws(() => acquireWatcherLock({ ...f.options, pid: 202 }), error => error === failure);
+  assert.equal(fs.readFileSync(f.lock, 'utf8'), before);
+  assert.deepEqual(fs.readdirSync(f.directory), [path.basename(f.lock)]);
 });

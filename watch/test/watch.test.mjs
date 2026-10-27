@@ -32,7 +32,7 @@ const hasGitCheckout = !!fs.lstatSync(path.join(checkout, '.git'), { throwIfNoEn
 function executable(file, body) {
   if (path.basename(file) === 'herdr') body = `
 if [ "$1 $2 $3" = 'agent get supervisor-test' ]; then
-  printf '%s\\n' '{"result":{"agent":{"agent_status":"idle","agent":"claude","pane_id":"fake:supervisor"}}}'
+  printf '%s\\n' '{"result":{"agent":{"agent_status":"idle","agent":"claude","pane_id":"fake:supervisor","terminal_id":"fake:supervisor-terminal"}}}'
   exit 0
 fi
 if [ "$1 $2" = 'pane read' ]; then
@@ -402,7 +402,7 @@ esac`);
   assert.match(result.stdout, /would create tab "watch R-6" in w-canonical/);
 });
 
-test('a valid report is checked and delivered without Herdr being present', () => {
+test('a valid report is checked and delivered without Herdr being present', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'watch-module-'));
   seedOwnedRun(path.join(root, '.org'), 'R-7');
   const report = path.join(root, 'report.md');
@@ -428,6 +428,10 @@ esac`);
   const sent = fs.readFileSync(calls, 'utf8');
   assert.match(sent, /agent prompt supervisor-test \[org-report\] run=R-7 item=ENG-3 outcome=done/);
   assert.match(sent, /headline="The work landed" check=pass/);
+  // The transport owner may finish just after the foreground delivery receipt.
+  // Let that owner release its own locks before removing this isolated fixture.
+  await waitForInboxIdle(path.join(root, '.org/supervisor/inbox.log'));
+  fs.rmSync(root, { recursive: true, force: true });
 });
 
 test('watch shadow uses the checked review verdict and scope while preserving the final tag', async t => {

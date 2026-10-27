@@ -100,6 +100,18 @@ exception facts and ambiguous attempts are preserved on recovery. New starts
 record dispatch_unlanded_admitted=false because lifecycle capacity is no longer
 charged. The core remains advisory for manual record starts.
 
+Current-source dispatch re-reads the actual item and its current parent/ancestor
+chain at native launch and immediately before prompt delivery. A closed, held,
+reserved or missing subject refuses only that request. The launcher also checks
+after native shell preparation, binding its check to the pending journal bytes,
+source/project, current run and claim generation. Changed inputs retain a typed
+`DISPATCH_INPUT_CHANGED` receipt in the original journal; existing workers and
+watchers remain owned, with no replacement or prompt replay. A native start
+refusal or unknown outcome stops that launch without another name or adoption.
+Unrelated record changes and ordinary predecessor evidence do not invalidate a
+valid original request. This replaces the detached item's earlier item-only
+check; saved runtime selection, native identity, capacity and source guards remain.
+
 Queued reviewers dispatch into their OWN registered review worktree at the exact
 captured immutable head. The dispatcher validates actual Git common-directory,
 canonical project, registered path and HEAD before effects, then passes the

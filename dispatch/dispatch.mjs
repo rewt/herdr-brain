@@ -31,6 +31,7 @@ import {foregroundCommand} from './foreground-command.mjs';
 import {lockRequest} from './request-lock.mjs';
 import {resolvedNotStarted} from './not-started.mjs';
 import {originalPrestartProof,reviewDigest,reviewPlain} from '../line-service/review-resolutions.mjs';
+import {checkDispatchEligibility,launchDigest} from './launch-guard.mjs';
 
 const local = (file) => fileURLToPath(new URL(file, import.meta.url));
 const { values: opt, positionals } = parseArgs({ usage: "Usage: node dispatch/dispatch.mjs ITEM --lane TOPIC --route ROUTE --brief FILE [OPTIONS] | --retry R-n|JOURNAL | --status R-n|JOURNAL\nAdmission counts running native workers/reviewers and durable uncertain starts under dispatch.max_sessions. Unlanded lifecycle history is diagnostic only. --from-run retains same-item/current-run guards; --unblocks records a genuine landing dependency and never bypasses native capacity.", allowPositionals: true, options: {
@@ -107,6 +108,10 @@ function command(argv, args, cwd = job?.repo ?? path.resolve(opt.repo)) {
     const error = new Error(`${argv[0]} ${args[0]}: ${(result.stderr || result.stdout || result.error?.message || `exit ${result.status}`).trim()}`);
     error.recordRefusal = !result.error && !result.signal && result.status === 1 &&
       result.stderr.trim().split('\n').at(-1).startsWith('record: ');
+    if(argv===laneCLI&&!result.error&&!result.signal)try{
+      const receipt=JSON.parse(result.stdout);
+      if(receipt.code==='DISPATCH_INPUT_CHANGED')Object.assign(error,{code:receipt.code,launch_input:receipt.launch_input});
+    }catch{/* Other native/command refusals keep their original evidence. */}
     throw error;
   }
   return result.stdout.trim();
@@ -137,7 +142,7 @@ const json = (text) => { const value = JSON.parse(text); if (value.error) throw 
 const refusal = (code, message) => Object.assign(new Error(message), { code });
 const dispatchCodes = new Set(['REUSE_RUN_OPEN', 'REUSE_MISMATCH', 'REUSE_IDENTITY_UNKNOWN', 'REUSE_WORKER_BUSY',
   'FROM_RUN_OTHER_ITEM', 'FROM_RUN_SUPERSEDED', 'DISPATCH_FAILED', 'DISPATCH_STOPPED', 'DISPATCH_HOOK_REVIEW',
-  'DISPATCH_UNLANDED_CAP', 'DISPATCH_UNBLOCKS_INVALID']);
+  'DISPATCH_UNLANDED_CAP', 'DISPATCH_UNBLOCKS_INVALID', 'DISPATCH_INPUT_CHANGED']);
 function checkOrigin(runId, item, current = true) {
   const origin = json(record(['show', runId, '--json']));
   if (!/^R-\d+$/.test(runId) || origin.item !== item.id) throw refusal('FROM_RUN_OTHER_ITEM', '--from-run must name a run on the dispatched item');
@@ -438,15 +443,7 @@ async function main() {
     }
     if((job.detached||job.detachedRequested)&&fs.existsSync(path.join(job.org,'line-service',
       createHash('sha256').update(JSON.stringify(job.common)).digest('hex').slice(0,20),'STOP')))throw Object.assign(Error('service STOP appeared before detached effect'),{code:'DISPATCH_STOPPED'});
-    if(job.lineInput){
-      const events=loadEvents(job.org).events,state=fold(events),item=state.items.get(job.item);
-      if(!item||item.closed||item.meta.hold||item.meta.held||item.meta.operator_reserved||item.meta.reserved||item.role==='human')throw Error('detached item closed/held/reserved before native effect');
-      if(job.run){
-        if(item.runs.at(-1)!==job.run)throw Error('detached run superseded before native effect');
-        state.items.set(item.id,{...item,runs:item.runs.filter(id=>id!==job.run)});state.runs.delete(job.run);
-      }
-      if(dispatchInput({events,state,item:state.items.get(job.item),org:job.org,identity:job.common})!==job.lineInput)throw Error('detached readiness or genuine changed input differs from its frozen request');
-    }
+    checkDispatchEligibility(job,journal);
     if (job.reviewQueue) {
       const events = loadEvents(job.org).events, state = fold(events), item = state.items.get(job.item);
       if (!item || item.closed || item.meta.hold || item.meta.held) throw Error('queued review item closed/held before native effect');
@@ -621,6 +618,7 @@ async function main() {
       job.stage = 'launching'; save();
       job.native_launch_attempted=true;save();
       const output = lane(['dispatch', job.lane, '--route', job.route, '--route-config', job.routeConfig, '--json', '--memory-checked',
+        '--dispatch-journal',journal,'--dispatch-sha256',launchDigest(fs.readFileSync(journal)),
         ...(job.reviewQueue ? ['--expected-head',job.reviewQueue.head] : [])]);
       const launched = JSON.parse(output);
       if (launched.result === 'stopped') {
@@ -705,10 +703,10 @@ async function main() {
       const composition = job.operatorPlainText ? ' EVERY message addressed to the operator must read naturally: one-line headline, what happened, whether you need to do anything, then ONE trailing Details line. Author the main text for a non-agent reader; bare item/run IDs, hashes, receipt/source jargon and shorthand such as bootstrap5 or record-only belong only in Details. A pending reserved decision must say a decision is needed, never Nothing needed. Internal agent coordination and owned callbacks keep their technical contracts.' : '';
       const producer = job.operatorRecordCommand ? `For OPERATOR-addressed status/fyi/done/questions, store an envelope in the owning record with this explicit source command: ${job.operatorRecordRoot ? `HERDR_BRAIN_ROOT=${quote(job.operatorRecordRoot)} ` : ''}ORG_DIR=${quote(job.org)} ORG_ACTOR=${quote(job.worker.agentName)} ${job.operatorRecordCommand.map(quote).join(' ')} messages send --id ${quote(`${job.run}:operator:STABLE_NOTICE_ID`)} --kind notice --run ${quote(job.run)} --item ${quote(job.item)} --summary '<one-line summary>'${wording}. Reuse the stable ID for a retry; use kind fyi for fyi and question/request for judgment, with --correlation THREAD and --reply-to ID when applicable. Pull messages digest on demand with the same source command. Ordinary OPERATOR-addressed messages are record-only and never typed into an operator pane. Only an actual pending human question already explicitly operator_reserved in the record, referenced with --question HUM-n, pushes once through the existing native inbox and Brain Chat filtering. Routine T2 questions do not become reserved. Internal owned report/watch callbacks and project T2/BrainChat delivery retain their existing native paths and recipients; retain the watcher. Do not fabricate native bindings or change pins, saved jobs or long-lived sessions.${composition}` : '';
       const prompt = `You are run ${job.run} on org item ${job.item}. Read ${job.brief} (the ask) and ${run.brief_path} (the record context and report template), then do the work. Write the report to ${run.report_path}; the report's run field is ${job.run}.\n\n${owner}${producer ? `\n\n${producer}` : ''}\n\n${validation}${job.reviewQueueBrief ? `\n\n${job.reviewQueueBrief}` : ''}${job.extra ? `\n\n${job.extra}` : ''}`;
-      if (job.detached || job.reviewQueue) checkStop();
-      checkReviewContinuationNative();
       prepareSessionBinding(run);
       job.stage = 'prompting'; save();
+      checkReviewContinuationNative();
+      checkStop();
       herdr(['agent', 'prompt', job.worker.agentName, prompt]);
       job.stage = 'complete'; save();
       note(`prompt sent; worker ${job.worker.agentName} and watcher ${job.watcher.pid} started`);
@@ -729,7 +727,7 @@ try { await main(); }
 catch (error) {
   if (job && journal && ownsLock) {
     job.error = error.message;
-    job.failure={code:error.code??null,kind:['DISPATCH_SESSION_CAP','DISPATCH_REVIEW_CAP'].includes(error.code)?'capacity':'guard-or-command',stage:job.stage,observed_at:new Date().toISOString(),native_launch_attempted:job.native_launch_attempted??null,...(error.sessions?{capacity:error.sessions}:{})};
+    job.failure={code:error.code??null,kind:['DISPATCH_SESSION_CAP','DISPATCH_REVIEW_CAP'].includes(error.code)?'capacity':'guard-or-command',stage:job.stage,observed_at:new Date().toISOString(),native_launch_attempted:job.native_launch_attempted??null,...(error.sessions?{capacity:error.sessions}:{}),...(error.launch_input?{launch_input:error.launch_input}:{})};
     if(job.detached&&!job.native_launch_attempted&&!job.worker&&!['starting','launching','prompting'].includes(job.stage))job.detached_refused=true;
     save();
     if (job.run) try { note(`incomplete at ${job.stage}: ${error.message}; retry with --retry ${job.run}`); } catch {}

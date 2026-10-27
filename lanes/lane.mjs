@@ -51,6 +51,7 @@ import { readReceiptDeclaration, restrictEnvironment, excludedAdditions, require
 import { changedPaths, plannedCommand } from '../promote/test-plan.mjs';
 import { canonicalTestPlan } from '../settle/test-plan.mjs';
 import { recordOwnLanding } from '../lib/landing-receipt.mjs';
+import { checkDispatchLaunch } from '../dispatch/launch-guard.mjs';
 
 import {
   loadRegistry,
@@ -1208,7 +1209,17 @@ function dispatch(topic, promptText, options = {}) {
     if(options.expectedHead===undefined)return;
     if(!/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(options.expectedHead)||samePath(path,REPO_ROOT)||worktreeFor(branch)!==path||gitIdentityForPath(path)!==REPO_IDENTITY||tryGit(['rev-parse','HEAD'],{cwd:path})!==options.expectedHead)fail('review worktree path/common-directory/captured HEAD changed; no new reviewer may launch');
   };
+  const checkLaunch=()=>{
+    if(!options.dispatchJournal)return;
+    try{checkDispatchLaunch({journal:options.dispatchJournal,sha256:options.dispatchSha256,repo:REPO_ROOT,workspace:path,topic});}
+    catch(error){
+      process.stdout.write(JSON.stringify({result:'failed',code:error.code??'DISPATCH_FAILED',reason:error.message,
+        journal:options.dispatchJournal,...(error.launch_input?{launch_input:error.launch_input}:{})})+'\n');
+      fail(error.message);
+    }
+  };
   checkCapturedWorktree();
+  checkLaunch();
   // Dispatch is model-agnostic: the tier policy is the operator's, and the
   // operator-owned role->agent mappings live in .lane.json "routes". A named
   // route owns kind/model/effort; extra agent-CLI arguments are launch plumbing
@@ -1246,6 +1257,7 @@ function dispatch(topic, promptText, options = {}) {
     process.removeListener('exit', unlockInitial);
     const release = releaseInitial; releaseInitial = undefined; release?.();
   };
+  checkLaunch();
   const workspace = ensureHerdrWorkspace(path, label, workspaces, options.deadline, { holdInitial: tab => {
     releaseInitial = initialShellLock(REPO_IDENTITY, tab, { deadline: options.deadline });
     process.once('exit', unlockInitial);
@@ -1266,6 +1278,7 @@ function dispatch(topic, promptText, options = {}) {
     const tabArgs = ["tab", "create", "--workspace", workspaceId, "--label", `agent:${topic}`, "--no-focus"];
     if (options.capturedHead || options.expectedHead) tabArgs.push('--cwd', path);
     for (const pair of resolved.env) tabArgs.push("--env", pair);
+    checkLaunch();
     const created = JSON.parse(execFileSync("herdr", tabArgs, {
       encoding: "utf8",
       ...(options.deadline === undefined ? {} : { timeout: Math.max(1, Math.min(60_000, options.deadline - Date.now())) }),
@@ -1315,6 +1328,7 @@ function dispatch(topic, promptText, options = {}) {
         `command /bin/sh ${quote(verifier)}\n`, { mode: 0o600, flag: "wx" });
       // Suppress source diagnostics too: an incompatible shell may print the
       // offending assignment. Only the non-secret path enters shell history.
+      checkLaunch();
       const prepared = spawnSync("herdr", ["pane", "run", pane,
         ` . ${quote(file)} 2>/dev/null; command rm -f -- ${quote(file)} ${quote(verifier)}`], {
         encoding: "utf8", timeout: Math.max(1, Math.min(60_000, deadline - Date.now())),
@@ -1359,6 +1373,7 @@ function dispatch(topic, promptText, options = {}) {
     // fresh name per attempt and adopt whatever is already running there.
     if (attempt > 0) agentName = newAgentName(topic, liveAgentNames);
     const launchInput = literalLaunch('herdr', startArgsFor(agentName), resolved.launch);
+    checkLaunch();
     const run = spawnSync(launchInput.command, launchInput.args, {
       cwd: path,
       encoding: "utf8",
@@ -1371,6 +1386,7 @@ function dispatch(topic, promptText, options = {}) {
     }
     liveAgentNames.add(agentName);
     lastError = `${run.stdout}${run.stderr}`.trim();
+    if(options.dispatchJournal)fail(`native dispatch start refused or outcome UNKNOWN; original pending attempt retained: ${lastError}`);
     const running = agentOnPane(pane, options.deadline);
     if (running !== undefined) {
       agentName = running.name;
@@ -1454,6 +1470,7 @@ function dispatch(topic, promptText, options = {}) {
       }
     }
     try {
+      checkLaunch();
       execFileSync("herdr", ["agent", "prompt", agentName, promptText], {
         stdio: options.silent ? ["ignore", "ignore", "pipe"] : "inherit",
         ...(options.deadline === undefined ? {} : { timeout: Math.max(1, Math.min(60_000, options.deadline - Date.now())) }),
@@ -2836,7 +2853,7 @@ switch (command) {
     const options = { env: [], args: [] };
     const positional = [];
     for (let i = 0; i < rest.length; i += 1) {
-      if (["--route", "--route-config", "--model", "--kind", "--env", "--arg", "--expected-head"].includes(rest[i]) &&
+      if (["--route", "--route-config", "--model", "--kind", "--env", "--arg", "--expected-head", "--dispatch-journal", "--dispatch-sha256"].includes(rest[i]) &&
           (rest[i + 1] === undefined || rest[i + 1] === "")) {
         fail(`${rest[i]} requires a value`);
       }
@@ -2849,8 +2866,11 @@ switch (command) {
       else if (rest[i] === "--json") options.silent = true;
       else if (rest[i] === "--memory-checked") options.memoryChecked = true;
       else if (rest[i] === "--expected-head") options.expectedHead = rest[(i += 1)];
+      else if (rest[i] === "--dispatch-journal") options.dispatchJournal = resolve(CALLER_CWD,rest[(i += 1)]);
+      else if (rest[i] === "--dispatch-sha256") options.dispatchSha256 = rest[(i += 1)];
       else positional.push(rest[i]);
     }
+    if(!!options.dispatchJournal!==!!options.dispatchSha256)fail('--dispatch-journal and --dispatch-sha256 require each other');
     if (options.route !== undefined && (options.kind !== undefined || options.model !== undefined)) {
       fail("--kind and --model cannot override a named route");
     }

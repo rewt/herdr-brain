@@ -513,10 +513,10 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       // progress. This is the end of a completed pass, under the same lock.
       try {
         snapshot=observe();
-        const observation=haltObservation({...snapshot,identity:project.identity,config,actions:effects.actions,occupancy:latestOccupancy});
+        const observation=haltObservation({...snapshot,org,identity:project.identity,config,actions:effects.actions,occupancy:latestOccupancy});
         {
           if(observation.ready.length)try{latestOccupancy=countCapacity('build');}catch(e){latestOccupancy=e.sessions??{unknown:e.message};log({action:'halt-capacity-held',code:e.code,reason:e.message});}
-          const observed=haltObservation({...snapshot,identity:project.identity,config,actions:effects.actions,occupancy:latestOccupancy});
+          const observed=haltObservation({...snapshot,org,identity:project.identity,config,actions:effects.actions,occupancy:latestOccupancy});
           const route=config.routes?.['engineer-xhigh']?'engineer-xhigh':routeFor({role:'engineer',meta:{}},config);
           const completedPass=randomUUID();
           log({action:'engineering-idle-observation',pass:completedPass,observation:observed});

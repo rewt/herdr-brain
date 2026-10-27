@@ -10,14 +10,21 @@ import {roleIs} from '../lib/roles.mjs';
 import {protectRecordMutation} from '../lib/record-guard.mjs';
 import {serviceRecordBinding,canonicalFailure} from './record-inbox.mjs';
 import {queuePolicy,queueClass,queueSelected} from './priority-order.mjs';
+import {dispatchInput} from './phase1.mjs';
+import {itemLaunchHold} from '../lib/item-launch-hold.mjs';
 
 const hash=value=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const repair=item=>item?.meta?.halt_repair===1;
-const readyItems=state=>[...state.items.values()].filter(i=>i.kind!=='goal'&&queueSelected(i)&&!repair(i)&&!roleIs(i,'REV')&&i.role!=='human'&&itemStatus(state,i.id)==='ready');
+// Record READY alone includes held ancestry and blocked reports whose linked
+// dependencies have closed. Only normal admission's current input is work an
+// idle diagnosis can help; this observation never clears an original attempt.
+const readyItems=({state,events,org,identity})=>[...state.items.values()].filter(i=>i.kind!=='goal'&&queueSelected(i)&&!repair(i)&&!roleIs(i,'REV')&&
+  !itemLaunchHold(state,i.id)&&!['security','funds-and-chain','publish','delete-data','licensing','priorities'].includes(i.meta.category)&&
+  dispatchInput({state,events,item:i,org,identity}));
 const held=i=>[i.id,i.meta.hold??null,i.meta.held??null,i.meta.reserved??null,i.meta.operator_reserved??null,i.meta.category??null];
 
-export function haltObservation({state,events,identity,config,occupancy,actions={}}) {
-  const ready=readyItems(state).sort((a,b)=>a.id.localeCompare(b.id));
+export function haltObservation({state,events,org,identity,config,occupancy,actions={}}) {
+  const ready=readyItems({state,events,org,identity}).sort((a,b)=>a.id.localeCompare(b.id));
   const engineering=id=>{const r=state.runs.get(id),i=state.items.get(r?.item);return roleIs(i,'ENG')&&!repair(i)&&r.meta?.dispatch_project===identity;};
   const productive=(occupancy?.sessions??[]).filter(s=>s.occupancy==='observed live'&&s.kind==='worker'&&s.runs?.some(engineering)).map(s=>s.runs);
   const progress=events.filter(e=>e.type==='change.landed'&&e.project===identity&&e.landed_at&&e.producer&&engineering(e.run)||
@@ -26,7 +33,7 @@ export function haltObservation({state,events,identity,config,occupancy,actions=
   const causes=ready.map(i=>({item:i.id,created:i.created.seq,role:i.role,capability:i.capability,route:i.meta.route,queue_class:queueClass(state,i,policy),priority:i.priority,last_run:i.runs.at(-1)??null,report:state.runs.get(i.runs.at(-1))?.report?.file??null,
     holds:[held(i),...ancestors(state,i.id).map(held)],
     failures:Object.entries(actions).filter(([key])=>key.startsWith(`dispatch:${i.id}:`)).map(([key,e])=>[key,canonicalFailure(e.error)])}));
-  const source=['line-service/line-service.mjs','line-service/priority-order.mjs','line-service/halt-repair.mjs','line-service/review.mjs','line-service/review-observation.mjs','dispatch/preflight.mjs','lib/worker-brief.mjs','lib/item-launch-hold.mjs'].map(file=>[file,hash(fs.readFileSync(new URL(`../${file}`,import.meta.url),'utf8'))]);
+  const source=['line-service/line-service.mjs','line-service/priority-order.mjs','line-service/halt-repair.mjs','line-service/phase1.mjs','line-service/review.mjs','line-service/review-observation.mjs','dispatch/preflight.mjs','lib/worker-brief.mjs','lib/item-launch-hold.mjs'].map(file=>[file,hash(fs.readFileSync(new URL(`../${file}`,import.meta.url),'utf8'))]);
   return {ready:ready.map(i=>i.id),productive,progress,causes,signature:hash([causes,policy,progress,config.routes,config.selection_policy,source])};
 }
 
@@ -45,7 +52,7 @@ export function completeHaltPass({repo,org,env,pass,previous,observation,route,a
     for(const file of [path.join(binding.directory,'STOP'),path.join(repo,'.lane/supervisor/STOP'),path.join(repo,'.lane/supervisor/HOLD')])
       if(fs.existsSync(file))throw Error('STOP/HOLD prevents halt repair intent');
     // Input changed after the completed scan: let the next real pass observe it.
-    if(JSON.stringify(readyItems(state).map(i=>i.id).sort())!==JSON.stringify([...observation.ready].sort()))throw Error('halt ready inputs changed before record intent');
+    if(JSON.stringify(readyItems({state,events,org,identity:binding.identity}).map(i=>i.id).sort())!==JSON.stringify([...observation.ready].sort()))throw Error('halt ready inputs changed before record intent');
     const previous=[...state.items.values()].filter(repair);
     // Pending, working, held and ambiguous owners are exclusive even if the
     // cause changes. A completed owner is exclusive for its unchanged episode.

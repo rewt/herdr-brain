@@ -13,6 +13,7 @@ import { fold } from '../lib/state.mjs';
 import { captureProductCheckout } from '../lib/product-files.mjs';
 import { tierFiles } from './helpers/tier.mjs';
 import {createHash} from 'node:crypto';
+import {haltObservation} from '../line-service/halt-repair.mjs';
 
 function fixture(t) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'line-service-'))), repo = path.join(root, 'project'), org = path.join(repo, '.org');
@@ -84,6 +85,47 @@ test('three completed engineering-idle passes file and immediately dispatch one 
   const release=noticeLock(path.join(f.service().directory,'pass.lock'));
   try{assert.throws(()=>f.service(options).pass(),/locked/);}finally{release();}
   assert.equal(repairs().length,1);
+});
+
+test('engineering-idle excludes held ancestry reserved work and unchanged blocked reports while independent work still dispatches',t=>{
+  const f=fixture(t),held=f.add('Explicit hold'),parent=f.add('Closed review ancestry'),child=f.add('Selected child',99,['--parent',parent]),blocked=f.add('Unchanged blocked report');
+  const reserved=f.add('Reserved publication'),ancestor=f.add('Reserved ancestor'),descendant=f.add('Reserved descendant',99,['--parent',ancestor]);
+  transact(f.org,()=>({add:[
+    {type:'item.updated',id:held,fields:{meta:{hold:true}}},
+    {type:'item.closed',id:parent,as:'done'},
+    {type:'item.updated',id:child,fields:{meta:{queue_selected:true}}},
+    {type:'item.updated',id:reserved,fields:{meta:{category:'publish'}}},
+    {type:'item.updated',id:ancestor,fields:{meta:{operator_reserved:true}}},
+    {type:'run.started',id:'R-1',item:blocked,meta:{}},
+    {type:'report.ingested',run:'R-1',sha256:'unchanged-report',file:'reports/R-1.md',report:{outcome:'blocked',summary:'Needs a real reframe.'}},
+    {type:'link.added',blocker:parent,blocked}
+  ]}));
+  const original=loadEvents(f.org).events;
+  for(let n=0;n<3;n++)f.service({haltAfter:3}).pass();
+  assert.equal(f.calls.length,0,'no native dispatch or recursive repair for inadmissible work');
+  const state=fold(loadEvents(f.org).events);
+  assert.equal([...state.items.values()].some(i=>i.meta.halt_repair===1),false);
+  assert.deepEqual(loadEvents(f.org).events,original,'holds, reports and ancestry stay unchanged');
+  const effects=JSON.parse(fs.readFileSync(path.join(f.service().directory,'effects.json')));
+  assert.equal(effects.halt_progress.count,0);
+  const observations=fs.readFileSync(path.join(f.service().directory,'passes.jsonl'),'utf8').trim().split('\n').map(JSON.parse).filter(r=>r.action==='engineering-idle-observation');
+  assert.ok(observations.every(r=>r.observation.ready.length===0));
+  const ready=f.add('Independent eligible engineering');
+  f.service({haltAfter:3}).pass();
+  assert.deepEqual(f.calls.map(c=>c.args[1]),[ready],'existing ordinary dispatch admits independent work');
+  assert.ok(!f.calls.some(c=>[held,child,blocked,reserved,ancestor,descendant].includes(c.args[1])));
+});
+
+test('engineering-idle includes an authorized blocked restart even before the record status changes',()=>{
+  const events=[
+    {type:'item.added',id:'ENG-1',kind:'work',role:'engineer',title:'Blocked engineering'},
+    {type:'run.started',id:'R-1',item:'ENG-1',meta:{}},
+    {type:'report.ingested',run:'R-1',sha256:'original-report',file:'reports/R-1.md',report:{outcome:'blocked'}},
+  ].map((e,n)=>({...e,seq:n+1,by:'fixture',at:'2026-10-27T00:00:00Z'}));
+  const observe=()=>haltObservation({events,state:fold(events),identity:'fixture',config:{}});
+  assert.deepEqual(observe().ready,[]);
+  events.push({type:'item.updated',id:'ENG-1',fields:{title:'Explicitly reframed engineering'},seq:4,by:'fixture'});
+  assert.deepEqual(observe().ready,['ENG-1'],'use the normal changed-input restart predicate');
 });
 
 test('priority READY dispatch uses existing admission and retains its one effect across restart', t => {

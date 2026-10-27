@@ -100,6 +100,37 @@ test('pending reserved question coalesces next passes and duplicate delivery unt
   assert.ok(dispatchInput({events:f.events,state:f.state(),item:f.state().items.get('ENG-1')}));
 });
 
+test('a parent-only pending reserved question waits without a link; its explicit answer resumes or keeps parked',()=>{
+  for(const reply of ['yes','no']){
+    const f=fixture(),by=(actor,e)=>f.events.push({...e,seq:f.events.length+1,at:'2026-10-27T00:01:00Z',by:actor});
+    // The supported `record ask --wait --parent ENG-1 --category publish` shape: a human child and its why note, no link.
+    by('lane-agent',{type:'item.added',id:'HUM-1',kind:'work',title:'Publish this release?',role:'human',capability:null,parent:'ENG-1',priority:0,accept:[],budget:{},meta:{category:'publish',recommend:'no'}});
+    by('lane-agent',{type:'note.added',id:'HUM-1',text:'Publishing is reserved.',decision:false,kind:'why'});
+    assert.equal(f.state().links.length,0);
+    const questions=()=>[...f.state().items.values()].filter(i=>i.role==='human');
+    for(let pass=0;pass<2;pass++){
+      // Repeated passes and a restarted process fold the same record: still a wait.
+      assert.equal(f.request(),null);
+      assert.equal(decisionCandidates({state:fold(f.events),events:f.events,identity:'/git',org:'/record'}).length,0);
+      assert.equal([...f.state().items.values()].filter(isDecision).length,0,'no judge');
+      assert.equal(questions().length,1,'no second question');
+      assert.equal(dispatchInput({events:f.events,state:fold(f.events),item:f.state().items.get('ENG-1')}),null);
+    }
+    const q=questions()[0];assert.equal(q.meta.recommend,'no');assert.equal(q.meta.answer,undefined);
+    // `record answer HUM-1 <reply>` as the operator.
+    by('human',{type:'note.added',id:'HUM-1',text:`Answered ${reply}`,decision:true,kind:'answer'});
+    by('human',{type:'item.updated',id:'HUM-1',fields:{meta:{answer:reply,answered_by:'human'}}});
+    by('human',{type:'item.closed',id:'HUM-1',as:'done',note:null});
+    for(let pass=0;pass<2;pass++){
+      assert.equal(f.request(),null,'the explicit answer owns the subject, not another judge');
+      assert.equal(decisionCandidates({state:fold(f.events),events:f.events,identity:'/git',org:'/record'}).length,0);
+      assert.equal(questions().length,1);
+      const input=dispatchInput({events:f.events,state:fold(f.events),item:f.state().items.get('ENG-1')});
+      if(reply==='yes')assert.ok(input,'yes resumes the intended work');else assert.equal(input,null,'no keeps the subject parked');
+    }
+  }
+});
+
 test('hold, reserved ancestry and unselected report proposals never become automatic decision candidates',()=>{
   for(const change of [{id:'ENG-1',fields:{meta:{hold:true}}},{id:'G-1',fields:{meta:{reserved:true}}},{id:'ENG-1',fields:{meta:{queue_selected:false}}}]){
     const f=fixture();f.add({type:'item.updated',...change});assert.equal(f.request(),null);

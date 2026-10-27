@@ -4,7 +4,7 @@ import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {reviewScope,claimedCommitTokens,declaredSourceRanges} from '../settle/review-range.mjs';
-import {fold,extendFold,itemStatus,blockersOf,releases} from '../lib/state.mjs';
+import {fold,extendFold,itemStatus,blockersOf,releases,isDeclined} from '../lib/state.mjs';
 import {roleIs} from '../lib/roles.mjs';
 import {transact,loadRecord} from '../lib/store.mjs';
 import {readReport} from '../lib/report.mjs';
@@ -259,7 +259,9 @@ export function blockedChangeKey({events,state,item,run,brief}) {
   const inputs=events.filter(e=>e.seq>seq&&e.by!=='line-service'&&!/^\[watch record-only\]/.test(e.text??'')&&(
     e.type==='question.answered'&&(ids.has(e.id)||state?.items.get(e.id)?.parent===item.id)||
     e.type==='link.removed'&&(ids.has(e.blocked)||ids.has(e.blocker))||e.type==='item.updated'&&e.id===item.id&&Object.keys(e.fields??{}).some(k=>['accept','title'].includes(k))||e.type==='item.reopened'&&e.id===item.id||
-    e.type==='item.closed'&&events.some(l=>l.type==='link.added'&&l.blocked===item.id&&l.blocker===e.id)));
+    e.type==='item.closed'&&events.some(l=>l.type==='link.added'&&l.blocked===item.id&&l.blocker===e.id)||
+    // An explicit non-declined answer to an unlinked question asked under the subject.
+    e.type==='item.closed'&&(q=>q?.parent===item.id&&roleIs(q,'HUM')&&q.meta.answer!=null&&q.meta.answered_by!=='auto'&&!isDeclined(q))(state?.items.get(e.id))));
   const original=events.find(e=>e.type==='report.ingested'&&e.run===run.id)?.brief_sha256;
   if(!answer&&!reframe&&!inputs.length&&!(original&&brief&&original!==brief))return null;
   return hash(JSON.stringify([run.report.sha256,inputs.map(e=>e.seq),brief??null,...(answer?[answer.key]:[]),...(reframe?[reframe.key,reframe.seq]:[])]));

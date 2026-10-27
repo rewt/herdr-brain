@@ -5,7 +5,7 @@ import {createHash} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {transact,loadRecord} from '../lib/store.mjs';
-import {nextItemId,ancestors,itemStatus,releases} from '../lib/state.mjs';
+import {nextItemId,ancestors,itemStatus,releases,isDeclined} from '../lib/state.mjs';
 import {roleIs} from '../lib/roles.mjs';
 import {readReport} from '../lib/report.mjs';
 import {readOwnedRun,requireController,assertOwner,ownerBinding} from '../lib/run-owner-guard.mjs';
@@ -48,6 +48,9 @@ export function decisionCapture({state,events,item,activation}) {
   // A pending reserved question is a mechanical wait: its own blocker and notes
   // must not become a new intent, judge or second human question.
   if(state.links.some(l=>l.blocked===item.id&&(q=>q&&!q.closed&&(q.role==='human'||q.meta.operator_reserved))(state.items.get(l.blocker))))return null;
+  // `record ask --wait --parent` questions carry no link: pending, or answered
+  // no after this report, they hold the subject the same way.
+  if([...state.items.values()].some(q=>q.parent===item.id&&roleIs(q,'HUM')&&(!q.closed||isDeclined(q)&&q.closed.seq>(run.report.seq??0))))return null;
   const ownDecisionIds=new Set([...state.items.values()].filter(isDecision).map(i=>i.id));
   const inputs=events.filter(e=>!ownDecisionIds.has(e.id)&&!ownDecisionIds.has(e.blocker));
   let brief=null;try{brief=bytesHash(fs.readFileSync(run.brief_path));}catch{}

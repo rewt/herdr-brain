@@ -37,6 +37,16 @@ const contains = (value, tokens) => {
   return value && typeof value === 'object' && Object.values(value).some(v => contains(v, tokens));
 };
 
+// A decision can describe reviews without directing a hold. Keep explicit
+// legacy hold/retained-reviewer instructions; new notes use REVIEW HOLD:.
+function explicitReviewHold(event) {
+  if(event.type!=='note.added'||!event.decision)return false;
+  const text=(event.text??'').trim();
+  return /^(?:new\s+)?(?:independent\s+)?review\s+hold\b/i.test(text)||
+    /^hold\s+(?:the\s+)?(?:independent\s+)?review\b/i.test(text)||
+    /^(?:C\d+\s+)?retain(?:ed)?\s+(?:the\s+)?(?:independent\s+)?review(?:er|\s+attempt)\b/i.test(text);
+}
+
 function changeReviewAttempt(item,{org,identity,events,state,repo,effects,target,ignoreService,ignoreQueue,capturedRun,capturedOriginal=false,ignoreQueues=[]}) {
   const resolution=reviewResolution({events,org,item:item.id,head:target.head}),archivedItems=new Set(resolution?.event.archived_review_items??[]);
   capturedRun??=target.source_group?.run;
@@ -86,11 +96,11 @@ function changeReviewAttempt(item,{org,identity,events,state,repo,effects,target
   for(const e of events){
     if(e.type==='change.reviewed'&&e.item===item.id&&(covered.has(e.head)||!capturedOriginal&&group&&(e.review_group_key??queueProducerGroup(state.items.get(e.review_item)))===group))return 'recorded same-change/producer-group verdict';
     if(e.type==='review.verdict'&&item.runs.includes(e.run)&&matches(e,e.run))return 'recorded same-change verdict';
-    if(e.type==='note.added'&&e.decision&&tokens.has(e.id)&&/review/i.test(e.text??'')){
+    if(tokens.has(e.id)&&explicitReviewHold(e)){
       // The validated archival authorization is not another independent
       // attempt. Every other decision, including later holds, still counts.
       if(resolution?.authorized_decision_seqs?.includes(e.seq))continue;
-      const named=(e.text.match(/\b[a-f0-9]{40,64}\b/g)??[]);
+      const named=(e.text.match(/[a-f0-9]{40}(?:[a-f0-9]{24})?/g)??[]);
       const atNote=item.runs.filter(id=>(state.runs.get(id)?.started.seq??Infinity)<e.seq).at(-1);
       if(named.some(h=>covered.has(h))||!named.length&&(runs.has(e.id)||(e.text.match(/\bR-\d+\b/g)??[]).some(id=>runs.has(id))||e.id===item.id&&runs.has(atNote)&&(state.runs.get(atNote)?.report?.seq??Infinity)<e.seq))return 'recorded same-change independent review hold';
     }
@@ -144,8 +154,7 @@ export function reviewAttempt(item, { org, identity, events, state, repo, effect
   const runs = new Set(item.runs), tokens = new Set([item.id, ...runs]);
   if (state && [...state.items.values()].some(candidate => candidate.id !== ignoreQueue && roleIs(candidate, 'REV') &&
       (candidate.parent === item.id || candidate.meta.review_source_item === item.id))) return 'existing item-wide record review';
-  // Decision holds need no particular prose formula or native qualification.
-  if (events.some(e => e.type === 'note.added' && e.decision && tokens.has(e.id) && /review/i.test(e.text ?? ''))) return 'recorded independent review attempt/hold';
+  if (events.some(e => tokens.has(e.id) && explicitReviewHold(e))) return 'recorded independent review attempt/hold';
   if (events.some(e => e.type === 'review.verdict' && runs.has(e.run))) return 'recorded verdict';
   const pending = (actions, file) => Object.entries(actions ?? {}).some(([key, value]) => {
     if (ignoreService && ignoreService.file === file && ignoreService.key === key && value.review_operation === ignoreService.operation && JSON.stringify(value.review_target) === JSON.stringify(ignoreService.target) &&

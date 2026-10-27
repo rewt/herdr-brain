@@ -168,6 +168,14 @@ An explicit verdict may be in frontmatter or a standalone `Verdict: PASS`,
 missing, unknown or contradictory declarations hold intake. The fact records
 the declaration location and original report hash; report bytes are unchanged.
 
+An explicit review hold uses the existing note command:
+`record note SOURCE_ITEM "REVIEW HOLD: FULL_SOURCE_HEAD; reason" --decision`.
+Existing independent-review-hold and retained-reviewer instructions remain
+recognized and scoped to their actual source head/run. Ordinary decisions that
+mention reviews, preserve evidence or say "no duplicate worker/review" do not
+create a new hold. Actual queued/native/UNKNOWN attempts still retain their
+original ownership and cap; no decision prose is evidence of native absence.
+
 Each pass writes a heartbeat, ingests an actual valid report as soon as its file
 exists, conditionally source-closes genuinely done integrated work, drains named
 closeout keys and considers independent READY work. It does not wait for native

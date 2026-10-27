@@ -31,6 +31,7 @@ import { stopFixtureInbox } from './helpers/inbox.mjs';
 import { retirementStatus, renderRetirementStatus } from '../lib/retire-status.mjs';
 import { outstandingEffects } from '../lib/run-owner.mjs';
 import { readCloseoutOwnerStatus } from '../lib/closeout-code.mjs';
+import {createLineService,sourceRoot} from '../line-service/line-service.mjs';
 
 const cli = fileURLToPath(new URL('../bin/org.mjs', import.meta.url));
 const closer = fileURLToPath(new URL('../supervisor/closeout.mjs', import.meta.url));
@@ -198,6 +199,47 @@ test('phase1 safe outcome readback keeps a still-live or replaced exit target an
   f.state.agents[0].agent_session={value:'replacement'};
   const shell=f.state.info.process_tree[0];f.state.info={shell_pid:shell.pid,foreground_processes:[{pid:shell.pid,name:'zsh'}],process_tree_complete:true,process_tree:[shell]};f.save();
   const replaced=f.drain({keys:[entry.key],retrySafe:true});assert.equal(replaced.evaluated[0].completed,false);assert.match(replaced.evaluated[0].reason,/identity changed/);assert.deepEqual(f.read().actions,[]);
+});
+
+test('continuity service reconciles a successful tab close with no saved closed receipt then completes cleanup without replay',t=>{
+  const f=setup(t,{merged:true});f.report();f.append([{type:'line-service.phase0',id:'bound',project:f.common,repo:f.repo,org:f.org,main:'main',canonical_head:f.head}]);
+  const rows=f.append([{type:'item.closed',id:'ENG-1',as:'done',completed_run:'R-1'}]),entry={...rows[0].closeout_targets.find(t=>t.signal==='landed'),source:{seq:rows[0].seq,type:'item.closed'}},base=f.options.command;
+  let lost=false;f.options.command=(exe,args,opt)=>{const result=base(exe,args,opt);if(!lost&&exe===f.job.herdr&&args[0]==='tab'&&args[1]==='close'){lost=true;return{...result,status:1,stderr:'lost tab-close acknowledgement'};}return result;};
+  const drains=[],service=createLineService({repo:f.repo,org:f.org,to:'brain-chat',env:f.env,maxStarts:0,recordNotice:d=>({id:d.id,state:'record-only'}),command:(_exe,args)=>{
+    assert.equal(args[0],path.join(sourceRoot,'supervisor/closeout.mjs'));assert.ok(args.includes('--retry-safe'));
+    const keys=JSON.parse(args[args.indexOf('--keys')+1]);assert.deepEqual(keys,[entry.key]);
+    const result=f.drain({keys,retrySafe:true,sessionsOnly:args.includes('--sessions-only')});drains.push(result);return{status:0,stdout:JSON.stringify(result),stderr:''};
+  }});
+  service.pass();assert.equal(lost,true);assert.equal(effects(f).some(e=>e.action==='closed'&&e.tab_id==='w:t'),false);assert.equal(f.read().tabs.length,0);
+  const original=f.read().actions;assert.deepEqual(original,[['agent','prompt','worker','/quit'],['tab','close','w:t']]);
+  assert.equal(closeoutOutcomeObservation(evaluations(f).at(-1),{entry,events:events(f)}),true);
+  service.pass();assert.equal(drains.at(-1).evaluated[0].reason,'original native outcome reconciled; fresh drain required');assert.deepEqual(f.read().actions,original);assert.ok(fs.existsSync(f.lane));
+  assert.equal(effects(f).filter(e=>e.action==='closed'&&e.tab_id==='w:t'&&e.reconciled).length,1);
+  assert.equal(safeCloseoutRetry(evaluations(f).at(-1),{entry,events:events(f)}),true);
+  service.pass();assert.equal(evaluations(f).at(-1).sessions_retired,true);assert.ok(fs.existsSync(f.lane));
+  service.pass();assert.equal(evaluations(f).at(-1).completed,true);assert.equal(fs.existsSync(f.lane),false);
+  assert.equal(f.read().actions.filter(a=>a[0]==='agent'&&a[1]==='prompt').length,1);assert.equal(f.read().actions.filter(a=>a[0]==='tab'&&a[1]==='close').length,1);
+  assert.equal(drains.length,4);
+});
+
+test('continuity tab-close readback protects present replaced held refused and unbound targets without another native effect',t=>{
+  for(const kind of ['present','replaced','moved','held','stop','native-read-refused','refused','unbound']){
+    const f=setup(t,{merged:true});f.report();const rows=f.append([{type:'item.closed',id:'ENG-1',as:'done',completed_run:'R-1'}]),entry={...rows[0].closeout_targets.find(t=>t.signal==='landed'),source:{seq:rows[0].seq,type:'item.closed'}};
+    f.append([{type:'closeout.effect',key:entry.key,identity:f.common,source:entry.source,effect:'original-close',outcome:{action:'shell-close-requested',tab_id:'w:t',panes:[{pane:'w:p',terminal:kind==='unbound'?'foreign':'term'}]}},
+      {type:'closeout.evaluated',key:entry.key,completed:false,revision:entry.source.seq,reason:kind==='refused'?'EPERM native refusal':'unresolved native exit/close intent retained; reconcile its original identity/outcome without replay'}]);
+    if(kind==='replaced'){f.state.panes[0].terminal_id='replacement';f.save();}
+    if(kind==='moved'){f.state.tabs=[];f.state.panes=[];f.state.agents[0].pane_id='elsewhere';f.save();}
+    if(kind==='held')hold(f);
+    if(kind==='stop'){fs.mkdirSync(path.join(f.repo,'.lane/supervisor'),{recursive:true});fs.writeFileSync(path.join(f.repo,'.lane/supervisor/STOP'),'stop');}
+    if(kind==='native-read-refused'){const base=f.options.command;f.options.command=(exe,args,opt)=>exe===f.job.herdr?{status:1,stdout:'',stderr:'EPERM native refusal'}:base(exe,args,opt);}
+    if(['refused','unbound'].includes(kind))assert.equal(closeoutOutcomeObservation(evaluations(f).at(-1),{entry,events:events(f)}),false,kind);
+    else{
+      assert.equal(closeoutOutcomeObservation(evaluations(f).at(-1),{entry,events:events(f)}),true,kind);
+      const result=f.drain({keys:[entry.key],retrySafe:true});assert.equal(result.evaluated[0].completed,false,kind);assert.equal(effects(f).some(e=>e.action==='closed'),false,kind);
+      assert.match(result.evaluated[0].reason,kind==='replaced'||kind==='moved'?/identity|moved/:kind==='held'?/HOLD/:kind==='stop'?/STOP/:kind==='native-read-refused'?/EPERM|native refusal/:/unresolved native/);
+    }
+    assert.deepEqual(f.read().actions,[],kind);assert.ok(fs.existsSync(f.lane),kind);
+  }
 });
 
 test('default landing and named requests, full-source opt-in, opt-out and canonical ownership', t => {

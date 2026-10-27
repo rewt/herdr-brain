@@ -35,6 +35,14 @@ const read = file => {
   try { return JSON.parse(fs.readFileSync(file, 'utf8')); }
   catch (e) { if (e.code === 'ENOENT') return null; throw e; }
 };
+function noticeBoundary(key,entry,boundary){
+  // Older journals omitted boundary. Only the original canonical key may
+  // supply it on recurrence or from the retained audit row.
+  boundary=entry.boundary??boundary;
+  if(typeof boundary!=='string'||key!==createHash('sha256').update(canonical([boundary,entry.reason,entry.scope])).digest('hex')||entry.id!==`line-record-${key}`)throw Error('notice boundary/source is inconsistent');
+  entry.boundary=boundary;
+  return entry;
+}
 function replayNoticeAudit(file,effects){
   const stat=fs.lstatSync(file,{throwIfNoEntry:false});if(!stat)return[];
   if(!stat.isFile()||fs.realpathSync(file)!==file)throw Error('notice audit is redirected');
@@ -42,8 +50,9 @@ function replayNoticeAudit(file,effects){
   const bytes=Buffer.alloc(stat.size-offset),fd=fs.openSync(file,fs.constants.O_RDONLY|fs.constants.O_NOFOLLOW);try{let n=0;while(n<bytes.length){const got=fs.readSync(fd,bytes,n,bytes.length-n,offset+n);if(!got)throw Error('notice audit changed during read');n+=got;}}finally{fs.closeSync(fd);}
   const text=bytes.toString('utf8');if(text&&!text.endsWith('\n'))throw Error('notice audit tail is incomplete; preserve it');
   const restored=new Set();for(const line of text.split('\n').filter(Boolean)){const row=JSON.parse(line),notice=row.notice_record;if(!notice)continue;const {key,entry}=notice;
-    if(!entry||key!==createHash('sha256').update(canonical([entry.boundary,entry.reason,entry.scope])).digest('hex')||entry.id!==`line-record-${key}`||!Number.isSafeInteger(entry.count)||entry.count<1||!Number.isFinite(Date.parse(entry.first_at)))throw Error('notice audit source/count is inconsistent');
-    effects.record_notices??={};const prior=effects.record_notices[key];if(prior&&prior.first_at!==entry.first_at)throw Error('notice audit first occurrence is inconsistent');
+    if(!entry||!Number.isSafeInteger(entry.count)||entry.count<1||!Number.isFinite(Date.parse(entry.first_at)))throw Error('notice audit source/count is inconsistent');
+    noticeBoundary(key,entry,row.boundary);
+    effects.record_notices??={};const prior=effects.record_notices[key];if(prior){noticeBoundary(key,prior,entry.boundary);if(prior.first_at!==entry.first_at)throw Error('notice audit first occurrence is inconsistent');}
     if(!prior||entry.count>prior.count){effects.record_notices[key]={...entry,state:prior?.state==='recorded'?'recorded':'recording',...(prior?.record?{record:prior.record}:{}),review_count_recorded:prior?.review_count_recorded??0};restored.add(key);}
   }
   return [...restored];
@@ -152,10 +161,12 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         noticesDirty=true;
       };
       const note = (boundary, reason, scope = {}, force = false) => {
+        scope=Object.fromEntries(Object.entries(scope).filter(([,value])=>value!==undefined));
         const scoped=scope.item??/^dispatch:([A-Z]+-\d+)/.exec(boundary)?.[1],review=scope.review===true||/^review|DISPATCH_REVIEW/i.test(boundary)||roleIs(snapshot?.state.items.get(scoped),'REV');
         const normalized=canonicalFailure(reason),key=createHash('sha256').update(canonical([boundary,normalized,scope])).digest('hex');
         effects.record_notices??={};
         const prior=effects.record_notices[key],entry=effects.record_notices[key]=prior??{first_at:now(),reason:normalized,scope,boundary,state:'recording',id:`line-record-${key}`,count:0};
+        noticeBoundary(key,entry,boundary);
         entry.count++;entry.last_at=now();if(review){entry.review=true;pendingErrors.set(key,errorRow(key,entry));}noticesDirty=true;
         // The compact fsynced delta precedes the record mutation. A lost full
         // checkpoint replays notice counts only, never native effect intents.

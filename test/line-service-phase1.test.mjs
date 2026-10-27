@@ -27,6 +27,7 @@ import {noticeLock} from '../supervisor/notice-lock.mjs';
 import {readReport} from '../lib/report.mjs';
 import {recoverInactiveReview,observeReviewProgress,recoverServiceReview} from '../line-service/review-recovery.mjs';
 import {claimedCommitTokens} from '../settle/review-range.mjs';
+import {canonical} from '../messages/schema.mjs';
 
 const hash=b=>createHash('sha256').update(b).digest('hex');
 function fixture(t,{reported=true}={}){
@@ -450,6 +451,45 @@ test('permanent health records the first review error immediately and one gap no
   assert.equal(messages.filter(e=>e.envelope.payload.service_notice.boundary==='review-gap').length,1);assert.equal(messages.filter(e=>e.envelope.payload.service_notice.boundary.startsWith('review:')).length,1);assert.equal(calls,5);
   const digest=morningDigest({events});assert.ok(digest.review_errors.occurrences>=5);assert.equal(digest.review_health.pass_id,health.at(-1).pass_id);
   assert.equal(fs.existsSync(path.join(f.org,'supervisor/inbox.log')),false);assert.ok(messages.every(e=>e.envelope.source.kind==='service'&&e.envelope.sessionUid===undefined));
+});
+
+test('continuity discovery producer and index failures preserve diagnostics while independent cleanup and READY admission proceed',t=>{
+  for(const kind of ['producer','index']){
+    const f=fixture(t),env=installedService(f),policy=JSON.parse(fs.readFileSync(path.join(f.cwd,'.lane.json')));policy.retirement={closeout_queue:true};fs.writeFileSync(path.join(f.cwd,'.lane.json'),JSON.stringify(policy));
+    const added=transact(f.org,events=>bindCloseoutSources({cwd:f.cwd,org:f.org,events,env:f.env,mutation:{add:[{type:'item.closed',id:'ENG-1',as:'done',completed_run:'R-1'}]}})).added;
+    publishCloseoutEvents({cwd:f.cwd,org:f.org,added,start:false,env:f.env});f.add([{type:'item.added',id:'ENG-2',role:'engineer',title:'Independent ready work'}]);
+    if(kind==='producer')fs.appendFileSync(f.file,'changed immutable bytes');
+    else{const rows=f.context().events;rows.find(e=>e.type==='line-service.phase0').canonical_head='f'.repeat(40);fs.writeFileSync(path.join(f.org,'events.jsonl'),rows.map(e=>JSON.stringify(e)+'\n').join(''));}
+    const calls=[],service=createLineService({repo:f.cwd,org:f.org,to:'brain-chat',env,maxStarts:1,capacity:()=>({cap:1,count:0}),command:(_exe,args)=>{
+      calls.push(args);return{status:0,stdout:args[0].endsWith('closeout.mjs')?JSON.stringify({evaluated:[{key:added[0].closeout_targets[0].key,completed:true}]}):args[0].endsWith('dispatch.mjs')?JSON.stringify({result:'detached',journal:path.join(f.org,'dispatch/new.json')}):'{}',stderr:''};
+    }});
+    service.pass();assert.ok(calls.some(a=>a[0].endsWith('closeout.mjs')),kind);assert.equal(calls.filter(a=>a[0].endsWith('dispatch.mjs')).length,1,kind);
+    const notices=f.context().events.filter(e=>e.type==='session.message.v1').map(e=>e.envelope.payload.service_notice),held=notices.find(e=>e.boundary.startsWith('review-source:'));
+    assert.ok(held,kind);assert.equal(held.scope.review,true);assert.equal('head' in held.scope,false);
+    if(kind==='producer'){assert.match(held.reason,/immutable producer report/);assert.equal(held.scope.item,'ENG-1');assert.equal(held.scope.run,'R-1');}
+    else{assert.match(held.reason,/bad object|revision|unknown|invalid|not a valid/i);assert.deepEqual(held.scope,{review:true});}
+  }
+});
+
+test('continuity base notices retain identity and recorded state across recurrence audit interruption and batched counter replay',t=>{
+  const f=fixture(t),env=installedService(f);f.add([{type:'item.closed',id:'ENG-1',as:'done'}]);
+  const boundary=`review:ENG-1:${f.heads[1]}`,reason='selected helper native refusal; preserve original attempt',scope={},key=hash(canonical([boundary,reason,scope])),id=`line-record-${key}`,first_at='2026-10-26T00:00:00.000Z';
+  const file=path.join(f.directory,'effects.json'),audit=path.join(f.directory,'passes.jsonl'),prior={first_at,reason,scope,state:'recorded',id,count:4,record:{id,state:'record-only'}};
+  fs.writeFileSync(file,JSON.stringify({identity:f.identity,org:f.org,actions:{},record_notices:{[key]:prior},notice_audit_offset:0}));
+  let calls=0,deliveries=0;const service=createLineService({repo:f.cwd,org:f.org,to:'brain-chat',env,capacity:()=>({cap:0,count:0}),recordNotice:()=>{deliveries++;throw Error('recorded notice must not redeliver');},command:(_exe,args)=>{calls++;assert.equal(args[1],'queue-review');return{status:1,stdout:'',stderr:reason};}});
+  // Simulate interruption after the compact fsync but before any journal or
+  // counter checkpoint. This executes the real pass/log path, not a made-up delta.
+  const write=fs.writeFileSync;let interrupted=false;
+  fs.writeFileSync=function(target,...args){if(String(target).startsWith(file+'.')&&fs.existsSync(audit)&&fs.readFileSync(audit,'utf8').includes('"notice_record"')){interrupted=true;throw Error('injected journal checkpoint interruption');}return write.call(this,target,...args);};
+  try{assert.throws(()=>service.pass(),/injected journal checkpoint interruption/);}finally{fs.writeFileSync=write;}
+  assert.equal(interrupted,true);const delta=fs.readFileSync(audit,'utf8').trim().split('\n').map(JSON.parse).find(e=>e.notice_record)?.notice_record;
+  assert.equal(delta.entry.boundary,boundary);assert.equal(delta.entry.id,id);assert.equal(delta.entry.count,5);assert.equal(delta.entry.first_at,first_at);assert.equal(delta.entry.state,'recorded');
+  service.pass();const saved=JSON.parse(fs.readFileSync(file)),entry=saved.record_notices[key];
+  assert.equal(entry.boundary,boundary);assert.equal(entry.id,id);assert.equal(entry.first_at,first_at);assert.equal(entry.state,'recorded');assert.deepEqual(entry.record,prior.record);assert.equal(entry.count,6);assert.equal(entry.review_count_recorded,6);assert.equal(deliveries,0);
+  const rows=fs.readFileSync(audit,'utf8').trim().split('\n').map(JSON.parse),last=rows.findLast(r=>r.action==='pass-complete');assert.equal(last.timing.notice_audit_replayed,1);assert.equal(last.timing.review_error_batches,1);
+  assert.equal(calls,1,'replay must retain the prior held effect rather than requeue it');
+  const counts=f.context().events.filter(e=>e.type==='line-service.review-error'&&e.key===key);assert.equal(Math.max(...counts.map(e=>e.count)),6);assert.equal(new Set(counts.map(e=>e.id)).size,counts.length);
+  service.pass();assert.equal(calls,1);assert.equal(JSON.parse(fs.readFileSync(file)).record_notices[key].count,7);assert.equal(deliveries,0);
 });
 
 test('permanent review route falls back to the existing review route without replacing explicit task policy',()=>{

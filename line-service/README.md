@@ -184,6 +184,27 @@ A retained dispatch receives read-only original-request/record outcome readback;
 its original error, receipt and ownership remain. A missing run or journal never
 proves zero native work and never authorizes replacement. Native ambiguity stays
 with the owning supervisor; independent work continues.
+
+An explicit owner/delegate NOT STARTED disposition can resolve one original
+elapsed-stop request through the existing dispatcher. The owning canonical
+supervisor records its scoped decision naming the exact item, original journal,
+stable ID and full changed-source commit, then uses:
+
+```sh
+HERDR_BRAIN_ROOT=/SOURCE node /SOURCE/dispatch/dispatch.mjs --repo /OWN/PROJECT --org /OWN/RECORD --resolve-not-started /OWN/RECORD/dispatch/ORIGINAL.json --disposition /OWN/RECORD/DISPOSITION.json --decision-seq N --id STABLE --changed-source FULL_SHA --role supervisor
+```
+
+The immutable disposition data names `original_request`, `conclusion` beginning
+`NOT STARTED`, and the explicit delegate `disposition`. Data alone grants no
+authority. The control requires actual native caller binding and the matching
+scoped decision, unchanged open/no-run/no-worker request and raw elapsed-stop
+effect, fresh native absence, committed changed source, ready/unreserved item,
+and an unchanged clean registered lane. Existing request serialization recovers
+only positive ESRCH; live/denied/unknown owners refuse. STOP/HOLD remain fences.
+It archives original bytes and records one disposition without rewriting the
+original journal/effect or launching anything. Only that exact recorded input
+becomes fresh for the line; the old request can never be retried. Native or
+record progress invalidates the disposition instead of authorizing a duplicate.
 Three occurrences of the same normalized failure create one envelope; every raw
 occurrence/count is retained. A pass over ten minutes creates one record alert.
 Only an actual pending explicitly reserved human question naming its decider can

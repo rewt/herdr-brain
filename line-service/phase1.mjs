@@ -12,6 +12,7 @@ import {readOwnedRun,requireController,assertOwner} from '../lib/run-owner.mjs';
 import {protectRecordMutation} from '../lib/record-guard.mjs';
 import {serviceRecordBinding} from './record-inbox.mjs';
 import {reviewResolution} from './review-resolutions.mjs';
+import {resolvedDispatchInput} from '../dispatch/not-started.mjs';
 
 const hash=b=>createHash('sha256').update(b).digest('hex');
 const git=(repo,args)=>execFileSync('git',['--no-optional-locks','-C',repo,...args],{encoding:'utf8',timeout:10000,stdio:['ignore','pipe','pipe'],maxBuffer:32*1024*1024}).trim();
@@ -78,7 +79,7 @@ export function blockedChangeKey({events,state,item,run,brief}) {
   return hash(JSON.stringify([run.report.sha256,inputs.map(e=>e.seq),brief??null]));
 }
 
-export function dispatchInput({events,state,item}) {
+export function dispatchInput({events,state,item,org,identity}) {
   if (!item || item.closed || item.kind === 'goal') return null;
   const run = state.runs.get(item.runs.at(-1));
   let brief;
@@ -90,7 +91,11 @@ export function dispatchInput({events,state,item}) {
     const items=new Map(state.items);items.set(item.id,{...item,outcome:null});
     status=itemStatus({...state,items},item.id);
   }
-  return status==='ready'?`${run?.id??item.created.seq}:${input}`:null;
+  if(status!=='ready')return null;
+  const value=`${run?.id??item.created.seq}:${input}`,resolution=events.find(e=>e.type==='dispatch.not-started'&&e.item===item.id&&e.input===value);
+  if(!resolution)return value;
+  if(!org||!identity||resolution.org!==org||resolution.project!==identity)throw Error('original dispatch resolution needs actual owning record/project context');
+  return resolvedDispatchInput({events,org,common:identity,item:item.id,input:value});
 }
 
 export function reviewResultEvents({state,events,run,report,sha256,body=report.body??'',usedIds=[]}) {

@@ -16,7 +16,7 @@ export function preflightContinuation({journal,repo,org,common,root=implementati
   let terminal=null;try{terminal=JSON.parse(plain(journal+'.driver/results.jsonl').trim().split('\n').at(-1));}catch(e){if(e.code!=='ENOENT')throw e;}
   const terminalZero=terminal?.journal===journal&&terminal.stage===job.stage&&!terminal.run&&Number.isInteger(terminal.exit_code)&&terminal.exit_code!==0&&terminal.error===job.error&&terminal.native_launch_attempted===false;
   if(job.native_launch_attempted!==false&&!terminalZero)return null;
-  const files=['dispatch/dispatch.mjs','dispatch/preflight.mjs','line-service/review-queue.mjs','dispatch/session-cap.mjs','dispatch/unlanded-cap.mjs'];
+  const files=['dispatch/dispatch.mjs','dispatch/preflight.mjs','dispatch/foreground-command.mjs','dispatch/outcome.mjs','dispatch/not-started.mjs','dispatch/request-lock.mjs','line-service/review-queue.mjs','dispatch/session-cap.mjs','dispatch/unlanded-cap.mjs'];
   const capability=hash(JSON.stringify(files.map(file=>[file,hash(fs.readFileSync(path.join(root,file)))])));
   if(job.preflightContinuations?.some(p=>p.capability===capability))return null;
   return{journal,token:job.token,job,request_sha256:hash(bytes),terminal_sha256:terminal?hash(JSON.stringify(terminal)):null,capability,native_launch_attempted:false};

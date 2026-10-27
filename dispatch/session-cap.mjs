@@ -10,6 +10,7 @@ import { effectiveWorkerIdentity } from '../lib/worker-identity.mjs';
 import { nativeProcess } from './session-bind.mjs';
 import { loadTimeout, ADMISSION_WAIT_MS } from '../lib/deadline.mjs';
 import { matchesDispatchStart } from './unlanded-cap.mjs';
+import {resolvedNotStarted} from './not-started.mjs';
 
 export const DEFAULT_SESSION_CAP = 7;
 export const DEFAULT_REVIEW_SESSION_CAP = 3;
@@ -230,8 +231,9 @@ export function checkSessionCap({ config, org, kind='all', ...options }) {
   try {
     // Journal first, then record: never miss both sides of a start transition.
     const directory=path.join(org,'dispatch');
-    const journals=readJSON(directory, name => name.endsWith('.json') && !name.endsWith('.routes.json'), true);
+    let journals=readJSON(directory, name => name.endsWith('.json') && !name.endsWith('.routes.json'), true);
     const events=loadEvents(org).events;
+    journals=journals.filter(j=>{try{return !resolvedNotStarted({events,org,common:options.common,journal:j.journal});}catch{return true;}});
     sessions = countSessions({ ...options, events, state: fold(events), journals,
       reviewers: readJSON(path.join(org, 'retirement/occupants')) });
   } catch (e) { throw Error(`session count unavailable: ${e.message}`); }

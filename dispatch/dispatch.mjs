@@ -28,6 +28,8 @@ import { isQueueReview, validateQueuedReview, reviewQueueBrief, reviewQueueRoute
 import { dispatchInput } from '../line-service/phase1.mjs';
 import {preflightContinuation} from './preflight.mjs';
 import {foregroundCommand} from './foreground-command.mjs';
+import {lockRequest} from './request-lock.mjs';
+import {resolvedNotStarted} from './not-started.mjs';
 
 const local = (file) => fileURLToPath(new URL(file, import.meta.url));
 const { values: opt, positionals } = parseArgs({ usage: "Usage: node dispatch/dispatch.mjs ITEM --lane TOPIC --route ROUTE --brief FILE [OPTIONS] | --retry R-n|JOURNAL | --status R-n|JOURNAL\nAdmission counts running native workers/reviewers and durable uncertain starts under dispatch.max_sessions. Unlanded lifecycle history is diagnostic only. --from-run retains same-item/current-run guards; --unblocks records a genuine landing dependency and never bypasses native capacity.", allowPositionals: true, options: {
@@ -42,6 +44,7 @@ const { values: opt, positionals } = parseArgs({ usage: "Usage: node dispatch/di
   'from-run': { type: 'string' }, unblocks: { type: 'string' },
   detach:{type:'boolean'},
   'continue-preflight':{type:'boolean'},
+  'resolve-not-started':{type:'string'},disposition:{type:'string'},'decision-seq':{type:'string'},id:{type:'string'},'changed-source':{type:'string'},role:{type:'string'},
   'org-cli': { type: 'string' }, 'lane-cli': { type: 'string' }, 'watch-cli': { type: 'string' },
 }});
 const cli = (name, fallback) => opt[`${name}-cli`] ? [opt[`${name}-cli`]] : [process.execPath, local(fallback)];
@@ -261,34 +264,15 @@ function capture(name) {
     terminalId: agent.terminal_id ?? null, agentSessionId: agent.agent_session?.value ?? null, cwd: job.workspace };
 }
 function lockJob() {
-  lock = `${journal}.lock`;
-  // Publish a unique contender before inspecting any owner. Every later contender
-  // sees this live PID and refuses; stale cleanup can never delete a new owner's
-  // contender. This also serializes takeover of the original single-file lock.
-  const directory = `${lock}s`;
-  fs.mkdirSync(directory, { recursive: true });
-  contender = path.join(directory, `${process.pid}-${randomUUID()}`);
-  fs.writeFileSync(contender, '', { flag: 'wx', mode: 0o600 });
-  for (const entry of fs.readdirSync(directory)) {
-    const file = path.join(directory, entry);
-    if (file === contender) continue;
-    const pid = Number(entry.split('-')[0]);
-    if (!Number.isInteger(pid) || pid < 1) throw new Error('invalid dispatch lock owner; inspect request locks');
-    try { process.kill(pid, 0); throw new Error(`dispatch is already running (pid ${pid})`); }
-    catch (error) { if (error.code !== 'ESRCH') throw error; }
-    try { fs.unlinkSync(file); } catch (error) { if (error.code !== 'ENOENT') throw error; }
-  }
-  try {
-    const pid = Number(fs.readFileSync(lock, 'utf8'));
-    if (!Number.isInteger(pid) || pid < 1) throw new Error('invalid dispatch lock owner; inspect request lock');
-    try { process.kill(pid, 0); throw new Error(`dispatch is already running (pid ${pid})`); }
-    catch (error) { if (error.code !== 'ESRCH') throw error; }
-    fs.unlinkSync(lock);
-  } catch (error) { if (error.code !== 'ENOENT') throw error; }
-  fs.writeFileSync(lock, String(process.pid), { flag: 'wx', mode: 0o600 });
-  ownsLock = true;
+  const held=lockRequest(journal);lock=held.lock;contender=held.contender;ownsLock=true;
 }
 async function main() {
+  if(opt['resolve-not-started']){
+    if(positionals.length||opt.retry||opt.detach||opt.status)throw Error('not-started resolution never dispatches or retries');
+    const {resolveNotStarted}=await import('./not-started.mjs');
+    const result=resolveNotStarted({repo:opt.repo,org:opt.org??findOrgDir({cwd:opt.repo}),journal:opt['resolve-not-started'],disposition:opt.disposition,decisionSeq:Number(opt['decision-seq']),id:opt.id,changedSource:opt['changed-source'],role:opt.role});
+    process.stdout.write(JSON.stringify(result)+'\n');return;
+  }
   if (!positionals.length && !opt.retry && !opt.status) {
     process.stdout.write(`dispatch ITEM --lane TOPIC --route ROUTE --brief FILE --report FILE [--org DIR] [--to AGENT] [--awaited [--awaited-step TEXT]]\nRecord is discovered from the canonical project. Routes carry a suggested preset; ask the operator before adopting it.\nStart the native harness through Herdr; ordinary report notices default to the recorded worker. Workers self-land finished source under the current operator waiver, start one async post-code review and report focused checks once. Only the canonical supervisor starts housekeeping.\n`);
     return;
@@ -310,6 +294,7 @@ async function main() {
     lockJob();
     const saved = JSON.parse(fs.readFileSync(journal, 'utf8'));
     if (saved.org !== fs.realpathSync(opt.org)) throw new Error('retry belongs to a different record');
+    if(resolvedNotStarted({events:loadEvents(saved.org).events,org:saved.org,common:saved.common,journal}))throw Error('original request archived NOT STARTED; never retry it; only the existing line may use its changed input');
     if(opt['continue-preflight']){
       preflight=preflightContinuation({journal,repo:saved.repo,org:saved.org,common:saved.common,root:bundleRelease().root,events:loadEvents(saved.org).events});
       if(!preflight)throw Error('original preflight has no positive zero-native continuation; retain unknown/native/foreign/spent request');
@@ -434,7 +419,7 @@ async function main() {
         if(item.runs.at(-1)!==job.run)throw Error('detached run superseded before native effect');
         state.items.set(item.id,{...item,runs:item.runs.filter(id=>id!==job.run)});state.runs.delete(job.run);
       }
-      if(dispatchInput({events,state,item:state.items.get(job.item)})!==job.lineInput)throw Error('detached readiness or genuine changed input differs from its frozen request');
+      if(dispatchInput({events,state,item:state.items.get(job.item),org:job.org,identity:job.common})!==job.lineInput)throw Error('detached readiness or genuine changed input differs from its frozen request');
     }
     if (job.reviewQueue) {
       const events = loadEvents(job.org).events, state = fold(events), item = state.items.get(job.item);
@@ -452,7 +437,7 @@ async function main() {
     if(!preflight&&(opt.retry||job.stage!=='open'||job.detached))throw Error('--detach is only for one new frozen request; never resubmit a saved launch');
     const release=acquireSessionCapLock(common,{check:checkStop});
     try{
-      const events=loadEvents(job.org).events,state=fold(events),input=dispatchInput({events,state,item:state.items.get(job.item)});
+      const events=loadEvents(job.org).events,state=fold(events),input=dispatchInput({events,state,item:state.items.get(job.item),org:job.org,identity:job.common});
       if(!input||job.lineInput&&job.lineInput!==input)throw Error('detached start needs unchanged ready work or genuinely changed blocked input');
       if(preflight){const fresh=preflightContinuation({journal,repo:job.repo,org:job.org,common,root:bundleRelease().root,events});
         if(!fresh||fresh.request_sha256!==preflight.request_sha256||fresh.capability!==preflight.capability)throw Error('original preflight evidence changed before continuation');

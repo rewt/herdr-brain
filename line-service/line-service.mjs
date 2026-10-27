@@ -299,7 +299,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       for (const item of sortItems([...snapshot.state.items.values()].filter(item => !item.closed && item.kind !== 'goal')).sort((a, b) => Number(isQueueReview(b)) - Number(isQueueReview(a)))) {
         if(expired()||starts>=(maxStarts??config.dispatch?.max_sessions??7))break;
         snapshot=current();
-        const input=dispatchInput({...snapshot,item:snapshot.state.items.get(item.id)});
+        const input=dispatchInput({...snapshot,item:snapshot.state.items.get(item.id),org,identity:project.identity});
         if(!input)continue;
         if(roleIs(item,'REV')&&(!cutoff||item.created.seq<=cutoff.seq)){timings.historical_review_skipped++;continue;}
         if (roleIs(item, 'REV') && !isQueueReview(item)) { note(`dispatch:${item.id}`, 'T2 legacy/manual review queue binding UNKNOWN; retain existing owner/attempt'); continue; }
@@ -323,7 +323,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
           const occupancy = count(); log({ action: 'capacity', ...occupancy });
           const dispatched = effect(continuation?`dispatch-preflight:${continuation.token}:${continuation.capability}`:key, () => {
             const fresh = observe(), current = fresh.state.items.get(item.id);
-            if (!current || current.closed || dispatchInput({...fresh,item:current}) !== input || reserved(current) || current.meta.hold || current.meta.held || (!continuation&&(reviewTarget ? reviewQueueRoute(config) : routeFor(current, config)) !== route)) throw Error('dispatch readiness or route changed');
+            if (!current || current.closed || dispatchInput({...fresh,item:current,org,identity:project.identity}) !== input || reserved(current) || current.meta.hold || current.meta.held || (!continuation&&(reviewTarget ? reviewQueueRoute(config) : routeFor(current, config)) !== route)) throw Error('dispatch readiness or route changed');
             if(continuation){
               const checked=preflightContinuation({journal:continuation.journal,repo,org,common:project.identity,root:fs.realpathSync(sourceRoot),events:fresh.events});
               if(!checked||checked.request_sha256!==continuation.request_sha256||checked.capability!==continuation.capability)throw Error('original preflight progress/source changed before continuation');

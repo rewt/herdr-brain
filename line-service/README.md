@@ -175,6 +175,14 @@ A closer verifies its committed import graph and main branch, so unrelated main
 landings no longer invalidate it. A changed closer payload still hands off.
 
 Routine holds and status use the existing record inbox, never session prompts.
+Service and detached-dispatch foreground commands use the existing measured
+no-output AND confirmed-no-activity policy, with a fresh owned birth check before
+signaling only their own child. There is no 120-second elapsed execution kill or
+ten-minute detached-controller stop. Unknown activity never authorizes a signal.
+A retained dispatch receives read-only original-request/record outcome readback;
+its original error, receipt and ownership remain. A missing run or journal never
+proves zero native work and never authorizes replacement. Native ambiguity stays
+with the owning supervisor; independent work continues.
 Three occurrences of the same normalized failure create one envelope; every raw
 occurrence/count is retained. A pass over ten minutes creates one record alert.
 Only an actual pending explicitly reserved human question naming its decider can

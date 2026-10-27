@@ -16,7 +16,7 @@ import { reviewAttempt } from './review.mjs';
 import { discoverChanges } from './phase1.mjs';
 
 const root = fs.realpathSync(fileURLToPath(new URL('../', import.meta.url)));
-const files = ['line-service/review-queue.mjs', 'line-service/review.mjs','line-service/review-recovery.mjs','line-service/review-resolutions.mjs', 'line-service/phase1.mjs', 'line-service/cutoff.mjs','settle/review-range.mjs', 'bin/org.mjs', 'dispatch/dispatch.mjs','dispatch/preflight.mjs', 'dispatch/session-cap.mjs', 'dispatch/unlanded-cap.mjs','lanes/lane.mjs'];
+const files = ['line-service/review-queue.mjs', 'line-service/review.mjs','line-service/review-recovery.mjs','line-service/review-resolutions.mjs', 'line-service/phase1.mjs', 'line-service/cutoff.mjs','settle/review-range.mjs', 'bin/org.mjs', 'dispatch/dispatch.mjs','dispatch/preflight.mjs','dispatch/foreground-command.mjs','dispatch/outcome.mjs', 'dispatch/session-cap.mjs', 'dispatch/unlanded-cap.mjs','lanes/lane.mjs'];
 const hashes = files.map(file => createHash('sha256').update(fs.readFileSync(path.join(root, file))).digest('hex'));
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const git = (repo, args) => execFileSync('git', ['--no-optional-locks', '-C', repo, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();

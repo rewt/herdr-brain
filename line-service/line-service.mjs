@@ -4,6 +4,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { spawnSync, execFileSync } from 'node:child_process';
+import {foregroundCommand} from '../dispatch/foreground-command.mjs';
+import {originalDispatchOutcome} from '../dispatch/outcome.mjs';
 import { fileURLToPath } from 'node:url';
 import { performance } from 'node:perf_hooks';
 import { gitProject } from '../lib/project.mjs';
@@ -44,7 +46,7 @@ export function routeFor(item, config) {
   return route;
 }
 
-export function createLineService({ repo, org, to, herdr = 'herdr', env = process.env, command = spawnSync,
+export function createLineService({ repo, org, to, herdr = 'herdr', env = process.env, command = foregroundCommand,
   recordNotice = recordLineNotice, wakeDecision = enqueueNamedDecision, capacity, identify = gitProject, now = () => new Date().toISOString(),
   childTimeoutMs=120000,maxStarts,maxStepsPerStage=8,passBudgetMs=480000,alertAfter=3 }) {
   const project = identify(repo);
@@ -69,9 +71,9 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
   const invoke = (exe, args, { receipt = false } = {}) => {
     const started = performance.now();
     let r;
-    try { r = command(exe, args, { cwd: repo, env: childEnv, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024,timeout:childTimeoutMs,killSignal:'SIGTERM' }); }
+    try { r = command(exe, args, { cwd: repo, env: childEnv, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024,timeout:0 }); }
     finally { if (timings) timings.effect_command_ms += performance.now() - started; }
-    if (r.error || r.status !== 0) throw Object.assign(Error((r.stderr || r.stdout || r.error?.message || `exit ${r.status}`).trim()), { code:r.error?.code,receipt: { status: r.status, signal: r.signal, stdout: r.stdout, stderr: r.stderr,error:r.error?.code } });
+    if (r.error || r.status !== 0) throw Object.assign(Error((r.stderr || r.stdout || r.error?.message || `exit ${r.status}`).trim()), { code:r.error?.code,receipt: { status: r.status, signal: r.signal, stdout: r.stdout, stderr: r.stderr,error:r.error?.code,...(r.activity?{activity:r.activity,signal_sent:r.signal_sent}:{}) } });
     return receipt ? { status: r.status, signal: r.signal ?? null, stdout: r.stdout ?? '', stderr: r.stderr ?? '' } : r.stdout?.trim() ?? '';
   };
   const native = args => JSON.parse(invoke(herdr, args)).result;
@@ -284,6 +286,14 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       }
       // Failed cleanup/review never prevents considering independent ready work.
       snapshot = current();
+      for(const [key,entry]of Object.entries(effects.actions))if(key.startsWith('dispatch:')&&entry.state!=='complete'){
+        const item=key.split(':')[1];
+        try{
+          const outcome=originalDispatchOutcome({repo,org,common:project.identity,item,brief:path.join(directory,`${digest(key)}.ask.md`),journal:entry.original_outcome?.journal??entry.result?.journal,events:snapshot.events});
+          if(JSON.stringify(outcome)!==JSON.stringify(entry.original_outcome)){entry.original_outcome=outcome;save();log({action:'dispatch-outcome-readback',key,...outcome});}
+          if(outcome.status==='unknown')note(key,outcome.reason,{item});
+        }catch(e){note(key,e.message,{item});}
+      }
       const { config } = loadDiscoveredRoutes({ cwd: repo, env: childEnv });
       let starts=0;
       for (const item of sortItems([...snapshot.state.items.values()].filter(item => !item.closed && item.kind !== 'goal')).sort((a, b) => Number(isQueueReview(b)) - Number(isQueueReview(a)))) {
@@ -301,6 +311,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
             const prior=effects.actions[key];let result=prior.result;
             if(typeof result==='string')try{result=JSON.parse(result);}catch{}
             if(!result?.journal&&prior.receipt?.stdout)try{result=JSON.parse(prior.receipt.stdout);}catch{}
+            if(!result?.journal&&prior.original_outcome?.journal)result={journal:prior.original_outcome.journal};
             if(result?.journal)continuation=preflightContinuation({journal:result.journal,repo,org,common:project.identity,root:fs.realpathSync(sourceRoot),events:snapshot.events});
             if(!continuation){log({ action: 'dispatch-retained', key, state: prior.state });continue;}
           }

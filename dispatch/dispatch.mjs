@@ -27,6 +27,7 @@ import { quote } from '../lib/shell.mjs';
 import { isQueueReview, validateQueuedReview, reviewQueueBrief, reviewQueueRoute } from '../line-service/review-queue.mjs';
 import { dispatchInput } from '../line-service/phase1.mjs';
 import {preflightContinuation} from './preflight.mjs';
+import {foregroundCommand} from './foreground-command.mjs';
 
 const local = (file) => fileURLToPath(new URL(file, import.meta.url));
 const { values: opt, positionals } = parseArgs({ usage: "Usage: node dispatch/dispatch.mjs ITEM --lane TOPIC --route ROUTE --brief FILE [OPTIONS] | --retry R-n|JOURNAL | --status R-n|JOURNAL\nAdmission counts running native workers/reviewers and durable uncertain starts under dispatch.max_sessions. Unlanded lifecycle history is diagnostic only. --from-run retains same-item/current-run guards; --unblocks records a genuine landing dependency and never bypasses native capacity.", allowPositionals: true, options: {
@@ -72,10 +73,11 @@ function claimAdmission() {
 function command(argv, args, cwd = job?.repo ?? path.resolve(opt.repo)) {
   const remaining = Math.min(observationDeadline??Infinity,controllerDeadline)-Date.now();
   if (remaining !== undefined && remaining <= 0) throw Error('session observation deadline expired');
-  const result = spawnSync(argv[0], [...argv.slice(1), ...args], {
+  const phase1=opt.detach||job?.detached,execute=phase1?foregroundCommand:spawnSync;
+  const result = execute(argv[0], [...argv.slice(1), ...args], {
     cwd, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024,
     env: { ...process.env, ORG_DIR: job?.org ?? opt.org },
-    timeout:Math.max(1,Math.min(120000,remaining??120000)),killSignal:'SIGTERM',
+    timeout:phase1?0:Math.max(1,Math.min(120000,remaining??120000)),killSignal:'SIGTERM',
   });
   if (result.error || result.status !== 0) {
     const error = new Error(`${argv[0]} ${args[0]}: ${(result.stderr || result.stdout || result.error?.message || `exit ${result.status}`).trim()}`);
@@ -335,7 +337,6 @@ async function main() {
       return;
     }
     job = saved;
-    if(job.detached)controllerDeadline=Date.now()+600000;
     if (opt['from-run'] !== undefined) {
       if (job.fromRun && job.fromRun !== opt['from-run']) throw new Error('--from-run cannot replace the saved origin');
       checkOrigin(opt['from-run'], json(record(['show', job.item, '--json'])), !job.run && job.stage !== 'starting');
@@ -469,7 +470,7 @@ async function main() {
         ...(opt['org-cli']?['--org-cli',opt['org-cli']]:[]),...(opt['lane-cli']?['--lane-cli',opt['lane-cli']]:[]),...(opt['watch-cli']?['--watch-cli',opt['watch-cli']]:[])];
       const child=spawn(process.execPath,args,{cwd:job.repo,env:process.env,detached:true,stdio:['ignore',output,output]});child.on('error',e=>fs.appendFileSync(`${journal}.driver.log`,`${e.message}\n`));child.unref();
       fs.mkdirSync(`${journal}.driver`,{recursive:true});
-      const launch={pid:child.pid??null,at:new Date().toISOString(),journal,command_limit_ms:120000,controller_budget_ms:600000,...(preflight?{continuation:preflight.capability}:{})};
+      const launch={pid:child.pid??null,at:new Date().toISOString(),journal,command_limit_ms:null,controller_budget_ms:null,stop_policy:'measured no-output AND confirmed no-activity; unknown retained',...(preflight?{continuation:preflight.capability}:{})};
       if(preflight)fs.appendFileSync(`${journal}.driver/continuations.jsonl`,JSON.stringify(launch)+'\n',{mode:0o600});
       else fs.writeFileSync(`${journal}.driver/launch.json`,JSON.stringify(launch)+'\n',{flag:'wx',mode:0o600});
       process.stdout.write(JSON.stringify({result:'detached',journal,run:null,item:job.item,pid:child.pid??null})+'\n');return;

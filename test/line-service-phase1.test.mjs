@@ -306,7 +306,7 @@ test('phase1 valid report ingests with no live pane and retries a transient safe
   const f=fixture(t,{reported:false});fs.mkdirSync(path.join(f.org,'runs/R-1'),{recursive:true});fs.writeFileSync(path.join(f.org,'runs/R-1/report.md'),f.report);
   f.add([{type:'item.added',id:'ENG-2',title:'Ready',role:'engineer'},{type:'item.added',id:'ENG-3',title:'Also ready',role:'engineer'}]);
   const calls=[];let failed=false;
-  const command=(_exe,args,options)=>{assert.ok(options.timeout>0);calls.push(args);
+  const command=(_exe,args,options)=>{assert.equal(options.timeout,0);calls.push(args);
     if(args[1]==='ingest'&&!failed){failed=true;return {error:Object.assign(Error('transient'),{code:'ETIMEDOUT'}),status:null,stdout:'',stderr:''};}
     if(args[1]==='ingest'){f.add([{type:'report.ingested',run:'R-1',item:'ENG-1',file:'reports/R-1.md',sha256:hash(f.report),report:{outcome:'done',artifacts:f.heads.map(h=>`Commit: ${h}`),extra:{},blockers:[]}}]);return {status:0,stdout:'ingested',stderr:''};}
     return {status:0,stdout:args[0].endsWith('dispatch.mjs')?JSON.stringify({result:'detached',journal:path.join(f.org,'dispatch',`new-${calls.length}.json`)}):'{}',stderr:''};};
@@ -315,9 +315,9 @@ test('phase1 valid report ingests with no live pane and retries a transient safe
   service().pass();assert.equal(f.context().run.report.outcome,'done');assert.equal(calls.some(a=>a[0]==='agent'),false);
 });
 
-test('phase1 hung owned child is bounded and does not freeze independent work or replay a native launch',t=>{
+test('phase1 measured inactive owned child failure does not freeze independent work or replay a native launch',t=>{
   const f=fixture(t,{reported:false});fs.mkdirSync(path.join(f.org,'runs/R-1'),{recursive:true});fs.writeFileSync(path.join(f.org,'runs/R-1/report.md'),f.report);f.add([{type:'item.added',id:'ENG-2',title:'Ready',role:'engineer'}]);
-  const calls=[];const command=(_exe,args,options)=>{calls.push(args);if(args[1]==='ingest')return spawnSync(process.execPath,['-e','setInterval(()=>{},1000)'],{encoding:'utf8',timeout:Math.min(options.timeout,30)});return {status:0,stdout:'{}',stderr:''};};
+  const calls=[];const command=(_exe,args,options)=>{calls.push(args);assert.equal(options.timeout,0);if(args[1]==='ingest')return {status:null,signal:'SIGTERM',stdout:'',stderr:'confirmed inactive owned child',signal_sent:true,activity:{observations:[{kind:'frozen',silence_s:2,inactivity_s:2}]}};return {status:0,stdout:'{}',stderr:''};};
   createLineService({repo:f.cwd,org:f.org,to:'brain-chat',env:f.env,command,capacity:()=>({cap:1,count:0}),recordNotice:d=>({id:d.id}),childTimeoutMs:30,maxStarts:1}).pass();
   assert.ok(calls.some(a=>a[0].endsWith('dispatch.mjs')));assert.equal(fs.existsSync(path.join(f.directory,'pass.lock')),false);
 });

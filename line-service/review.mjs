@@ -133,8 +133,9 @@ function changeReviewAttempt(item,{org,identity,events,state,repo,effects,target
     if(matches(value,hint))return `existing same-change ${dir} attempt/UNKNOWN`;
   }
   for(const entry of entries(path.join(org,'line-service')))if(entry.isDirectory()){
-    const file=path.join(org,'line-service',entry.name,'effects.json');let saved;try{saved=read(file);}catch(e){if(entry.name===sha(JSON.stringify(identity)).slice(0,20))throw e;continue;}
-    if(saved&&!saved.actions&&entry.name===sha(JSON.stringify(identity)).slice(0,20))throw Error('current service review journal is UNKNOWN');
+    // An unreadable or unrecognized journal cannot prove this change is absent.
+    const file=path.join(org,'line-service',entry.name,'effects.json'),current=entry.name===sha(JSON.stringify(identity)).slice(0,20);let saved;try{saved=read(file);}catch(e){if(current)throw e;throw Error(`unrecognized service review inventory; absence UNKNOWN: ${file}`);}
+    if(saved&&(!saved.actions||typeof saved.actions!=='object'||Array.isArray(saved.actions)))throw Error(current?'current service review journal is UNKNOWN':`unrecognized service review inventory; absence UNKNOWN: ${file}`);
     if(pending(saved?.actions,file))return 'existing same-change service intent/result';
   }
   for(const id of item.runs){

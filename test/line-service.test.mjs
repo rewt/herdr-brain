@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { createLineService, sourceRoot, reviewAttempt } from '../line-service/line-service.mjs';
+import { createLineService, sourceRoot, reviewAttempt, serviceDirectory } from '../line-service/line-service.mjs';
 import { launchPlist } from '../line-service/launchd.mjs';
 import { noticeLock } from '../supervisor/notice-lock.mjs';
 import { gitProject } from '../lib/project.mjs';
@@ -14,10 +14,10 @@ import { captureProductCheckout } from '../lib/product-files.mjs';
 import { tierFiles } from './helpers/tier.mjs';
 
 function fixture(t) {
-  const repo = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'line-service-'))), org = path.join(repo, '.org');
-  t.after(() => fs.rmSync(repo, { recursive: true, force: true }));
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'line-service-'))), repo = path.join(root, 'project'), org = path.join(repo, '.org');
+  t.after(() => fs.rmSync(root, { recursive: true, force: true })); fs.mkdirSync(repo); fs.writeFileSync(path.join(root, '.identity-root'), 'fixture\n');
   const env = { ...process.env, ORG_DIR: org, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' };
-  delete env.LANE_CONFIG;
+  for (const key of ['LANE_CONFIG', 'HERDR_ENV', 'HERDR_PANE_ID', 'CODEX_THREAD_ID']) delete env[key];
   const exec = (exe, args) => {
     const r = spawnSync(exe, args, { cwd: repo, env, encoding: 'utf8' });
     assert.equal(r.status, 0, r.stderr || r.stdout); return r.stdout.trim();
@@ -29,6 +29,9 @@ function fixture(t) {
   const boundary = {id:'fixture-cutover',project:gitProject(repo).identity,repo,org,source:fs.realpathSync(sourceRoot),main:'main',canonical_head:git(['rev-parse','HEAD'])};
   // These fixtures start after a recorded boundary, before any fixture work.
   transact(org,()=>({add:['line-service.cutover','line-service.phase0'].map(type=>({...boundary,type}))}));
+  // Review steps mutate only through an installed service binding, as in production.
+  const directory = serviceDirectory(org, boundary.project); fs.mkdirSync(directory, { recursive: true });
+  fs.writeFileSync(path.join(directory, 'installation.json'), JSON.stringify({ at: '2026-10-27T00:00:00Z', repo, org, source: sourceRoot, node: process.execPath, file: path.join(directory, 'service.plist'), target: `gui/${process.getuid()}/dev.herdr.line.${path.basename(directory)}` }));
   const add = (title, priority = 1, extra = []) => record(['add', title, '--role', 'engineer', '--priority', String(priority), ...extra]).split(' ')[0];
   const show = id => JSON.parse(record(['show', id, '--json']));
   const calls = [], notes = [];

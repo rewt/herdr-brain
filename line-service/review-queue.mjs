@@ -64,6 +64,9 @@ function source({ state, events, org, repo, identity, runId, head, base,env=proc
   const discovered=discoverChanges({state,events,org,repo,identity});
   const whole=discovered.changes.filter(c=>c.run.id===runId);let choices=whole.filter(c=>!head||c.target.head===head),capturedOriginal=false;
   if(!head&&choices.length>1)choices=choices.filter(c=>choices.every(other=>{try{git(repo,['merge-base','--is-ancestor',other.target.head,c.target.head]);return true;}catch{return false;}}));
+  // A supplemental target exists only beside retained captures, so a recomputed
+  // whole target at its head overlaps them and is never a new target itself.
+  const extra=choices.filter(c=>additionalTarget(c.target));if(choices.length>1&&extra.length===1&&choices.every(c=>c.target.head===extra[0].target.head))choices=extra;
   if(originalCapture&&whole.length===1&&!sameCapturedTarget(originalCapture,whole[0].target)){
     capturedProducerTarget({repo,target:originalCapture,whole:whole[0]});choices=[{...whole[0],target:originalCapture}];capturedOriginal=true;
   }

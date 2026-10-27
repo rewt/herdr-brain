@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { createLineService, sourceRoot } from '../line-service/line-service.mjs';
+import { createLineService, sourceRoot, serviceDirectory } from '../line-service/line-service.mjs';
 import { bindReviewTarget, reviewAttempt, selectedReviewConsumer } from '../line-service/review.mjs';
 import { DEFAULT_CONFIG } from '../lib/store.mjs';
 import { gitProject } from '../lib/project.mjs';
@@ -36,10 +36,14 @@ function fixture(t, { admission = false } = {}) {
     { type: 'report.ingested', run: 'R-1', item: 'ENG-1', sha256: hash, file: 'reports/R-1.md', report: { outcome: 'blocked', summary: 'Committed code, tests red', artifacts, blockers: [], extra: { validation: { exit_code: 1 } } }, seq: 4 },
   ];
   const write = () => fs.writeFileSync(path.join(org, 'events.jsonl'), events.map((e,i) => {e.seq=i+1;return JSON.stringify({ at: '2026-10-26T18:00:00Z', by: 'fixture', ...e });}).join('\n') + '\n');
+  // Review steps mutate only through an installed service binding, as in production.
+  const directory = serviceDirectory(org, identity); fs.mkdirSync(directory, { recursive: true }); fs.writeFileSync(path.join(root, '.identity-root'), 'fixture\n');
+  fs.writeFileSync(path.join(directory, 'installation.json'), JSON.stringify({ at: '2026-10-27T00:00:00Z', repo, org, source: sourceRoot, node: process.execPath, file: path.join(directory, 'service.plist'), target: `gui/${process.getuid()}/dev.herdr.line.${path.basename(directory)}` }));
+  const env = { ...process.env }; for (const key of ['HERDR_ENV', 'HERDR_PANE_ID', 'CODEX_THREAD_ID']) delete env[key];
   write(); fs.writeFileSync(journal, JSON.stringify({ token: 'fixture', stage: 'complete', run: 'R-1', item: 'ENG-1', org, common: identity, workspace, base }));
   const context = () => { const state = fold(events); return { repo, org, identity, events, state, item: state.items.get('ENG-1'), run: state.runs.get('R-1') }; };
   const calls = [], notices = [];
-  const service = options => createLineService({ repo, org, to: 'test-supervisor', command: (exe, args) => { calls.push({ exe, args }); return { status: 0, stdout: JSON.stringify({ result: 'review_pending', item: 'ENG-1', run: 'R-1', head: args[args.indexOf('--head') + 1] }), stderr: '' }; }, recordNotice: data => { notices.push(data.reason); return { id:data.id,state:'record-only' }; }, ...options });
+  const service = options => createLineService({ repo, org, to: 'test-supervisor', env, command: (exe, args) => { calls.push({ exe, args }); return { status: 0, stdout: JSON.stringify({ result: 'review_pending', item: 'ENG-1', run: 'R-1', head: args[args.indexOf('--head') + 1] }), stderr: '' }; }, recordNotice: data => { notices.push(data.reason); return { id:data.id,state:'record-only' }; }, ...options });
   return { root, repo, org, workspace, base, head, events, write, context, service, calls, notices, git, commit };
 }
 
@@ -53,7 +57,7 @@ test('automatic review binds committed changed evidence despite blocked outcome 
   assert.equal(args[args.indexOf('--head') + 1], f.head);
   assert.equal(args[args.indexOf('--base') + 1], f.base);
   const effects = JSON.parse(fs.readFileSync(path.join(s.directory, 'effects.json')));
-  assert.equal(effects.actions['review:ENG-1'].review_target.reportHash, target.reportHash);
+  assert.equal(effects.actions[`review:ENG-1:${f.head}`].review_target.reportHash, target.reportHash);
 });
 
 test('automatic review holds blocked uncommitted admission source before any helper launch', t => {
@@ -68,7 +72,7 @@ test('automatic review retains pending manual ambiguous and UNKNOWN item attempt
     const f = fixture(t), c = f.context();
     if (kind === 'pending') {
       fs.mkdirSync(path.join(f.org, 'line-service/older-head'), { recursive: true });
-      fs.writeFileSync(path.join(f.org, 'line-service/older-head/effects.json'), JSON.stringify({ actions: { 'review:ENG-1': { state: 'complete', result: { result: 'review_pending', run: 'R-older', head: f.base } } } }));
+      fs.writeFileSync(path.join(f.org, 'line-service/older-head/effects.json'), JSON.stringify({ actions: { 'review:ENG-1': { state: 'complete', result: { result: 'review_pending', run: 'R-older', head: f.head } } } }));
     } else if (kind === 'native') {
       fs.mkdirSync(path.join(f.org, 'retirement/occupants'), { recursive: true }); fs.writeFileSync(path.join(f.org, 'retirement/occupants/native.json'), JSON.stringify({ kind: 'settle', run: 'R-1', common: c.identity, qualification: 'UNKNOWN' }));
     } else if (kind === 'manual') {

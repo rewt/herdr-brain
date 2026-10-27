@@ -741,7 +741,15 @@ test('a dequeued job is persisted before retirement catch-up and is never left c
   const send = process.send, messages = [];
   process.send = message => { messages.push(message); return true; };
   t.after(() => { process.send = send; });
-  requestRetirement({ org: f.org, eventSeq: 4, source: 'completion' }); await drain(queue);
+  const cwd = process.cwd();
+  try {
+    // Notice binding uses the caller's real Git project as the production CLI
+    // does. The record and queue here both belong to this disposable project.
+    process.chdir(f.repo);
+    requestRetirement({ org: f.org, eventSeq: 4, source: 'completion' }); await drain(queue);
+  } finally { process.chdir(cwd); }
+  const notice = JSON.parse(fs.readFileSync(inbox, 'utf8').trim().split('\n')[0]);
+  assert.equal(notice.project.identity, f.common); assert.equal(notice.project.org, f.org);
   assert.deepEqual(messages, [{ ready: true }]);
   assert.equal(f.read().observedCurrent ?? false, false, 'catch-up observed the dequeued job as current');
   assert.equal(f.read().catchupCurrent, null); assert.equal(f.read().catchupPersisted, 1);

@@ -11,6 +11,7 @@ import { nativeProcess } from './session-bind.mjs';
 import { loadTimeout, ADMISSION_WAIT_MS } from '../lib/deadline.mjs';
 import { matchesDispatchStart } from './unlanded-cap.mjs';
 import {resolvedNotStarted} from './not-started.mjs';
+import {resolvedReviewJournal} from '../line-service/review-resolutions.mjs';
 
 export const DEFAULT_SESSION_CAP = 7;
 export const DEFAULT_REVIEW_SESSION_CAP = 3;
@@ -238,7 +239,7 @@ export function checkSessionCap({ config, org, kind='all', ...options }) {
     const directory=path.join(org,'dispatch');
     let journals=readJSON(directory, name => name.endsWith('.json') && !name.endsWith('.routes.json'), true);
     const events=loadEvents(org).events;
-    journals=journals.filter(j=>{try{return !resolvedNotStarted({events,org,common:options.common,journal:j.journal});}catch{return true;}});
+    journals=journals.filter(j=>{try{return !resolvedNotStarted({events,org,common:options.common,journal:j.journal})&&!resolvedReviewJournal({events,org,journal:j.journal});}catch{return true;}});
     sessions = countSessions({ ...options, events, state: fold(events), journals,
       reviewers: readJSON(path.join(org, 'retirement/occupants')) });
   } catch (e) { throw Error(`session count unavailable: ${e.message}`); }

@@ -88,7 +88,8 @@ Red checks or a blocked report do not disqualify genuinely landed changed code.
 Only an existing attempt for the SAME source item/head or immutable producer
 item/run/report group blocks a new review.
 Unrelated old private review directories do not establish an attempt. A real
-same-change UNKNOWN/native refusal remains held, with no retry or replacement.
+same-change UNKNOWN/native refusal remains held. Routine recovery requires strict
+original-request proof; a timer or missing run never establishes inactivity.
 
 The current queue helper creates ONE ordinary reviewer item for the whole
 immutable producer report/source group, keyed by its item, final delivered head
@@ -118,6 +119,21 @@ owed/queued/running/done producer groups and separate commit coverage,
 attribution gaps and formal-fix exemptions. More than three real passes with a
 queue/coverage gap create one deduplicated notice. The morning digest includes
 these observations; no extra scan, native prompt or benchmark is started.
+
+The installed service observes normal queue progress across real passes. With
+unchanged source/request evidence it can archive one inactive attempt and create
+one normal-route replacement, without a supervisor command. It first serializes
+the ORIGINAL request under its existing lock: live/denied/unknown owners stay
+held, and only the existing positive-ESRCH recovery applies. A persisted
+pre-record-start protocol barrier, or an ended fully bound reviewer process plus
+positive native pane absence, must establish inactivity. Working reviewers,
+incoming reports, native refusals, unresolved exit intents, partial/ambiguous
+producer groups, source/claim changes and STOP/HOLD all retain the attempt.
+Original journals and UNKNOWN/native flags are archived unchanged, no verdict
+is invented, callbacks are retained, and cap1 permits only one replacement.
+Prepared archives resume with the same bytes when an unrelated service update
+occurs. Neither this path nor the explicit legacy recovery launches a reviewer;
+the ordinary guarded queue dispatcher owns the new worktree/session.
 
 Reviewers inspect only the immutable diff and producer evidence, with zero
 suites/edits. Their normal report says `outcome: done`, `verdict: PASS|FAIL` and

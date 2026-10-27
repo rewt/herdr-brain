@@ -19,6 +19,11 @@ import {claimedCommitTokens,declaredSourceRanges} from '../settle/review-range.m
 import {queueConsumer,queueReviewMutation} from './review-queue.mjs';
 import {lineDirectory} from './cutoff.mjs';
 import {reviewDigest as hash,reviewPlain,reviewResolution} from './review-resolutions.mjs';
+import {serviceRecordBinding} from './record-inbox.mjs';
+import {discoverChanges} from './phase1.mjs';
+import {sameCapturedTarget,sameProducerQueue} from './review-group.mjs';
+import {lockRequest} from '../dispatch/request-lock.mjs';
+import {lookupProcess} from '../lib/processes.mjs';
 const root=fs.realpathSync(fileURLToPath(new URL('../',import.meta.url)));
 const git=(repo,args)=>execFileSync('git',['--no-optional-locks','-C',repo,...args],{encoding:'utf8',stdio:['ignore','pipe','pipe'],timeout:10000,maxBuffer:32*1024*1024}).trim();
 const verdicts=new Set(['PASS','FAIL','NEEDS-WORK']);
@@ -35,6 +40,114 @@ function completedVerdict(bytes,head){
 function immutable(file,bytes){
   try{const fd=fs.openSync(file,'wx',0o444);try{fs.writeFileSync(fd,bytes);fs.fsyncSync(fd);}finally{fs.closeSync(fd);}}
   catch(e){if(e.code!=='EEXIST'||hash(reviewPlain(file))!==hash(bytes))throw e;}
+}
+function originalDriverFiles(journal){
+  const directory=journal+'.driver',files=[];
+  if(fs.existsSync(directory)){
+    const s=fs.lstatSync(directory);if(!s.isDirectory()||s.isSymbolicLink())throw Error('original review driver evidence is redirected');
+    for(const name of fs.readdirSync(directory).sort()){const file=path.join(directory,name);files.push({original:file,bytes:reviewPlain(file)});}
+  }
+  if(fs.existsSync(journal+'.driver.log'))files.push({original:journal+'.driver.log',bytes:reviewPlain(journal+'.driver.log')});return files;
+}
+
+// Progress is an original-request/record fingerprint across real passes, never
+// an elapsed timer. Unattributed/multiple requests are retained, not absence.
+export function observeReviewProgress({state,org,identity,pass,previous={}}){
+  const directory=path.join(org,'dispatch'),jobs=[];
+  if(fs.existsSync(directory))for(const name of fs.readdirSync(directory))if(name.endsWith('.json')&&!name.endsWith('.routes.json')){try{const file=path.join(directory,name),bytes=reviewPlain(file),job=JSON.parse(bytes);if(job.common===identity&&job.org===org)jobs.push({file,job,sha256:hash(bytes)});}catch{/* No positive request proof is derived from an unreadable file. */}}
+  const progress={},candidates=[];
+  for(const q of state.items.values()){
+    if(!roleIs(q,'REV')||q.closed||q.meta.review_round_cap!==1||!q.meta.review_target||q.meta.hold||q.meta.held||q.meta.reserved||q.meta.operator_reserved||q.runs.some(id=>state.runs.get(id)?.report))continue;
+    const matches=jobs.filter(j=>j.job.item===q.id);if(matches.length!==1)continue;const request=matches[0];
+    const driver=originalDriverFiles(request.file).map(f=>({original:f.original,sha256:hash(f.bytes)})),signature=hash(JSON.stringify([q.meta,request.sha256,driver,q.runs.map(id=>{const r=state.runs.get(id);return[r?.id,r?.owner,r?.owner_generation,r?.abandoned,r?.meta];})])),old=previous[q.id],unchanged=old?.signature===signature&&old.pass<pass;
+    progress[q.id]={signature,pass,stable_passes:unchanged?(old.stable_passes??1)+1:old?.pass===pass&&old.signature===signature?old.stable_passes:1,journal:request.file,request_sha256:request.sha256,driver_files:driver};
+    if(unchanged)candidates.push(q.id);
+  }
+  return{progress,candidates};
+}
+
+// Routine recovery is service-owned and uses the existing archive + record
+// queue path. A legacy unresolved native launch is never made zero by a missing
+// run. Only a serialized pre-start barrier or a positively ended bound native
+// process can establish inactivity. Original journals/flags remain unchanged.
+export function recoverServiceReview({repo,org,reviewId,env=process.env,call=invokeHerdr,kill=process.kill,readProcess=pid=>lookupProcess(pid,{identityOnly:true})}){
+  const binding=serviceRecordBinding({repo,org,env}),project=gitProject(repo),journalFile=path.join(binding.directory,'effects.json'),effects=JSON.parse(reviewPlain(journalFile)),progress=effects.review_progress?.[reviewId];
+  if(!progress||progress.pass!==effects.pass_number||progress.stable_passes<2)throw Error('review has no unchanged original-request proof across real passes');
+  const initial=loadEvents(org).events,state=fold(initial),q=state.items.get(reviewId),source=state.items.get(q?.meta.review_source_item),run=state.runs.get(q?.meta.review_source_run);
+  if(!q||!source||!run?.report||q.closed||q.runs.some(id=>state.runs.get(id)?.report)||!roleIs(q,'REV')||q.meta.review_round_cap!==1)throw Error('review progressed/completed or is not an owned normal queue attempt');
+  const peers=[...state.items.values()].filter(i=>sameProducerQueue(i,source.id,run.id));if(peers.length!==1||peers[0].id!==q.id)throw Error('partial/ambiguous producer attempts remain immutable; no automatic replacement');
+  const journal=progress.journal;if(path.dirname(journal)!==path.join(org,'dispatch'))throw Error('original review request is outside its owning record');
+  const bytes=reviewPlain(journal),job=JSON.parse(bytes),target=q.meta.review_target,id=`service-${hash(JSON.stringify([source.id,run.id,target.reportHash,target.head])).slice(0,48)}`;
+  const driver=originalDriverFiles(journal);if(JSON.stringify(driver.map(f=>({original:f.original,sha256:hash(f.bytes)})))!==JSON.stringify(progress.driver_files))throw Error('original reviewer driver progressed; observe its changed input');
+  if(hash(bytes)!==progress.request_sha256||job.item!==q.id||job.repo!==repo||job.org!==org||job.common!==project.identity||path.basename(journal)!==`${job.token}.json`||job.reviewQueueProtocol!==1||JSON.stringify(job.reviewQueue)!==JSON.stringify(target))throw Error('original review request/source/target CAS changed');
+  if(/EPERM|EACCES|native refusal|foreign|identity|reserved|HOLD|STOP/i.test(job.error??'')||q.meta.hold||q.meta.held||q.meta.reserved||q.meta.operator_reserved)throw Error('native/ownership/reserved refusal remains stopped; no automatic replacement');
+  const prior=reviewResolution({events:initial,org,item:source.id,head:target.head});if(prior)throw Error('one exact producer replacement budget already spent');
+  const current=discoverChanges({events:initial,state,repo,org,identity:project.identity}).changes.find(c=>c.item.id===source.id&&c.run.id===run.id);
+  if(!current||current.authorization||!sameCapturedTarget(target,current.target))throw Error('historical/partial target differs from its actual whole producer group; retain it');
+  const reviewRuns=q.runs.map(id=>state.runs.get(id));if(reviewRuns.length>1||reviewRuns.some(r=>r.abandoned||r.report||r.report_path&&fs.existsSync(r.report_path)))throw Error('original reviewer report/attempt needs intake or judgment, not replacement');
+  const original=reviewRuns[0];
+  if(original&&(job.run!==original.id||original.meta.dispatch_journal!==journal||original.meta.dispatch_attempt!==job.token))throw Error('original reviewer claim/request binding differs');
+  if(original){const claim=readOwnedRun(org,original.id);requireController(claim,'brain');assertOwner(claim,{owner:original.owner,generation:original.owner_generation});}
+  if(!original&&(job.run||initial.some(e=>e.type==='run.started'&&(e.item===q.id||e.meta?.dispatch_journal===journal||e.meta?.dispatch_attempt===job.token))))throw Error('original request has unbound record-start progress; retain it');
+  const prestart=!original&&['open','start'].includes(job.stage)&&!job.worker&&!job.launchProcess&&!job.sessionBinding&&job.native_launch_attempted!==true;
+  const zeroWorker=original&&job.stage==='worker'&&job.native_launch_attempted===false&&!job.worker&&!job.launchProcess&&!job.sessionBinding;
+  if(!prestart&&!zeroWorker&&(!original||job.stage!=='complete'||!job.worker))throw Error('original native launch outcome remains UNKNOWN; no missing-run inference');
+  const owner=readOwnedRun(org,run.id);requireController(owner,'brain');assertOwner(owner,{owner:run.owner,generation:run.owner_generation});queueConsumer({run,env});
+  const authority={kind:'installed-service-progress',project:project.identity,org,installation:binding.installationFile,installation_sha256:hash(reviewPlain(binding.installationFile))};
+  const guard=events=>{
+    const live=serviceRecordBinding({repo,org,env});if(live.identity!==project.identity||hash(reviewPlain(binding.installationFile))!==authority.installation_sha256)throw Error('service source/installation changed');
+    for(const file of [path.join(binding.directory,'STOP'),path.join(repo,'.lane/supervisor/STOP'),path.join(repo,'.lane/supervisor/HOLD')])if(fs.existsSync(file))throw Error('STOP/HOLD prevents routine review recovery');
+    if(hash(reviewPlain(journal))!==hash(bytes)||hash(reviewPlain(target.evidence))!==target.reportHash||git(repo,['status','--porcelain=v1']))throw Error('original request/evidence/clean source changed');
+    if(JSON.stringify(originalDriverFiles(journal).map(f=>({original:f.original,sha256:hash(f.bytes)})))!==JSON.stringify(progress.driver_files))throw Error('original review driver progressed before archival completion');
+    assertOwner(readOwnedRun(org,run.id),{owner:run.owner,generation:run.owner_generation});
+    if(original){assertOwner(readOwnedRun(org,original.id),{owner:original.owner,generation:original.owner_generation});if(original.report_path&&fs.existsSync(original.report_path))throw Error('original reviewer report appeared; retain it for intake');}
+    if(events){const fresh=fold(events),old=fresh.items.get(q.id);if(old?.closed||old?.meta.hold||old?.meta.held||old?.meta.reserved||old?.meta.operator_reserved||JSON.stringify(old?.meta.review_target)!==JSON.stringify(target)||JSON.stringify(old?.runs)!==JSON.stringify(q.runs)||q.runs.some(id=>fresh.runs.get(id)?.report)||events.some(e=>e.type==='change.reviewed'&&e.item===source.id&&e.head===target.head))throw Error('review progressed, was held or received a verdict');
+      if(original&&events.some(e=>e.type==='closeout.effect'&&e.run===original.id&&['agent-exit-requested','shell-close-requested'].includes(e.outcome?.action)))throw Error('original native retirement intent remains retained');}
+  };
+  const native=args=>{let raw;try{raw=JSON.parse(call('herdr',args));}catch(e){if(args[0]==='pane'&&args[1]==='get'&&/"code"\s*:\s*"pane_not_found"/.test(e.message))return{error:{code:'pane_not_found'}};throw e;}if(raw.error){if(args[0]==='pane'&&args[1]==='get'&&raw.error.code==='pane_not_found')return raw;throw Error(JSON.stringify(raw.error));}return raw.result;};
+  const inactive=()=>{
+    const inventory=native(['agent','list']);if(!Array.isArray(inventory?.agents))throw Error('native absence inventory is incomplete; keep original review');
+    const trees=git(repo,['worktree','list','--porcelain']).split('\n\n').filter(Boolean).map(block=>Object.fromEntries(block.split('\n').map(row=>{const n=row.indexOf(' ');return[row.slice(0,n),row.slice(n+1)];}))).filter(w=>w.branch===`refs/heads/lane/${job.lane}`);
+    if(trees.length>1||trees.some(w=>w.HEAD!==target.head)||job.workspace&&trees[0]?.worktree!==job.workspace)throw Error('original review lane/source binding changed');
+    const w=original&&effectiveWorkerIdentity(original,state),saved=job.worker;
+    if(inventory.agents.some(a=>trees.some(t=>a.cwd===t.worktree)||w&&[w.agent&&a.name===w.agent,w.pane&&a.pane_id===w.pane,w.agent_session_id&&a.agent_session?.value===w.agent_session_id].some(Boolean)))return false;
+    if(prestart||zeroWorker)return true;
+    if(!w?.agent||!w.pane||!w.terminal_id||!w.agent_session_id||w.identity_conflict||saved.agentName!==w.agent||saved.pane!==w.pane||saved.terminalId!==w.terminal_id||saved.agentSessionId!==w.agent_session_id)throw Error('original reviewer native identity is UNKNOWN');
+    const process=job.launchProcess??job.sessionBinding?.process;if(!Number.isSafeInteger(process?.pid)||!process.identity)throw Error('original reviewer process outcome is UNKNOWN');
+    const observed=readProcess(process.pid);if(!observed?.ok)throw Error('original reviewer process outcome is UNKNOWN; retain attempt');
+    if(observed.value!==null&&!(observed.value?.pid===process.pid&&typeof observed.value.identity==='string'&&observed.value.identity!==process.identity))return false;
+    const pane=native(['pane','get',w.pane]);if(pane?.error?.code!=='pane_not_found')return false;
+    return true;
+  };
+  let requestLock,release;
+  try{
+    guard(initial);try{requestLock=lockRequest(journal,{kill});}catch(e){if(/already running/.test(e.message))return{result:'review_retained',reason:'original request owner remains live'};throw e;}
+    release=acquireLock(path.join(project.identity,'lane-promote.lock'));guard(loadEvents(org).events);if(!inactive())return{result:'review_retained',reason:'original native reviewer still present'};
+    const sourceHead=git(repo,['rev-parse','HEAD']);git(repo,['merge-base','--is-ancestor',target.head,sourceHead]);
+    const effectRows=[];for(const [key,value]of Object.entries(effects.actions??{}))if(key.startsWith(`review:${source.id}:`)&&JSON.stringify(value.review_target)===JSON.stringify(target))effectRows.push({file:journalFile,key,sha256:hash(JSON.stringify(value))});
+    let files=[{original:journal,bytes},{original:target.evidence,bytes:reviewPlain(target.evidence)},...driver,...(effectRows.length?[{original:journalFile,bytes:reviewPlain(journalFile)}]:[])];
+    const proof={kind:prestart?'serialized-pre-record-start-barrier':zeroWorker?'typed-pre-native-worker-barrier':'confirmed-ended-bound-native',review_item:q.id,review_run:original?.id??null,original_journal:journal,request_sha256:hash(bytes),original_native_launch_attempted:job.native_launch_attempted??null,progress_signature:progress.signature};
+    let request={id,item:source.id,run:run.id,target,service_authority:authority,inactivity:proof,files:files.map(f=>({original:f.original,sha256:hash(f.bytes)})),effects:effectRows};
+    const prepared=initial.find(e=>e.type==='review.recovery-intent'&&e.id===id);
+    if(prepared){
+      for(const key of ['item','run','target','service_authority','inactivity','effects'])if(JSON.stringify(prepared[key])!==JSON.stringify(request[key]))throw Error('original routine recovery preparation changed; retain archive');
+      if(JSON.stringify(prepared.files.map(f=>f.original))!==JSON.stringify(files.map(f=>f.original)))throw Error('original routine recovery inventory changed');
+      files=files.map((f,i)=>{const archive=path.join(org,'evidence/review-recovery',id,`${i}-${path.basename(f.original)}`),old=fs.existsSync(archive)?reviewPlain(archive):f.bytes;if(hash(old)!==prepared.files[i].sha256)throw Error('original prepared review bytes are unavailable; retain intent');return{original:f.original,bytes:old};});
+      request={...request,files:prepared.files};
+    }
+    const requestHash=hash(JSON.stringify(request));
+    transact(org,events=>{guard(events);const old=events.find(e=>e.type==='review.recovery-intent'&&e.id===id);if(old&&old.request_sha256!==requestHash)throw Error('original routine recovery preparation changed; retain archive');return protectRecordMutation({org,events,state:fold(events),command:'queue-review progress recovery',mutation:{add:old?[]:[{type:'review.recovery-intent',...request,request_sha256:requestHash,project:project.identity,org}]}});},{actor:'line-service',strictTail:true,lockOptions:{recover:false}});
+    const directory=path.join(org,'evidence/review-recovery',id);fs.mkdirSync(directory,{recursive:true});const archived=files.map((f,i)=>{guard();const archive=path.join(directory,`${i}-${path.basename(f.original)}`);immutable(archive,f.bytes);return{original:f.original,archive,sha256:hash(f.bytes)};});
+    const manifest={...request,request_sha256:requestHash,files:archived},manifestBytes=Buffer.from(JSON.stringify(manifest,null,2)+'\n'),manifestFile=path.join(directory,'manifest.json');immutable(manifestFile,manifestBytes);const fd=fs.openSync(directory,'r');try{fs.fsyncSync(fd);}finally{fs.closeSync(fd);}
+    return transact(org,events=>{
+      guard(events);if(!inactive())throw Error('original reviewer became live before archival completion');if(git(repo,['rev-parse','HEAD'])!==sourceHead)throw Error('source CAS changed at routine archive completion');
+      const fresh=fold(events),old=events.find(e=>e.type==='review.recovery-completed'&&e.item===source.id&&e.target?.head===target.head);if(old)return{add:[],result:{result:'review_queued',review_item:old.review_item,existing:true}};
+      for(const row of effectRows)if(hash(JSON.stringify(JSON.parse(reviewPlain(row.file)).actions?.[row.key]))!==row.sha256)throw Error('original queue effect progressed before archival completion');
+      const event={type:'review.recovery-completed',by:'line-service',id,item:source.id,run:run.id,target,project:project.identity,org,service_authority:authority,inactivity:proof,archive:{file:manifestFile,sha256:hash(manifestBytes)},archived_review_items:[q.id],replacement_cap:1,prior_caps_preserved:true,seq:events.at(-1).seq+1};
+      const projected=[...events,event],queued=queueReviewMutation({state:fold(projected),events:projected,org,repo,runId:run.id,head:target.head,base:target.base,env:{...env,ORG_ACTOR:'line-service'}});event.review_item=queued.result.review_item;
+      return protectRecordMutation({org,events,state:fresh,command:'queue-review progress recovery',mutation:{add:[event,{type:'item.closed',id:q.id,as:'dropped',note:`Confirmed inactive review archived by ${id}; no verdict claimed. One normal-route replacement ${event.review_item}; original evidence/native flags/cap retained.`},...(original?[{type:'run.abandoned',id:original.id,note:`Confirmed inactive review archived by ${id}; original callbacks/evidence retained, no verdict claimed.`}]:[]),...queued.add],result:queued.result}});
+    },{actor:'line-service',strictTail:true,lockOptions:{recover:false}}).result;
+  }finally{release?.();requestLock?.release();}
 }
 export function recoverInactiveReview({repo,org,runId,head,base,resolution,decisionSeq,id,role,cwd=process.cwd(),env=process.env,call=invokeHerdr}){
   if(role!=='supervisor'||!/^[-a-zA-Z0-9_]{1,80}$/.test(id??'')||!Number.isSafeInteger(decisionSeq))throw Error('inactive review recovery needs actual supervisor mode, stable id and scoped decision sequence');

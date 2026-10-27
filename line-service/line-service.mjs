@@ -26,6 +26,7 @@ import { enqueueNamedDecision } from './decision-wake.mjs';
 import { canonical } from '../messages/schema.mjs';
 import { discoverChanges,dispatchInput,phase0Boundary,morningDigest,recordReviewResults,reviewCompletionPlan,recordReviewCompletion,ensureReviewBoundary,canonicalReviewIndex,recordReviewError,recordReviewHealth } from './phase1.mjs';
 import {preflightContinuation} from '../dispatch/preflight.mjs';
+import {observeReviewProgress,recoverServiceReview} from './review-recovery.mjs';
 export { reviewAttempt } from './review.mjs';
 
 export const sourceRoot = fileURLToPath(new URL('../', import.meta.url));
@@ -197,6 +198,17 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
           effect(`review-result:${run.id}:${run.report.sha256}`,()=>recordReviewResults({repo,org,runId:run.id,env:childEnv}),undefined,undefined,true);
         }
       }
+      snapshot=current();
+      try{
+        const observed=observeReviewProgress({state:snapshot.state,org,identity:project.identity,pass:effects.pass_number,previous:effects.review_progress});effects.review_progress=observed.progress;save();let recoveries=0;
+        for(const id of observed.candidates){
+          if(expired()||recoveries>=maxStepsPerStage)break;const q=snapshot.state.items.get(id),target=q.meta.review_target;
+          const held=effects.review_recovery_holds?.[id];if(held?.signature===observed.progress[id].signature)continue;
+          try{const result=recoverServiceReview({repo,org,reviewId:id,env:childEnv,call:(_exe,args)=>JSON.stringify({result:native(args)})});log({action:'review-progress-resolution',item:id,...result});if(result.result==='review_queued')stale=true;}
+          catch(e){effects.review_recovery_holds??={};if(/EPERM|EACCES|native refusal|identity|reserved|HOLD|STOP|UNKNOWN|partial|ambiguous/i.test(e.message))effects.review_recovery_holds[id]={signature:observed.progress[id].signature,reason:e.message};save();note(`review-progress:${id}`,e.message,{item:id,review:true});}
+          recoveries++;
+        }
+      }catch(e){note('review-progress',e.message);}
       snapshot=current();
       let discovered,index;try{index=canonicalReviewIndex({events:snapshot.events,state:snapshot.state,repo,org,identity:project.identity,boundary:cutoff});discovered=discoverChanges({events:snapshot.events,state:snapshot.state,repo,org,identity:project.identity,pendingOnly:true,index});}catch(e){discovered={changes:[],holds:[{reason:e.message}]};}
       for(const held of discovered.holds)note(`review-source:${held.run??'boundary'}:${held.head??''}`,held.reason,{item:held.item,run:held.run,head:held.head,review:true});

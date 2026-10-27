@@ -37,6 +37,14 @@ const contains = (value, tokens) => {
   return value && typeof value === 'object' && Object.values(value).some(v => contains(v, tokens));
 };
 
+// A decision can describe reviews without directing a hold. Only an explicit
+// directive holds, and only for a full commit it names exactly. Known commits
+// are checked against the text; no token is extracted (labels such as head or
+// base end in hex letters and run straight into the hash).
+const holdDirective=/^(?:(?:new\s+)?(?:independent\s+)?review\s+hold\b|hold\s+(?:the\s+)?(?:independent\s+)?review\b|independent\s+(?:post-code\s+)?review\s+(?:attempt\s+)?held\b|(?:C\d+\s+)?retain(?:ed)?\s+(?:the\s+)?(?:independent\s+)?review(?:er|\s+attempt)\b)/i;
+export const explicitReviewHold=e=>e.type==='note.added'&&Boolean(e.decision)&&holdDirective.test((e.text??'').trim());
+const namesCommit=(text,head)=>{for(let i=text.indexOf(head);i>=0;i=text.indexOf(head,i+1))if(!/[a-f0-9]/.test(text[i+head.length]??''))return true;return false;};
+
 function changeReviewAttempt(item,{org,identity,events,state,repo,effects,target,ignoreService,ignoreQueue,capturedRun,capturedOriginal=false,ignoreQueues=[]}) {
   const resolution=reviewResolution({events,org,item:item.id,head:target.head}),archivedItems=new Set(resolution?.event.archived_review_items??[]);
   capturedRun??=target.source_group?.run;
@@ -86,13 +94,13 @@ function changeReviewAttempt(item,{org,identity,events,state,repo,effects,target
   for(const e of events){
     if(e.type==='change.reviewed'&&e.item===item.id&&(covered.has(e.head)||!capturedOriginal&&group&&(e.review_group_key??queueProducerGroup(state.items.get(e.review_item)))===group))return 'recorded same-change/producer-group verdict';
     if(e.type==='review.verdict'&&item.runs.includes(e.run)&&matches(e,e.run))return 'recorded same-change verdict';
-    if(e.type==='note.added'&&e.decision&&tokens.has(e.id)&&/review/i.test(e.text??'')){
+    if(tokens.has(e.id)&&explicitReviewHold(e)){
       // The validated archival authorization is not another independent
-      // attempt. Every other decision, including later holds, still counts.
+      // attempt. Every other explicit hold, including later holds, still counts.
       if(resolution?.authorized_decision_seqs?.includes(e.seq))continue;
-      const named=(e.text.match(/\b[a-f0-9]{40,64}\b/g)??[]);
+      const named=/[a-f0-9]{40}/.test(e.text);
       const atNote=item.runs.filter(id=>(state.runs.get(id)?.started.seq??Infinity)<e.seq).at(-1);
-      if(named.some(h=>covered.has(h))||!named.length&&(runs.has(e.id)||(e.text.match(/\bR-\d+\b/g)??[]).some(id=>runs.has(id))||e.id===item.id&&runs.has(atNote)&&(state.runs.get(atNote)?.report?.seq??Infinity)<e.seq))return 'recorded same-change independent review hold';
+      if([...covered].some(h=>namesCommit(e.text,h))||!named&&(runs.has(e.id)||(e.text.match(/\bR-\d+\b/g)??[]).some(id=>runs.has(id))||e.id===item.id&&runs.has(atNote)&&(state.runs.get(atNote)?.report?.seq??Infinity)<e.seq))return 'recorded same-change independent review hold';
     }
   }
   const pending=(actions,file)=>Object.entries(actions??{}).some(([key,value])=>{
@@ -144,8 +152,7 @@ export function reviewAttempt(item, { org, identity, events, state, repo, effect
   const runs = new Set(item.runs), tokens = new Set([item.id, ...runs]);
   if (state && [...state.items.values()].some(candidate => candidate.id !== ignoreQueue && roleIs(candidate, 'REV') &&
       (candidate.parent === item.id || candidate.meta.review_source_item === item.id))) return 'existing item-wide record review';
-  // Decision holds need no particular prose formula or native qualification.
-  if (events.some(e => e.type === 'note.added' && e.decision && tokens.has(e.id) && /review/i.test(e.text ?? ''))) return 'recorded independent review attempt/hold';
+  if (events.some(e => tokens.has(e.id) && explicitReviewHold(e))) return 'recorded independent review attempt/hold';
   if (events.some(e => e.type === 'review.verdict' && runs.has(e.run))) return 'recorded verdict';
   const pending = (actions, file) => Object.entries(actions ?? {}).some(([key, value]) => {
     if (ignoreService && ignoreService.file === file && ignoreService.key === key && value.review_operation === ignoreService.operation && JSON.stringify(value.review_target) === JSON.stringify(ignoreService.target) &&

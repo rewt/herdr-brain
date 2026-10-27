@@ -168,6 +168,17 @@ An explicit verdict may be in frontmatter or a standalone `Verdict: PASS`,
 missing, unknown or contradictory declarations hold intake. The fact records
 the declaration location and original report hash; report bytes are unchanged.
 
+An explicit review hold is a decision note on the source item or its run that
+starts with `REVIEW HOLD:` (or an existing explicit hold/retained-reviewer
+phrase) and names the change's full commit:
+`record note SOURCE_ITEM "REVIEW HOLD: FULL_SOURCE_HEAD; reason" --decision`.
+The service checks the note for each captured commit as an exact full string
+(a label such as `head` may touch it; a longer hex run may not), so a hold for
+another commit binds nothing. An explicit hold that names no full commit holds
+its run conservatively. Other decision prose that mentions reviews, such as
+"no duplicate worker/review", is never a hold. Queued/native/UNKNOWN attempts
+still retain their original ownership and cap.
+
 Each pass writes a heartbeat, ingests an actual valid report as soon as its file
 exists, conditionally source-closes genuinely done integrated work, drains named
 closeout keys and considers independent READY work. It does not wait for native

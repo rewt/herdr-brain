@@ -95,7 +95,7 @@ test('phase1 dedup retains same-change UNKNOWN but unrelated old attempts and pr
   fs.writeFileSync(file,JSON.stringify({kind:'settle',run:'R-1',item:'ENG-1',head:f.heads[0],qualification:'UNKNOWN'}));
   assert.equal(reviewAttempt(c.item,{...c,target}),null);
   fs.writeFileSync(file,JSON.stringify({kind:'settle',run:'R-1',item:'ENG-1',head:target.head,qualification:'UNKNOWN'}));
-  assert.match(reviewAttempt(c.item,{...c,target}),/review|native|receipt|retained/);
+  assert.match(reviewAttempt(c.item,{...c,target}),/same-change.*UNKNOWN/);
 });
 
 test('phase1 creates one queue item per landed change with immutable evidence and never duplicates the same key',t=>{
@@ -126,7 +126,7 @@ test('phase1 current service records an old selected consumers immutable review 
     {type:'run.started',id:'R-2',item:'REV-1',workspace:f.cwd}, {type:'run.claimed',run:'R-2',record:f.org,project:f.identity,owner},
     {type:'report.ingested',run:'R-2',file:'reports/R-2.md',sha256:hash(text),report:{outcome:'done',summary:'Review',extra:{verdict:'FAIL'},proposals:[{role:'engineer',title:'Fix the source'}]}},
     {type:'item.added',id:'ENG-2',role:'engineer',title:'Fix the source',parent:'REV-1',from_run:'R-2'}]);
-  fs.mkdirSync(f.directory,{recursive:true});fs.writeFileSync(path.join(f.directory,'installation.json'),JSON.stringify({repo:f.cwd,org:f.org,source:sourceRoot,node:process.execPath,file:path.join(f.directory,'service.plist'),target:`gui/${process.getuid()}/dev.herdr.line.${path.basename(f.directory)}`}));
+  fs.mkdirSync(f.directory,{recursive:true});fs.writeFileSync(path.join(f.directory,'installation.json'),JSON.stringify({at:'2026-10-27T01:00:00Z',repo:f.cwd,org:f.org,source:sourceRoot,node:process.execPath,file:path.join(f.directory,'service.plist'),target:`gui/${process.getuid()}/dev.herdr.line.${path.basename(f.directory)}`}));
   const env={...f.env};delete env.HERDR_ENV;delete env.HERDR_PANE_ID;
   const release=noticeLock(path.join(f.directory,'pass.lock'));
   try{assert.equal(recordReviewResults({repo:f.cwd,org:f.org,runId:'R-2',env}).added.filter(e=>e.type==='change.reviewed').length,1);assert.equal(recordReviewResults({repo:f.cwd,org:f.org,runId:'R-2',env}).added.length,0);}

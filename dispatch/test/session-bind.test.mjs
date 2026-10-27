@@ -93,7 +93,7 @@ test('binding refuses changed receipts, foreign dispatch anchors, renewed deadli
     j => { j.sessionBinding.deadline = j.sessionBinding.proposed.deadline = new Date(Date.now() + 120000).toISOString(); },
     j => { j.sessionBinding.process = j.sessionBinding.proposed.process = null; },
     j => { j.stage = 'prompting'; },
-    j => { j.sessionBinding.status = 'unbound'; },
+    j => { j.sessionBinding.proposed.observed_at = new Date(Date.parse(j.sessionBinding.deadline) + 1).toISOString(); },
   ];
   for (const mutate of mutations) {
     Object.assign(f.job, structuredClone(original)); mutate(f.job); f.save();
@@ -110,18 +110,19 @@ test('binding refuses changed receipts, foreign dispatch anchors, renewed deadli
   assert.equal(f.bind().status, 1);
 });
 
-test('fresh expired bind refuses, while an exact expired fact is idempotent after finishing', t => {
+test('timely expired proposal replays on an open unbound run, while reported runs never gain a fresh bind', t => {
   const f = fixture(t), old = Date.now() - 120000;
   f.job.sessionBinding.proposed = sessionBindFact(f.show(), f.state(), { at: old });
   Object.assign(f.job.sessionBinding, { prompted_at: f.job.sessionBinding.proposed.prompted_at,
-    deadline: f.job.sessionBinding.proposed.deadline }); f.save();
-  const before = f.events(), result = f.bind(); assert.equal(result.status, 1); assert.match(result.stderr, /deadline expired/);
-  assert.deepEqual(f.events(), before);
-  // A previously committed event is durable even when its reply was lost long ago.
-  const fact = { ...f.job.sessionBinding.proposed, seq: before.at(-1).seq + 1, at: new Date(old).toISOString(), by: 'dispatch-fixture' };
-  fs.appendFileSync(path.join(f.org, 'events.jsonl'), JSON.stringify(fact) + '\n');
+    deadline: f.job.sessionBinding.proposed.deadline, status: 'unbound' }); f.save();
+  const journal = fs.readFileSync(f.journal), result = f.bind(); assert.equal(result.status, 0, result.stderr);
+  assert.equal(effectiveWorkerIdentity(f.show(), f.state()).identity_conflict, false);
+  assert.deepEqual(fs.readFileSync(f.journal), journal);
   f.ingest(); const finished = f.events();
   assert.equal(f.bind().status, 0); assert.deepEqual(f.events(), finished);
+  const g = fixture(t); g.job.sessionBinding.status = 'unbound'; g.save(); g.ingest();
+  const reported = g.events(), refused = g.bind();
+  assert.equal(refused.status, 1); assert.match(refused.stderr, /open, unreported/); assert.deepEqual(g.events(), reported);
 });
 
 test('duplicate/conflicting log evidence and stale receipt anchors are never resolved newest-first', t => {
@@ -221,4 +222,17 @@ test('continuity positive control binds but same PID replacement birth and missi
   const missing = observationFixture(); missing.job.sessionBinding.process = null;
   await observeSessionBinding(missing.options); assert.equal(missing.reads(), 0); assert.equal(missing.commits(), 0);
   assert.throws(() => nativeProcess(agent, info, () => ({ ok: false, error: 'unavailable' })), /unavailable/);
+});
+
+test('timely refused proposals replay without observing, and an elapsed observation error is labelled as expiry', async () => {
+  const f = observationFixture(); await observeSessionBinding(f.options);
+  f.job.sessionBinding.status = 'unbound'; const reads = f.reads();
+  f.options.observe = () => { throw Error('must not observe a saved proposal again'); };
+  await observeSessionBinding(f.options); assert.equal(f.commits(), 2); assert.equal(f.reads(), reads);
+  const expired = observationFixture();
+  expired.options.observe = () => { throw Error('session observation deadline expired'); };
+  expired.options.now = (() => { let n = 0; return () => ++n > 2 ? expired.deadline + 1 : 100000; })();
+  await observeSessionBinding(expired.options);
+  assert.equal(expired.job.sessionBinding.reason, 'native session observation deadline expired');
+  assert.equal(expired.commits(), 0);
 });

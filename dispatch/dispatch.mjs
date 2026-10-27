@@ -264,14 +264,14 @@ function prepareSessionBinding(run) {
 }
 async function bindSession() {
   const binding = job.sessionBinding;
-  if (!binding || ['bound', 'unbound'].includes(binding.status)) return;
+  if (!binding || binding.status === 'bound' || binding.status === 'unbound' && !binding.proposed) return;
   // An exact saved proposal may be retried after the deadline. Observation may not.
   observationDeadline = binding.proposed ? undefined : Date.parse(binding.deadline);
   try {
     await observeSessionBinding({ job: { ...job, journal }, save, observe: observeNative,
       record: () => {
         // Only observations use the launch-window timeout. The writer checks
-        // its deadline under the record lock and must finish its transaction.
+        // the saved observation against its original window under the lock.
         observationDeadline = undefined;
         return record(['session-bind', '--journal', journal]);
       } });

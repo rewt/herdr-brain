@@ -279,41 +279,15 @@ There is no backfill, background binder or ingestion delay. A saved bind proposa
 is never replaced and can recover an exact lost reply even after report ingestion.
 An unknown bind reply prints the exact retry command to stderr and returns
 `binding.status: "unknown"` with that command in the JSON receipt. Record writes
-finish outside the observation timeout and enforce the deadline under the lock.
+finish outside the observation timeout and validate the saved observation window
+under the lock.
+The writer judges the proposal's saved `observed_at`, not elapsed CLI or record
+lock time. A timely saved proposal refused by an earlier commit-time check can
+replay on an **open, unreported** run, including a saved `unbound` status; no new
+observation or renewed deadline is allowed. Reported/abandoned runs accept only
+an exact retry of an already recorded bind. They cannot gain a new identity fact.
 Folded identity evidence lives in side tables; run objects and historical
 completion fingerprints retain their original shape.
-
-A finished original whose saved binding is `unbound` cannot use the ordinary
-writer: its status fails the original-dispatch gate before the deadline guard.
-The actual project supervisor may recover that **same** finished occupant with
-the development source, without changing the original journal, deadline, claim,
-worker, watcher or report. First record a scoped decision on the owning item:
-
-```sh
-ORG_DIR=/owning/.org /PINNED/NODE /SOURCE/bin/org.mjs note ITEM --decision 'Recover original R-n JOURNAL STABLE_ID FULL_LANE_HEAD FULL_SOURCE_HEAD ACTUAL_SESSION under fresh native guards.'
-```
-
-Then use that decision's sequence (from the record), the actual committed lane
-head, the committed development source head, and the original native session:
-
-```sh
-HERDR_BRAIN_ROOT=/SOURCE ORG_DIR=/owning/.org /PINNED/NODE /SOURCE/bin/org.mjs session-bind --journal JOURNAL --recover-finished --role supervisor --id STABLE_ID --decision-seq N --expected-head FULL_LANE_HEAD --expected-source FULL_SOURCE_HEAD --expected-session ACTUAL_SESSION
-```
-
-Run it from the supervisor's actual canonical native checkout. This command
-observes only the saved original worker; the native session, terminal, workspace,
-foreground process PID and birth identity must match. A saved proposal also pins
-the expected session. The original report may already be ingested, or the native
-worker may be finished with clean committed source and no report yet. Success
-appends one checked identity fact and an immutable archive under
-`.org/evidence/session-bind/R-n/`; it never prompts, claims, launches, lands or
-reports for that worker. The original worker retains its normal landing guards
-and existing producer checks. Exact retries return the same fact. Conflicting
-binds, UNKNOWN attempts/replies, changed receipts/source, newer holders, active
-or ambiguous natives, STOP/HOLD and missing original launch/delivery evidence
-refuse. A retained recovery archive without a committed bind is UNKNOWN and must
-not be replaced. A pre-launch request without an original worker/process/receipt
-cannot use this recovery. Ordinary dispatch binding and its old binds are unchanged.
 Correction and completion notices go through watch's
 [shared supervisor input gate](../supervisor/README.md), which journals notices
 and waits for two empty-composer reads while the supervisor is idle. Dispatch's

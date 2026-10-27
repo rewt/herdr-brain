@@ -16,6 +16,25 @@ import { fixture, promptCalls, until, pauseHook, hooksTableScreen, startupHookRe
 const DISPATCH = fileURLToPath(new URL('../dispatch.mjs', import.meta.url));
 const RECORD = fileURLToPath(new URL('../../bin/org.mjs', import.meta.url));
 const WATCH = fileURLToPath(new URL('../../watch/watch.mjs', import.meta.url));
+test('timely saved unbound proposal retries through dispatch without a new native observation or prompt', t => {
+  const f = fixture(t, { lateSession: 'delayed' }), first = f.start(); assert.equal(first.status, 0, first.stderr);
+  const file = f.jobs()[0], job = JSON.parse(fs.readFileSync(file)), b = job.sessionBinding;
+  const eventFile = path.join(f.org, 'events.jsonl');
+  const events = fs.readFileSync(eventFile, 'utf8').trim().split('\n').map(JSON.parse).filter(e => e.type !== 'run.session_bound');
+  fs.writeFileSync(eventFile, events.map((e, i) => JSON.stringify({ ...e, seq: i + 1 }) + '\n').join(''));
+  b.status = 'unbound'; const at = Date.now() - 120000;
+  b.prompted_at = b.proposed.prompted_at = new Date(at).toISOString();
+  b.deadline = b.proposed.deadline = new Date(at + 60000).toISOString();
+  b.proposed.observed_at = new Date(at + 30000).toISOString();
+  fs.writeFileSync(file, JSON.stringify(job));
+  const reads = () => fs.readFileSync(path.join(f.root, 'calls'), 'utf8').trim().split('\n').map(JSON.parse)
+    .filter(c => c.a[0] === 'pane' && c.a[1] === 'process-info').length;
+  const before = reads(), retry = f.dispatch(['--retry', job.run]); assert.equal(retry.status, 0, retry.stderr);
+  const after = JSON.parse(fs.readFileSync(file));
+  assert.equal(after.sessionBinding.status, 'bound'); assert.equal(reads(), before); assert.equal(promptCalls(f).length, 1);
+  assert.deepEqual(after.sessionBinding.proposed, b.proposed); assert.equal(after.sessionBinding.deadline, b.deadline);
+  assert.equal(effectiveWorkerIdentity(f.state().runs.get(job.run), f.state()).identity_conflict, false);
+});
 test('fake Herdr readers see complete worker state while a concurrent writer is paused mid-write', async t => {
   const f = fixture(t), first = f.start(); assert.equal(first.status, 0, first.stderr);
   const agent = JSON.parse(first.stdout).agent, state = path.join(f.root, 'workers');

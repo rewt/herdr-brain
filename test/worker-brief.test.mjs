@@ -5,7 +5,7 @@ import { fold } from '../lib/state.mjs';
 import { DEFAULT_CONFIG } from '../lib/store.mjs';
 import { renderBrief } from '../lib/render.mjs';
 import { productFiles } from '../lib/product-files.mjs';
-import { createWorkerBrief, validateWorkerBrief, runWorkerBrief, renderWorkerBrief, validateLineExecution, lineWorkerPrompt } from '../lib/worker-brief.mjs';
+import { createWorkerBrief, validateWorkerBrief, runWorkerBrief, renderWorkerBrief, validateLineExecution, compatibleLineBrief, lineWorkerPrompt } from '../lib/worker-brief.mjs';
 import { fileURLToPath } from 'node:url';
 
 function assignment({ role = 'engineer', address = 'supervisor-herdr', project = '/brain', extra = '' } = {}) {
@@ -84,6 +84,18 @@ test('prelaunch validation rejects absent, changed or duplicated generated contr
   assert.throws(() => validateLineExecution({ job: f.job, run: missing, brief }), /saved\/recorded contract differs/);
   const malformed = structuredClone(f.run); malformed.meta.worker_brief = '{';
   assert.throws(() => runWorkerBrief(malformed), /worker_brief JSON/);
+});
+
+test('an older installed renderer receives the bound contract exactly once while partial or foreign briefs refuse', () => {
+  const f=assignment(),current=f.render(),section=renderWorkerBrief(f.contract),legacy=current.replace(section+'\n\n','');
+  const compatible=compatibleLineBrief({job:f.job,run:f.run,brief:legacy});
+  assert.equal(compatible,current);
+  assert.equal(compatibleLineBrief({job:f.job,run:f.run,brief:compatible}),current);
+  assert.match(f.prompt(compatible),/PROJECT SUPERVISOR supervisor-herdr/);
+  for(const brief of [current.replace(f.contract.guidance.text,'Changed guidance'),legacy.replace('R-1 on ENG-1','R-2 on ENG-2'),legacy+'\n## Execution contract\npartial'])
+    assert.throws(()=>compatibleLineBrief({job:f.job,run:f.run,brief}),/missing required fields/);
+  const job={...f.job,workspace:'/foreign'};
+  assert.throws(()=>compatibleLineBrief({job,run:f.run,brief:legacy}),/actual launch workspace/);
 });
 
 test('item fields and ask supply real scope while estimates and first reds never become launch gates', () => {

@@ -9,13 +9,12 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from '../lib/cli-help.mjs';
 import { loadDiscoveredRoutes, mergeRoutesConfig, resolveRoute, resolveLaunchRoute } from '../lanes/routes.mjs';
 import { BRAIN_CONTROLLER, brainOwner, claimRun, readOwnedRun, requireController, fenceOwner, continueOwnerRelease } from '../lib/run-owner.mjs';
-import { findOrgDir, loadEvents } from '../lib/store.mjs';
+import { findOrgDir, loadEvents, writeFileAtomic } from '../lib/store.mjs';
 import { fold } from '../lib/state.mjs';
 import { waitForProvingHold, RESERVATION_WAIT_EXPIRED_CODE } from '../test-slot/reservations.mjs';
 import { admissionDeadline } from '../lib/deadline.mjs';
 import { readTiming, timedMemoryWait, timingMetadata, readAdmissionTiming, admissionTimingMetadata } from '../lib/run-timing.mjs';
 import { gitProject } from '../lib/project.mjs';
-import { readProjectPolicy } from '../lib/config-policy.mjs';
 import { bundleRelease, forwardRelease, continueRelease, operationFile } from '../lib/releases.mjs';
 import { hookReviewDialog, codexProfile } from './hook-review.mjs';
 import { effectiveWorkerIdentity, workerReceipt, sharesWorker } from '../lib/worker-identity.mjs';
@@ -32,7 +31,7 @@ import {lockRequest} from './request-lock.mjs';
 import {resolvedNotStarted} from './not-started.mjs';
 import {originalPrestartProof,reviewDigest,reviewPlain} from '../line-service/review-resolutions.mjs';
 import {checkDispatchEligibility,launchDigest} from './launch-guard.mjs';
-import { createWorkerBrief, validateWorkerBrief, validateLineExecution, lineWorkerPrompt } from '../lib/worker-brief.mjs';
+import { createWorkerBrief, validateWorkerBrief, validateLineExecution, compatibleLineBrief, lineWorkerPrompt, projectExceptionAddress } from '../lib/worker-brief.mjs';
 
 const local = (file) => fileURLToPath(new URL(file, import.meta.url));
 const { values: opt, positionals } = parseArgs({ usage: "Usage: node dispatch/dispatch.mjs ITEM --lane TOPIC --route ROUTE --brief FILE [OPTIONS] | --retry R-n|JOURNAL | --status R-n|JOURNAL\nAdmission counts running native workers/reviewers and durable uncertain starts under dispatch.max_sessions. Unlanded lifecycle history is diagnostic only. --from-run retains same-item/current-run guards; --unblocks records a genuine landing dependency and never bypasses native capacity.", allowPositionals: true, options: {
@@ -120,24 +119,6 @@ function command(argv, args, cwd = job?.repo ?? path.resolve(opt.repo)) {
 const record = (args) => command(recordCLI, args);
 const identityState = () => fold(loadEvents(job?.org ?? opt.org).events);
 const lane = (args) => command(laneCLI, args);
-function projectExceptionAddress(repo, config, route) {
-  const explicit = process.env.MONITOR_SUPERVISOR_AGENT?.trim();
-  if (explicit) return { to: explicit, source: 'parent MONITOR_SUPERVISOR_AGENT' };
-  // Launch env is child-only; resolve its effective value without mutating the
-  // dispatcher's environment. Later route entries override dispatch defaults.
-  const launch = resolveLaunchRoute(config, { route });
-  const setting = launch.env.filter(pair => pair.startsWith('MONITOR_SUPERVISOR_AGENT=')).at(-1);
-  const configured = setting?.slice('MONITOR_SUPERVISOR_AGENT='.length).trim();
-  if (configured) return { to: configured, source: 'effective launch MONITOR_SUPERVISOR_AGENT' };
-  try {
-    const policy = readProjectPolicy(repo, 'promote', process.env, { canonical: gitProject(repo).canonical });
-    if (policy.config.to) return { to: policy.config.to.trim(), source: 'project promote.to', file: policy.file };
-    return { to: null, source: 'unknown', reason: 'No project-specific exception address is configured.' };
-  } catch (error) {
-    // Address discovery supplies guidance, never a new dispatch readiness gate.
-    return { to: null, source: 'unknown', reason: error.message };
-  }
-}
 const git = (args, cwd) => command(['git'], args, cwd);
 const json = (text) => { const value = JSON.parse(text); if (value.error) throw new Error(JSON.stringify(value.error)); return value.result ?? value; };
 const refusal = (code, message) => Object.assign(new Error(message), { code });
@@ -595,6 +576,17 @@ async function main() {
   // start may have committed the run before failing to materialize its brief.
   // The existing record command recreates a missing brief from durable context.
   if (!fs.existsSync(run.brief_path)) record(['brief', job.run]);
+  if (job.workerBrief && job.native_launch_attempted === false && !job.worker) {
+    const original = fs.readFileSync(run.brief_path, 'utf8');
+    const compatible = compatibleLineBrief({ job, run, brief: original });
+    if (compatible !== original) {
+      fenceOwner(job.org, job.run, job.ownership, () => {
+        const archive = run.brief_path + '.pre-contract.md';
+        if (!fs.existsSync(archive)) fs.writeFileSync(archive, original, {flag:'wx',mode:0o600});
+        writeFileAtomic(run.brief_path, compatible, 0o600);
+      });
+    }
+  }
   if (job.stage === 'launching') {
     if (opt.fresh) {
       job.stage = 'worker'; save();

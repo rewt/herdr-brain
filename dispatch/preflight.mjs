@@ -4,6 +4,7 @@ import path from 'node:path';
 import {createHash} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import {originalPrestartProof} from '../line-service/review-resolutions.mjs';
+import {validateWorkerBrief} from '../lib/worker-brief.mjs';
 const implementation=fs.realpathSync(fileURLToPath(new URL('../',import.meta.url)));
 const hash=b=>createHash('sha256').update(b).digest('hex');
 const plain=file=>{const s=fs.lstatSync(file);if(!s.isFile()||fs.realpathSync(file)!==path.resolve(file))throw Error('redirected original preflight evidence');return fs.readFileSync(file,'utf8');};
@@ -16,6 +17,22 @@ export function implementationChangeOutcome(job){
 export function initialCapacityRefusal(entry){
   if(entry?.receipt?.status!==1||entry.receipt.signal||/EPERM|EACCES|native refusal|foreign|identity|reserved|HOLD|STOP/i.test(entry.error??''))return null;
   try{const value=JSON.parse(entry.receipt.stdout);return value.result==='failed'&&capacityCodes.has(value.code)&&!value.journal&&typeof value.reason==='string'?value:null;}catch{return null;}
+}
+
+// This exact legacy failure is thrown before journal allocation. Missing
+// journals/runs alone are never zero-effect proof. A now-valid contract proves
+// the missing address input actually changed; all other failures stay retained.
+export function initialBriefRefusal({entry,contract,events,item,outcome}) {
+  if(entry?.state!=='held'||entry.receipt?.status!==1||entry.receipt.signal||entry.receipt.signal_sent||
+      outcome?.status!=='unknown'||outcome.reason!=='original request outcome unavailable; no replacement')return null;
+  let result;try{result=JSON.parse(entry.receipt.stdout);}catch{return null;}
+  const reason='Worker brief missing required fields: PROJECT SUPERVISOR address (configure owning project promote.to or launch MONITOR_SUPERVISOR_AGENT); no worker spawned';
+  if(result.result!=='failed'||!['DISPATCH_FAILED','WORKER_BRIEF_REQUIRED'].includes(result.code)||result.reason!==reason||result.journal||result.native_launch_attempted===true||
+      (entry.error??'').replace(/^dispatch:\s*/,'').trim()!==reason||
+      !Number.isFinite(Date.parse(entry.at))||events.some(e=>e.type==='run.started'&&e.item===item&&Date.parse(e.at)>=Date.parse(entry.at)))return null;
+  const current=typeof contract==='function'?contract():contract;
+  validateWorkerBrief(current);
+  return {kind:'changed-brief-address',original_sha256:hash(JSON.stringify(entry.receipt)),input_sha256:hash(JSON.stringify(current))};
 }
 function capacityEvidence({job,journal,org,common,failure,terminal}){
   if(job.failure?.kind==='capacity'&&capacityCodes.has(job.failure.code)&&job.failure.stage===job.stage&&job.failure.native_launch_attempted===false)return job.failure;

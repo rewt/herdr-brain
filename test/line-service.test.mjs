@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { createLineService, sourceRoot, reviewAttempt, serviceDirectory } from '../line-service/line-service.mjs';
+import { createLineService, sourceRoot, reviewAttempt, serviceDirectory, routeFor } from '../line-service/line-service.mjs';
 import { launchPlist } from '../line-service/launchd.mjs';
 import { noticeLock } from '../supervisor/notice-lock.mjs';
 import { gitProject } from '../lib/project.mjs';
@@ -12,6 +12,7 @@ import { loadEvents,transact } from '../lib/store.mjs';
 import { fold } from '../lib/state.mjs';
 import { captureProductCheckout } from '../lib/product-files.mjs';
 import { tierFiles } from './helpers/tier.mjs';
+import {createHash} from 'node:crypto';
 
 function fixture(t) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'line-service-'))), repo = path.join(root, 'project'), org = path.join(repo, '.org');
@@ -42,9 +43,47 @@ function fixture(t) {
     return { status: 0, stdout: JSON.stringify({ result: args[1] === 'handle' ? 'review_pending' : 'dispatched' }), stderr: '' };
   };
   const service = (overrides = {}) => createLineService({ repo, org, to: 'supervisor-test', env, command,
-    capacity: () => ({ count: 0, cap: 2 }), recordNotice: data => { notes.push({ to:'supervisor-test',text:data.reason,options:data }); return { id:data.id,state:'record-only' }; }, ...overrides });
+    haltAfter:100,capacity: () => ({ count: 0, cap: 2 }), recordNotice: data => { notes.push({ to:'supervisor-test',text:data.reason,options:data }); return { id:data.id,state:'record-only' }; }, ...overrides });
   return { repo, org, env, record, git, add, show, calls, notes, service, setFailure: value => { fail = value; } };
 }
+
+test('default routing handles known role and narrow task aliases without recasting supervisor or orchestrator work',()=>{
+  const route={kind:'codex'},config={routes:{narrow:route},selection_policy:{by_task_class:{'implementation-narrow':'narrow'}}};
+  for(const role of ['engineer','engineering'])assert.equal(routeFor({role,meta:{}},config),'narrow');
+  for(const role of ['supervisor','orchestrator'])assert.throws(()=>routeFor({role,meta:{}},config),/unsupported line role/);
+  assert.throws(()=>routeFor({role:'engineer',capability:'unknown',meta:{}},config),/unknown task class: unknown/);
+  assert.equal(routeFor({role:'supervisor',meta:{route:'narrow'}},config),'narrow','an explicit existing route remains authoritative');
+  for(const role of ['architect','architecture','planner'])assert.equal(routeFor({role,meta:{}},{routes:{unblock:route},selection_policy:{by_task_class:{review:'unblock'}}}),'unblock','partial project selection policy retains the established planning route');
+});
+
+test('a changed supervisor address recovers only the exact zero-effect pre-journal failure once and preserves its original receipt',t=>{
+  const f=fixture(t),item=f.add('Previously stranded engineering'),s=f.service(),directory=s.directory;
+  const created=f.show(item).created.seq,key=`dispatch:${item}:${created}:ordinary`,brief=path.join(directory,createHash('sha256').update(JSON.stringify(key)).digest('hex')+'.ask.md');
+  const reason='Worker brief missing required fields: PROJECT SUPERVISOR address (configure owning project promote.to or launch MONITOR_SUPERVISOR_AGENT); no worker spawned';
+  fs.writeFileSync(brief,'# Original assignment\n');
+  const original={state:'held',at:'2026-10-27T00:00:00Z',error:'dispatch: '+reason,receipt:{status:1,signal:null,stdout:JSON.stringify({result:'failed',code:'DISPATCH_FAILED',reason}),stderr:'dispatch: '+reason}};
+  fs.writeFileSync(path.join(directory,'effects.json'),JSON.stringify({identity:gitProject(f.repo).identity,org:f.org,actions:{[key]:original}}));
+  s.pass();assert.equal(f.calls.length,0,'an unchanged missing address never retries');
+  fs.writeFileSync(path.join(f.repo,'.promote.json'),JSON.stringify({to:'supervisor-test'}));
+  f.service().pass();f.service().pass();assert.equal(f.calls.length,1);assert.equal(f.calls[0].args[1],item);
+  const actions=JSON.parse(fs.readFileSync(path.join(directory,'effects.json'))).actions;
+  assert.deepEqual(actions[key].receipt,original.receipt);assert.ok(actions[key].prejournal_recovery);
+  assert.equal(actions[actions[key].prejournal_recovery.key].state,'complete');
+});
+
+test('three completed engineering-idle passes file and immediately dispatch one repair across restart while original native refusal remains retained',t=>{
+  const f=fixture(t),item=f.add('Native refusal'),options={haltAfter:3};f.setFailure('native permission refused');
+  for(let n=0;n<3;n++)f.service(options).pass();
+  const repairs=()=>[...fold(loadEvents(f.org).events).items.values()].filter(i=>i.meta.halt_repair===1);
+  assert.equal(repairs().length,1);const repair=repairs()[0];
+  assert.equal(f.calls.filter(c=>c.args[1]===item).length,1);
+  assert.equal(f.calls.filter(c=>c.args[1]===repair.id).length,1,'fresh ordinary dispatch in the threshold pass');
+  for(let n=0;n<3;n++)f.service(options).pass();
+  assert.equal(repairs().length,1);assert.equal(f.calls.filter(c=>c.args[1]===repair.id).length,1);
+  const release=noticeLock(path.join(f.service().directory,'pass.lock'));
+  try{assert.throws(()=>f.service(options).pass(),/locked/);}finally{release();}
+  assert.equal(repairs().length,1);
+});
 
 test('priority READY dispatch uses existing admission and retains its one effect across restart', t => {
   const f = fixture(t); const high = f.add('High', 7);

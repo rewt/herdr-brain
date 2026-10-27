@@ -2,7 +2,7 @@
 // One model-free pass. launchd supplies the schedule, existing CLIs own effects.
 import fs from 'node:fs';
 import path from 'node:path';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { spawnSync, execFileSync } from 'node:child_process';
 import {foregroundCommand} from '../dispatch/foreground-command.mjs';
 import {originalDispatchOutcome} from '../dispatch/outcome.mjs';
@@ -25,8 +25,10 @@ import { recordLineNotice,canonicalFailure } from './record-inbox.mjs';
 import { enqueueNamedDecision } from './decision-wake.mjs';
 import { canonical } from '../messages/schema.mjs';
 import { discoverChanges,dispatchInput,phase0Boundary,morningDigest,recordReviewResults,reviewCompletionPlan,recordReviewCompletion,ensureReviewBoundary,canonicalReviewIndex,observeReviewHealth } from './phase1.mjs';
-import {preflightContinuation,initialCapacityRefusal} from '../dispatch/preflight.mjs';
+import {preflightContinuation,initialCapacityRefusal,initialBriefRefusal} from '../dispatch/preflight.mjs';
+import {createWorkerBrief,projectExceptionAddress} from '../lib/worker-brief.mjs';
 import {observeReviewProgress,recoverServiceReview} from './review-recovery.mjs';
+import {haltObservation,completeHaltPass} from './halt-repair.mjs';
 export { reviewAttempt } from './review.mjs';
 
 export const sourceRoot = fileURLToPath(new URL('../', import.meta.url));
@@ -61,15 +63,30 @@ export function reserved(item) {
     ['security', 'funds-and-chain', 'publish', 'delete-data', 'licensing', 'priorities'].includes(item.meta.category);
 }
 export function routeFor(item, config) {
-  const task = { engineer: 'implementation', architect: 'planning', reviewer: 'review', writer: 'writing', researcher: 'research' }[item.role];
-  const route = item.meta.route ?? (config.routes?.[item.role] ? item.role : selectRoute(config, item.capability ?? task));
+  const role = {ENG:'engineer',ARCH:'architect',REV:'reviewer',DOC:'writer',RES:'researcher',PLAN:'planner',TRI:'triage',DES:'designer'};
+  const normalized = Object.entries(role).find(([prefix])=>roleIs(item,prefix))?.[1] ?? item.role;
+  const task = {engineer:'implementation',architect:'planning',planner:'planning',reviewer:'review',writer:'writing',researcher:'research',triage:'chore',designer:'design'}[normalized];
+  let route = item.meta.route ?? (config.routes?.[item.role] ? item.role : config.routes?.[normalized] ? normalized : null);
+  if(!route){
+    if(!task&&!item.capability)throw Error(`unsupported line role: ${item.role}; assign an explicit route or task capability`);
+    const requested=item.capability??task;
+    // Established task vocabularies differ across projects. Only known narrow
+    // defaults are aliases; explicit capabilities and unsupported roles refuse.
+    const aliases={implementation:['implementation-narrow'],planning:['planning-bounded']};
+    const selected=!item.capability&&config.selection_policy?.by_task_class?.[requested]===undefined
+      ? aliases[requested]?.find(name=>config.selection_policy?.by_task_class?.[name]!==undefined)??requested : requested;
+    const fallback={planning:'unblock',research:'research',review:'review',chore:'chore',writing:'writer'}[requested];
+    route=!item.capability&&config.selection_policy?.by_task_class?.[selected]===undefined&&fallback&&config.routes?.[fallback]
+      ? fallback : selectRoute(config,selected);
+  }
   resolveLaunchRoute(config, { route });
   return route;
 }
 
 export function createLineService({ repo, org, to, herdr = 'herdr', env = process.env, command = foregroundCommand,
   recordNotice = recordLineNotice, wakeDecision = enqueueNamedDecision, capacity, identify = gitProject, now = () => new Date().toISOString(),
-  childTimeoutMs=120000,maxStarts,maxStepsPerStage=8,passBudgetMs=480000,alertAfter=3,workClock=()=>performance.now() }) {
+  childTimeoutMs=120000,maxStarts,maxStepsPerStage=8,passBudgetMs=480000,alertAfter=3,haltAfter=Number(env.HERDR_LINE_HALT_PASSES??3),workClock=()=>performance.now() }) {
+  if(!Number.isSafeInteger(haltAfter)||haltAfter<1)throw Error('halt repair threshold must be a positive completed-pass count');
   const project = identify(repo);
   if (project.checkout !== project.canonical) throw Error('line service requires the canonical project checkout');
   repo = project.canonical;
@@ -376,9 +393,11 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       // independent admission allowance. All actual effects still recount and
       // re-read native/record/source/STOP/HOLD; no worker is stopped by a clock.
       const precedingWork=workClock()-workStarted;workStarted=workClock();
-      let starts=0,admissionLogged=false;
-      for (const item of sortItems([...snapshot.state.items.values()].filter(item => !item.closed && item.kind !== 'goal')).sort((a, b) => Number(isQueueReview(b)) - Number(isQueueReview(a)))) {
-        if(expired()||starts>=(maxStarts??config.dispatch?.max_sessions??7))break;
+      let starts=0,admissionLogged=false,latestOccupancy;
+      const countCapacity = kind => (capacity??(()=>checkSessionCap({config,org,kind,common:project.identity,
+        agent:name=>native(['agent','get',name]).agent,processInfo:pane=>native(['pane','process-info','--pane',pane]).process_info})))();
+      const admitItems = (items,repair=false) => { for (const item of items) {
+        if(expired()||!repair&&starts>=(maxStarts??config.dispatch?.max_sessions??7))break;
         snapshot=current();
         const input=dispatchInput({...snapshot,item:snapshot.state.items.get(item.id),org,identity:project.identity});
         if(!input)continue;
@@ -390,23 +409,35 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         if (reserved(item) || item.meta.hold || item.meta.held) { note(`dispatch:${item.id}`, 'held or reserved ready item needs judgment'); continue; }
         try {
           const key = `dispatch:${item.id}:${input}`;
-          let continuation,retryAdmission;
+          let continuation,retryAdmission,briefRecovery,dispatchKey=key;
           if (effects.actions[key]) {
-            const prior=effects.actions[key];let result=prior.result;
+            const original=effects.actions[key];
+            dispatchKey=original.prejournal_recovery?.key??key;
+            const prior=effects.actions[dispatchKey];
+            if(!prior)throw Error('pre-journal recovery intent has UNKNOWN outcome; retain owner');
+            let result=prior.result;
             if(typeof result==='string')try{result=JSON.parse(result);}catch{}
             if(!result?.journal&&prior.receipt?.stdout)try{result=JSON.parse(prior.receipt.stdout);}catch{}
             if(!result?.journal&&prior.original_outcome?.journal)result={journal:prior.original_outcome.journal};
             if(result?.journal)continuation=preflightContinuation({journal:result.journal,repo,org,common:project.identity,root:fs.realpathSync(sourceRoot),events:snapshot.events});
-            else retryAdmission=initialCapacityRefusal(prior);
-            if(!continuation&&!retryAdmission){log({ action: 'dispatch-retained', key, state: prior.state });if(roleIs(item,'REV')&&prior.state!=='complete'&&!prior.original_outcome?.error)note(key,prior.error??'original review launch outcome retained; no duplicate launch',{item:item.id,review:true});continue;}
+            else {
+              retryAdmission=initialCapacityRefusal(prior);
+              if(!retryAdmission&&!original.prejournal_recovery){
+                const contract=()=>{
+                  const route=routeFor(item,config),brief=path.join(directory,`${digest(key)}.ask.md`);
+                  return createWorkerBrief({item,ask:brief,askText:fs.readFileSync(brief,'utf8'),project:repo,org,lane:`line-${item.id.toLowerCase()}-${item.runs.length+1}`,route,harness:resolveLaunchRoute(config,{route}).kind,reviewRoute:reviewQueueRoute(config),exception:projectExceptionAddress(repo,config,route,childEnv)});
+                };
+                briefRecovery=initialBriefRefusal({entry:prior,contract,events:snapshot.events,item:item.id,outcome:prior.original_outcome});
+                if(briefRecovery)dispatchKey=`dispatch-recovered:${digest([key,briefRecovery])}`;
+              }
+            }
+            if(!continuation&&!retryAdmission&&!briefRecovery){log({ action: 'dispatch-retained', key:dispatchKey, state: prior.state });if(roleIs(item,'REV')&&prior.state!=='complete'&&!prior.original_outcome?.error)note(key,prior.error??'original review launch outcome retained; no duplicate launch',{item:item.id,review:true});continue;}
           }
           const reviewTarget = isQueueReview(item) ? validateQueuedReview({ item, state: snapshot.state, events: snapshot.events, org, repo,...(continuation?{allowJournal:continuation.journal}:{}) }) : null;
           const route = continuation?.job.route??(reviewTarget ? reviewQueueRoute(config) : routeFor(item, config));
-          const count = capacity ?? (() => checkSessionCap({ config, org, kind:reviewTarget?'review':'build',common: project.identity,
-            agent: name => native(['agent', 'get', name]).agent,
-            processInfo: pane => native(['pane', 'process-info', '--pane', pane]).process_info }));
-          const occupancy = count(); log({ action: 'capacity', ...occupancy });
-          const dispatched = effect(continuation?`dispatch-preflight:${continuation.token}:${continuation.key}`:key, () => {
+          const occupancy = countCapacity(reviewTarget?'review':'build');latestOccupancy=occupancy; log({ action: 'capacity', ...occupancy });
+          if(briefRecovery){effects.actions[key].prejournal_recovery={...briefRecovery,key:dispatchKey,at:now()};save();log({action:'prejournal-recovery',key,recovery:effects.actions[key].prejournal_recovery});}
+          const dispatched = effect(continuation?`dispatch-preflight:${continuation.token}:${continuation.key}`:dispatchKey, () => {
             const fresh = observe(), current = fresh.state.items.get(item.id);
             if (!current || current.closed || dispatchInput({...fresh,item:current,org,identity:project.identity}) !== input || reserved(current) || current.meta.hold || current.meta.held || (!continuation&&(reviewTarget ? reviewQueueRoute(config) : routeFor(current, config)) !== route)) throw Error('dispatch readiness or route changed');
             if(continuation){
@@ -429,7 +460,29 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
           if (['DISPATCH_SESSION_CAP', 'DISPATCH_UNLANDED_CAP'].includes(e.code)) { log({ action: 'capacity-held', code: e.code, reason: e.message }); note(`capacity:${e.code}`, e.message); break; }
           note(`dispatch:${item.id}`, e.message);
         }
-      }
+      }};
+      admitItems(sortItems([...snapshot.state.items.values()].filter(item=>!item.closed&&item.kind!=='goal')).sort((a,b)=>Number(isQueueReview(b))-Number(isQueueReview(a))));
+      // Detached acknowledgements and review activity are not engineering
+      // progress. This is the end of a completed pass, under the same lock.
+      try {
+        snapshot=observe();
+        const observation=haltObservation({...snapshot,identity:project.identity,config,actions:effects.actions,occupancy:latestOccupancy});
+        {
+          if(observation.ready.length)try{latestOccupancy=countCapacity('build');}catch(e){latestOccupancy=e.sessions??{unknown:e.message};log({action:'halt-capacity-held',code:e.code,reason:e.message});}
+          const observed=haltObservation({...snapshot,identity:project.identity,config,actions:effects.actions,occupancy:latestOccupancy});
+          const route=config.routes?.['engineer-xhigh']?'engineer-xhigh':routeFor({role:'engineer',meta:{}},config);
+          const completedPass=randomUUID();
+          log({action:'engineering-idle-observation',pass:completedPass,observation:observed});
+          const repair=completeHaltPass({repo,org,env:childEnv,pass:completedPass,observation:observed,route,after:haltAfter,audit:path.join(directory,'passes.jsonl'),effects:journal});
+          log({action:'engineering-idle',...repair});
+          if(repair.dispatch){
+            // One diagnosis has an independent scheduling allowance; actual
+            // native/shared capacity is still recounted by ordinary admission.
+            workStarted=workClock();stale=true;snapshot=current();
+            const item=snapshot.state.items.get(repair.item);if(item)admitItems([item],true);
+          }
+        }
+      }catch(e){note('halt-repair',e.message);}
       checkpointNotices();
       if(performance.now()-passStarted>600000)note('long-pass','line pass exceeded ten minutes',{},true);
       checkpointNotices();const duration_ms = performance.now() - passStarted;

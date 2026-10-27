@@ -66,9 +66,8 @@ test('automatic review holds blocked uncommitted admission source before any hel
   f.service().pass(); assert.equal(f.calls.length, 0); assert.equal(f.notices.length,0);
 });
 
-test('automatic review retains pending manual ambiguous and UNKNOWN item attempts across heads runs and restarts', t => {
-  const cases = ['pending', 'native', 'manual', 'decision', 'unknown', 'legacy'];
-  for (const kind of cases) {
+for (const kind of ['pending', 'native', 'manual', 'decision', 'unknown', 'legacy']) {
+  test(`automatic review retains pending manual ambiguous and UNKNOWN item attempts across heads runs and restarts: ${kind}`, t => {
     const f = fixture(t), c = f.context();
     if (kind === 'pending') {
       fs.mkdirSync(path.join(f.org, 'line-service/older-head'), { recursive: true });
@@ -83,8 +82,8 @@ test('automatic review retains pending manual ambiguous and UNKNOWN item attempt
     f.write(); const next = f.context();
     try { assert.ok(reviewAttempt(next.item, next)); } catch (e) { assert.match(e.message, /UNKNOWN|unmapped/); }
     f.service().pass(); f.service().pass(); assert.equal(f.calls.length, 0, kind);
-  }
-});
+  });
+}
 
 test('automatic immutable capture ignores subsequent engineer head movement and cleanup', t => {
   const f = fixture(t), target = bindReviewTarget(f.context()); f.commit(2); f.git(['worktree', 'remove', '--force', f.workspace]);
@@ -113,7 +112,7 @@ test('settled history sweep has constant identity work and bounded log rows whil
   try { s = f.service({ identify: cwd => { identities++; return gitProject(cwd); } }); s.pass(); } finally { fs.existsSync = exists; }
   assert.equal(identities, 2); assert.equal(historicalReads, 0); assert.equal(f.calls.length, 0);
   const rows = fs.readFileSync(path.join(s.directory, 'passes.jsonl'), 'utf8').trim().split('\n').map(JSON.parse);
-  assert.ok(rows.length <= 4); assert.ok(rows.some(r => r.action === 'review-retained'));
+  assert.ok(rows.length <= 4, JSON.stringify(rows, null, 2)); assert.ok(rows.some(r => r.action === 'review-retained'));
   const timing = rows.find(r => r.action === 'pass-complete').timing;
   assert.equal(timing.snapshots, 1); assert.equal(timing.historical_intake_skipped, 2035); assert.equal(timing.effect_command_ms, 0);
 });

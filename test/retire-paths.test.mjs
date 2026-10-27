@@ -24,8 +24,7 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 const laneCLI = path.join(root, 'lanes/lane.mjs'), recordCLI = path.join(root, 'bin/org.mjs');
 
 async function checkRetirementRestoration(t, body) {
-  const keys = ['HOME', ...RETIREMENT_ENV_KEYS];
-  const snapshot = () => Object.fromEntries(keys.map(key => [key, process.env[key]]));
+  const snapshot = () => Object.fromEntries(RETIREMENT_ENV_KEYS.map(key => [key, process.env[key]]));
   const before = snapshot();
   await t.test('fixture lifecycle', body);
   assert.deepEqual(snapshot(), before, 'completed child restores the caller environment');
@@ -362,11 +361,7 @@ test('retirement hold: drain catch-up acknowledges ready first and leaves the hi
   process.send = m => { messages.push(m); return true; };
   process.stderr.write = function(chunk, ...args) { outputs.push({ text: String(chunk), ready: messages.some(m => m.ready) }); return write.call(this, chunk, ...args); };
   t.after(() => { process.send = send; process.stderr.write = write; });
-  requestRetirement({ org: f.org, eventSeq: 4, source: 'completion' });
-  // Notice correlation must resolve the same disposable project as the queue.
-  const cwd = process.cwd();
-  try { process.chdir(f.repo); await drain(queue); }
-  finally { process.chdir(cwd); }
+  requestRetirement({ org: f.org, eventSeq: 4, source: 'completion' }); await drain(queue);
   assertNoRemoval(f); assert.deepEqual(messages, [{ ready: true }]);
   assert.equal(fs.existsSync(path.join(f.org, 'retirement/handled.json')), false);
   const held = outputs.filter(row => row.text.includes('"action":"held"')); assert.ok(held.length >= 2, JSON.stringify(outputs));

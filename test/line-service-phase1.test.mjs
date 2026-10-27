@@ -477,16 +477,18 @@ test('continuity base notices retain identity and recorded state across recurren
   const file=path.join(f.directory,'effects.json'),audit=path.join(f.directory,'passes.jsonl'),prior={first_at,reason,scope,state:'recorded',id,count:4,record:{id,state:'record-only'}};
   fs.writeFileSync(file,JSON.stringify({identity:f.identity,org:f.org,actions:{},record_notices:{[key]:prior},notice_audit_offset:0}));
   let calls=0,deliveries=0;const service=createLineService({repo:f.cwd,org:f.org,to:'brain-chat',env,capacity:()=>({cap:0,count:0}),recordNotice:d=>{if(d.id===id){deliveries++;throw Error('recorded notice must not redeliver');}return{id:d.id,state:'record-only'};},command:(_exe,args)=>{calls++;assert.equal(args[1],'queue-review');return{status:1,stdout:'',stderr:reason};}});
-  // Simulate interruption after the compact fsync but before any journal or
-  // counter checkpoint. This executes the real pass/log path, not a made-up delta.
+  // Simulate interruption after the compact fsync but before the journal
+  // checkpoint. Already-written counters must deduplicate on recovery too.
   const write=fs.writeFileSync;let interrupted=false;
   fs.writeFileSync=function(target,...args){if(String(target).startsWith(file+'.')&&fs.existsSync(audit)&&fs.readFileSync(audit,'utf8').includes('"notice_record"')){interrupted=true;throw Error('injected journal checkpoint interruption');}return write.call(this,target,...args);};
   try{assert.throws(()=>service.pass(),/injected journal checkpoint interruption/);}finally{fs.writeFileSync=write;}
-  assert.equal(interrupted,true);const delta=fs.readFileSync(audit,'utf8').trim().split('\n').map(JSON.parse).find(e=>e.notice_record)?.notice_record;
+  assert.equal(interrupted,true);const interruptedRows=fs.readFileSync(audit,'utf8').trim().split('\n').map(JSON.parse),delta=interruptedRows.find(e=>e.notice_record)?.notice_record;
   assert.equal(delta.entry.boundary,boundary);assert.equal(delta.entry.id,id);assert.equal(delta.entry.count,5);assert.equal(delta.entry.first_at,first_at);assert.equal(delta.entry.state,'recorded');
   service.pass();const saved=JSON.parse(fs.readFileSync(file)),entry=saved.record_notices[key];
   assert.equal(entry.boundary,boundary);assert.equal(entry.id,id);assert.equal(entry.first_at,first_at);assert.equal(entry.state,'recorded');assert.deepEqual(entry.record,prior.record);assert.equal(entry.count,6);assert.equal(entry.review_count_recorded,6);assert.equal(deliveries,0);
-  const rows=fs.readFileSync(audit,'utf8').trim().split('\n').map(JSON.parse),last=rows.findLast(r=>r.action==='pass-complete');assert.equal(last.timing.notice_audit_replayed,1);assert.equal(last.timing.review_error_batches,1);
+  const rows=fs.readFileSync(audit,'utf8').trim().split('\n').map(JSON.parse),last=rows.findLast(r=>r.action==='pass-complete');
+  // The checkpoint failure itself also has a retained review-health delta.
+  const interruptedKeys=new Set(interruptedRows.filter(r=>r.notice_record).map(r=>r.notice_record.key));assert.ok(interruptedKeys.has(key));assert.equal(last.timing.notice_audit_replayed,interruptedKeys.size);assert.equal(last.timing.review_error_batches,1);
   assert.equal(calls,1,'replay must retain the prior held effect rather than requeue it');
   const counts=f.context().events.filter(e=>e.type==='line-service.review-error'&&e.key===key);assert.equal(Math.max(...counts.map(e=>e.count)),6);assert.equal(new Set(counts.map(e=>e.id)).size,counts.length);
   service.pass();assert.equal(calls,1);assert.equal(JSON.parse(fs.readFileSync(file)).record_notices[key].count,7);assert.equal(deliveries,0);

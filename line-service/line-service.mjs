@@ -31,6 +31,7 @@ import {observeReviewProgress,recoverServiceReview} from './review-recovery.mjs'
 import {haltObservation,completeHaltPass} from './halt-repair.mjs';
 import {itemLaunchHold} from '../lib/item-launch-hold.mjs';
 import {queuePolicy,queueClass,queueSelected,orderQueue} from './priority-order.mjs';
+import {isDecision,decisionActivation,decisionRoute,decisionBrief,decisionCandidates,queueDecision,applyDecision,observeDecisionConsequences} from './decisions.mjs';
 export { reviewAttempt } from './review.mjs';
 
 export const sourceRoot = fileURLToPath(new URL('../', import.meta.url));
@@ -69,6 +70,7 @@ export function reserved(item) {
     ['security', 'funds-and-chain', 'publish', 'delete-data', 'licensing', 'priorities'].includes(item.meta.category);
 }
 export function routeFor(item, config) {
+  if(isDecision(item)){const route=item.meta.route??decisionRoute(config);resolveLaunchRoute(config,{route});return route;}
   const role = {ENG:'engineer',ARCH:'architect',REV:'reviewer',DOC:'writer',RES:'researcher',PLAN:'planner',TRI:'triage',DES:'designer'};
   const normalized = Object.entries(role).find(([prefix])=>roleIs(item,prefix))?.[1] ?? item.role;
   const task = {engineer:'implementation',architect:'planning',planner:'planning',reviewer:'review',writer:'writing',researcher:'research',triage:'chore',designer:'design'}[normalized];
@@ -320,7 +322,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       for (const item of [...snapshot.state.items.values()].sort((a,b)=>(snapshot.state.runs.get(b.runs.at(-1))?.report?.seq??0)-(snapshot.state.runs.get(a.runs.at(-1))?.report?.seq??0))) {
         if(expired()||closeSteps>=maxStepsPerStage)break;
         const run = snapshot.state.runs.get(item.runs.at(-1));
-        if (item.closed || isQueueReview(item) || run?.report?.outcome !== 'done' || run.abandoned || !run.workspace || !fs.existsSync(run.workspace) ||
+        if (item.closed || isQueueReview(item) || isDecision(item) || run?.report?.outcome !== 'done' || run.abandoned || !run.workspace || !fs.existsSync(run.workspace) ||
             !run.owner || run.owner.legacy || run.owner.controller !== 'brain') continue;
         try {
           if (identify(run.workspace).identity !== project.identity) continue;
@@ -347,6 +349,25 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
           },undefined,undefined,true);
         } catch (e) { note(`source-complete:${run.id}`, `T2 source completion needs supervisor judgment: ${e.message}`); }
       }
+      // Mechanical rules/cleanup run first. Judgment is ordinary record work;
+      // all native launches still pass through the admission/effect path below.
+      snapshot=current();
+      if(decisionActivation(snapshot.events,project.identity,org)){
+        let decisionSteps=0;
+        for(const item of snapshot.state.items.values())if(isDecision(item)&&!item.closed){
+          if(expired()||decisionSteps>=maxStepsPerStage)break;
+          const run=snapshot.state.runs.get(item.runs.at(-1));if(!run?.report)continue;
+          decisionSteps++;
+          effect(`decision-apply:${item.id}:${run.id}:${run.report.sha256}`,()=>applyDecision({repo,org,itemId:item.id,env:childEnv,native}));
+        }
+        snapshot=current();
+        for(const request of decisionCandidates({...snapshot,identity:project.identity,org})){
+          if(expired()||decisionSteps>=maxStepsPerStage)break;
+          decisionSteps++;
+          effect(`decision-queue:${request.key}`,()=>queueDecision({repo,org,request,env:childEnv}));
+        }
+        try{checkpointNotices();observeDecisionConsequences({repo,org,env:childEnv,native});stale=true;}catch(e){note('decision-consequence',e.message);}
+      }
       try {
         const observed = current(), evaluationRows=closeoutEvaluations(project.identity,org,observed.events),evaluations = new Map(evaluationRows.map(e => [e.key, e]));
         const entries = readCloseoutEntries(project.identity).filter(e => {
@@ -366,7 +387,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
           effect(`closeout:${sessionsOnly?'sessions':'physical'}:${digest([entry.key,revision])}`,()=>JSON.parse(cli('supervisor/closeout.mjs',['drain','--repo',repo,'--org',org,'--keys',JSON.stringify([entry.key]),'--no-restart','--retry-safe','--deadline','0',...(sessionsOnly?['--sessions-only']:[])])),undefined,undefined,true,outcomeReadback);
         }
       } catch (e) { note('closeout', e.message); }
-      // A routine error never creates a decision. Only a real post-cutover
+      // Only a real post-cutover
       // pending reserved question with an explicitly named decider may wake.
       snapshot=current();
       if(cutoff)for(const item of snapshot.state.items.values()){
@@ -458,7 +479,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
             }
             const brief = path.join(directory, `${digest(key)}.ask.md`);
             const target = reviewTarget ? validateQueuedReview({ item: current, state: fresh.state, events: fresh.events, org, repo }) : null;
-            writeFileAtomic(brief, target ? reviewQueueBrief(current) : `# ${current.title}\n\n${current.accept.join('\n')}\n\nWork from the existing item fields/notes and accepted directions. The generated execution brief supplies role guidance and project routing.\n`, 0o600);
+            writeFileAtomic(brief, target ? reviewQueueBrief(current) : isDecision(current) ? decisionBrief(current) : `# ${current.title}\n\n${current.accept.join('\n')}\n\nWork from the existing item fields/notes and accepted directions. The generated execution brief supplies role guidance and project routing.\n`, 0o600);
             return JSON.parse(cli('dispatch/dispatch.mjs', [item.id, '--repo', repo, '--org', org, '--lane', `${target ? 'review' : 'line'}-${item.id.toLowerCase()}-${current.runs.length + 1}`, '--route', route, '--brief', brief, ...(target ? ['--base', target.head] : []),'--detach']));
           },undefined,undefined,Boolean(retryAdmission));
           // Each original detached journal reserves admission before returning.

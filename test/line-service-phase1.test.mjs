@@ -54,7 +54,7 @@ function recoveryFixture(t,{verdict,kind='never-created'}={}){
   fs.writeFileSync(attempt,JSON.stringify({run:'R-1',head,stage:verdict?'complete':'reviewing',...(verdict?{review:{verdict}}:{})}));
   const resolution=path.join(f.org,'inactive-review.json');
   const input={item:'ENG-1',run:'R-1',head,base:f.base,evidence:f.file,attempts:[attempt],inactive:{kind,verified_by:a.name,reviewer:kind==='absent'?{pane:'old:p',agent:null,terminal:null,session:null}:null,evidence:attempt}};
-  fs.writeFileSync(resolution,JSON.stringify(input));transact(f.org,()=>({add:[{type:'note.added',id:'ENG-1',decision:true,text:`Quiet G1 authorized archive/resolution and one normal-route replacement of ENG-1 R-1 ${head}; preserve original evidence/caps and all completed verdicts.`}]}),{actor:a.name});
+  fs.writeFileSync(resolution,JSON.stringify(input));transact(f.org,()=>({add:[{type:'note.added',id:'ENG-1',decision:true,text:`Quiet G1 authorized archive/resolution and ONE fresh normal-route review ONLY for ENG-1 R-1 actual landed head ${head} base ${f.base}; preserve original evidence/caps/native refusal and all completed verdicts. Stable id fixture-recovery; no boundary reset or native launch in recovery.`}]}),{actor:a.name});
   const decision=f.context().events.at(-1).seq,env={...f.env,HERDR_ENV:'1',HERDR_PANE_ID:a.pane_id,HERDR_WORKSPACE_ID:a.workspace_id,CODEX_THREAD_ID:a.agent_session.value,HERDR_BRAIN_ROOT:fs.realpathSync(sourceRoot)};
   const call=(_exe,args)=>JSON.stringify(args[0]==='pane'?{error:{code:'pane_not_found'}}:{result:args[1]==='list'?{agents:[a]}:{agent:a}});
   const args={repo:f.cwd,org:f.org,runId:'R-1',head,base:f.base,resolution,decisionSeq:decision,id:'fixture-recovery',role:'supervisor',cwd:f.cwd,env,call};
@@ -108,6 +108,41 @@ test('permanent recovery source composition never promotes packet admission base
   sourceArtifact(f,`source: ${f.heads[0]}; base: ${f.base}; lane: source`);fs.writeFileSync(f.attempt,JSON.stringify({run:'R-1',item:'ENG-1',head:f.heads[0],deliveryRange:{head:f.heads[0],base:f.heads[1]}}));assert.throws(()=>recoverInactiveReview(f.args),/deliveryRange/);
   fs.writeFileSync(f.attempt,JSON.stringify({run:'R-1',head:f.heads[0],stage:'reviewing'}));const dispatch=path.join(f.org,'dispatch/source.json'),saved=JSON.parse(fs.readFileSync(dispatch));saved.base=f.heads[0];fs.writeFileSync(dispatch,JSON.stringify(saved));
   assert.throws(()=>recoverInactiveReview(f.args),/admission/);assert.equal(f.context().events.some(e=>e.type==='review.recovery-intent'),false);
+});
+
+test('permanent R858 retained recovery resumes its immutable intent and archive with the required review authorization note',t=>{
+  const f=recoveryFixture(t),head=f.heads[0];sourceArtifact(f,`source: ${head}; base: ${f.base}; lane: line-eng-226-1`);
+  fs.writeFileSync(f.attempt,JSON.stringify({run:'R-1',item:'ENG-1',head,mainHead:f.base,deliveryRange:{head,base:f.base},stage:'reviewing',review:null,qualification:'UNKNOWN',error:'canonical w3PD repository identity mismatch before reviewer creation'}));
+  f.add([{type:'note.added',id:'ENG-1',decision:true,text:`Completed SOURCE at integrated ${f.heads[1]}; preserve original held review UNKNOWN, callbacks and final-release obligations.`},
+    {type:'item.closed',id:'ENG-1',as:'done'}]);
+  const events=f.context().events;events.find(e=>e.type==='line-service.phase0').canonical_head=f.heads[1];fs.writeFileSync(path.join(f.org,'events.jsonl'),events.map(e=>JSON.stringify(e)+'\n').join(''));
+  f.git(['worktree','remove',f.workspace],f.cwd);
+  const original=fs.readFileSync(f.attempt),authorization=f.context().events.find(e=>e.seq===f.args.decisionSeq);assert.match(authorization.text,/review/);
+  let lists=0;const staged=(exe,args)=>{if(args[0]==='agent'&&args[1]==='list'&&++lists===2)throw Error('native inventory unavailable at final queue boundary; retain attempt');return f.call(exe,args);};
+  assert.throws(()=>recoverInactiveReview({...f.args,call:staged}),/inventory unavailable/);
+  const pending=f.context().events;assert.equal(pending.filter(e=>e.type==='review.recovery-intent').length,1);assert.equal(pending.some(e=>e.type==='review.recovery-completed'),false);
+  const manifest=path.join(f.org,'evidence/review-recovery/fixture-recovery/manifest.json'),archived=fs.readFileSync(manifest),intent=pending.find(e=>e.type==='review.recovery-intent');
+  const result=recoverInactiveReview(f.args),c=f.context(),q=c.state.items.get(result.review_item);
+  assert.equal(q.meta.review_target.head,head);assert.equal(q.meta.review_target.base,f.base);assert.equal(q.meta.review_round_cap,1);assert.equal(q.meta.review_recovery_id,'fixture-recovery');
+  assert.deepEqual(fs.readFileSync(f.attempt),original);assert.deepEqual(fs.readFileSync(manifest),archived);assert.deepEqual(c.events.find(e=>e.seq===intent.seq),intent);assert.deepEqual(c.events.find(e=>e.seq===authorization.seq),authorization);
+  assert.equal(c.events.filter(e=>e.type==='review.recovery-intent').length,1);assert.equal(c.events.filter(e=>e.type==='review.recovery-completed').length,1);
+  assert.equal(recoverInactiveReview(f.args).review_item,q.id);assert.equal([...f.context().state.items.values()].filter(i=>i.role==='reviewer').length,1);
+});
+
+test('permanent R858 authorization exempts only its exact validated note and retains independent holds or new unknown evidence',t=>{
+  for(const kind of ['older-note','later-note','unknown-attempt']){
+    const f=recoveryFixture(t),head=f.heads[0];
+    if(kind==='older-note'){
+      f.add([{type:'note.added',id:'ENG-1',decision:true,text:`Independent review hold for ENG-1 ${head}; unresolved.`}]);
+      // A newer authorization still cannot silently supersede this hold.
+      transact(f.org,()=>({add:[{type:'note.added',id:'ENG-1',decision:true,text:`Authorize one inactive review recovery for ENG-1 ${head}; preserve independent holds.`}]}),{actor:f.a.name});f.args.decisionSeq=f.context().events.at(-1).seq;
+    }else if(kind==='later-note')f.add([{type:'note.added',id:'R-1',decision:true,text:`New independent review hold for ENG-1 ${head}; unresolved.`}]);
+    else fs.writeFileSync(path.join(f.org,'settle/new-unknown.json'),JSON.stringify({run:'R-1',item:'ENG-1',head,stage:'reviewing',review:null,qualification:'UNKNOWN'}));
+    const before=f.context().events.filter(e=>e.type==='note.added');
+    assert.throws(()=>recoverInactiveReview(f.args),/same-change.*(hold|UNKNOWN)/);
+    assert.deepEqual(f.context().events.filter(e=>e.type==='note.added'),before);assert.equal(f.context().events.some(e=>e.type==='review.recovery-completed'),false);
+    assert.equal([...f.context().state.items.values()].some(i=>i.role==='reviewer'),false);
+  }
 });
 
 test('phase1 owes every landed build commit after the boundary even after item close and source worktree cleanup',t=>{

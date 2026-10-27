@@ -11,7 +11,7 @@ export function reviewResolution({events,org,item,head}){
   if(!e.archive?.file?.startsWith(root+path.sep)||reviewDigest(reviewPlain(e.archive.file))!==e.archive.sha256)throw Error('review archive manifest changed; retain attempts');
   const manifest=JSON.parse(reviewPlain(e.archive.file));
   if(manifest.id!==e.id||manifest.item!==item||JSON.stringify(manifest.target)!==JSON.stringify(e.target))throw Error('review archive target changed');
-  const decision=events.find(d=>d.seq===e.decision_seq&&d.type==='note.added'&&d.decision&&d.by===e.native_caller?.name);
+  const decision=events.find(d=>d.seq===e.decision_seq&&d.type==='note.added'&&d.decision&&d.by===e.native_caller?.name&&[item,e.run].includes(d.id));
   if(!decision||!decision.text.includes(item)||!decision.text.includes(head))throw Error('review resolution lost its scoped native supervisor decision');
   const files=new Map();for(const f of manifest.files){if(!f.archive.startsWith(path.dirname(e.archive.file)+path.sep)||reviewDigest(reviewPlain(f.archive))!==f.sha256)throw Error('archived review bytes changed');files.set(f.original,f);}
   return{event:e,manifest,files,effects:manifest.effects??[]};

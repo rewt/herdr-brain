@@ -50,7 +50,7 @@ test('phase1 scoped retirement bounds watcher owner reads while retaining target
   const adapter=f.retirement({readOwner:owner=>{reads.push(owner.pid);return owner.pid===11;}});
   const snapshot=adapter.observe(f.lane);
   assert.deepEqual(reads,[11],'unrelated historical watcher owners are not queried');
-  assert.match(planRetirement(snapshot).close[0].reason,/watcher callback/,'actual target watcher still holds');
+  assert.match(planRetirement(snapshot).keep[0].why,/watcher callback/,'actual target watcher still holds');
   transact(f.org,()=>({add:[{type:'run.started',id:'R-3000',item:'ENG-2',meta:{watcher_pid:9001,watcher_identity:'unknown'}},
     {type:'item.added',id:'ENG-3',role:'engineer',title:'Contradictory native binding'},
     {type:'run.started',id:'R-3001',item:'ENG-3',workspace:path.join(f.scratch,'other'),meta:{pane:'w:p',watcher_pid:9002,watcher_identity:'alias'}}]}));
@@ -58,7 +58,7 @@ test('phase1 scoped retirement bounds watcher owner reads while retaining target
   const guarded=f.retirement({readOwner:owner=>{reads.push(owner.pid);if(owner.pid===9001)throw Error('unknown owner');return false;}}).observe(f.lane);
   assert.deepEqual(reads,[11,9001,9002]);
   assert.ok(guarded.references.some(r=>r.run==='R-3000'&&r.global),'unknown callback scope remains a project hold');
-  assert.notEqual(planRetirement(guarded).close[0].decision,'exit');
+  assert.equal(planRetirement(guarded).close.length,0);
   reads.length=0;adapter.observe();assert.equal(reads.length,2038,'unscoped inspection retains the complete owner inventory');
   assert.deepEqual(f.read().actions,[],'observation never performs a native effect');
 });
@@ -78,7 +78,7 @@ test('phase1 queue reviewer retires its own completed chain without borrowing th
   executeRetirement(plan,{observe:()=>guarded,exit:()=>effects++,close:()=>effects++});assert.equal(effects,0);
   const legacy=structuredClone(snapshot);delete legacy.record.items.find(i=>i.id==='ENG-1').meta.review_target;
   assert.equal(chainFor(legacy.record,legacy.record.runs.find(r=>r.id==='R-1')).root.id,'G-3','legacy or incomplete review evidence keeps the old parent chain');
-  assert.notEqual(planRetirement(legacy).close[0].decision,'exit');
+  assert.equal(planRetirement(legacy).close.length,0);
   const result=adapter.apply(plan,f.lane);assert.ok(result.some(r=>r.action==='closed'),JSON.stringify(result));
   assert.deepEqual(f.read().actions,[['agent','prompt','worker','/quit'],['tab','close','w:t']]);
 });

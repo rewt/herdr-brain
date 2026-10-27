@@ -98,9 +98,9 @@ export function archivedReviewFile(resolution,file){
 
 // An exact zero-native archive releases only its named original run/journal.
 // The queue item, cap and captured target survive; a new request spends it once.
-export const unstartedSubject=item=>{
-  const {runs,notes,outcome,closed,...subject}=item;return subject;
-};
+export const unstartedSubject=item=>Object.fromEntries([
+  'id','kind','title','role','capability','parent','priority','accept','budget','meta','created',
+].map(key=>[key,item[key]??null]));
 export const unstartedRun=run=>{
   const {abandoned,notes,...version}=run;return version;
 };

@@ -114,6 +114,13 @@ test('never-started archive and claim changes stay held at normal dispatch consu
   }
 });
 
+test('never-started durable subject binding accepts CLI-derived display fields and holds a changed title',t=>{
+  const f=fixture(t);recoverUnstartedReview(f.args());const c=f.context();
+  assert.equal(validateQueuedReview({...c,item:{...c.item,status:'ready',computed_display:{owner:'display-only'}}}).head,f.head);
+  f.add([{type:'item.updated',id:f.reviewId,fields:{title:'Changed durable intent'}}]);
+  assert.throws(()=>validateQueuedReview(f.context()),/subject\/run version changed/);
+});
+
 test('never-started preparation recovery requires and archives an actual current source fix',t=>{
   const f=fixture(t),current=f.git(['log','-1','--format=%H','--','line-service/review-unstarted.mjs'],root),previous=f.git(['rev-parse',current+'^'],root),job={...f.job,sourceSelection:{root,head:previous},failure:{code:'PREPARATION_FAILED'},error:'prepare failed in original source'};
   fs.writeFileSync(f.journal,JSON.stringify(job));

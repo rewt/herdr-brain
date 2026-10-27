@@ -105,7 +105,7 @@ test('cleanup tail publishes every final report and abandonment without closing 
     const add=outcome==='abandoned'?[{type:'run.abandoned',id:'R-1'}]:[{type:'report.ingested',run:'R-1',report:{outcome,summary:'Allocation finished'},sha256:'fixture'}];
     const rows=f.append(add),entry=readCloseoutEntries(f.common).find(e=>e.run==='R-1');
     assert.ok(entry,`${outcome} must publish an evaluation request`);assert.equal(entry.signal,'ready');
-    assert.equal(fold(events(f)).items.get('ENG-1').closed,undefined);assert.equal(rows[0].closeout_targets[0].run,'R-1');
+    assert.equal(fold(events(f)).items.get('ENG-1').closed,null);assert.equal(rows[0].closeout_targets[0].run,'R-1');
   }
 });
 
@@ -115,11 +115,20 @@ function historicalTail(t,{kind='eligible'}={}){
   if(kind==='unknown')delete meta.agent_session_id;
   fs.writeFileSync(f.eventFile,raw.map(e=>JSON.stringify(e)+'\n').join(''));
   transact(f.org,()=>({add:[{type:'report.ingested',run:'R-1',report:{outcome:'blocked',summary:'old final allocation'},sha256:'old'}]}));
+  if(kind==='refused'){
+    const all=events(f);all.find(e=>e.type==='report.ingested').report.summary='EPERM original native refusal remains held';
+    fs.writeFileSync(f.eventFile,all.map(e=>JSON.stringify(e)+'\n').join(''));
+  }
   if(kind==='working'){f.state.agents[0].agent_status='working';f.save();}
   if(kind==='dirty')fs.writeFileSync(path.join(f.lane,'unique-uncommitted'),'retain');
   if(kind==='unlanded')f.git(['reset','--hard',`${f.head}^`]);
   if(kind==='reused')transact(f.org,()=>({add:[{type:'run.started',id:'R-2',item:'ENG-1',workspace:f.lane,meta:{...meta}}]}));
   if(kind==='foreign'){f.state.workspaces[0].worktree.repo_key='/foreign/common';f.save();}
+  selectCurrentCleanup(f);
+  if(kind==='uncertain'){
+    const source=f.append([{type:'lane.ready',common:f.common,run:'R-1'}])[0],entry=readCloseoutEntries(f.common)[0],c=f.retirement(f.options).plan(f.lane).close[0];
+    f.append([{type:'closeout.effect',key:entry.key,identity:f.common,run:'R-1',item:'ENG-1',source:{seq:source.seq,type:source.type},effect:'retained-original',outcome:{action:'agent-exit-requested',run:c.run,pane:c.pane,tab_id:c.tab_id,occupant:c.occupant,shell:c.shell}}]);
+  }
   return f;
 }
 
@@ -134,12 +143,38 @@ test('cleanup tail creates a separate verified historical binding under the pair
   assert.equal(f.drain({keys:[entry.key],retrySafe:true}).evaluated[0]?.completed,true);
 });
 
+test('cleanup tail explicit abandonment permits only a guarded content-released allocation',t=>{
+  const f=setup(t,{merged:true});f.append([{type:'run.abandoned',id:'R-1'}]);const entry=readCloseoutEntries(f.common)[0];
+  assert.ok(entry);const result=f.drain({keys:[entry.key],sessionsOnly:true});
+  assert.equal(result.evaluated[0]?.sessions_retired,true,JSON.stringify(result));assert.equal(fs.existsSync(f.lane),true);
+  assert.equal(fold(events(f)).items.get('ENG-1').closed,null);
+});
+
 test('cleanup tail historical discovery retains working reused foreign unknown dirty and unlanded allocations',async t=>{
   const {refreshCloseouts}=await import('../lib/closeout-consumer.mjs');assert.equal(typeof refreshCloseouts,'function');
-  for(const kind of ['working','reused','foreign','unknown','dirty','unlanded']){
+  for(const kind of ['working','reused','foreign','unknown','dirty','unlanded','refused','uncertain']){
     const f=historicalTail(t,{kind}),bytes=fs.readFileSync(f.eventFile),result=refreshCloseouts({cwd:f.repo,org:f.org,env:f.env,retirementOptions:f.options});
     assert.deepEqual(result.created,[],`${kind}: ${JSON.stringify(result)}`);assert.deepEqual(fs.readFileSync(f.eventFile),bytes);assert.deepEqual(f.read().actions,[]);
   }
+});
+
+test('cleanup tail fresh binding preserves an exact active settle reference as an executor fence',async t=>{
+  const f=historicalTail(t),{refreshCloseouts}=await import('../lib/closeout-consumer.mjs');
+  const directory=path.join(f.org,'settle');fs.mkdirSync(directory,{recursive:true});
+  fs.writeFileSync(path.join(directory,'R-1.json'),JSON.stringify({common:f.common,run:'R-1',workspace:f.lane,stage:'reviewing'}));
+  const created=refreshCloseouts({cwd:f.repo,org:f.org,env:f.env,retirementOptions:f.options});assert.equal(created.created.length,1,JSON.stringify(created));
+  const entry=readCloseoutEntries(f.common).find(e=>e.key===created.created[0]),bytes=fs.readFileSync(path.join(f.common,'closeout/entries',entry.key+'.json'));
+  const result=f.drain({keys:[entry.key],sessionsOnly:true});assert.match(result.evaluated[0]?.reason??'',/settle callback reference/);
+  assert.equal(fs.existsSync(f.lane),true);assert.deepEqual(fs.readFileSync(path.join(f.common,'closeout/entries',entry.key+'.json')),bytes);
+  assert.equal(f.read().actions.length,0);
+});
+
+test('cleanup tail physical CAS tolerates unrelated completed settle receipt activity',t=>{
+  const f=setup(t,{merged:true});f.report();f.append([{type:'item.closed',id:'ENG-1',as:'done',completed_run:'R-1'}]);const entry=readCloseoutEntries(f.common).find(e=>e.signal==='landed');
+  assert.equal(f.drain({keys:[entry.key],sessionsOnly:true}).evaluated[0]?.sessions_retired,true);
+  const dir=path.join(f.org,'settle');fs.mkdirSync(dir,{recursive:true});const command=f.options.command;let observed=0;
+  f.options.command=(exe,args,options)=>{if(exe===f.job.herdr)fs.writeFileSync(path.join(dir,'R-9999.json'),JSON.stringify({common:f.common,run:'R-9999',workspace:path.join(f.scratch,'other'),stage:'complete',observed:++observed}));return command(exe,args,options);};
+  const result=f.drain({keys:[entry.key],retrySafe:true});assert.equal(result.evaluated[0]?.completed,true,JSON.stringify(result));assert.equal(fs.existsSync(f.lane),false);assert.ok(observed>1);
 });
 
 test('cleanup tail observes original absent allocation without inventing process exit or claim release',t=>{

@@ -4,5 +4,9 @@
   "zero_elapsed_budget": true,
   "owner_status_read_only": true,
   "handoff_packet_read_only": true,
-  "shared_retirement_owner": true
+  "shared_retirement_owner": true,
+  "verified_cleanup_binding": true,
+  "original_allocation_absence": true,
+  "serial_cleanup_batches": true,
+  "target_local_removal_seal": true
 }

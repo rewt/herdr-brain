@@ -16,7 +16,7 @@ import { readOwnedRun, requireController, assertOwner } from '../lib/run-owner.m
 import { loadDiscoveredRoutes, resolveLaunchRoute, selectRoute } from '../lanes/routes.mjs';
 import { checkSessionCap,dispatchPool } from '../dispatch/session-cap.mjs';
 import { noticeLock } from '../supervisor/notice-lock.mjs';
-import { readCloseoutEntries, closeoutRevision, safeCloseoutRetry,closeoutOutcomeObservation,scheduleLineCloseouts,closeoutEvaluations } from '../lib/closeout.mjs';
+import { readCloseoutEntries, closeoutRevision, safeCloseoutRetry,closeoutOutcomeObservation,scheduleLineCloseouts,closeoutEvaluations,lineServiceOwnsCleanup } from '../lib/closeout.mjs';
 import { parseArgs, isMain } from '../lib/cli-help.mjs';
 import { reviewAttempt, readServiceJournal } from './review.mjs';
 import { queueConsumer, isQueueReview, validateQueuedReview, reviewQueueBrief, reviewQueueRoute } from './review-queue.mjs';
@@ -371,13 +371,19 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         }
         try{checkpointNotices();observeDecisionConsequences({repo,org,env:childEnv,native});stale=true;}catch(e){note('decision-consequence',e.message);}
       }
+      // Cleanup owns its own checked publication/selection scope. A REVIEW
+      // history boundary never excludes a valid original cleanup binding.
+      try{
+        if(!expired()&&lineServiceOwnsCleanup(project,org)){
+          cli('supervisor/closeout.mjs',['refresh','--repo',repo,'--org',org]);stale=true;
+        }
+      }catch(e){note('closeout-binding',e.message);}
       try {
         const observed = current(), evaluationRows=closeoutEvaluations(project.identity,org,observed.events),evaluations = new Map(evaluationRows.map(e => [e.key, e]));
         const entries = readCloseoutEntries(project.identity).filter(e => {
           if (e.org !== org || e.project !== repo) return false;
-          // Retained legacy/native-held requests keep their existing owner.
-          // A code handoff is not changed input for an old refused effect.
-          if(!cutoff||e.source.seq<=cutoff.seq){timings.closeout_retained++;return false;}
+          // Historical requests retain their exact owner/source. Neither a
+          // review cutoff nor a new code epoch clears an original refusal.
           const prior = evaluations.get(e.key);
           if (prior?.completed) {timings.closeout_retained++;return false;}
           if (!prior && !fs.existsSync(e.cwd)) return false;
@@ -385,9 +391,13 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
           return !prior||closeoutRevision(e,observed.events,observed.state)>(prior.revision??0)||safeCloseoutRetry(prior,{entry:e,events:observed.events})||
             closeoutOutcomeObservation(prior,{entry:e,events:observed.events});
         });
-        for(const {entry,sessionsOnly}of scheduleLineCloseouts(entries,evaluationRows)){
+        effects.closeout_attempts??={};
+        let attempt=Math.max(0,...Object.values(effects.closeout_attempts));
+        for(const {entry,sessionsOnly}of scheduleLineCloseouts(entries,evaluationRows,{batch:true,attempts:effects.closeout_attempts})){
+          if(expired())break;
           const revision=closeoutRevision(entry,observed.events,observed.state),outcomeReadback=closeoutOutcomeObservation(evaluations.get(entry.key),{entry,events:observed.events});
           effect(`closeout:${sessionsOnly?'sessions':'physical'}:${digest([entry.key,revision])}`,()=>JSON.parse(cli('supervisor/closeout.mjs',['drain','--repo',repo,'--org',org,'--keys',JSON.stringify([entry.key]),'--no-restart','--retry-safe','--deadline','0',...(sessionsOnly?['--sessions-only']:[])])),undefined,undefined,true,outcomeReadback);
+          effects.closeout_attempts[entry.key]=++attempt;save();
         }
       } catch (e) { note('closeout', e.message); }
       // Only a real post-cutover

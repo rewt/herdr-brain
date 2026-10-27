@@ -19,12 +19,16 @@ export async function closeoutMain(argv = process.argv.slice(2)) {
     return;
   }
   // Bind both identities before importing any queue/consumer/retirement code.
-  const loadedCode = command === 'drain' ? captureCloseoutLaunch(gitProject(cwd)) : undefined;
+  const loadedCode = ['drain','refresh'].includes(command) ? captureCloseoutLaunch(gitProject(cwd)) : undefined;
   const { findOrgDir, loadEvents } = await import('../lib/store.mjs');
   const { readCloseoutEntries, retryCloseout, publishCloseoutEvents, endReviewFollowup } = await import('../lib/closeout.mjs');
   const org = values.org ?? findOrgDir({ cwd });
   let result;
-  if (command === 'packet' && positionals.length === 1) {
+  if(command==='refresh'&&positionals.length===1){
+    const {refreshCloseouts}=await import('../lib/closeout-consumer.mjs');
+    result=refreshCloseouts({cwd,org,loadedCode});
+  }
+  else if (command === 'packet' && positionals.length === 1) {
     const { prepareCloseoutPacket } = await import('../lib/closeout-packet.mjs');
     result = prepareCloseoutPacket({ cwd, org, originalFile: values.original, candidateRoot: values.candidate });
   }

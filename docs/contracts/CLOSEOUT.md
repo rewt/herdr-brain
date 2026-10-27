@@ -59,6 +59,33 @@ live drain. No release is installed or activated by this change.
 
 ## Sources and durable targets
 
+The current line's cleanup scope is independent of the Phase 0 review boundary.
+Every final report outcome and explicit abandonment can publish a ready request;
+item closure is not allocation finality. Separate `cleanup.bound` observations
+can cover historical/unqueued clean integrated or exactly archived lanes. They
+retain the original pre-finalization native launch identity, compare a complete
+current native inventory, bind current real Git identities/head and preserve the
+old report, launch and every queued byte. They never late-bind a missing native
+session or replace an uncertain/refused request. Working, reused, foreign,
+unbound, dirty, needed/unlanded and unknown source scopes keep. The policy and
+actual line installation checks apply to both publisher and executor.
+
+The existing line selects finite serial batches in its ordinary work allowance,
+interleaving session and physical work and moving attempted targets behind
+unattempted peers. Landed/parked physical removal retains priority over empty
+ready bookkeeping. There is no new scheduler, parallel native executor or
+elapsed eligibility rule. Every effect still rechecks its own safety boundary.
+
+Exact original pane and terminal absence with no moved/replaced session can
+produce `allocation-absent` after a complete guarded native readback. That is a
+current allocation observation, never a historical `exit-observed`, `closed`,
+signal success or consumer claim release. Observation-only recovery remains
+deferred until a fresh drain; still-present terminals never authorize a resend.
+Refusals, original uncertain ownership and missing preservation remain holds.
+Removal seals compare target-related retirement/settle/reference evidence,
+including matching additions and invalid/redirected authority, while unrelated
+receipt updates do not invalidate the target's CAS.
+
 The record CLI binds the target while committing the source event, before queue
 publication. An interrupted publication can therefore recover the same target
 from the record; it cannot bind a newly recreated lane under an old name.

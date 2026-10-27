@@ -996,6 +996,25 @@ test('closer lock contention is immediate and discards preparation; an explicit 
   f.drain(); assertRemoved(f); assert.ok(f.herdrCalls().length > native);
 });
 
+for(const change of ['activity','owner','reference','HOLD'])test(`retirement housekeeping final CAS ${change==='activity'?'allows unrelated activity':'retains '+change+' changes'}`,t=>{
+  const f=setup(t,{occupied:false,terminal:true}),command=f.options.command,log=f.options.log,job=path.join(f.org,'housekeeping/default'),lock=path.join(job,'lock');fs.mkdirSync(lock,{recursive:true});
+  const owner=path.join(lock,'owner.json');fs.writeFileSync(owner,JSON.stringify({pid:40001,cwd:f.repo,retirement_queue_protocol:2}));let prepared=false,changed=false;
+  f.options.log=row=>{log(row);if(row.action==='lane-preflight')prepared=true;};
+  f.options.command=(exe,args,opt)=>{
+    if(prepared&&!changed&&exe==='git'&&fs.existsSync(path.join(f.common,'lane-promote.lock'))){
+      changed=true;
+      if(change==='activity'){fs.writeFileSync(path.join(job,'state.json'),'another ordinary pass');fs.appendFileSync(path.join(job,'activity.jsonl'),'unrelated heartbeat\n');}
+      if(change==='owner')fs.writeFileSync(owner,JSON.stringify({pid:40002,cwd:f.repo,retirement_queue_protocol:2}));
+      if(change==='reference'){fs.mkdirSync(path.join(f.org,'references'),{recursive:true});fs.writeFileSync(path.join(f.org,'references/live.json'),JSON.stringify({schema:'herdr-reference/v1',owner:'fixture',kind:'live',run:'R-1',cwd:f.lane,state:'running',created_at:'2020-01-01',expires_at:'2099-01-01'}));}
+      if(change==='HOLD')hold(f);
+    }
+    return command(exe,args,opt);
+  };
+  const result=f.drain();assert.equal(changed,true,'changed input reaches the final locked removal boundary');
+  if(change==='activity')assertRemoved(f);
+  else{assert.equal(fs.existsSync(f.lane),true);assert.equal(effects(f).some(e=>e.action==='lane-removed'),false);assert.ok(evaluations(f).some(e=>!e.completed),JSON.stringify(result));}
+});
+
 for (const change of ['tip', 'branch generation', 'worktree identity', 'Git directory identity', 'registration', 'untracked', 'index flags',
   'integration', 'source', 'handoff', 'open run', 'job', 'callback', 'reference', 'HOLD', 'protected slot', 'manifest', 'preserved copy', 'source evidence', 'archive collision', 'policy'])
 test(`guarded removal keeps when ${change} changes after preparation`, t => {

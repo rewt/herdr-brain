@@ -245,6 +245,11 @@ verdict/closure against the current run and retains all native occupant,
 source/integration, callback, HOLD and archive guards. A FAIL reviewer may retire;
 its product correction remains separately owned without a second review chain.
 
+Physical removal seals housekeeping's actual owner files and their directory
+identities, rather than unrelated activity logs or state updates. New/replaced
+owners, unknown/redirected locks, target references, source/CAS changes and HOLD
+still refuse; this makes no owner probe, process signal or lock recovery.
+
 The installed line selects one least-recently-evaluated bound session request
 and one independent physical-cleanup request per pass. Named `drain` supports
 `--sessions-only --deadline 0`: it uses measured activity for owned commands,

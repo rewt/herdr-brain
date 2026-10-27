@@ -50,6 +50,14 @@ function briefWorkspace(t) {
   return { ...f, root, workspace, env };
 }
 
+test('generated briefs use land-first queue review instructions and preserve saved legacy brief bytes',t=>{
+  const {dir,ok,workspace,env}=briefWorkspace(t),first=ok(['add','Saved legacy work'],{env}).trim();ok(['start',first,'--workspace',workspace],{env});
+  const saved=path.join(dir,'runs/R-1/brief.md'),legacy='Saved immutable brief\nReviewer proposals hold their parent regardless of blocking; promotion requires PASS.\n';fs.writeFileSync(saved,legacy);
+  const next=ok(['add','New source work'],{env}).trim();ok(['start',next,'--workspace',workspace],{env});const fresh=fs.readFileSync(path.join(dir,'runs/R-2/brief.md'),'utf8');
+  assert.match(fresh,/self-land OWN finished source before checks\/review/);assert.match(fresh,/ONE async record-queue review: cap1, zero reviewer suites/);assert.match(fresh,/do not hold finished source or its parent/);assert.match(fresh,/Fix Majors and check their corrections before final release/);assert.doesNotMatch(fresh,/Reviewer proposals hold their parent|promotion requires PASS/);
+  assert.equal(ok(['brief','R-1'],{env}),legacy);assert.equal(fs.readFileSync(saved,'utf8'),legacy);
+});
+
 for (const declared of [true, false]) test(`record start and regenerated brief show durable locations ${declared ? 'with an archive' : 'without an archive'}`, t => {
   const { dir, ok, root, workspace, env } = briefWorkspace(t);
   if (declared) fs.writeFileSync(path.join(workspace, '.lane.json'), JSON.stringify({ archive: { dirs: ['docs/reports'] } }));

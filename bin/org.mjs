@@ -363,9 +363,14 @@ function add(argv) {
 }
 
 async function queueReview(argv) {
-  const { values, positionals } = args(argv, { head: { type: 'string' }, base: { type: 'string' },'recover-inactive':{type:'boolean'},role:{type:'string'},resolution:{type:'string'},'decision-seq':{type:'string'},id:{type:'string'},'predecessor-preparation':{type:'string'} }, { min: 1, max: 1, usage: 'record queue-review R-n [--head SHA --base SHA] [--recover-inactive --role supervisor --resolution OWN.json --decision-seq N --id STABLE --predecessor-preparation UNUSED_ID]' });
+  const { values, positionals } = args(argv, { head: { type: 'string' }, base: { type: 'string' },'recover-inactive':{type:'boolean'},'recover-unstarted':{type:'boolean'},role:{type:'string'},resolution:{type:'string'},'decision-seq':{type:'string'},id:{type:'string'},'predecessor-preparation':{type:'string'} }, { min: 1, max: 1, usage: 'record queue-review R-n|canonical:SHA [--head SHA --base SHA] | REV-n --recover-unstarted --role supervisor --resolution OWN.json --decision-seq N --id STABLE | R-n --recover-inactive --role supervisor --resolution OWN.json --decision-seq N --id STABLE [--predecessor-preparation UNUSED_ID]' });
   const { queueReviewMutation } = await import('../line-service/review-queue.mjs');
   const ctx = openOrg(), repo = gitProject(process.cwd()).canonical;
+  if(values['recover-unstarted']){
+    if(values['recover-inactive']||values['predecessor-preparation']||values.head||values.base)throw new UserError('never-started recovery retains the exact original target; no other recovery or retarget flags');
+    const {recoverUnstartedReview}=await import('../line-service/review-unstarted.mjs');
+    const result=recoverUnstartedReview({repo,org:ctx.dir,reviewId:positionals[0],resolution:values.resolution,decisionSeq:Number(values['decision-seq']),id:values.id,role:values.role});out(JSON.stringify(result)+'\n');return 0;
+  }
   if(values['recover-inactive']){
     const {recoverInactiveReview}=await import('../line-service/review-recovery.mjs');
     const result=recoverInactiveReview({repo,org:ctx.dir,runId:positionals[0],head:values.head,base:values.base,resolution:values.resolution,decisionSeq:Number(values['decision-seq']),id:values.id,role:values.role,predecessorPreparation:values['predecessor-preparation']});out(JSON.stringify(result)+'\n');return 0;

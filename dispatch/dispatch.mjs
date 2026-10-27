@@ -24,7 +24,7 @@ import { nativeProcess, observeSessionBinding } from './session-bind.mjs';
 import { acquireSessionCapLock, checkSessionCap } from './session-cap.mjs';
 import { checkSourceAdmission, matchesDispatchStart } from './unlanded-cap.mjs';
 import { quote } from '../lib/shell.mjs';
-import { isQueueReview, validateQueuedReview, reviewQueueBrief, reviewQueueRoute } from '../line-service/review-queue.mjs';
+import { isQueueReview, validateQueuedReview, reviewQueueBrief, reviewQueueRoute,reserveUnstartedReview } from '../line-service/review-queue.mjs';
 import { dispatchInput } from '../line-service/phase1.mjs';
 import {preflightContinuation} from './preflight.mjs';
 import {foregroundCommand} from './foreground-command.mjs';
@@ -425,6 +425,7 @@ async function main() {
     // Only routing fields are frozen. Lifecycle paths keep their original config provenance.
     job.routeConfig = path.join(directory, `${token}.routes.json`);
     atomic(job.routeConfig, mergeRoutesConfig([config]));
+    if(reviewQueue)reserveUnstartedReview({org,repo,journal,job});
     if (opt.awaited) record(['set', job.item, 'meta.notify=supervisor', ...(opt['awaited-step'] ? [`meta.notify_step=${opt['awaited-step']}`] : [])]);
     save();
     lockJob();

@@ -51,6 +51,11 @@ export function reviewResolution({events,org,item,head}){
   return{event:e,manifest,files,effects:manifest.effects??[],authorized_decision_seqs};
 }
 export function resolvedReviewJournal({events,org,journal}){
+  const authorization=events.find(e=>e.type==='review.unstarted-authorized'&&e.org===org&&e.journal===journal);
+  if(authorization){
+    const state=fold(events),proof=unstartedReviewProof({events,state,org,common:authorization.project,item:state.items.get(authorization.review_item)});
+    return proof?.journal===journal;
+  }
   for(const e of events)if(e.type==='review.recovery-completed'&&e.org===org&&e.inactivity?.original_journal===journal){
     const resolution=reviewResolution({events,org,item:e.item,head:e.target.head});return archivedReviewFile(resolution,journal);
   }
@@ -89,4 +94,42 @@ export function archivedReviewFile(resolution,file){
   const entry=resolution?.files.get(path.resolve(file));if(!entry)return false;
   try{if(reviewDigest(reviewPlain(file))!==entry.sha256)throw Error('resolved original review evidence changed; retain new progress');}catch(e){if(e.code!=='ENOENT')throw e;}
   return true;
+}
+
+// An exact zero-native archive releases only its named original run/journal.
+// The queue item, cap and captured target survive; a new request spends it once.
+export const unstartedSubject=item=>{
+  const {runs,notes,outcome,closed,...subject}=item;return subject;
+};
+export const unstartedRun=run=>{
+  const {abandoned,notes,...version}=run;return version;
+};
+export const unstartedRequest=job=>Object.fromEntries([
+  'token','repo','org','common','release','sourceSelection','item','lane','route',
+  'reviewQueueProtocol','reviewQueue','reviewQueueBrief','brief','report','to','base',
+  'extra','reuse','fromRun','unblocks','declared','routeConfig','lineInput',
+].map(k=>[k,job[k]??null]));
+export function unstartedReviewProof({events,state,org,common,item}){
+  const rows=events.filter(e=>e.type==='review.unstarted-authorized'&&e.review_item===item.id);
+  if(!rows.length)return null;
+  if(rows.length!==1)throw Error('never-started authorization is ambiguous; retain history');
+  const e=rows[0],intent=events.find(i=>i.type==='review.unstarted-intent'&&i.seq===e.intent_seq),run=state.runs.get(e.original_run);
+  if(e.project!==common||e.org!==org||!intent||intent.id!==e.id||intent.by!==e.by||intent.request_sha256!==e.request_sha256||intent.project!==common||intent.org!==org)throw Error('never-started intent/project authority changed');
+  if(reviewDigest(JSON.stringify(unstartedSubject(item)))!==e.subject_sha256||!run?.abandoned||run.abandoned.seq!==e.abandon_seq||run.report||reviewDigest(JSON.stringify(unstartedRun(run)))!==e.run_sha256)throw Error('never-started subject/run version changed');
+  const decision=events.find(d=>d.seq===e.decision_seq&&d.type==='note.added'&&d.decision&&d.by===e.native_caller?.name&&d.id===item.id);
+  if(!decision||![e.id,e.journal,e.journal_sha256,e.target.head].every(v=>decision.text.includes(v)))throw Error('never-started scoped native supervisor decision changed');
+  if(!e.archive?.file?.startsWith(path.join(org,'evidence/review-recovery',e.id)+path.sep)||reviewDigest(reviewPlain(e.archive.file))!==e.archive.sha256)throw Error('never-started archive manifest changed');
+  const manifest=JSON.parse(reviewPlain(e.archive.file));
+  if(JSON.stringify(manifest.request)!==JSON.stringify(intent.request)||reviewDigest(JSON.stringify(manifest.request))!==e.request_sha256||JSON.stringify(manifest.request.target)!==JSON.stringify(e.target))throw Error('never-started archive/intent target differs');
+  for(const [key,value]of Object.entries(manifest.request))if(JSON.stringify(value)!==JSON.stringify(e[key]))throw Error('never-started authorization differs from its full request');
+  for(const f of manifest.files){
+    if(!f.archive.startsWith(path.dirname(e.archive.file)+path.sep)||reviewDigest(reviewPlain(f.archive))!==f.sha256||!intent.request.files.some(x=>x.original===f.original&&x.sha256===f.sha256)||reviewDigest(reviewPlain(f.original))!==f.sha256)throw Error('never-started original/archive bytes changed');
+  }
+  if(manifest.files.length!==intent.request.files.length)throw Error('never-started archive inventory differs');
+  const claim=readOwnedRun(org,run.id);requireController(claim,'brain');assertOwner(claim,e.ownership);
+  const consumed=events.filter(c=>c.type==='review.unstarted-consumed'&&c.authorization_seq===e.seq);
+  if(consumed.length>1)throw Error('never-started continuation budget is ambiguous');
+  const reservation=consumed[0];
+  if(reservation&&(reservation.project!==common||reservation.org!==org||reservation.review_item!==item.id||reservation.request_sha256!==reviewDigest(JSON.stringify(reservation.request))))throw Error('never-started request reservation changed');
+  return{...e,reservation};
 }

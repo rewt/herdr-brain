@@ -5,8 +5,9 @@ import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { gitProject } from '../lib/project.mjs';
-import { findOrgDir } from '../lib/store.mjs';
-import { nextItemId } from '../lib/state.mjs';
+import { findOrgDir,transact } from '../lib/store.mjs';
+import { nextItemId,fold,ancestors } from '../lib/state.mjs';
+import {protectRecordMutation} from '../lib/record-guard.mjs';
 import { roleIs } from '../lib/roles.mjs';
 import { readOwnedRun, requireController, assertOwner } from '../lib/run-owner.mjs';
 import { effectiveWorkerIdentity } from '../lib/worker-identity.mjs';
@@ -15,13 +16,13 @@ import { selectRoute,resolveLaunchRoute } from '../lanes/routes.mjs';
 import { reviewAttempt } from './review.mjs';
 import { discoverChanges,capturedProducerTarget,publishLandedReviewEvidence } from './phase1.mjs';
 import {producerGroupKey,queueProducerGroup,sameProducerQueue,sameCapturedTarget,capturedReviewCommits} from './review-group.mjs';
-import {originalPrestartProof,reviewPlain,reviewDigest} from './review-resolutions.mjs';
+import {originalPrestartProof,reviewPlain,reviewDigest,unstartedReviewProof,unstartedRequest} from './review-resolutions.mjs';
 import {additionalTarget,canonicalSelector,reviewCutoff,validateAdditionalTarget,disjointCapture} from './review-targets.mjs';
 import {canonicalReviewIndex} from './phase1.mjs';
 import {installedContext} from './cutoff.mjs';
 
 const root = fs.realpathSync(fileURLToPath(new URL('../', import.meta.url)));
-const files = ['line-service/review-queue.mjs', 'line-service/review-findings.mjs', 'line-service/review-targets.mjs','line-service/review.mjs','line-service/review-group.mjs','line-service/review-recovery.mjs','line-service/review-resolutions.mjs', 'line-service/phase1.mjs', 'line-service/cutoff.mjs','settle/review-range.mjs', 'bin/org.mjs', 'dispatch/dispatch.mjs','dispatch/preflight.mjs','dispatch/foreground-command.mjs','dispatch/outcome.mjs','dispatch/not-started.mjs','dispatch/request-lock.mjs', 'dispatch/session-cap.mjs', 'dispatch/unlanded-cap.mjs','lanes/lane.mjs'];
+const files = ['line-service/review-unstarted.mjs','line-service/review-queue.mjs', 'line-service/review-findings.mjs', 'line-service/review-targets.mjs','line-service/review.mjs','line-service/review-group.mjs','line-service/review-recovery.mjs','line-service/review-resolutions.mjs', 'line-service/phase1.mjs', 'line-service/cutoff.mjs','settle/review-range.mjs', 'bin/org.mjs', 'dispatch/dispatch.mjs','dispatch/preflight.mjs','dispatch/foreground-command.mjs','dispatch/outcome.mjs','dispatch/not-started.mjs','dispatch/request-lock.mjs', 'dispatch/session-cap.mjs', 'dispatch/unlanded-cap.mjs','lanes/lane.mjs'];
 const hashes = files.map(file => createHash('sha256').update(fs.readFileSync(path.join(root, file))).digest('hex'));
 const immutableCode=fs.existsSync(path.join(root,'.release-manifest.json'))||fs.existsSync(path.join(root,'.release-commit'));
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
@@ -148,9 +149,7 @@ function validateCanonicalReview({item,state,events,org,repo,allowRun,allowJourn
   validateAdditionalTarget({repo,org,identity,index,state,events,target});
   if(target.evidence_kind!=='canonical-unattributed/v1'||item.meta.review_source_selector!==selector||item.meta.review_source_item!==item.id||item.meta.review_source_run!==null||item.meta.review_key!==`${item.id}:${target.head}`||item.meta.review_group_key!==target.source_group.key||!same(item.meta.review_cutover,reviewCutoff(index.boundary)))throw Error('canonical current responsibility/provenance changed');
   if([...state.items.values()].some(q=>q.id!==item.id&&(q.meta.review_source_selector===selector||q.meta.review_target&&capturedReviewCommits(q.meta.review_target).includes(target.head))))throw Error('overlapping/UNKNOWN canonical review already retained');
-  if(item.runs.some(id=>id!==allowRun))throw Error('queued review already has a run; no replacement/re-review');
-  journals??=fs.readdirSync(path.join(org,'dispatch')).filter(f=>f.endsWith('.json')&&!f.endsWith('.routes.json')).map(f=>({...JSON.parse(fs.readFileSync(path.join(org,'dispatch',f),'utf8')),journal:path.join(org,'dispatch',f)}));
-  if(journals.some(j=>j.item===item.id&&j.journal!==allowJournal&&(!allowRun||j.run!==allowRun)))throw Error('queued review has existing/ambiguous saved dispatch; retain it');
+  validateQueueHistory({item,state,events,org,common:identity,allowRun,allowJournal,journals});
   const prior=canonicalAttempt({selector,target,state,events,org,repo,identity,ignoreQueue:item.id,ignoreService:{file:journalFor(org,identity),key:`review:${selector}`,target,operation:'record-queue'}});if(prior)throw Error(`canonical review launch held: ${prior}`);
   return target;
 }
@@ -159,6 +158,7 @@ export function validateQueuedReview({ item, state, events, org, repo, allowRun,
   if (!isQueueReview(item) || item.meta.review_round_cap !== 1) throw Error('not a supported single-review queue item');
   if(item.meta.review_source_selector)return validateCanonicalReview({item,state,events,org,repo,allowRun,allowJournal,journals});
   const project = gitProject(repo);let originalCapture;
+  if(unstartedReviewProof({events,state,org,common:project.identity,item}))originalCapture=item.meta.review_target;
   if(allowJournal&&path.dirname(path.resolve(allowJournal))===path.join(org,'dispatch')){
     const bytes=reviewPlain(allowJournal),job=JSON.parse(bytes),proof=originalPrestartProof({events,org,common:project.identity,journal:allowJournal,job,requestHash:reviewDigest(bytes)});
     if(proof&&proof.review_item===item.id&&same(item.meta.review_target,job.reviewQueue))originalCapture=item.meta.review_target;
@@ -173,16 +173,45 @@ export function validateQueuedReview({ item, state, events, org, repo, allowRun,
     const captured=new Set(capturedReviewCommits(bound.target));for(const peer of peers){capturedProducerTarget({repo:project.canonical,target:peer.meta.review_target,whole:bound.whole});if(capturedReviewCommits(peer.meta.review_target).some(h=>captured.has(h)))throw Error('overlapping/UNKNOWN original review scope retained; no duplicate launch');}
   }
   if (bound.item.id !== item.meta.review_source_item || item.meta.review_key !== `${bound.item.id}:${bound.target.head}` || !sameCapturedTarget(item.meta.review_target,bound.target)) throw Error('queued review immutable whole producer target/evidence changed');
-  if (item.runs.some(id => id !== allowRun)) throw Error('queued review already has a run; no replacement/re-review');
-  journals ??= fs.readdirSync(path.join(org, 'dispatch')).filter(file => file.endsWith('.json') && !file.endsWith('.routes.json')).map(file => ({
-    ...JSON.parse(fs.readFileSync(path.join(org, 'dispatch', file), 'utf8')), journal: path.join(org, 'dispatch', file),
-  }));
-  if (journals.some(j => j.item === item.id && j.journal !== allowJournal && (!allowRun || j.run !== allowRun))) throw Error('queued review has existing/ambiguous saved dispatch; retain it');
+  validateQueueHistory({item,state,events,org,common:project.identity,allowRun,allowJournal,journals});
   const prior = reviewAttempt(bound.item, { state, events, org, repo: project.canonical, identity: project.identity, ignoreQueue: item.id, capturedRun: bound.run.id,
     target:bound.target,capturedOriginal:bound.capturedOriginal,ignoreQueues:bound.capturedOriginal?peers.map(q=>q.id):[],
     ignoreService: ignoreIntent(org, project.identity, bound.item, bound.target) });
   if (prior) throw Error(`queued review launch held by existing item attempt: ${prior}`);
   return bound.target;
+}
+
+function validateQueueHistory({item,state,events,org,common,allowRun,allowJournal,journals}){
+  const proof=unstartedReviewProof({events,state,org,common,item});
+  if(proof){
+    if([item,...ancestors(state,item.id)].some(i=>i.closed||i.meta.hold||i.meta.held||i.meta.reserved||i.meta.operator_reserved))throw Error('STOP/HOLD or reserved subject prevents never-started continuation');
+    const reservation=proof.reservation;
+    if(reservation){
+      if(allowJournal!==reservation.journal)throw Error('one never-started continuation already reserved; retain its request');
+      const job=JSON.parse(reviewPlain(allowJournal)),current=unstartedRequest(job);
+      // The normal dispatcher fills an omitted callback only after launch.
+      if(!reservation.request.to&&current.to===job.worker?.agentName)current.to=null;
+      current.lineInput=reservation.request.lineInput;
+      if(JSON.stringify(current)!==JSON.stringify(reservation.request))throw Error('never-started continuation retargeted its reserved request');
+      if(allowRun){const r=state.runs.get(allowRun);if(r?.meta.dispatch_journal!==allowJournal||r.meta.dispatch_attempt!==job.token)throw Error('never-started continuation run/request differs');}
+    }else if(allowRun||allowJournal)throw Error('never-started continuation needs its one normal dispatch reservation');
+  }
+  if(item.runs.some(id=>id!==allowRun&&id!==proof?.original_run))throw Error('queued review already has a run; no replacement/re-review');
+  journals??=fs.readdirSync(path.join(org,'dispatch')).filter(f=>f.endsWith('.json')&&!f.endsWith('.routes.json')).map(f=>({...JSON.parse(reviewPlain(path.join(org,'dispatch',f))),journal:path.join(org,'dispatch',f)}));
+  if(journals.some(j=>j.item===item.id&&!(proof&&j.journal===proof.journal&&j.run===proof.original_run)&&j.journal!==allowJournal&&(!allowRun||j.run!==allowRun)))throw Error('queued review has existing/ambiguous saved dispatch; retain it');
+}
+
+// Reserve before publishing a fresh dispatch journal. The record transaction
+// serializes competing normal dispatchers; an interrupted reservation stays held.
+export function reserveUnstartedReview({org,repo,journal,job,env=process.env}){
+  return transact(org,events=>{
+    const state=fold(events),item=state.items.get(job.item),common=gitProject(repo).identity;
+    if(!unstartedReviewProof({events,state,org,common,item}))return{add:[]};
+    validateQueuedReview({item,state,events,org,repo});
+    const proof=unstartedReviewProof({events,state,org,common,item}),request=unstartedRequest(job);
+    if(job.base!==proof.target.head||JSON.stringify(job.reviewQueue)!==JSON.stringify(proof.target)||!job.lane.startsWith('review-')||path.dirname(journal)!==path.join(org,'dispatch')||path.basename(journal)!==`${job.token}.json`)throw Error('never-started reservation changes the captured target/request');
+    return protectRecordMutation({org,state,events,command:'reserve never-started review',mutation:{add:[{type:'review.unstarted-consumed',authorization_seq:proof.seq,item:item.id,review_item:item.id,project:common,org,journal,request,request_sha256:reviewDigest(JSON.stringify(request))}]}});
+  },{actor:env.ORG_ACTOR??'dispatch',strictTail:true,lockOptions:{recover:false}});
 }
 
 export function reviewQueueBrief(item) {

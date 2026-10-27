@@ -295,7 +295,8 @@ export function dispatchInput({events,state,item,org,identity}) {
     status=itemStatus({...state,items},item.id);
   }
   if(status!=='ready')return null;
-  const value=`${run?.id??item.created.seq}:${input}`,resolution=events.find(e=>e.type==='dispatch.not-started'&&e.item===item.id&&e.input===value);
+  const authorization=events.find(e=>e.type==='review.unstarted-authorized'&&e.review_item===item.id&&e.org===org&&e.project===identity);
+  const value=`${run?.id??item.created.seq}:${input}${authorization?`:unstarted-${authorization.seq}`:''}`,resolution=events.find(e=>e.type==='dispatch.not-started'&&e.item===item.id&&e.input===value);
   if(!resolution)return value;
   if(!org||!identity||resolution.org!==org||resolution.project!==identity)throw Error('original dispatch resolution needs actual owning record/project context');
   return resolvedDispatchInput({events,org,common:identity,item:item.id,input:value});

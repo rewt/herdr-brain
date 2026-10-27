@@ -181,6 +181,59 @@ is invented, callbacks are retained, and cap1 permits only one replacement.
 Prepared archives resume with the same bytes when an unrelated service update
 occurs. Neither this path nor the explicit legacy recovery launches a reviewer;
 the ordinary guarded queue dispatcher owns the new worktree/session.
+
+A positively never-started recorded queue run also has an explicit owner-only
+form. This covers canonical unattributed targets and producer targets without
+inventing a producer. From the actual owning supervisor's canonical checkout,
+using the matching development source, run:
+
+```sh
+HERDR_BRAIN_ROOT=/actual/source ORG_DIR=/own/record node /actual/source/bin/org.mjs \
+  queue-review REV-n --recover-unstarted --role supervisor \
+  --resolution /own/identity/unstarted.json --decision-seq N --id STABLE
+```
+
+The resolution is an owned plain JSON file naming `review_item`, `journal`,
+`journal_sha256` (the SHA256 of its complete original bytes), `head` and `base`
+(the immutable review target's diff base). The scoped decision must be an actual
+decision note on that reviewer item, written by the current native supervisor,
+and include the stable ID, full journal path, journal SHA256 and full target HEAD.
+`--role` and display labels alone supply no authority. A real preparation error
+also requires `fix: {"commit":"FULL_SHA","file":"relative/source/file","why":"actual fix"}`:
+the named source input must actually differ from the original captured source,
+be landed in the selected current source, and still match its fixed bytes.
+An elapsed typed admission-lock/capacity barrier is not a preparation failure.
+Unknown errors cannot be relabeled as timeouts.
+
+This command serializes the original request and promotion lock, freshly checks
+native caller/absence, source/claim versions and item/ancestor STOP/HOLD, archives
+the full request, routes, ask, evidence and driver bytes, and authorizes one
+unchanged-target normal dispatch. It abandons an open original only after positive
+pre-native proof; already abandoned originals remain unchanged. Explicit
+`native_launch_attempted: false`, stage `worker`, and no worker, launch process,
+session binding, watcher or incoming report are required. Missing launch metadata,
+native refusals, started/unqualified sessions, competing saved requests and
+completed verdicts retain their original hold. Original journals, claims, runs,
+verdicts, review item and cap are preserved. No launch happens in recovery.
+
+The service sees a new durable dispatch input; normal dispatch reserves that
+authorization once under the record lock before saving its fresh journal. A
+lost/ambiguous reservation stays occupied. For a manual normal invocation use
+the ordinary reviewer route and a new `review-...` lane, with **`--base` equal
+to the captured target HEAD**, not its diff base or parent. The normal request
+still checks fresh native capacity, current holds and exact source at each edge.
+No old journal is retried or rewritten and no second review item is created.
+Retained partial scopes still require the existing exact disjoint-source guards.
+
+Recovery archives are immutable under `evidence/review-recovery/STABLE/` and bind
+their intent, subject, original request hash, source, claim generation and scoped
+decision. Interrupted archival resumes only that identical preparation; another
+ID or changed input retains it for judgment. They replace the former manual
+abandon-then-fresh-start dead end, not the existing UNKNOWN/native holds. Removing
+this source change means reverting its exact landed range in the owning project;
+never remove the archive or authorization/consumption history to reset its budget.
+Source/fixture success does not establish live recovery or release acceptance.
+
 An existing pre-start partial request with disjoint immutable sibling scopes can
 instead continue its ORIGINAL request, target and cap. The service records and
 archives a positive serialized prestart proof; its old UNKNOWN launch flag stays

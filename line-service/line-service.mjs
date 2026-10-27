@@ -49,7 +49,7 @@ export function routeFor(item, config) {
 
 export function createLineService({ repo, org, to, herdr = 'herdr', env = process.env, command = foregroundCommand,
   recordNotice = recordLineNotice, wakeDecision = enqueueNamedDecision, capacity, identify = gitProject, now = () => new Date().toISOString(),
-  childTimeoutMs=120000,maxStarts,maxStepsPerStage=8,passBudgetMs=480000,alertAfter=3 }) {
+  childTimeoutMs=120000,maxStarts,maxStepsPerStage=8,passBudgetMs=480000,alertAfter=3,workClock=()=>performance.now() }) {
   const project = identify(repo);
   if (project.checkout !== project.canonical) throw Error('line service requires the canonical project checkout');
   repo = project.canonical;
@@ -110,7 +110,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
     heartbeat('starting');
     try {
       const passStarted = performance.now();
-      const expired=()=>performance.now()-passStarted>=passBudgetMs;
+      let workStarted=workClock();const expired=()=>workClock()-workStarted>=passBudgetMs;
       timings = { snapshots: 0, record_snapshot_ms: 0, effect_command_ms: 0, historical_intake_skipped: 0, historical_review_skipped: 0, closeout_retained: 0 };
       effects = read(journal) ?? { identity: project.identity, org, actions: {}, notices: {} };
       if (effects.identity !== project.identity || effects.org !== org) throw Error('effect journal project binding changed');
@@ -328,6 +328,11 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         }catch(e){note(key,e.message,{item});}
       }
       const { config } = loadDiscoveredRoutes({ cwd: repo, env: childEnv });
+      // Productive cleanup is allowed to finish. It cannot consume READY work's
+      // independent admission allowance. All actual effects still recount and
+      // re-read native/record/source/STOP/HOLD; no worker is stopped by a clock.
+      const precedingWork=workClock()-workStarted;workStarted=workClock();
+      log({action:'admission-stage',preceding_work_ms:precedingWork,preceding_budget_exhausted:precedingWork>=passBudgetMs,work_budget_ms:passBudgetMs});
       let starts=0;
       for (const item of sortItems([...snapshot.state.items.values()].filter(item => !item.closed && item.kind !== 'goal')).sort((a, b) => Number(isQueueReview(b)) - Number(isQueueReview(a)))) {
         if(expired()||starts>=(maxStarts??config.dispatch?.max_sessions??7))break;

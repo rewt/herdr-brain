@@ -479,6 +479,20 @@ test('phase1 pending pre-effect closeout source handoff continues its original k
   fs.writeFileSync(file,JSON.stringify(completed));service.pass();assert.equal(calls.length,2,'a native/ambiguous evaluated request is not a pre-effect handoff');
 });
 
+test('useful admission proceeds after unrelated productive cleanup exceeds its work budget while a fresh STOP still prevents launch',t=>{
+  for(const stopped of [false,true]){
+    const f=fixture(t),policy=JSON.parse(fs.readFileSync(path.join(f.cwd,'.lane.json')));policy.retirement={closeout_queue:true};fs.writeFileSync(path.join(f.cwd,'.lane.json'),JSON.stringify(policy));
+    const added=transact(f.org,events=>bindCloseoutSources({cwd:f.cwd,org:f.org,events,env:f.env,mutation:{add:[{type:'item.closed',id:'ENG-1',as:'done',completed_run:'R-1'}]}})).added;publishCloseoutEvents({cwd:f.cwd,org:f.org,added,start:false,env:f.env});f.add([{type:'item.added',id:'ENG-2',role:'engineer',title:'Independent genuinely ready work'}]);
+    let clock=0;const calls=[],key=added[0].closeout_targets.find(t=>t.signal==='landed').key,service=createLineService({repo:f.cwd,org:f.org,to:'brain-chat',env:f.env,maxStarts:1,passBudgetMs:100,workClock:()=>clock,capacity:()=>({cap:1,count:0}),recordNotice:d=>({id:d.id,state:'record-only'}),command:(_exe,args,options)=>{
+      assert.equal(options.timeout,0);calls.push(args);
+      if(args[0]===path.join(sourceRoot,'supervisor/closeout.mjs')){clock+=1000;if(stopped)fs.writeFileSync(path.join(f.directory,'STOP'),'fresh stop after productive cleanup');return{status:0,stdout:JSON.stringify({evaluated:[{key,completed:true}]}),stderr:''};}
+      return{status:0,stdout:args[0].endsWith('dispatch.mjs')?JSON.stringify({result:'detached',journal:path.join(f.org,'dispatch/new-original.json')}):'{}',stderr:''};
+    }});
+    if(stopped)assert.throws(()=>service.pass(),/STOP/);else service.pass();assert.ok(calls.some(a=>a[0].endsWith('supervisor/closeout.mjs')));assert.equal(calls.filter(a=>a[0].endsWith('dispatch.mjs')).length,stopped?0:1);
+    if(!stopped){const rows=fs.readFileSync(path.join(f.directory,'passes.jsonl'),'utf8').trim().split('\n').map(JSON.parse);assert.equal(rows.find(r=>r.action==='admission-stage').preceding_budget_exhausted,true);assert.equal(rows.find(r=>r.action==='pass-complete').starts,1);}
+  }
+});
+
 test('phase1 service retains unknown exit authority while scheduling only the original supported outcome readback',t=>{
   const f=fixture(t),policy=JSON.parse(fs.readFileSync(path.join(f.cwd,'.lane.json'),'utf8'));policy.retirement={closeout_queue:true};fs.writeFileSync(path.join(f.cwd,'.lane.json'),JSON.stringify(policy));
   const a=f.observation.agents[0];f.add([{type:'run.updated',id:'R-1',meta:{agent:a.name,pane:a.pane_id,worker_workspace:a.workspace_id,terminal_id:a.terminal_id,agent_session_id:a.agent_session.value}}]);

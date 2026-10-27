@@ -13,7 +13,8 @@ import {gitProject} from '../lib/project.mjs';
 import {createLineService,sourceRoot,serviceDirectory} from '../line-service/line-service.mjs';
 import {discoverChanges,blockedChangeKey,reviewResultEvents,morningDigest,recordReviewResults} from '../line-service/phase1.mjs';
 import {reviewAttempt} from '../line-service/review.mjs';
-import {queueReviewMutation} from '../line-service/review-queue.mjs';
+import {queueReviewMutation,reviewQueueRoute} from '../line-service/review-queue.mjs';
+import {ROUTE_PRESET} from '../lanes/preset.mjs';
 import {countSessions,checkSessionCap} from '../dispatch/session-cap.mjs';
 import {closeoutCodeIdentity,bindCloseoutCode} from '../lib/closeout-code.mjs';
 import {kickCloseout,bindCloseoutSources,publishCloseoutEvents,CLOSEOUT_EXIT_PENDING} from '../lib/closeout.mjs';
@@ -117,6 +118,15 @@ test('phase1 creates one queue item per landed change with immutable evidence an
   }finally{process.chdir(before);}
 });
 
+test('permanent review route falls back to the existing review route without replacing explicit task policy',()=>{
+  const config=structuredClone(ROUTE_PRESET);delete config.routes.reviewer;delete config.selection_policy.by_task_class.review;
+  config.routes.review={kind:'codex',model:'fixture-reviewer',effort:'max'};
+  assert.equal(reviewQueueRoute(config),'review');
+  config.selection_policy.by_task_class.review='review-sol-max';assert.equal(reviewQueueRoute(config),'review-sol-max');
+  delete config.selection_policy.by_task_class.review;delete config.routes.review;assert.throws(()=>reviewQueueRoute(config),/unknown task class: review/);
+  config.routes.review={kind:'invalid'};assert.throws(()=>reviewQueueRoute(config),/route|kind/);
+});
+
 test('phase1 verdict and Major FAIL plus Minor findings become immutable scoped facts and linked work once',t=>{
   const f=fixture(t),target=discoverChanges(f.context()).changes[0].target;
   f.add([{type:'item.added',id:'REV-1',role:'reviewer',title:'Review',meta:{review_source_item:'ENG-1',review_source_run:'R-1',review_key:`ENG-1:${target.head}`,review_target:target,review_round_cap:1}},{type:'run.started',id:'R-2',item:'REV-1',workspace:f.cwd,meta:{dispatch_role:'review'}}]);
@@ -144,6 +154,20 @@ test('phase1 ingests an explicit immutable body verdict and holds missing quoted
   assert.equal(result.status,0,result.stderr);assert.equal(f.context().state.runs.get('R-2').report.extra.verdict,'PASS');
   assert.equal(f.context().events.filter(e=>e.type==='change.reviewed'&&e.review_run==='R-2').length,1);
   assert.equal(fs.readFileSync(path.join(f.org,'reports/R-2.md'),'utf8'),text,'original report bytes stay immutable');
+});
+
+test('permanent review verdict accepts the actual PASS sentence and bold FAIL prefix with frontmatter agreement and one Major fix',t=>{
+  const f=fixture(t),target=discoverChanges(f.context()).changes[0].target;
+  f.add([{type:'item.added',id:'REV-1',role:'reviewer',title:'Review',meta:{review_source_item:'ENG-1',review_source_run:'R-1',review_key:`ENG-1:${target.head}`,review_target:target,review_round_cap:1}},
+    {type:'run.started',id:'R-2',item:'REV-1',workspace:f.cwd}]);
+  const c=f.context(),run=c.state.runs.get('R-2');
+  for(const [verdict,body]of [['PASS','Verdict: PASS. No findings.'],['FAIL','Verdict: **FAIL**\n- [Major] source-1:1 - actual source defect']]){
+    const report={outcome:'done',summary:'Immutable independent judgment',proposals:[],extra:{verdict}},facts=reviewResultEvents({...c,run,report,body,sha256:hash(body)});
+    assert.equal(facts[0].verdict,verdict);assert.equal(facts[0].report_sha256,hash(body));
+    assert.equal(facts.filter(e=>e.type==='item.added').length,verdict==='FAIL'?1:0);
+    if(verdict==='FAIL')assert.equal(facts[1].meta.review_fix_of,`ENG-1:${target.head}`);
+    assert.throws(()=>reviewResultEvents({...c,run,report:{...report,extra:{verdict:verdict==='PASS'?'FAIL':'PASS'}},body,sha256:hash(body)}),/ambiguous/);
+  }
 });
 
 test('phase1 current service records an old selected consumers immutable review result without changing its owner or pin',t=>{

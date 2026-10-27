@@ -11,7 +11,7 @@ import { roleIs } from '../lib/roles.mjs';
 import { readOwnedRun, requireController, assertOwner } from '../lib/run-owner.mjs';
 import { effectiveWorkerIdentity } from '../lib/worker-identity.mjs';
 import { nativeSender } from '../messages/operator-inbox.mjs';
-import { selectRoute } from '../lanes/routes.mjs';
+import { selectRoute,resolveLaunchRoute } from '../lanes/routes.mjs';
 import { reviewAttempt } from './review.mjs';
 import { discoverChanges } from './phase1.mjs';
 
@@ -23,7 +23,12 @@ const git = (repo, args) => execFileSync('git', ['--no-optional-locks', '-C', re
 const journalFor = (org, identity) => path.join(org, 'line-service', createHash('sha256').update(JSON.stringify(identity)).digest('hex').slice(0, 20), 'effects.json');
 
 export const isQueueReview = item => roleIs(item, 'REV') && Boolean(item.meta.review_source_item);
-export const reviewQueueRoute = config => config.routes?.reviewer ? 'reviewer' : selectRoute(config, 'review');
+export function reviewQueueRoute(config) {
+  if(config.routes?.reviewer)return'reviewer';
+  if(config.selection_policy?.by_task_class?.review!==undefined)return selectRoute(config,'review');
+  if(config.routes?.review){resolveLaunchRoute(config,{route:'review'});return'review';}
+  return selectRoute(config,'review');
+}
 function openBoundary(org, repo, identity) {
   for (const file of [journalFor(org, identity).replace(/effects\.json$/, 'STOP'), path.join(repo, '.lane/supervisor/STOP'), path.join(repo, '.lane/supervisor/HOLD')])
     if (fs.existsSync(file)) throw Error('STOP/HOLD prevents review queue effect');

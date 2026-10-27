@@ -102,7 +102,7 @@ export function reviewResultEvents({state,events,run,report,sha256,body=report.b
     if(marker){if(!fence)fence=marker[1];else if(marker[1][0]===fence[0]&&marker[1].length>=fence.length)fence=null;continue;}
     if(fence)continue;
     const match=/^\s{0,3}Verdict:\s*(.*?)\s*$/i.exec(line);
-    if(match){declarations.push(match[1].toUpperCase());bodyLines.push(index+1);}
+    if(match){const verdict=/^\**\s*(PASS|FAIL|NEEDS-WORK)\b/i.exec(match[1]);declarations.push(verdict?verdict[1].toUpperCase():match[1].toUpperCase());bodyLines.push(index+1);}
   }
   const distinct=new Set(declarations),verdict=declarations[0];
   if(!declarations.length||declarations.some(v=>!['PASS','FAIL','NEEDS-WORK'].includes(v)))throw Error('queued review report requires explicit PASS, FAIL or NEEDS-WORK verdict');

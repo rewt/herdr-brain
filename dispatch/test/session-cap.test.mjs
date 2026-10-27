@@ -243,7 +243,7 @@ test('cap refusal names all runs and the worker/reviewer breakdown from durable 
     run: 'R-9', process: { pid: 9, identity: '100:1' } }));
   const options = { config: { dispatch: { max_sessions: 1 } }, org, common, kill: () => {}, readProcess: pid => row(pid) };
   assert.throws(() => checkSessionCap(options), e => e.code === 'DISPATCH_SESSION_CAP' &&
-    /session cap 1 reached: R-9/.test(e.message) && /0 workers, 1 settle reviewers/.test(e.message));
+    /session cap 1 reached: R-9/.test(e.message) && /0 workers, 1 reviewers/.test(e.message));
   assert.equal(checkSessionCap({ ...options, kill: () => { throw error('ESRCH'); } }).count, 0);
   fs.writeFileSync(path.join(dir, 'review.json'), '{');
   assert.throws(() => checkSessionCap(options), /session count unavailable/);

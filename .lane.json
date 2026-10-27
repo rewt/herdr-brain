@@ -8,7 +8,8 @@
     ]
   },
   "retirement": {
-    "closeout_queue": true
+    "closeout_queue": false,
+    "line_service_cleanup": true
   },
   "settle": {
     "review_route": "review-sol-max",

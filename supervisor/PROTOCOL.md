@@ -32,6 +32,8 @@ New cold source calls use pinned Node20.19.4 and matching HERDR_BRAIN_ROOT.
 Normal pin forwarding, saved retries and native ownership remain intact.
 Use supported policy writers. Instructions do not activate a runtime. Never amend
 immutable reports, replay green checks or start duplicate schedules.
+The Phase 0 routine prefix rules use protected OUTSIDE-sandbox execution. New
+sessions load operator-applied rules; do not bulk restart or claim old-session load.
 
 ## Communication and decisions
 

@@ -17,6 +17,10 @@ task needs them, not as another admission stage.
   `node lanes/lane.mjs promote TOPIC --expected-head FULL_SHA`.
   Rebase moved main in your lane and capture the resulting head; then report.
   No report-first promotion flag, fabricated report, push or release.
+- Routine protected commands request require_escalated from the outset. The
+  approved general forms use `git rebase -- UPSTREAM`, mode-only `git rebase
+  --continue` / `--abort`, `git merge --ff-only -- UPSTREAM`, and `kill -0 -- PID`.
+  Matching prefix rules run OUTSIDE the sandbox, like commits; no broader authority.
 - Run only your selected affected checks once through the existing runner/lane
   check. No baseline/default/full suite or green replay. Preserve failures; after
   a fix run only failing, affected or unrun controls. Unrun is never PASS.

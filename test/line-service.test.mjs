@@ -58,6 +58,7 @@ test('default routing handles known role and narrow task aliases without recasti
 
 test('a changed supervisor address recovers only the exact zero-effect pre-journal failure once and preserves its original receipt',t=>{
   const f=fixture(t),item=f.add('Previously stranded engineering'),s=f.service(),directory=s.directory;
+  const configFile=path.join(f.repo,'.lane.json'),config=JSON.parse(fs.readFileSync(configFile));config.routes.review={kind:'claude'};fs.writeFileSync(configFile,JSON.stringify(config));
   const created=f.show(item).created.seq,key=`dispatch:${item}:${created}:ordinary`,brief=path.join(directory,createHash('sha256').update(JSON.stringify(key)).digest('hex')+'.ask.md');
   const reason='Worker brief missing required fields: PROJECT SUPERVISOR address (configure owning project promote.to or launch MONITOR_SUPERVISOR_AGENT); no worker spawned';
   fs.writeFileSync(brief,'# Original assignment\n');

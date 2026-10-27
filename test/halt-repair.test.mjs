@@ -23,7 +23,7 @@ function fixture(t){
   const config={routes:{engineer:{kind:'codex'},'engineer-xhigh':{kind:'codex'},review:{kind:'claude'}},selection_policy:{by_task_class:{review:'review'}}};
   fs.writeFileSync(path.join(repo,'.lane.json'),JSON.stringify(config));
   const identity=gitProject(repo).identity,directory=serviceDirectory(org,identity);fs.mkdirSync(directory,{recursive:true});
-  fs.writeFileSync(path.join(directory,'installation.json'),JSON.stringify({repo,org,source:sourceRoot,node:process.execPath,file:path.join(directory,'service.plist'),target:`gui/${process.getuid()}/dev.herdr.line.${path.basename(directory)}`}));
+  fs.writeFileSync(path.join(directory,'installation.json'),JSON.stringify({at:'2026-10-27T00:00:00Z',repo,org,source:sourceRoot,node:process.execPath,file:path.join(directory,'service.plist'),target:`gui/${process.getuid()}/dev.herdr.line.${path.basename(directory)}`}));
   const add=events=>transact(org,()=>({add:events}));
   const boundary={id:'fixture',project:identity,repo,org,source:fs.realpathSync(sourceRoot),main:'main',canonical_head:git(['rev-parse','HEAD'])};
   add(['line-service.cutover','line-service.phase0'].map(type=>({...boundary,type})));

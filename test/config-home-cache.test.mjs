@@ -5,6 +5,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { configFixture } from './helpers/config-home-fixture.mjs';
 import { homeBindings, homeProject, readConfigJSON } from '../lib/config-home.mjs';
+import { transact } from '../lib/store.mjs';
 
 function countRecordReads(record, action) {
   const open = fs.openSync, read = fs.readFileSync; let reads = 0;
@@ -47,6 +48,43 @@ test('config verification cache invalidates on record replacement, same-size wri
   fs.unlinkSync(path.join(f.cwd, '.brain')); fs.symlinkSync(f.scratch, path.join(f.cwd, '.brain'));
   assert.throws(() => f.binding(), /conflicting home link/);
 });
+
+for (const change of ['authorization append', 'target replacement', 'same-size rewrite', 'incomplete tail']) {
+  test(`config verification cache invalidates a symlinked external log after ${change}`, async t => {
+    const f = configFixture(t); await f.adopt(); const binding = f.binding();
+    const file = path.join(binding.record, 'events.jsonl');
+    const external = path.join(f.scratch, 'external'); fs.mkdirSync(external);
+    const target = path.join(external, 'events.jsonl');
+    fs.renameSync(file, target); fs.symlinkSync(target, file);
+    assert.ok(countRecordReads(binding.record, () => f.binding()) > 0, 'warm verification must follow the external log');
+    assert.equal(countRecordReads(binding.record, () => f.binding()), 0, 'stable symlink target may reuse verification');
+    const link = fs.lstatSync(file, { bigint: true }), stat = fs.statSync(target), bytes = fs.readFileSync(target);
+    let error = /human record answer/;
+    if (change === 'authorization append') {
+      transact(binding.record, () => ({ add: [{ type: 'item.updated', id: f.decision.id, fields: { meta: { answer: 'no' } } }] }), { actor: 'human' });
+    } else if (change === 'target replacement') {
+      // Keep the pathname, length and mtime; the new inode has no adoption completion.
+      const changed = bytes.toString().replace('"type":"config.adopted"', '"type":"config.changed"');
+      assert.notEqual(changed, bytes.toString()); assert.equal(Buffer.byteLength(changed), bytes.length);
+      fs.writeFileSync(target + '.replacement', changed);
+      fs.utimesSync(target + '.replacement', stat.atime, stat.mtime);
+      fs.renameSync(target + '.replacement', target);
+      assert.notEqual(fs.statSync(target).ino, stat.ino);
+      error = /adoption completion record changed/;
+    } else if (change === 'same-size rewrite') {
+      const changed = bytes.toString().replace('"answer":"yes"', '"answer":"no "');
+      assert.notEqual(changed, bytes.toString()); assert.equal(Buffer.byteLength(changed), bytes.length);
+      fs.writeFileSync(target, changed); fs.utimesSync(target, stat.atime, stat.mtime);
+      assert.equal(fs.statSync(target).ino, stat.ino);
+    } else {
+      fs.appendFileSync(target, '{"type":'); error = /incomplete tail/;
+    }
+    const after = fs.lstatSync(file, { bigint: true });
+    for (const key of ['dev', 'ino', 'size', 'mtimeNs', 'ctimeNs']) assert.equal(after[key], link[key], `link ${key} stays unchanged`);
+    assert.equal(fs.realpathSync(file), target, 'resolved pathname stays unchanged');
+    assert.ok(countRecordReads(binding.record, () => assert.throws(() => f.binding(), error)) > 0, 'changed target must be read and refused');
+  });
+}
 
 test('config verification selects only claimed projects while selected damage and overlapping record claims still hold', async t => {
   const f = configFixture(t); await f.adopt(); const binding = f.binding(), raw = readConfigJSON(binding.file);

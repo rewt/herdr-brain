@@ -116,9 +116,10 @@ unblock or changed brief arrives; unresolved dependencies/HOLD still refuse.
 
 Starts use `dispatch --detach`. The original journal reserves capacity before
 spawn and returns immediately; each candidate and the child perform fresh
-admission/readiness checks. The child has a ten-minute controller budget and
-120-second command bounds. Each pass has an eight-minute work budget and bounded
-children; it logs a stuck child and continues independent branches. The two
+admission/readiness checks. Foreground commands stop only for measured silence
+AND confirmed inactivity of their own unchanged child; elapsed time alone and
+unknown activity never authorize a signal. The eight-minute pass work budget
+only defers new work and never terminates an active child. The two
 legacy-named memory phases now pause only for a genuine live proving reservation.
 Memory pressure is observed, never an admission wait. Lost launches/prompts are
 retained, never resubmitted. New detached watchers record callbacks without

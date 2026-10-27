@@ -258,7 +258,9 @@ export function observeDecisionConsequences({repo,org,env=process.env,native}){
 export function decisionRestoreMutation({events,state,key}){
   if(events.some(e=>e.type==='decision.restored'&&e.key===key))return{add:[],result:{existing:true}};
   const applied=events.filter(e=>e.type==='decision.applied'&&e.key===key);if(applied.length!==1)throw Error('exact application is missing/ambiguous');
-  const event=applied[0];if(events.some(e=>e.type==='decision.consequence'&&e.key===key))throw Error('consequence observed; exact automatic restore is no longer reversible');
+  const event=applied[0];
+  if(event.action==='ask_operator')throw Error('reserved question retained; its disposition requires the actual operator route');
+  if(events.some(e=>e.type==='decision.consequence'&&e.key===key))throw Error('consequence observed; exact automatic restore is no longer reversible');
   const ids=new Set(event.changes.map(c=>c.id));
   if(events.some(e=>e.seq>event.seq&&[e.id,e.item,e.blocker,e.blocked].some(id=>ids.has(id))))throw Error('affected state changed after application; preserve downstream work');
   // Restore the captured pre-application state, including absent metadata keys.

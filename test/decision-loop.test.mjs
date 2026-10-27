@@ -85,6 +85,13 @@ test('hold, reserved ancestry and unselected report proposals never become autom
   const f=fixture();f.add({type:'line.decisions-deactivated',project:'/git',org:'/record'});assert.equal(f.request(),null);
 });
 
+test('reserved question creation cannot be undone through delegated automatic restore',()=>{
+  const f=fixture(),a=f.answer('ask_operator',{category:'security',question:'Change the permission boundary?',recommend:'no'}),id=f.queue();f.judge(id,a);
+  f.apply(id,a).add.forEach(f.add);
+  assert.throws(()=>decisionRestoreMutation({state:f.state(),events:f.events,key:a.key}),/actual operator route/);
+  assert.equal([...f.state().items.values()].filter(i=>i.role==='human'&&!i.closed).length,1);
+});
+
 test('a typed reshape changes only the delegated contract and resumes work',()=>{
   const f=fixture(),a=f.answer('reshape',{title:'Bounded successor slice',accept:['One concrete affected check']}),id=f.queue();f.judge(id,a);
   f.apply(id,a).add.forEach(f.add);assert.equal(f.state().items.get('ENG-1').title,a.title);

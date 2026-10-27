@@ -16,7 +16,7 @@ import { readOwnedRun, requireController, assertOwner } from '../lib/run-owner.m
 import { loadDiscoveredRoutes, resolveLaunchRoute, selectRoute } from '../lanes/routes.mjs';
 import { checkSessionCap } from '../dispatch/session-cap.mjs';
 import { noticeLock } from '../supervisor/notice-lock.mjs';
-import { readCloseoutEntries, closeoutRevision, safeCloseoutRetry,closeoutOutcomeObservation } from '../lib/closeout.mjs';
+import { readCloseoutEntries, closeoutRevision, safeCloseoutRetry,closeoutOutcomeObservation,scheduleLineCloseouts } from '../lib/closeout.mjs';
 import { parseArgs, isMain } from '../lib/cli-help.mjs';
 import { reviewAttempt } from './review.mjs';
 import { queueConsumer, isQueueReview, validateQueuedReview, reviewQueueBrief, reviewQueueRoute } from './review-queue.mjs';
@@ -154,7 +154,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
           }
           if(entry.result?.already_running){entry.state='held';entry.error='ordinary closeout consumer contention; unchanged request retained';}
           if(pendingHandoff(entry.result)){entry.state='held';entry.error='closer implementation changed before effect; original requests need a fresh drain';}
-          const deferred = entry.result?.evaluated?.filter(row => !row.completed);
+          const deferred = entry.result?.evaluated?.filter(row => !row.completed&&!row.sessions_retired);
           if (deferred?.length) { entry.state = 'held'; entry.error = deferred.map(row => `${row.run}: ${row.reason}`).join('; '); }
         }
         catch (e) { entry.state = 'held'; entry.error = e.message; entry.receipt = e.receipt; }
@@ -267,11 +267,10 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
           if(prior&&/EPERM|EACCES|native refusal|foreign|identity|reserved|HOLD/i.test(prior.reason??'')&&!closeoutOutcomeObservation(prior,{entry:e,events:observed.events})){timings.closeout_retained++;return false;}
           return !prior||closeoutRevision(e,observed.events,observed.state)>(prior.revision??0)||safeCloseoutRetry(prior,{entry:e,events:observed.events})||
             closeoutOutcomeObservation(prior,{entry:e,events:observed.events});
-        }).sort((a,b)=>b.source.seq-a.source.seq).slice(0,maxStepsPerStage);
-        if (entries.length) {
-          const revisions = entries.map(e=>closeoutRevision(e,observed.events,observed.state));
-          const outcomeReadback=entries.some(entry=>closeoutOutcomeObservation(evaluations.get(entry.key),{entry,events:observed.events}));
-          effect(`closeout:${digest([entries.map(e=>e.key), revisions])}`, () => JSON.parse(cli('supervisor/closeout.mjs', ['drain', '--repo', repo, '--org', org, '--keys', JSON.stringify(entries.map(e => e.key)), '--no-restart','--retry-safe','--deadline',String(Date.now()+Math.max(1,childTimeoutMs-5000))])),undefined,undefined,true,outcomeReadback);
+        });
+        for(const {entry,sessionsOnly}of scheduleLineCloseouts(entries,observed.events)){
+          const revision=closeoutRevision(entry,observed.events,observed.state),outcomeReadback=closeoutOutcomeObservation(evaluations.get(entry.key),{entry,events:observed.events});
+          effect(`closeout:${sessionsOnly?'sessions':'physical'}:${digest([entry.key,revision])}`,()=>JSON.parse(cli('supervisor/closeout.mjs',['drain','--repo',repo,'--org',org,'--keys',JSON.stringify([entry.key]),'--no-restart','--retry-safe','--deadline','0',...(sessionsOnly?['--sessions-only']:[])])),undefined,undefined,true,outcomeReadback);
         }
       } catch (e) { note('closeout', e.message); }
       // A routine error never creates a decision. Only a real post-cutover

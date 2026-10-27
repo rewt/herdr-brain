@@ -20,7 +20,7 @@ import { completedCloseoutKeys, handoffCloseout, migrateCloseout } from '../lib/
 import { completionFingerprint, digest } from '../lib/completion.mjs';
 import { bindCloseoutSources, publishCloseoutEvents, readCloseoutEntries, readyLane, retryCloseout,
   closeoutPolicy, recordCompletedReview, retirementOwnerLock, retryPromotionCloseout, closeoutRevision, pruneCompletedCloseout, closeoutKey,
-  recoverLane,closeoutOutcomeObservation,safeCloseoutRetry } from '../lib/closeout.mjs';
+  recoverLane,closeoutOutcomeObservation,safeCloseoutRetry,scheduleLineCloseouts } from '../lib/closeout.mjs';
 import { reconcile } from '../supervisor/reconcile.mjs';
 import { retirementLock } from '../lib/retire-lock.mjs';
 import { acquireLock } from '../lanes/promotion-lock.mjs';
@@ -110,6 +110,38 @@ test('phase1 deadline-deferred closeout retries its original unattempted target 
   assert.equal(first.evaluated[0].completed,false);assert.match(first.evaluated[0].reason,/deadline/);assert.equal(effects(f).some(e=>e.action==='agent-exit-requested'),false);
   const next=f.drain({keys:[entry.key],retrySafe:true});assert.equal(next.evaluated[0]?.completed,true,JSON.stringify(next));
   assert.equal(f.read().actions.filter(a=>a[0]==='agent'&&a[1]==='prompt').length,1);assert.equal(fs.existsSync(f.lane),false);
+});
+
+test('retirement phase closes its one bound session after slow preparation and leaves physical cleanup independent',t=>{
+  const f=setup(t,{merged:true});f.report();const rows=f.append([{type:'item.closed',id:'ENG-1',as:'done',completed_run:'R-1'}]),entry=rows[0].closeout_targets.find(t=>t.signal==='landed'),command=f.options.command;
+  const realNow=Date.now,started=realNow();let delayed=false;
+  f.options.command=(exe,args,opt)=>{if(!delayed&&exe===f.job.herdr){delayed=true;Date.now=()=>started+200000;}return command(exe,args,opt);};
+  let phase;try{phase=f.drain({keys:[entry.key],sessionsOnly:true});}finally{Date.now=realNow;f.options.command=command;}
+  assert.equal(phase.evaluated[0]?.sessions_retired,true,JSON.stringify(phase));assert.equal(phase.evaluated[0].completed,false);assert.equal(fs.existsSync(f.lane),true);
+  assert.ok(effects(f).some(e=>e.action==='exit-observed'));assert.ok(effects(f).some(e=>e.action==='closed'));assert.equal(effects(f).some(e=>e.action==='worktree-removed'),false);
+  assert.equal(f.read().actions.filter(a=>a[0]==='agent'&&a[1]==='prompt').length,1);
+  const physical=f.drain({keys:[entry.key],retrySafe:true});assert.equal(physical.evaluated[0]?.completed,true,JSON.stringify(physical));assert.equal(fs.existsSync(f.lane),false);
+  assert.equal(f.read().actions.filter(a=>a[0]==='agent'&&a[1]==='prompt').length,1,'physical completion never replays quit');
+});
+
+test('retirement phase fair selection finds native work among thousands of physical requests and preserves one-target phases',()=>{
+  const physical=Array.from({length:2035},(_,n)=>({key:String(n),source:{seq:n+1},panes:[{pane:`old:${n}`}]})),build={key:'build',source:{seq:4000},panes:[{pane:'build:p'}]},review={key:'review',source:{seq:4001},panes:[{pane:'review:p'}]};
+  const rows=physical.map((e,n)=>({type:'closeout.evaluated',key:e.key,seq:n+1,sessions_retired:true})),entries=[...physical,build,review];
+  let chosen=scheduleLineCloseouts(entries,rows);assert.deepEqual(chosen.map(c=>[c.entry.key,c.sessionsOnly]),[['build',true],['0',false]]);
+  chosen=scheduleLineCloseouts(entries,[...rows,{type:'closeout.evaluated',key:'build',seq:5000,reason:'original native outcome UNKNOWN'}]);
+  assert.deepEqual(chosen.map(c=>[c.entry.key,c.sessionsOnly]),[['review',true],['0',false]],'a retained original intent gets no priority over a never-attempted independent session');
+});
+
+test('retirement phase retains original unknown exits and a fresh service STOP before any native effect',t=>{
+  for(const kind of ['unknown','stop']){
+    const f=setup(t,{merged:true});f.report();const rows=f.append([{type:'item.closed',id:'ENG-1',as:'done',completed_run:'R-1'}]),entry=rows[0].closeout_targets.find(t=>t.signal==='landed');
+    if(kind==='unknown'){
+      const candidate=f.retirement(f.options).plan(f.lane).close[0];f.append([{type:'closeout.effect',key:entry.key,identity:f.common,run:'R-1',item:'ENG-1',source:{seq:rows[0].seq,type:'item.closed'},effect:'preserved-original-intent',outcome:{action:'agent-exit-requested',run:candidate.run,pane:candidate.pane,tab_id:candidate.tab_id,occupant:candidate.occupant,shell:candidate.shell}}]);
+    }else{
+      const base=f.options.command;let stopped=false;f.options.command=(exe,args,opt)=>{const result=base(exe,args,opt);if(!stopped&&exe===f.job.herdr){stopped=true;const directory=path.join(f.org,'line-service',createHash('sha256').update(JSON.stringify(f.common)).digest('hex').slice(0,20));fs.mkdirSync(directory,{recursive:true});fs.writeFileSync(path.join(directory,'STOP'),'actual STOP after selection');}return result;};
+    }
+    const result=f.drain({keys:[entry.key],sessionsOnly:true,retrySafe:true});assert.equal(result.evaluated[0]?.completed,false);assert.notEqual(result.evaluated[0]?.sessions_retired,true);assert.match(result.evaluated[0].reason,/unresolved native|STOP/);assert.deepEqual(f.read().actions,[]);
+  }
 });
 
 test('phase1 deadline retry preserves an unresolved original native exit intent without another prompt',t=>{

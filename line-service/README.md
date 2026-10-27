@@ -221,6 +221,18 @@ verdict/closure against the current run and retains all native occupant,
 source/integration, callback, HOLD and archive guards. A FAIL reviewer may retire;
 its product correction remains separately owned without a second review chain.
 
+The installed line selects one least-recently-evaluated bound session request
+and one independent physical-cleanup request per pass. Named `drain` supports
+`--sessions-only --deadline 0`: it uses measured activity for owned commands,
+records actual exit/tab-close results, and leaves worktree preservation/removal
+queued separately. Zero disables the elapsed retirement allowance for exact
+named targets only. A successful session phase records `sessions_retired: true`
+with full physical completion still false; later cleanup never replays quit.
+Each new native mutation rechecks the original source, claim, actual binding,
+callback, STOP/HOLD and archive guards. Uncertain original intents permit only
+their existing outcome readback, never another exit/close attempt. Evaluation
+timings are passive observations of real passes, not benchmarks.
+
 ```sh
 node line-service/line-service.mjs --digest --org /OWN/RECORD --since 2026-10-27T00:00:00Z
 ```

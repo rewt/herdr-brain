@@ -55,3 +55,7 @@ test('not-started request serialization recovers positive ESRCH only and preserv
   for(const code of ['live','EPERM','EACCES','unknown']){fs.writeFileSync(f.journal+'.lock','876543');assert.throws(()=>lockRequest(f.journal,{kill:()=>{if(code!=='live')throw Object.assign(Error(code),{code});}}),/running|EPERM|EACCES|unknown/);assert.equal(fs.readFileSync(f.journal+'.lock','utf8'),'876543');}
   const held=lockRequest(f.journal,{kill:()=>{throw Object.assign(Error('absent'),{code:'ESRCH'});}});assert.equal(fs.readFileSync(f.journal+'.lock','utf8'),String(process.pid));held.release();assert.equal(fs.existsSync(f.journal+'.lock'),false);
 });
+test('not-started native refusal remains stopped despite an elapsed-only disposition',t=>{
+  const f=fixture(t);fs.writeFileSync(f.journal,JSON.stringify({...f.job,error:'EPERM native refusal'}));
+  assert.throws(()=>resolveNotStarted(f.args),/native refusal\/ownership guard/);assert.equal(loadEvents(f.org).events.some(e=>e.type==='dispatch.resolution-intent'||e.type==='dispatch.not-started'),false);
+});

@@ -24,7 +24,7 @@ import { roleIs } from '../lib/roles.mjs';
 import { recordLineNotice,canonicalFailure } from './record-inbox.mjs';
 import { enqueueNamedDecision } from './decision-wake.mjs';
 import { canonical } from '../messages/schema.mjs';
-import { discoverChanges,dispatchInput,phase0Boundary,morningDigest,recordReviewResults,reviewCompletionPlan,recordReviewCompletion } from './phase1.mjs';
+import { discoverChanges,dispatchInput,phase0Boundary,morningDigest,recordReviewResults,reviewCompletionPlan,recordReviewCompletion,ensureReviewBoundary,canonicalReviewIndex,recordReviewError,recordReviewHealth } from './phase1.mjs';
 import {preflightContinuation} from '../dispatch/preflight.mjs';
 export { reviewAttempt } from './review.mjs';
 
@@ -114,15 +114,19 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       effects = read(journal) ?? { identity: project.identity, org, actions: {}, notices: {} };
       if (effects.identity !== project.identity || effects.org !== org) throw Error('effect journal project binding changed');
       const save = () => writeFileAtomic(journal, JSON.stringify(effects, null, 2) + '\n', 0o600);
+      if(effects.pass_number!==undefined&&(!Number.isSafeInteger(effects.pass_number)||effects.pass_number<0))throw Error('service pass counter is inconsistent');
+      effects.pass_number=(effects.pass_number??0)+1;save();
       let snapshot, stale = true, reviewCache = new Map();
       const current = () => { if (stale) { snapshot = observe(); stale = false; reviewCache = new Map(); } return snapshot; };
       const note = (boundary, reason, scope = {}, force = false) => {
+        const scoped=scope.item??/^dispatch:([A-Z]+-\d+)/.exec(boundary)?.[1],review=scope.review===true||/^review|DISPATCH_REVIEW/i.test(boundary)||roleIs(snapshot?.state.items.get(scoped),'REV');
         const normalized=canonicalFailure(reason),key=createHash('sha256').update(canonical([boundary,normalized,scope])).digest('hex');
         log({ action: 'hold', boundary, reason, canonical_key:key,scope });
         effects.record_notices??={};
-        const prior=effects.record_notices[key],entry=effects.record_notices[key]=prior??{first_at:now(),reason:normalized,scope,state:'recording',id:`line-record-${key}`,count:0};
+        const prior=effects.record_notices[key],entry=effects.record_notices[key]=prior??{first_at:now(),reason:normalized,scope,boundary,state:'recording',id:`line-record-${key}`,count:0};
         entry.count++;entry.last_at=now();save();
-        if(!force&&entry.count<alertAfter)return;
+        if(review){entry.review=true;save();try{recordReviewError({repo,org,key,count:entry.count,boundary,reason:normalized,scope,env:childEnv});}catch(e){log({action:'review-error-counter-held',key,error:e.message});}}
+        if(!force&&!review&&entry.count<alertAfter)return;
         if(entry.state==='recorded')return;
         try {
           const receipt=recordNotice({repo,org,id:entry.id,boundary,reason:entry.reason,scope:entry.scope,first_at:entry.first_at,audit:path.join(directory,'passes.jsonl'),counts:`${journal}#record_notices/${key}`,env:childEnv});
@@ -181,19 +185,21 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         }catch(e){note(`ingest:${run.id}`,e.message);}
       }
       snapshot=current();
-      let cutoff;try{cutoff=phase0Boundary(snapshot.events,{repo,org,identity:project.identity});}catch(e){note('review-cutoff',e.message);}
+      let cutoff;try{cutoff=phase0Boundary(snapshot.events,{repo,org,identity:project.identity});}catch{
+        try{ensureReviewBoundary({repo,org,env:childEnv});stale=true;snapshot=current();cutoff=phase0Boundary(snapshot.events,{repo,org,identity:project.identity});}catch(e){note('review-cutoff',e.message);}
+      }
       const recordedReviews=new Set(snapshot.events.filter(e=>e.type==='change.reviewed').map(e=>e.review_run));let resultSteps=0;
       for(const run of snapshot.state.runs.values()){
         if(expired()||resultSteps>=maxStepsPerStage)break;
         const review=snapshot.state.items.get(run.item);
-        if(cutoff&&review?.created.seq>cutoff.seq&&run.report&&isQueueReview(review)&&!recordedReviews.has(run.id)){
+        if(run.report&&isQueueReview(review)&&!recordedReviews.has(run.id)){
           resultSteps++;
           effect(`review-result:${run.id}:${run.report.sha256}`,()=>recordReviewResults({repo,org,runId:run.id,env:childEnv}),undefined,undefined,true);
         }
       }
       snapshot=current();
-      let discovered;try{discovered=discoverChanges({events:snapshot.events,state:snapshot.state,repo,org,identity:project.identity,pendingOnly:true});}catch(e){discovered={changes:[],holds:[{reason:e.message}]};}
-      for(const held of discovered.holds)note(`review-source:${held.run??'boundary'}:${held.head??''}`,held.reason);
+      let discovered,index;try{index=canonicalReviewIndex({events:snapshot.events,state:snapshot.state,repo,org,identity:project.identity,boundary:cutoff});discovered=discoverChanges({events:snapshot.events,state:snapshot.state,repo,org,identity:project.identity,pendingOnly:true,index});}catch(e){discovered={changes:[],holds:[{reason:e.message}]};}
+      for(const held of discovered.holds)note(`review-source:${held.run??'boundary'}:${held.head??''}`,held.reason,{item:held.item,run:held.run,head:held.head,review:true});
       let reviewSteps=0;
       for(const {item,run,target}of discovered.changes){
         if(expired()||reviewSteps>=maxStepsPerStage)break;
@@ -201,8 +207,8 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         try{
           reviewLock=noticeLock(path.join(directory,`review-change-${digest([item.id,target.head])}.lock`),{recover:false});
           const ignoreService={file:journal,key,target,operation:'record-queue'};
-          const attempt=reviewAttempt(item,{org,identity:project.identity,events:snapshot.events,state:snapshot.state,repo,effects,cache:reviewCache,target,ignoreService});
-          if(attempt){log({action:'review-retained',item:item.id,head:target.head,reason:attempt});continue;}
+          const attempt=reviewAttempt(item,{org,identity:project.identity,events:snapshot.events,state:snapshot.state,repo,effects,cache:reviewCache,target,capturedRun:run.id,ignoreService});
+          if(attempt){log({action:'review-retained',item:item.id,head:target.head,reason:attempt});note(key,attempt,{item:item.id,run:run.id,head:target.head,review:true});continue;}
           queueConsumer({run,env:childEnv});reviewSteps++;
           effect(key,()=>{
             const fresh=observe(),checked=discoverChanges({events:fresh.events,state:fresh.state,repo,org,identity:project.identity}).changes.find(c=>c.item.id===item.id&&c.target.head===target.head);
@@ -213,6 +219,15 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         }catch(e){note(key,e.message,{item:item.id,run:run.id,head:target.head});}
         finally{reviewLock?.();}
       }
+      if(index)try{
+        const errors=Object.values(effects.record_notices??{}).filter(e=>e.review),health=recordReviewHealth({repo,org,index,passId:`${directory}:${effects.pass_number}`,errorCounts:{unique:errors.length,occurrences:errors.reduce((n,e)=>n+e.count,0)},env:childEnv});
+        log({action:'review-health',owed:health.owed,queued:health.queued,running:health.running,done:health.done,missing_queue:health.missing_queue,gap_passes:health.gap_passes,errors:health.errors});
+        for(const gap of health.attribution_gaps)note(`review-attribution:${gap.head}`,gap.reason,{item:gap.item,run:gap.run,head:gap.head,review:true});
+        const attribution=new Set(health.attribution_gaps.map(g=>g.head));
+        for(const gap of health.coverage_gaps)if(!attribution.has(gap.head)&&gap.retained)note(`review-coverage:${gap.head}`,'Retained producer review scopes do not cover this landed source; preserve immutable attempts and verdicts, judgment is needed.',{item:gap.item,run:gap.run,head:gap.head,review:true});
+        for(const held of health.retained_issues)note(`review-cardinality:${held.group}`,held.reason,{item:held.item,run:held.run,review:true});
+        if(health.gap_passes>3)note('review-gap','More than three real passes have canonical source without complete queued or reviewed coverage; inspect the review health digest.',{review:true,boundary:index.boundary.id},true);
+      }catch(e){note('review-health',e.message);}
       // Source completion releases the real admission slot independently of
       // review verdicts and physical cleanup. The record owns the conditional
       // current-run/report/blocker/reopen transaction; there is no override.
@@ -291,12 +306,13 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       }
       // Failed cleanup/review never prevents considering independent ready work.
       snapshot = current();
-      for(const [key,entry]of Object.entries(effects.actions))if(key.startsWith('dispatch:')&&entry.state!=='complete'){
+      for(const [key,entry]of Object.entries(effects.actions))if(key.startsWith('dispatch:')&&(entry.state!=='complete'||entry.result?.result==='detached'&&entry.original_outcome?.status!=='dispatch-complete')){
         const item=key.split(':')[1];
         try{
           const outcome=originalDispatchOutcome({repo,org,common:project.identity,item,brief:path.join(directory,`${digest(key)}.ask.md`),journal:entry.original_outcome?.journal??entry.result?.journal,events:snapshot.events});
           if(JSON.stringify(outcome)!==JSON.stringify(entry.original_outcome)){entry.original_outcome=outcome;save();log({action:'dispatch-outcome-readback',key,...outcome});}
           if(outcome.status==='unknown')note(key,outcome.reason,{item});
+          else if(outcome.error)note(key,outcome.error,{item});
         }catch(e){note(key,e.message,{item});}
       }
       const { config } = loadDiscoveredRoutes({ cwd: repo, env: childEnv });
@@ -306,7 +322,9 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         snapshot=current();
         const input=dispatchInput({...snapshot,item:snapshot.state.items.get(item.id),org,identity:project.identity});
         if(!input)continue;
-        if(roleIs(item,'REV')&&(!cutoff||item.created.seq<=cutoff.seq)){timings.historical_review_skipped++;continue;}
+        if(roleIs(item,'REV')&&cutoff&&isQueueReview(item)&&!index?.heads.includes(item.meta.review_target?.head)&&!snapshot.events.some(e=>e.type==='review.recovery-completed'&&e.item===item.meta.review_source_item&&e.target?.head===item.meta.review_target?.head)){
+          try{sourceGit(repo,['merge-base','--is-ancestor',item.meta.review_target.head,cutoff.canonical_head]);timings.historical_review_skipped++;continue;}catch{/* Unlanded/unknown targets are errors, never historical skips. */}
+        }
         if (roleIs(item, 'REV') && !isQueueReview(item)) { note(`dispatch:${item.id}`, 'T2 legacy/manual review queue binding UNKNOWN; retain existing owner/attempt'); continue; }
         if (reserved(item) || item.meta.hold || item.meta.held) { note(`dispatch:${item.id}`, 'held or reserved ready item needs judgment'); continue; }
         try {
@@ -318,7 +336,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
             if(!result?.journal&&prior.receipt?.stdout)try{result=JSON.parse(prior.receipt.stdout);}catch{}
             if(!result?.journal&&prior.original_outcome?.journal)result={journal:prior.original_outcome.journal};
             if(result?.journal)continuation=preflightContinuation({journal:result.journal,repo,org,common:project.identity,root:fs.realpathSync(sourceRoot),events:snapshot.events});
-            if(!continuation){log({ action: 'dispatch-retained', key, state: prior.state });continue;}
+            if(!continuation){log({ action: 'dispatch-retained', key, state: prior.state });if(roleIs(item,'REV')&&prior.state!=='complete'&&!prior.original_outcome?.error)note(key,prior.error??'original review launch outcome retained; no duplicate launch',{item:item.id,review:true});continue;}
           }
           const reviewTarget = isQueueReview(item) ? validateQueuedReview({ item, state: snapshot.state, events: snapshot.events, org, repo,...(continuation?{allowJournal:continuation.journal}:{}) }) : null;
           const route = continuation?.job.route??(reviewTarget ? reviewQueueRoute(config) : routeFor(item, config));

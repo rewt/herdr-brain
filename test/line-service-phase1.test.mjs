@@ -11,9 +11,9 @@ import {loadEvents,transact} from '../lib/store.mjs';
 import {fold} from '../lib/state.mjs';
 import {gitProject} from '../lib/project.mjs';
 import {createLineService,sourceRoot,serviceDirectory} from '../line-service/line-service.mjs';
-import {discoverChanges,blockedChangeKey,reviewResultEvents,morningDigest,recordReviewResults} from '../line-service/phase1.mjs';
-import {reviewAttempt} from '../line-service/review.mjs';
-import {queueReviewMutation,reviewQueueRoute} from '../line-service/review-queue.mjs';
+import {discoverChanges,blockedChangeKey,reviewResultEvents,morningDigest,recordReviewResults,canonicalReviewIndex,reviewHealth,ensureReviewBoundary,phase0Boundary} from '../line-service/phase1.mjs';
+import {reviewAttempt,selectedReviewConsumer} from '../line-service/review.mjs';
+import {queueReviewMutation,reviewQueueRoute,validateQueuedReview} from '../line-service/review-queue.mjs';
 import {ROUTE_PRESET} from '../lanes/preset.mjs';
 import {countSessions,checkSessionCap} from '../dispatch/session-cap.mjs';
 import {closeoutCodeIdentity,bindCloseoutCode} from '../lib/closeout-code.mjs';
@@ -47,6 +47,20 @@ function fixture(t,{reported=true}={}){
   const context=()=>{const events=loadEvents(org).events,state=fold(events);return {events,state,org,repo:f.cwd,identity,item:state.items.get('ENG-1'),run:state.runs.get('R-1')};};
   const add=rows=>transact(org,()=>({add:rows}));
   return {...f,org,identity,base,heads,workspace,directory,report,file,git,context,add};
+}
+
+function independentProducer(f){
+  fs.writeFileSync(path.join(f.cwd,'independent-source'),'separate owner');f.git(['add','.'],f.cwd);f.git(['commit','-qm','Independent source'],f.cwd);const head=f.git(['rev-parse','HEAD'],f.cwd),dispatch=path.join(f.org,'dispatch/independent.json');
+  fs.writeFileSync(dispatch,JSON.stringify({token:'independent',stage:'complete',run:'R-3',item:'ENG-2',org:f.org,common:f.identity,workspace:f.cwd,base:f.heads[1]}));
+  const report=`---\nrun: R-3\noutcome: done\nsummary: Independent source.\nartifacts:\n  - "Commit: ${head}"\n---\n`;fs.writeFileSync(path.join(f.org,'reports/R-3.md'),report);
+  f.add([{type:'item.added',id:'ENG-2',title:'Independent',role:'engineer'},{type:'run.started',id:'R-3',item:'ENG-2',workspace:f.cwd,meta:{dispatch_journal:dispatch,dispatch_attempt:'independent',dispatch_project:f.identity}},
+    {type:'run.claimed',run:'R-3',record:f.org,project:f.identity,owner:f.context().run.owner},
+    {type:'report.ingested',run:'R-3',file:'reports/R-3.md',sha256:hash(report),report:{outcome:'done',artifacts:[`Commit: ${head}`],extra:{},blockers:[],proposals:[]}}]);return head;
+}
+
+function installedService(f){
+  fs.mkdirSync(f.directory,{recursive:true});fs.writeFileSync(path.join(f.directory,'installation.json'),JSON.stringify({at:'2026-10-27T00:00:00Z',repo:f.cwd,org:f.org,source:sourceRoot,node:process.execPath,file:path.join(f.directory,'service.plist'),target:`gui/${process.getuid()}/dev.herdr.line.${path.basename(f.directory)}`}));
+  const env={...f.env};for(const k of ['HERDR_ENV','HERDR_PANE_ID','CODEX_THREAD_ID'])delete env[k];return env;
 }
 
 function recoveryFixture(t,{verdict,kind='never-created'}={}){
@@ -84,10 +98,10 @@ test('permanent recovery preserves completed exact-head verdicts and refuses liv
 });
 
 test('permanent recovery archive guards block only their exact change and cannot hide an unrelated owed review',t=>{
-  const f=recoveryFixture(t);recoverInactiveReview(f.args);const c=f.context(),event=c.events.find(e=>e.type==='review.recovery-completed');
+  const f=recoveryFixture(t);recoverInactiveReview(f.args);const head=independentProducer(f),c=f.context(),event=c.events.find(e=>e.type==='review.recovery-completed');
   fs.chmodSync(event.archive.file,0o644);fs.appendFileSync(event.archive.file,'changed');
-  const found=discoverChanges({...c,pendingOnly:true});assert.ok(found.changes.some(x=>x.target.head===f.heads[1]));
-  const target=found.changes.find(x=>x.target.head===f.heads[1]).target;assert.equal(reviewAttempt(c.item,{...c,target}),null);
+  const found=discoverChanges({...c,pendingOnly:true});assert.ok(found.changes.some(x=>x.target.head===head));
+  const target=found.changes.find(x=>x.target.head===head).target;assert.equal(reviewAttempt(c.state.items.get('ENG-2'),{...c,target}),null);
   assert.throws(()=>reviewAttempt(c.item,{...c,target:event.target}),/manifest changed/);
 });
 
@@ -147,8 +161,9 @@ test('permanent R858 authorization exempts only its exact validated note and ret
 
 test('phase1 owes every landed build commit after the boundary even after item close and source worktree cleanup',t=>{
   const f=fixture(t);f.add([{type:'item.closed',id:'ENG-1',as:'done'}]);f.git(['worktree','remove','--force',f.workspace],f.cwd);
-  const found=discoverChanges(f.context());assert.deepEqual(found.changes.map(c=>c.target.head),f.heads);
-  assert.equal(found.changes[0].target.base,f.base);assert.equal(found.changes[1].target.base,f.heads[0]);
+  const found=discoverChanges(f.context());assert.deepEqual(found.changes.map(c=>c.target.head),[f.heads[1]]);
+  assert.equal(found.changes[0].target.base,f.base);assert.deepEqual(found.changes[0].target.source_group.owned_commits,f.heads);
+  assert.equal(canonicalReviewIndex(f.context()).entries.length,2);
   assert.equal(found.changes.some(c=>c.target.head===f.base),false);
 });
 
@@ -189,31 +204,119 @@ test('phase1 only pre-effect lifecycle mutex refusal receives automatic closeout
 });
 
 test('phase1 dedup retains same-change UNKNOWN but unrelated old attempts and private folders block no new change',t=>{
-  const f=fixture(t),c=f.context(),target=discoverChanges(c).changes[1].target;
+  const f=fixture(t),c=f.context(),target=discoverChanges(c).changes[0].target;
   fs.mkdirSync(path.join(f.cwd,'.lane-review-unrelated-r1'));
   fs.mkdirSync(path.join(f.org,'retirement/occupants'),{recursive:true});const file=path.join(f.org,'retirement/occupants/old.json');
-  fs.writeFileSync(file,JSON.stringify({kind:'settle',run:'R-1',item:'ENG-1',head:f.heads[0],qualification:'UNKNOWN'}));
+  fs.writeFileSync(file,JSON.stringify({kind:'settle',run:'R-90',item:'ENG-1',head:f.base,qualification:'UNKNOWN'}));
   assert.equal(reviewAttempt(c.item,{...c,target}),null);
   fs.writeFileSync(file,JSON.stringify({kind:'settle',run:'R-1',item:'ENG-1',head:target.head,qualification:'UNKNOWN'}));
   assert.match(reviewAttempt(c.item,{...c,target}),/same-change.*UNKNOWN/);
 });
 
 test('phase1 explicit current-source manual review reference holds without inspecting another identity',t=>{
-  const f=fixture(t),c=f.context(),target=discoverChanges(c).changes[1].target;
+  const f=fixture(t),c=f.context(),target=discoverChanges(c).changes[0].target;
   c.run.report.artifacts.push('/outside-owner/archive/source-review.json');
   let probes=0;const stat=fs.lstatSync;fs.lstatSync=(file,...args)=>{if(String(file).startsWith('/outside-owner/'))probes++;return stat(file,...args);};
   try{assert.match(reviewAttempt(c.item,{...c,target}),/source-owner review reference UNKNOWN/);}finally{fs.lstatSync=stat;}
   assert.equal(probes,0);
 });
 
-test('phase1 creates one queue item per landed change with immutable evidence and never duplicates the same key',t=>{
+test('phase1 creates one queue item per whole producer change with immutable evidence and never duplicates intermediate tuples',t=>{
   const f=fixture(t),c=f.context(),changes=discoverChanges(c).changes;
   const before=process.cwd(),env={...f.env,ORG_ACTOR:'line-service',HERDR_ENV:'',HERDR_PANE_ID:''};process.chdir(f.cwd);
   try{
     for(const change of changes){const r=queueReviewMutation({...f.context(),runId:'R-1',head:change.target.head,base:change.target.base,env});f.add(r.add);}
-    const q=[...f.context().state.items.values()].filter(i=>i.role==='reviewer');assert.equal(q.length,2);assert.notEqual(q[0].meta.review_key,q[1].meta.review_key);
+    const q=[...f.context().state.items.values()].filter(i=>i.role==='reviewer');assert.equal(q.length,1);assert.deepEqual(q[0].meta.review_target.source_group.owned_commits,f.heads);
+    assert.equal(q[0].meta.review_target.base,f.base);assert.equal(q[0].meta.review_target.head,f.heads[1]);assert.equal(q[0].meta.review_round_cap,1);
+    assert.throws(()=>queueReviewMutation({...f.context(),runId:'R-1',head:f.heads[0],env}),/missing\/ambiguous/);
     const again=queueReviewMutation({...f.context(),runId:'R-1',head:changes[0].target.head,base:changes[0].target.base,env});assert.equal(again.add.length,0);
   }finally{process.chdir(before);}
+});
+
+function partialReview(f,id,{head,base,run,verdict,held=false}){
+  const c=f.context(),whole=discoverChanges(c).changes.find(x=>x.run.id==='R-1'),target={...whole.target,head,base,diff_sha256:hash(f.git(['diff','--no-ext-diff','--no-textconv',base,head],f.cwd)),scope:{base,commits:[head],claims:[head],unresolved:[],deferred:false}};delete target.source_group;
+  const rows=[{type:'item.added',id,role:'reviewer',title:'Retained exact partial',meta:{review_source_item:'ENG-1',review_source_run:'R-1',review_key:`ENG-1:${head}`,review_target:target,review_round_cap:1,review_cutover:whole.cutoff,...(held?{hold:true}:{})}}];
+  if(run)rows.push({type:'run.started',id:run,item:id,workspace:f.cwd,meta:{agent:`review-${run}`,pane:`pane-${run}`,worker_workspace:'review-workspace',terminal_id:`terminal-${run}`,agent_session_id:`session-${run}`}});
+  if(verdict){rows.push({type:'report.ingested',run,file:`reports/${run}.md`,sha256:'c'.repeat(64),report:{outcome:'done',extra:{verdict},blockers:[]}},
+    {type:'change.reviewed',item:'ENG-1',head,base,review_item:id,review_run:run,verdict,findings:[],report_sha256:'c'.repeat(64)});}
+  f.add(rows);return target;
+}
+
+test('permanent group preserves R3388-shaped active intermediate and held final without a duplicate or false whole-source coverage',t=>{
+  const f=fixture(t);partialReview(f,'REV-1200',{head:f.heads[0],base:f.base,run:'R-3400'});partialReview(f,'REV-1201',{head:f.heads[1],base:f.heads[0],held:true});
+  f.add([{type:'change.reviewed',item:'ENG-90',head:f.base,verdict:'PASS',review_item:'REV-666',review_run:'R-666',findings:[]}]);
+  const c=f.context(),before=structuredClone(c.events),index=canonicalReviewIndex(c),health=reviewHealth({...c,index});
+  assert.equal(health.owed,1);assert.equal(health.owed_commits,2);assert.equal(health.queued,1);assert.equal(health.running,1);assert.equal(health.done,0);assert.deepEqual(health.coverage_gaps.map(x=>x.head),[f.heads[1]]);
+  assert.equal(discoverChanges({...c,pendingOnly:true}).changes.length,0);
+  const cwd=process.cwd();process.chdir(f.cwd);try{assert.throws(()=>queueReviewMutation({...c,runId:'R-1',env:{...f.env,ORG_ACTOR:'line-service',HERDR_ENV:'',HERDR_PANE_ID:''}}),/whole producer review already retained/);}finally{process.chdir(cwd);}
+  assert.throws(()=>validateQueuedReview({...c,item:c.state.items.get('REV-1201')}),/base|producer|target/);
+  assert.deepEqual(f.context().events,before);assert.equal(f.context().state.items.get('REV-1201').runs.length,0);assert.equal(c.events.filter(e=>e.type==='change.reviewed').length,1);
+});
+
+test('permanent group preserves ARCH679-shaped fixture PASS and active feature scopes while held unstarted partials provide no invented coverage',t=>{
+  const f=fixture(t);partialReview(f,'REV-1203',{head:f.heads[1],base:f.heads[0],run:'R-3403',verdict:'PASS'});partialReview(f,'REV-1204',{head:f.heads[0],base:f.base,run:'R-3404'});
+  const c=f.context(),health=reviewHealth({...c,index:canonicalReviewIndex(c)});assert.equal(health.owed,1);assert.equal(health.done,0);assert.equal(health.done_commits,1);assert.equal(health.running,1);assert.equal(health.coverage_gaps.length,0);
+  assert.equal(c.state.items.get('REV-1203').meta.review_target.base,f.heads[0]);assert.equal(c.state.items.get('REV-1204').meta.review_target.head,f.heads[0]);
+  assert.match(reviewAttempt(c.item,{...c,target:discoverChanges(c).changes[0].target}),/whole producer/);
+  const g=fixture(t);partialReview(g,'REV-1205',{head:g.heads[0],base:g.base,held:true});partialReview(g,'REV-1206',{head:g.heads[1],base:g.heads[0],held:true});
+  const gc=g.context(),gh=reviewHealth({...gc,index:canonicalReviewIndex(gc)});assert.equal(gh.queued,1);assert.equal(gh.running,0);assert.equal(gh.done_commits,0);assert.equal(gh.coverage_gaps.length,2);assert.equal(discoverChanges({...gc,pendingOnly:true}).changes.length,0);
+});
+
+test('permanent group uses an explicit immutable whole range and keeps unrelated interleaved ownership and verdict coverage separate',t=>{
+  const f=fixture(t);sourceArtifact(f,`source: ${f.heads[1]}; base: ${f.base}; lane: source`);
+  let c=f.context(),index=canonicalReviewIndex(c),target=discoverChanges(c).changes[0].target;assert.deepEqual(target.source_group.owned_commits,f.heads);assert.ok(index.entries.every(e=>e.run==='R-1'));
+  f.add([{type:'item.added',id:'ENG-99',role:'engineer',title:'Other owner'}, {type:'run.started',id:'R-99',item:'ENG-99',workspace:f.cwd},
+    {type:'change.landed',item:'ENG-99',run:'R-99',head:f.heads[0],base:f.base,project:f.identity},
+    {type:'change.reviewed',item:'ENG-99',head:f.heads[0],verdict:'PASS',findings:[]}]);
+  c=f.context();target=discoverChanges(c).changes[0].target;assert.deepEqual(target.scope.commits,f.heads);assert.deepEqual(target.source_group.owned_commits,[f.heads[1]]);
+  index=canonicalReviewIndex(c);assert.equal(index.entries.find(e=>e.head===f.heads[0]).run,'R-99');assert.equal(reviewHealth({...c,index}).done_commits,1);
+  assert.equal(reviewAttempt(c.item,{...c,target}),null,'an independently attributed verdict is not this producer attempt');
+});
+
+test('permanent group rejects admission packet unresolved omitted and unlanded source instead of reviewing a convenient intermediate',t=>{
+  const f=fixture(t),dispatch=path.join(f.org,'dispatch/source.json'),job=JSON.parse(fs.readFileSync(dispatch));
+  sourceArtifact(f,`packet: ${f.heads[1]}; admission: ${f.heads[0]}`);assert.equal(discoverChanges(f.context()).changes.length,0);
+  sourceArtifact(f,`source: ${f.heads[1]}; base: ${f.heads[0]}; lane: source`);f.add([{type:'change.landed',item:'ENG-1',run:'R-1',head:f.heads[0],base:f.base,project:f.identity}]);assert.match(discoverChanges(f.context()).holds[0].reason,/omits/);
+  fs.writeFileSync(dispatch,JSON.stringify({...job,base:f.heads[1]}));assert.match(discoverChanges(f.context()).holds[0].reason,/admission/);
+  fs.writeFileSync(dispatch,JSON.stringify(job));f.git(['reset','--hard',f.heads[0]],f.cwd);assert.equal(discoverChanges(f.context()).changes.length,0);
+});
+
+test('permanent index counts unclaimed commits and own unreported landings and scopes linked-fix exemptions without relying on creation sequence',t=>{
+  const f=fixture(t,{reported:false});f.add([{type:'change.landed',item:'ENG-1',run:'R-1',head:f.heads[0],base:f.base,project:f.identity}]);
+  const c=f.context(),index=canonicalReviewIndex(c),health=reviewHealth({...c,index});assert.equal(health.owed_commits,2);assert.equal(health.owed,2);assert.equal(health.attribution_gaps.length,2);assert.ok(health.attribution_gaps.some(g=>g.reason==='missing source attribution'));assert.ok(health.attribution_gaps.some(g=>g.reason==='immutable producer report pending'));
+  f.add([{type:'item.added',id:'REV-99',role:'reviewer',title:'Original judgment'},{type:'item.added',id:'ENG-99',role:'engineer',title:'Formal correction',parent:'REV-99',meta:{review_fix_of:'original:key'}},
+    {type:'run.started',id:'R-99',item:'ENG-99',workspace:f.cwd}, {type:'change.landed',item:'ENG-99',run:'R-99',head:f.heads[1],base:f.heads[0],project:f.identity}]);
+  const changed=f.context(),later=reviewHealth({...changed,index:canonicalReviewIndex(changed)});assert.equal(later.owed_commits,1);assert.equal(later.exemptions[0].head,f.heads[1]);
+});
+
+test('permanent boundary auto records first actual main once and preserves explicit qualified boundaries and STOP native-context fences',t=>{
+  const f=fixture(t),env=installedService(f),release=noticeLock(path.join(f.directory,'pass.lock'));
+  try{
+    const original=phase0Boundary(f.context().events,f.context());assert.deepEqual(ensureReviewBoundary({repo:f.cwd,org:f.org,env}),original);
+    const events=f.context().events.filter(e=>e.type!=='line-service.phase0');events.push({type:'line-service.phase0',seq:events.at(-1).seq+1,project:f.identity,org:f.org,repo:f.cwd,canonical_head:null,main:'main',time_qualification:'Earlier UNKNOWN retained.'});fs.writeFileSync(path.join(f.org,'events.jsonl'),events.map(e=>JSON.stringify(e)+'\n').join(''));
+    const first=ensureReviewBoundary({repo:f.cwd,org:f.org,env});assert.equal(first.canonical_head,f.heads[1]);assert.equal(first.cutoff_at,null);assert.match(first.time_qualification,/no historical18:55/);assert.deepEqual(ensureReviewBoundary({repo:f.cwd,org:f.org,env}),phase0Boundary(f.context().events,f.context()));assert.equal(f.context().events.filter(e=>e.type==='line-service.phase0').length,2);
+    assert.throws(()=>ensureReviewBoundary({repo:f.cwd,org:f.org,env:{...env,HERDR_ENV:'1'}}),/native session/);
+    fs.writeFileSync(path.join(f.directory,'STOP'),'stopped');assert.throws(()=>ensureReviewBoundary({repo:f.cwd,org:f.org,env}),/STOP/);
+  }finally{release();}
+});
+
+test('permanent group capability contains an old adopted or saved helper before any automatic review effect',t=>{
+  const f=fixture(t),c=f.context();assert.equal(selectedReviewConsumer({...c,resolve:()=>f.bundle}).recordRoot,f.bundle);
+  fs.appendFileSync(path.join(f.bundle,'line-service/review-group.mjs'),'\n// older grouping implementation\n');
+  assert.throws(()=>selectedReviewConsumer({...c,resolve:()=>f.bundle}),/old\/unknown.*capability/);
+  assert.throws(()=>selectedReviewConsumer({...c,run:{...c.run,owner:{...c.run.owner,release:{...c.run.owner.release,root:f.bundle}}}}),/saved review helper capability/);
+  assert.equal([...f.context().state.items.values()].some(q=>q.role==='reviewer'),false);
+});
+
+test('permanent health records the first review error immediately and one gap notice after four real passes without a session prompt',t=>{
+  const f=fixture(t),env=installedService(f);f.add([{type:'item.closed',id:'ENG-1',as:'done'}]);
+  let calls=0;const service=()=>createLineService({repo:f.cwd,org:f.org,to:'brain-chat',env,capacity:()=>({cap:0,count:0}),command:(_exe,args)=>{calls++;assert.equal(args[1],'queue-review');return{status:1,stdout:'',stderr:'selected helper cannot certify immutable review target'};}});
+  service().pass();let events=f.context().events;assert.equal(events.filter(e=>e.type==='line-service.review-error').length,1);assert.equal(events.filter(e=>e.type==='session.message.v1').length,1);
+  for(let n=0;n<4;n++)service().pass();events=f.context().events;const messages=events.filter(e=>e.type==='session.message.v1'),health=events.filter(e=>e.type==='line-service.review-health');
+  assert.equal(health.length,5);assert.equal(health.at(-1).gap_passes,5);assert.equal(health.at(-1).owed,1);assert.equal(health.at(-1).owed_commits,2);assert.equal(health.at(-1).queued,0);
+  assert.equal(messages.filter(e=>e.envelope.payload.service_notice.boundary==='review-gap').length,1);assert.equal(messages.filter(e=>e.envelope.payload.service_notice.boundary.startsWith('review:')).length,1);assert.equal(calls,5);
+  const digest=morningDigest({events});assert.ok(digest.review_errors.occurrences>=5);assert.equal(digest.review_health.pass_id,health.at(-1).pass_id);
+  assert.equal(fs.existsSync(path.join(f.org,'supervisor/inbox.log')),false);assert.ok(messages.every(e=>e.envelope.source.kind==='service'&&e.envelope.sessionUid===undefined));
 });
 
 test('permanent review route falls back to the existing review route without replacing explicit task policy',()=>{

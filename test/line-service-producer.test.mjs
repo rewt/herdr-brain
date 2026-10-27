@@ -27,6 +27,7 @@ function fixture(t,{cutoff=true,before=[]}={}) {
   if(before.length)transact(org,()=>({add:before}));
   const cut=()=>establishCutover({repo:f.cwd,org,id:'producer-cutover',cutover:true,cwd:f.cwd,env:nativeEnv,call:native});
   const boundary=cutoff?cut():null;
+  if(boundary)transact(org,()=>({add:[{...boundary.cutover,type:'line-service.phase0'}]}));
   fs.unlinkSync(path.join(directory,'STOP'));
   const env={...f.env,HERDR_BRAIN_ROOT:developmentRoot};for(const key of ['HERDR_ENV','HERDR_PANE_ID','HERDR_WORKSPACE_ID','CODEX_THREAD_ID'])delete env[key];
   const git=(args,cwd=f.cwd)=>{const r=spawnSync('git',['-C',cwd,...args],{env,encoding:'utf8'});assert.equal(r.status,0,r.stderr);return r.stdout.trim();};
@@ -65,12 +66,12 @@ test('producer review creation and dispatch require actual post-cutoff landing w
   assert.equal(review.meta.review_cutover.id,f.boundary.cutover.id);
   assert.equal(validateQueuedReview({item:review,state:next,events:f.events(),repo:f.cwd,org:f.org}).head,source.head);
   const historical={...review,created:{...review.created,seq:f.boundary.cutover.seq},meta:{...review.meta,review_cutover:undefined}};
-  assert.throws(()=>validateQueuedReview({item:historical,state:next,events:f.events(),repo:f.cwd,org:f.org}),e=>e.code==='REVIEW_CUTOFF');
+  assert.throws(()=>validateQueuedReview({item:historical,state:next,events:f.events(),repo:f.cwd,org:f.org}),/boundary differs/);
   f.add([{type:'item.added',id:'ENG-2',role:'engineer',title:'Existing ready build',meta:{}}]);
   // Current review remains retained; native capacity hold affects only this
   // fixture's action. A separate no-cutoff service still considers READY build.
   const g=fixture(t,{cutoff:false});g.build();
-  const refused=spawnSync(process.execPath,[path.join(developmentRoot,'bin/org.mjs'),'queue-review','R-1'],{cwd:g.cwd,env:{...g.env,ORG_ACTOR:'line-service'},encoding:'utf8'});assert.notEqual(refused.status,0);assert.match(refused.stderr,/durable service cutover/);
+  const refused=spawnSync(process.execPath,[path.join(developmentRoot,'bin/org.mjs'),'queue-review','R-1'],{cwd:g.cwd,env:{...g.env,ORG_ACTOR:'line-service'},encoding:'utf8'});assert.notEqual(refused.status,0);assert.match(refused.stderr,/Phase0 source boundary/);
   g.add([{type:'item.added',id:'ENG-3',role:'engineer',title:'Authorized ready build',meta:{}}]);g.service().pass();
   assert.ok(g.calls.some(a=>a[1]==='ENG-3'));assert.equal(g.events().some(e=>e.role==='reviewer'),false);
 });
@@ -78,7 +79,7 @@ test('producer review creation and dispatch require actual post-cutoff landing w
 test('producer old reported and manual review history creates no review debt or native notice',t=>{
   const f=fixture(t,{before:[{type:'item.added',id:'REV-90',role:'reviewer',title:'Old manual review',meta:{}}]});f.build({historical:true});
   const before=f.events().length;f.service().pass();f.service().pass();
-  assert.equal(f.calls.length,0);assert.equal(f.messages().length,0);assert.equal(f.events().length,before);
+  assert.equal(f.calls.length,0);assert.equal(f.messages().length,0);assert.ok(f.events().slice(before).every(e=>e.type==='line-service.review-health'&&e.owed===0));
   assert.equal(fs.existsSync(inboxPath({org:f.org})),false);
 });
 

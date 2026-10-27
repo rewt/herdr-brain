@@ -14,9 +14,10 @@ import { nativeSender } from '../messages/operator-inbox.mjs';
 import { selectRoute,resolveLaunchRoute } from '../lanes/routes.mjs';
 import { reviewAttempt } from './review.mjs';
 import { discoverChanges } from './phase1.mjs';
+import {producerGroupKey,queueProducerGroup,sameProducerQueue,sameCapturedTarget} from './review-group.mjs';
 
 const root = fs.realpathSync(fileURLToPath(new URL('../', import.meta.url)));
-const files = ['line-service/review-queue.mjs', 'line-service/review.mjs','line-service/review-recovery.mjs','line-service/review-resolutions.mjs', 'line-service/phase1.mjs', 'line-service/cutoff.mjs','settle/review-range.mjs', 'bin/org.mjs', 'dispatch/dispatch.mjs','dispatch/preflight.mjs','dispatch/foreground-command.mjs','dispatch/outcome.mjs','dispatch/not-started.mjs','dispatch/request-lock.mjs', 'dispatch/session-cap.mjs', 'dispatch/unlanded-cap.mjs','lanes/lane.mjs'];
+const files = ['line-service/review-queue.mjs', 'line-service/review.mjs','line-service/review-group.mjs','line-service/review-recovery.mjs','line-service/review-resolutions.mjs', 'line-service/phase1.mjs', 'line-service/cutoff.mjs','settle/review-range.mjs', 'bin/org.mjs', 'dispatch/dispatch.mjs','dispatch/preflight.mjs','dispatch/foreground-command.mjs','dispatch/outcome.mjs','dispatch/not-started.mjs','dispatch/request-lock.mjs', 'dispatch/session-cap.mjs', 'dispatch/unlanded-cap.mjs','lanes/lane.mjs'];
 const hashes = files.map(file => createHash('sha256').update(fs.readFileSync(path.join(root, file))).digest('hex'));
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const git = (repo, args) => execFileSync('git', ['--no-optional-locks', '-C', repo, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
@@ -78,12 +79,12 @@ export function queueReviewMutation({ state, events, org, repo, runId, head, bas
     const supervisorRecovery=recovery&&recovery.native_caller?.name===native.name&&recovery.native_caller?.agent_session?.value===native.agent_session.value&&binding.project.checkout===repo;
     if (!supervisorRecovery&&(worker.agent !== native.name || worker.terminal_id !== native.terminal_id || worker.agent_session_id !== native.agent_session.value)) throw Error('queue producer differs from actual source worker');
   }
-  const archived=new Set(bound.authorization?.archived_review_items??[]),key = `${item.id}:${target.head}`, existing = [...state.items.values()].filter(q => q.meta.review_key === key&&!archived.has(q.id));
+  const archived=new Set(bound.authorization?.archived_review_items??[]),key = `${item.id}:${target.head}`,group=producerGroupKey(item.id,run.id,target.reportHash),existing = [...state.items.values()].filter(q => !archived.has(q.id)&&(sameProducerQueue(q,item.id,run.id)||q.meta.review_key===key));
   if (existing.length) {
-    if (existing.length !== 1 || !isQueueReview(existing[0]) || existing[0].meta.review_source_run !== run.id || !same(existing[0].meta.review_target, target)) throw Error('review queue key has ambiguous/different evidence; retain it');
+    if (existing.length !== 1 || !isQueueReview(existing[0]) || queueProducerGroup(existing[0])!==group || !sameCapturedTarget(existing[0].meta.review_target,target)) throw Error('whole producer review already retained with different/partial/UNKNOWN capture; preserve attempts, verdicts and cap1');
     return { add: [], result: { result: 'review_queued', review_item: existing[0].id, source_item: item.id, head: target.head, existing: true } };
   }
-  const prior = reviewAttempt(item, { state, events, org, repo, identity, target, ignoreService: ignoreIntent(org, identity, item, target) });
+  const prior = reviewAttempt(item, { state, events, org, repo, identity, target,capturedRun:run.id, ignoreService: ignoreIntent(org, identity, item, target) });
   if (prior) throw Error(`item review already retained: ${prior}`);
   const id = nextItemId(state, { kind: 'work', role: 'reviewer' });
   // The source reference is metadata, not a blocking review-child edge: source
@@ -93,7 +94,7 @@ export function queueReviewMutation({ state, events, org, repo, runId, head, bas
   }];
   return { add: [...landing,{ type: 'item.added', id, kind: 'work', role: 'reviewer', capability: 'review', parent: item.parent, priority: item.priority,
     title: `Review ${item.title}`, budget: {}, accept: ['Independent immutable diff/evidence review; zero suites and no edits. Record PASS or FAIL verdict. Major findings become linked engineer follow-up proposals, never an automatic second review.'],
-    meta: { review_key: key, review_source_item: item.id, review_source_run: run.id, review_target: target, review_round_cap: 1, review_cutover:bound.cutoff,...(bound.authorization?{review_recovery_id:bound.authorization.id}:{}) } }],
+    meta: { review_key: key,review_group_key:group, review_source_item: item.id, review_source_run: run.id, review_target: target, review_round_cap: 1, review_cutover:bound.cutoff,...(bound.authorization?{review_recovery_id:bound.authorization.id}:{}) } }],
     result: { result: 'review_queued', review_item: id, source_item: item.id, head: target.head, existing: false } };
 }
 
@@ -101,9 +102,11 @@ export function validateQueuedReview({ item, state, events, org, repo, allowRun,
   if (!isQueueReview(item) || item.meta.review_round_cap !== 1) throw Error('not a supported single-review queue item');
   const project = gitProject(repo), bound = source({ state, events, org, repo: project.canonical, identity: project.identity, runId: item.meta.review_source_run,head:item.meta.review_target?.head,base:item.meta.review_target?.base });
   openBoundary(org, project.canonical, project.identity);
-  if(!same(item.meta.review_cutover,bound.cutoff)||!bound.authorization&&item.created.seq<=bound.cutoff.seq)throw Object.assign(Error('historical review queue predates recorded service cutover; retained without dispatch'),{code:'REVIEW_CUTOFF'});
+  if(!same(item.meta.review_cutover,bound.cutoff))throw Error('review queue boundary differs from its actual landed target; retain exact evidence');
   if(bound.authorization&&item.meta.review_recovery_id!==bound.authorization.id)throw Error('archived review item cannot consume the one replacement');
-  if (bound.item.id !== item.meta.review_source_item || item.meta.review_key !== `${bound.item.id}:${bound.target.head}` || !same(item.meta.review_target, bound.target)) throw Error('queued review immutable target/evidence changed');
+  const archived=new Set(bound.authorization?.archived_review_items??[]),peers=[...state.items.values()].filter(q=>q.id!==item.id&&!archived.has(q.id)&&sameProducerQueue(q,bound.item.id,bound.run.id));
+  if(peers.length)throw Error('another record entry retains this whole producer review; no duplicate native launch, cancellation or retarget');
+  if (bound.item.id !== item.meta.review_source_item || item.meta.review_key !== `${bound.item.id}:${bound.target.head}` || !sameCapturedTarget(item.meta.review_target,bound.target)) throw Error('queued review immutable whole producer target/evidence changed');
   if (item.runs.some(id => id !== allowRun)) throw Error('queued review already has a run; no replacement/re-review');
   journals ??= fs.readdirSync(path.join(org, 'dispatch')).filter(file => file.endsWith('.json') && !file.endsWith('.routes.json')).map(file => ({
     ...JSON.parse(fs.readFileSync(path.join(org, 'dispatch', file), 'utf8')), journal: path.join(org, 'dispatch', file),
@@ -118,5 +121,5 @@ export function validateQueuedReview({ item, state, events, org, repo, allowRun,
 
 export function reviewQueueBrief(item) {
   const t = item.meta.review_target;
-  return `# Independent review of ${item.meta.review_source_item}\n\nCaptured immutable HEAD ${t.head}, base ${t.base}. Evidence ${t.evidence}; report SHA256 ${t.reportHash}; diff SHA256 ${t.diff_sha256}. Read the original ask and complete bound producer evidence. Inspect this exact committed diff, independently of later source/cleanup. No build, test, check, prepare, install, model/API or source mutation commands; zero reviewer suites. Do not start another review or invoke settle/lane review. Write the normal record report with outcome done and verdict PASS or FAIL. Use one markdown bullet per finding: - [Major] path:line - explanation or - [Minor] path:line - explanation. With no findings say so. Unsupported claims and Major findings must be explicit. Propose any formal correction as a linked engineer follow-up under this review, preserving the original source item and final-release Major obligations; cap1, no re-review chain. Existing held/native attempts remain immutable.\n`;
+  return `# Independent review of ${item.meta.review_source_item}\n\nCaptured immutable HEAD ${t.head}, base ${t.base}. Evidence ${t.evidence}; report SHA256 ${t.reportHash}; diff SHA256 ${t.diff_sha256}. This is ONE whole producer report/source group, including its intermediate and final delivered commits: ${(t.source_group?.owned_commits??t.scope?.commits??[t.head]).join(', ')}. Other attributed commits in the immutable range are context and retain their independent reviews. Read the original ask and complete bound producer evidence. Inspect this exact committed diff, independently of later source/cleanup. No build, test, check, prepare, install, model/API or source mutation commands; zero reviewer suites. Do not start another review or invoke settle/lane review. Write the normal record report with outcome done and verdict PASS or FAIL. Use one markdown bullet per finding: - [Major] path:line - explanation or - [Minor] path:line - explanation. With no findings say so. Unsupported claims and Major findings must be explicit. Propose any formal correction as a linked engineer follow-up under this review, preserving the original source item and final-release Major obligations; cap1, no re-review chain. Existing held/native attempts remain immutable.\n`;
 }

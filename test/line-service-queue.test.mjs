@@ -29,6 +29,7 @@ function fixture(t, { outcome = 'blocked' } = {}) {
   fs.mkdirSync(path.join(org, 'reports'), { recursive: true }); fs.writeFileSync(path.join(org, 'reports', 'R-1.md'), report);
   transact(org, () => ({ add: [
     {type:'line-service.cutover',id:'fixture-cutover',project:identity,repo:f.cwd,org,source:root,main:'main',canonical_head:base},
+    {type:'line-service.phase0',id:'fixture-phase0',project:identity,repo:f.cwd,org,source:root,main:'main',canonical_head:base},
     { type: 'item.added', id: 'ENG-1', title: 'Build', role: 'engineer', meta: {} },
     { type: 'run.started', id: 'R-1', item: 'ENG-1', workspace, meta: { lane: 'implementation', dispatch_journal: dispatch, dispatch_attempt: 'fixture' } },
     { type: 'run.claimed', run: 'R-1', record: org, project: identity, owner: { controller: 'brain', legacy: false, release: { id: 'source', commit: null, root, identity: gitProject(root).identity } } },

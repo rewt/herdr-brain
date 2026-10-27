@@ -9,9 +9,10 @@ import { fileURLToPath } from 'node:url';
 import { projectPin, selectRelease } from '../lib/releases.mjs';
 import { roleIs } from '../lib/roles.mjs';
 import {reviewResolution,archivedReviewFile,reviewDigest} from './review-resolutions.mjs';
+import {producerGroupKey,queueProducerGroup,sameProducerQueue,capturedReviewCommits} from './review-group.mjs';
 
 const codeRoot = fs.realpathSync(fileURLToPath(new URL('../', import.meta.url)));
-const capabilityFiles = ['line-service/review.mjs', 'settle/settle.mjs', 'supervisor/supervisor.mjs'];
+const capabilityFiles = ['line-service/review.mjs','line-service/review-group.mjs', 'settle/settle.mjs', 'supervisor/supervisor.mjs'];
 const capability = capabilityFiles.map(file => createHash('sha256').update(fs.readFileSync(path.join(codeRoot, file))).digest('hex'));
 
 const sha = value => createHash('sha256').update(value).digest('hex');
@@ -34,20 +35,22 @@ const contains = (value, tokens) => {
   return value && typeof value === 'object' && Object.values(value).some(v => contains(v, tokens));
 };
 
-function changeReviewAttempt(item,{org,identity,events,state,repo,effects,target,ignoreService,ignoreQueue}) {
+function changeReviewAttempt(item,{org,identity,events,state,repo,effects,target,ignoreService,ignoreQueue,capturedRun}) {
   const resolution=reviewResolution({events,org,item:item.id,head:target.head}),archivedItems=new Set(resolution?.event.archived_review_items??[]);
-  const runs=new Set(item.runs.filter(id=>(state.runs.get(id)?.report?.artifacts??[]).some(a=>typeof a==='string'&&a.includes(target.head))));
+  capturedRun??=target.source_group?.run;
+  const runs=new Set(capturedRun?[capturedRun]:item.runs.filter(id=>(state.runs.get(id)?.report?.artifacts??[]).some(a=>typeof a==='string'&&a.includes(target.head)))),group=producerGroupKey(item.id,capturedRun,target.reportHash),covered=new Set(capturedReviewCommits(target));
   const tokens=new Set([item.id,...item.runs]);
   const heads=value=>{
     const out=new Set();const visit=(v,key='')=>{if(typeof v==='string'&&/head|commit|reviewed/i.test(key)&&!/^base$/i.test(key)&&commit(v))out.add(v);else if(Array.isArray(v))for(const x of v)visit(x,key);else if(v&&typeof v==='object')for(const[k,x]of Object.entries(v))visit(x,k);};visit(value);return out;
   };
   const matches=(value,runHint)=>{
     if(!value)return false;const named=heads(value);
-    if(named.size)return named.has(target.head)&&(contains(value,tokens)||item.runs.includes(runHint));
+    const sameGroup=contains(value,new Set(runs))||value.reportHash===target.reportHash||value.review_target?.reportHash===target.reportHash;
+    if(named.size)return named.has(target.head)&&(contains(value,tokens)||item.runs.includes(runHint))||sameGroup&&[...named].some(h=>covered.has(h));
     const run=value.run??value.source_run??runHint;
     return runs.has(run);
   };
-  for(const q of state.items.values())if(q.id!==ignoreQueue&&!archivedItems.has(q.id)&&roleIs(q,'REV')&&q.meta.review_source_item===item.id&&q.meta.review_target?.head===target.head)return 'existing same-change record review';
+  for(const q of state.items.values())if(q.id!==ignoreQueue&&!archivedItems.has(q.id)&&roleIs(q,'REV')&&q.meta.review_source_item===item.id&&(q.meta.review_target?.head===target.head||capturedRun&&sameProducerQueue(q,item.id,capturedRun)))return 'existing whole producer/same-change record review';
   for(const id of runs)for(const artifact of state.runs.get(id)?.report?.artifacts??[]){
     // A producer's explicit current-source review locator is evidence of an
     // attempt, including outside-org manual receipts. Never probe another
@@ -55,7 +58,7 @@ function changeReviewAttempt(item,{org,identity,events,state,repo,effects,target
     if(typeof artifact==='string'&&/review|settle/i.test(artifact)&&/\.json(?:$|[ #])/.test(artifact)&&path.isAbsolute(artifact.split(/[ #]/)[0])&&!archivedReviewFile(resolution,artifact.split(/[ #]/)[0]))return 'same-change source-owner review reference UNKNOWN; retain without external probe';
   }
   for(const e of events){
-    if(e.type==='change.reviewed'&&e.item===item.id&&e.head===target.head)return 'recorded same-change verdict';
+    if(e.type==='change.reviewed'&&e.item===item.id&&(covered.has(e.head)||group&&(e.review_group_key??queueProducerGroup(state.items.get(e.review_item)))===group))return 'recorded same-change/producer-group verdict';
     if(e.type==='review.verdict'&&item.runs.includes(e.run)&&matches(e,e.run))return 'recorded same-change verdict';
     if(e.type==='note.added'&&e.decision&&tokens.has(e.id)&&/review/i.test(e.text??'')){
       // The validated archival authorization is not another independent
@@ -63,7 +66,7 @@ function changeReviewAttempt(item,{org,identity,events,state,repo,effects,target
       if(e.seq===resolution?.event.decision_seq)continue;
       const named=(e.text.match(/\b[a-f0-9]{40,64}\b/g)??[]);
       const atNote=item.runs.filter(id=>(state.runs.get(id)?.started.seq??Infinity)<e.seq).at(-1);
-      if(named.includes(target.head)||!named.length&&(runs.has(e.id)||(e.text.match(/\bR-\d+\b/g)??[]).some(id=>runs.has(id))||e.id===item.id&&runs.has(atNote)&&(state.runs.get(atNote)?.report?.seq??Infinity)<e.seq))return 'recorded same-change independent review hold';
+      if(named.some(h=>covered.has(h))||!named.length&&(runs.has(e.id)||(e.text.match(/\bR-\d+\b/g)??[]).some(id=>runs.has(id))||e.id===item.id&&runs.has(atNote)&&(state.runs.get(atNote)?.report?.seq??Infinity)<e.seq))return 'recorded same-change independent review hold';
     }
   }
   const pending=(actions,file)=>Object.entries(actions??{}).some(([key,value])=>{

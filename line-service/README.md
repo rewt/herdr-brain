@@ -68,21 +68,38 @@ fresh own native/project/source guards. It never rewrites the earlier cutover or
 starts a runtime. Brain's designated intended source boundary is
 `ff88cae6cc7db0140debe47bc3f55fafed46d6c7`, archive
 `archive/phase0-land-first-20261026-pre`, captured before Phase0 instruction edits.
-Exact canonical main at18:55CDT and the archive-creation minute are UNKNOWN.
-The completion measurements are not an18:55 observation. BCH needs its own
-owner-designated boundary; Brain's SHA supplies no BCH authority.
+The original receipt qualified the exact18:55 head as UNKNOWN. Later designated
+owner evidence confirms Brain's same head at18:55 (move18:54:47), and BCH's own
+`8add6fb831a20f8a2db3e91b805ea8ba83a01903` (move18:53:55). Preserve both the
+original qualification and later evidence; completion measurements alone are not
+an18:55 observation. Brain's SHA supplies no BCH authority. Without any valid
+boundary, the installed service records its first actual clean canonical main
+once under pass/promotion/record guards, with no invented historical time.
 
 Reviews are owed for each actual landed build commit strictly after that source
 boundary, including a closed item or removed producer worktree. Two Git reads
 index the interval; old reports outside it perform no per-report Git, hashing or
-native inventory. Immutable report bytes and original dispatch/source attribution
-bind each parent/head diff. Unknown attribution holds only that review branch.
+native inventory. Canonical `rev-list` defines owed commits; immutable reports
+and native landing facts attribute them. Unclaimed/unreported commits remain
+visible in health and the record inbox. Immutable report bytes and original
+dispatch/source attribution bind the delivered diff. Unknown attribution holds
+only that review branch.
 Red checks or a blocked report do not disqualify genuinely landed changed code.
-Only an existing attempt for the SAME source item and head blocks a new review.
+Only an existing attempt for the SAME source item/head or immutable producer
+item/run/report group blocks a new review.
 Unrelated old private review directories do not establish an attempt. A real
 same-change UNKNOWN/native refusal remains held, with no retry or replacement.
 
-The current queue helper creates one ordinary reviewer item keyed `(item, head)`.
+The current queue helper creates ONE ordinary reviewer item for the whole
+immutable producer report/source group, keyed by its item, final delivered head
+and report hash. Its explicit source/base range or captured owned commits include
+intermediate and final source; interleaved commits attributed to other producers
+remain context with independent coverage. It never creates a separate review for
+each intermediate/final tuple in the same report. Red producer checks still
+permit review of genuinely landed source. Existing partial/active/UNKNOWN
+reviews, independent verdicts and cap1 remain immutable: no retarget, cancellation
+or replacement. Their exact coverage is counted without claiming the whole
+producer has been reviewed; an uncovered remainder is a recorded judgment hold.
 Its bound immutable target/evidence is checked again before every native effect.
 New source dispatch uses the configured normal review selection (review-sol-max)
 and a registered `review-` worktree at that exact head. The review pool defaults
@@ -91,6 +108,13 @@ resource cap remains. Old settle reviewers still consume real total resources.
 Saved owner/pinned consumers retain their original selection. A matching explicit
 source selector does not fabricate native/run authority. Unknown queue/helper
 capability holds before launch.
+
+Every review error is recorded in the existing record inbox on its first
+occurrence, with a durable count and stable deduplication. Each real pass records
+owed/queued/running/done producer groups and separate commit coverage,
+attribution gaps and formal-fix exemptions. More than three real passes with a
+queue/coverage gap create one deduplicated notice. The morning digest includes
+these observations; no extra scan, native prompt or benchmark is started.
 
 Reviewers inspect only the immutable diff and producer evidence, with zero
 suites/edits. Their normal report says `outcome: done`, `verdict: PASS|FAIL` and

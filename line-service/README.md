@@ -100,7 +100,23 @@ each intermediate/final tuple in the same report. Red producer checks still
 permit review of genuinely landed source. Existing partial/active/UNKNOWN
 reviews, independent verdicts and cap1 remain immutable: no retarget, cancellation
 or replacement. Their exact coverage is counted without claiming the whole
-producer has been reviewed; an uncovered remainder is a recorded judgment hold.
+producer has been reviewed. Strictly later attributed commits outside every
+retained capture receive one immutable `supplemental-review/v1` target through
+the same record queue. Its evidence binds the prior targets, exact owned commits
+and recorded landing/report provenance. Earlier captures, native attempts,
+verdicts and cap1 stay unchanged. Overlap, an UNKNOWN prior scope or a gap inside
+an earlier captured interval remains held; none permits a duplicate or retarget.
+
+Commits with no recorded producer use `queue-review canonical:FULL_SHA` in the
+genuine installed canonical service context. The ordinary reviewer item owns
+the **current** review responsibility and references itself as its source item,
+with a null source run. Its `canonical-unattributed/v1` evidence preserves null
+historical item/run/owner, binds the recorded boundary and exact canonical diff,
+and never emits a synthetic producer run or landing. The canonical index keeps
+that historical attribution missing while counting the exact queued/verdict
+coverage. Ambiguous attribution and exact-head UNKNOWN attempts remain held.
+Verdicts and linked Major corrections use the existing record path and cap1;
+release still requires actual Major correction checks.
 Its bound immutable target/evidence is checked again before every native effect.
 New source dispatch uses the configured normal review selection (review-sol-max)
 and a registered `review-` worktree at that exact head. The review pool defaults

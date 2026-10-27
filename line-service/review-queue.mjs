@@ -16,9 +16,12 @@ import { reviewAttempt } from './review.mjs';
 import { discoverChanges,capturedProducerTarget,publishLandedReviewEvidence } from './phase1.mjs';
 import {producerGroupKey,queueProducerGroup,sameProducerQueue,sameCapturedTarget,capturedReviewCommits} from './review-group.mjs';
 import {originalPrestartProof,reviewPlain,reviewDigest} from './review-resolutions.mjs';
+import {additionalTarget,canonicalSelector,reviewCutoff,validateAdditionalTarget,disjointCapture} from './review-targets.mjs';
+import {canonicalReviewIndex} from './phase1.mjs';
+import {installedContext} from './cutoff.mjs';
 
 const root = fs.realpathSync(fileURLToPath(new URL('../', import.meta.url)));
-const files = ['line-service/review-queue.mjs', 'line-service/review.mjs','line-service/review-group.mjs','line-service/review-recovery.mjs','line-service/review-resolutions.mjs', 'line-service/phase1.mjs', 'line-service/cutoff.mjs','settle/review-range.mjs', 'bin/org.mjs', 'dispatch/dispatch.mjs','dispatch/preflight.mjs','dispatch/foreground-command.mjs','dispatch/outcome.mjs','dispatch/not-started.mjs','dispatch/request-lock.mjs', 'dispatch/session-cap.mjs', 'dispatch/unlanded-cap.mjs','lanes/lane.mjs'];
+const files = ['line-service/review-queue.mjs', 'line-service/review-targets.mjs','line-service/review.mjs','line-service/review-group.mjs','line-service/review-recovery.mjs','line-service/review-resolutions.mjs', 'line-service/phase1.mjs', 'line-service/cutoff.mjs','settle/review-range.mjs', 'bin/org.mjs', 'dispatch/dispatch.mjs','dispatch/preflight.mjs','dispatch/foreground-command.mjs','dispatch/outcome.mjs','dispatch/not-started.mjs','dispatch/request-lock.mjs', 'dispatch/session-cap.mjs', 'dispatch/unlanded-cap.mjs','lanes/lane.mjs'];
 const hashes = files.map(file => createHash('sha256').update(fs.readFileSync(path.join(root, file))).digest('hex'));
 const immutableCode=fs.existsSync(path.join(root,'.release-manifest.json'))||fs.existsSync(path.join(root,'.release-commit'));
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
@@ -39,14 +42,17 @@ function openBoundary(org, repo, identity) {
 export function queueConsumer({ run, env = process.env }) {
   // Both NEW entry points explicitly support this matching development selector.
   // No installed/pinned/saved owner is substituted or rewritten.
-  if (env.HERDR_BRAIN_ROOT && fs.realpathSync(env.HERDR_BRAIN_ROOT) !== root) throw Error('queue source selector differs from actual implementation');
+  queueImplementation(env);
   if (!run.owner || run.owner.legacy || run.owner.controller!=='brain') throw Error('source ownership is UNKNOWN; retain owner and existing attempt');
   // This actual loaded module implements immutable target/group/dedup checks.
   // Development main may advance while a request runs: that does not change
   // its captured tuple or loaded capability. Immutable saved bundles retain
   // their byte fence; neither selection nor native/source ownership is replaced.
-  if(immutableCode)for (let i = 0; i < files.length; i++) if (createHash('sha256').update(fs.readFileSync(path.join(root, files[i]))).digest('hex') !== hashes[i]) throw Object.assign(Error('immutable saved queue/dispatch implementation changed; retain its owner'),{code:'DISPATCH_IMPLEMENTATION_CHANGED'});
   return root;
+}
+function queueImplementation(env){
+  if (env.HERDR_BRAIN_ROOT && fs.realpathSync(env.HERDR_BRAIN_ROOT) !== root) throw Error('queue source selector differs from actual implementation');
+  if(immutableCode)for (let i = 0; i < files.length; i++) if (createHash('sha256').update(fs.readFileSync(path.join(root, files[i]))).digest('hex') !== hashes[i]) throw Object.assign(Error('immutable saved queue/dispatch implementation changed; retain its owner'),{code:'DISPATCH_IMPLEMENTATION_CHANGED'});
 }
 function source({ state, events, org, repo, identity, runId, head, base,env=process.env,originalCapture }) {
   const run = state.runs.get(runId), item = run && state.items.get(run.item);
@@ -57,6 +63,7 @@ function source({ state, events, org, repo, identity, runId, head, base,env=proc
   queueConsumer({ run,env });
   const discovered=discoverChanges({state,events,org,repo,identity});
   const whole=discovered.changes.filter(c=>c.run.id===runId);let choices=whole.filter(c=>!head||c.target.head===head),capturedOriginal=false;
+  if(!head&&choices.length>1)choices=choices.filter(c=>choices.every(other=>{try{git(repo,['merge-base','--is-ancestor',other.target.head,c.target.head]);return true;}catch{return false;}}));
   if(originalCapture&&whole.length===1&&!sameCapturedTarget(originalCapture,whole[0].target)){
     capturedProducerTarget({repo,target:originalCapture,whole:whole[0]});choices=[{...whole[0],target:originalCapture}];capturedOriginal=true;
   }
@@ -78,6 +85,7 @@ export function queueReviewMutation({ state, events, org, repo, runId, head, bas
   const record = findOrgDir({ cwd: repo, env: { ...env, ORG_DIR: '' } });
   if (!record || fs.realpathSync(record) !== fs.realpathSync(org)) throw Error('queue-review record differs from the actual project');
   openBoundary(org, repo, identity);
+  if(runId?.startsWith('canonical:'))return queueCanonicalReview({state,events,org,repo,identity,selector:runId,head,base,env});
   const bound = source({ state, events, org, repo, identity, runId,head,base,env }), { item, run, target } = bound;
   if (head && head !== target.head || base && base !== target.base) throw Error('queue request differs from immutable landed tuple/evidence');
   if (env.ORG_ACTOR === 'line-service') {
@@ -88,7 +96,7 @@ export function queueReviewMutation({ state, events, org, repo, runId, head, bas
     const supervisorRecovery=recovery&&recovery.native_caller?.name===native.name&&recovery.native_caller?.agent_session?.value===native.agent_session.value&&binding.project.checkout===repo;
     if (!supervisorRecovery&&(worker.agent !== native.name || worker.terminal_id !== native.terminal_id || worker.agent_session_id !== native.agent_session.value)) throw Error('queue producer differs from actual source worker');
   }
-  const archived=new Set(bound.authorization?.archived_review_items??[]),key = `${item.id}:${target.head}`,group=producerGroupKey(item.id,run.id,target.reportHash),existing = [...state.items.values()].filter(q => !archived.has(q.id)&&(sameProducerQueue(q,item.id,run.id)||q.meta.review_key===key));
+  const archived=new Set(bound.authorization?.archived_review_items??[]),key = `${item.id}:${target.head}`,group=producerGroupKey(item.id,run.id,target.reportHash),existing = [...state.items.values()].filter(q => !archived.has(q.id)&&(sameProducerQueue(q,item.id,run.id)||q.meta.review_key===key)&&!disjointCapture({repo,target,peer:q.meta.review_target}));
   if (existing.length) {
     if (existing.length !== 1 || !isQueueReview(existing[0]) || queueProducerGroup(existing[0])!==group || !sameCapturedTarget(existing[0].meta.review_target,target)) throw Error('whole producer review already retained with different/partial/UNKNOWN capture; preserve attempts, verdicts and cap1');
     return { add: [], result: { result: 'review_queued', review_item: existing[0].id, source_item: item.id, head: target.head, existing: true } };
@@ -108,8 +116,45 @@ export function queueReviewMutation({ state, events, org, repo, runId, head, bas
     result: { result: 'review_queued', review_item: id, source_item: item.id, head: target.head, existing: false } };
 }
 
+function canonicalAttempt({selector,target,state,events,org,repo,identity,ignoreQueue,ignoreService}){
+  // This selector is only an inventory key. All persisted item references use
+  // the real reviewer ID allocated by the ordinary record, never a fake run.
+  return reviewAttempt({id:selector,runs:[]},{state,events,org,repo,identity,target,ignoreQueue,ignoreService});
+}
+function queueCanonicalReview({state,events,org,repo,identity,selector,head,base,env}){
+  if(env.ORG_ACTOR!=='line-service'||gitProject(process.cwd()).checkout!==repo||env.HERDR_ENV==='1'||env.HERDR_PANE_ID)throw Error('unattributed responsibility requires the genuine canonical line-service context');
+  installedContext(repo,org);queueImplementation(env);
+  const found=discoverChanges({state,events,org,repo,identity}),change=found.unattributed?.find(c=>c.selector===selector);
+  if(!change||head&&head!==change.target.head||base&&base!==change.target.base)throw Error('canonical unattributed target missing/UNKNOWN or differs from immutable tuple');
+  const {target}=change,existing=[...state.items.values()].filter(q=>q.meta.review_source_selector===selector||q.meta.review_target&&capturedReviewCommits(q.meta.review_target).includes(target.head));
+  if(existing.length){
+    if(existing.length!==1||!isQueueReview(existing[0])||existing[0].meta.review_round_cap!==1||existing[0].meta.review_source_selector!==selector||existing[0].meta.review_source_item!==existing[0].id||!sameCapturedTarget(existing[0].meta.review_target,target))throw Error('canonical review already retained with overlapping/UNKNOWN capture');
+    return{add:[],result:{result:'review_queued',review_item:existing[0].id,source_item:existing[0].id,head:target.head,existing:true}};
+  }
+  const prior=canonicalAttempt({selector,target,state,events,org,repo,identity,ignoreService:{file:journalFor(org,identity),key:`review:${selector}`,target,operation:'record-queue'}});if(prior)throw Error(`canonical review already retained: ${prior}`);
+  publishLandedReviewEvidence(target);
+  const id=nextItemId(state,{kind:'work',role:'reviewer'});
+  return{add:[{type:'item.added',id,kind:'work',role:'reviewer',capability:'review',title:`Review unattributed canonical change ${target.head.slice(0,12)}`,budget:{},
+    accept:['Review this exact canonical diff/evidence with zero suites. Historical producer attribution remains UNKNOWN. Record PASS or FAIL; Major findings require a linked correction before release.'],
+    meta:{review_key:`${id}:${target.head}`,review_group_key:target.source_group.key,review_source_selector:selector,review_source_item:id,review_source_run:null,review_target:target,review_round_cap:1,review_cutover:reviewCutoff(found.index.boundary)}}],
+    result:{result:'review_queued',review_item:id,source_item:id,head:target.head,existing:false}};
+}
+function validateCanonicalReview({item,state,events,org,repo,allowRun,allowJournal,journals}){
+  const project=gitProject(repo),identity=project.identity;repo=project.canonical;openBoundary(org,repo,identity);
+  const target=item.meta.review_target,selector=canonicalSelector(target?.head),index=canonicalReviewIndex({state,events,org,repo,identity});
+  validateAdditionalTarget({repo,org,identity,index,state,events,target});
+  if(target.evidence_kind!=='canonical-unattributed/v1'||item.meta.review_source_selector!==selector||item.meta.review_source_item!==item.id||item.meta.review_source_run!==null||item.meta.review_key!==`${item.id}:${target.head}`||item.meta.review_group_key!==target.source_group.key||!same(item.meta.review_cutover,reviewCutoff(index.boundary)))throw Error('canonical current responsibility/provenance changed');
+  if([...state.items.values()].some(q=>q.id!==item.id&&(q.meta.review_source_selector===selector||q.meta.review_target&&capturedReviewCommits(q.meta.review_target).includes(target.head))))throw Error('overlapping/UNKNOWN canonical review already retained');
+  if(item.runs.some(id=>id!==allowRun))throw Error('queued review already has a run; no replacement/re-review');
+  journals??=fs.readdirSync(path.join(org,'dispatch')).filter(f=>f.endsWith('.json')&&!f.endsWith('.routes.json')).map(f=>({...JSON.parse(fs.readFileSync(path.join(org,'dispatch',f),'utf8')),journal:path.join(org,'dispatch',f)}));
+  if(journals.some(j=>j.item===item.id&&j.journal!==allowJournal&&(!allowRun||j.run!==allowRun)))throw Error('queued review has existing/ambiguous saved dispatch; retain it');
+  const prior=canonicalAttempt({selector,target,state,events,org,repo,identity,ignoreQueue:item.id,ignoreService:{file:journalFor(org,identity),key:`review:${selector}`,target,operation:'record-queue'}});if(prior)throw Error(`canonical review launch held: ${prior}`);
+  return target;
+}
+
 export function validateQueuedReview({ item, state, events, org, repo, allowRun, allowJournal, journals }) {
   if (!isQueueReview(item) || item.meta.review_round_cap !== 1) throw Error('not a supported single-review queue item');
+  if(item.meta.review_source_selector)return validateCanonicalReview({item,state,events,org,repo,allowRun,allowJournal,journals});
   const project = gitProject(repo);let originalCapture;
   if(allowJournal&&path.dirname(path.resolve(allowJournal))===path.join(org,'dispatch')){
     const bytes=reviewPlain(allowJournal),job=JSON.parse(bytes),proof=originalPrestartProof({events,org,common:project.identity,journal:allowJournal,job,requestHash:reviewDigest(bytes)});
@@ -119,7 +164,7 @@ export function validateQueuedReview({ item, state, events, org, repo, allowRun,
   openBoundary(org, project.canonical, project.identity);
   if(!same(item.meta.review_cutover,bound.cutoff))throw Error('review queue boundary differs from its actual landed target; retain exact evidence');
   if(bound.authorization&&item.meta.review_recovery_id!==bound.authorization.id)throw Error('archived review item cannot consume the one replacement');
-  const archived=new Set(bound.authorization?.archived_review_items??[]),peers=[...state.items.values()].filter(q=>q.id!==item.id&&!archived.has(q.id)&&sameProducerQueue(q,bound.item.id,bound.run.id));
+  const archived=new Set(bound.authorization?.archived_review_items??[]),peers=[...state.items.values()].filter(q=>q.id!==item.id&&!archived.has(q.id)&&sameProducerQueue(q,bound.item.id,bound.run.id)&&!disjointCapture({repo:project.canonical,target:bound.target,peer:q.meta.review_target}));
   if(peers.length){
     if(!bound.capturedOriginal)throw Error('another record entry retains this whole producer review; no duplicate native launch, cancellation or retarget');
     const captured=new Set(capturedReviewCommits(bound.target));for(const peer of peers){capturedProducerTarget({repo:project.canonical,target:peer.meta.review_target,whole:bound.whole});if(capturedReviewCommits(peer.meta.review_target).some(h=>captured.has(h)))throw Error('overlapping/UNKNOWN original review scope retained; no duplicate launch');}
@@ -139,5 +184,6 @@ export function validateQueuedReview({ item, state, events, org, repo, allowRun,
 
 export function reviewQueueBrief(item) {
   const t = item.meta.review_target;
-  return `# Independent review of ${item.meta.review_source_item}\n\nCaptured immutable HEAD ${t.head}, base ${t.base}. Evidence ${t.evidence}; producer evidence SHA256 ${t.reportHash}; diff SHA256 ${t.diff_sha256}. This is ONE whole landed producer group at capture, including its intermediate and delivered commits: ${(t.source_group?.owned_commits??t.scope?.commits??[t.head]).join(', ')}. ${t.evidence_kind==='native-landings/v1'?'Native post-FF source/claim receipts bind this capture before the final producer report. No test PASS or whole-product completion is inferred; later source is separate visible coverage debt. ':''}Other attributed commits in the immutable range are context and retain their independent reviews. Read the original ask and complete bound producer evidence. Inspect this exact committed diff, independently of later source/cleanup. No build, test, check, prepare, install, model/API or source mutation commands; zero reviewer suites. Do not start another review or invoke settle/lane review. Write the normal record report with outcome done and verdict PASS or FAIL. Use one markdown bullet per finding: - [Major] path:line - explanation or - [Minor] path:line - explanation. With no findings say so. Unsupported claims and Major findings must be explicit. Propose any formal correction as a linked engineer follow-up under this review, preserving the original source item and final-release Major obligations; cap1, no re-review chain. Existing held/native attempts remain immutable.\n`;
+  if(t.evidence_kind==='canonical-unattributed/v1')return `# Independent review of an unattributed canonical change\n\nCurrent review responsibility: ${item.id}. Historical producer item, run and owner remain UNKNOWN. Captured immutable HEAD ${t.head}, base ${t.base}. Evidence ${t.evidence}; SHA256 ${t.reportHash}; diff SHA256 ${t.diff_sha256}. Review only this exact committed diff and its bound provenance. No build, test, check, prepare, install, model/API or source mutation commands; zero reviewer suites. Do not start another review or invoke settle/lane review. Write the normal report with outcome done and explicit verdict PASS or FAIL. Use one bullet per finding: - [Major] path:line - explanation or - [Minor] path:line - explanation. With no findings say so. Major findings require linked engineer correction before release; preserve the verdict, cap1 and no re-review chain.\n`;
+  return `# Independent review of ${item.meta.review_source_item}\n\nCaptured immutable HEAD ${t.head}, base ${t.base}. Evidence ${t.evidence}; producer evidence SHA256 ${t.reportHash}; diff SHA256 ${t.diff_sha256}. ${t.evidence_kind==='supplemental-review/v1'?'This is ONE non-overlapping supplemental target for strictly later source. Earlier captures and verdicts remain immutable. Owned commits':'This is ONE whole landed producer group at capture, including its intermediate and delivered commits'}: ${(t.source_group?.owned_commits??t.scope?.commits??[t.head]).join(', ')}. ${t.evidence_kind==='native-landings/v1'?'Native post-FF source/claim receipts bind this capture before the final producer report. No test PASS or whole-product completion is inferred; later source is separate visible coverage debt. ':''}Other attributed commits in the immutable range are context and retain their independent reviews. Read the original ask and complete bound producer evidence. Inspect this exact committed diff, independently of later source/cleanup. No build, test, check, prepare, install, model/API or source mutation commands; zero reviewer suites. Do not start another review or invoke settle/lane review. Write the normal record report with outcome done and verdict PASS or FAIL. Use one markdown bullet per finding: - [Major] path:line - explanation or - [Minor] path:line - explanation. With no findings say so. Unsupported claims and Major findings must be explicit. Propose any formal correction as a linked engineer follow-up under this review, preserving the original source item and final-release Major obligations; cap1, no re-review chain. Existing held/native attempts remain immutable.\n`;
 }

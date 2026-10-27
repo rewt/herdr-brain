@@ -4,7 +4,7 @@ const commit=value=>/^[a-f0-9]{40}(?:[a-f0-9]{24})?$/.test(value??'');
 export function producerGroupKey(item,run,reportHash){
   return typeof item==='string'&&typeof run==='string'&&/^[a-f0-9]{64}$/.test(reportHash??'')?`${item}:${run}:${reportHash}`:null;
 }
-export function queueProducerGroup(item){return producerGroupKey(item?.meta.review_source_item,item?.meta.review_source_run,item?.meta.review_target?.reportHash);}
+export function queueProducerGroup(item){return item?.meta.review_target?.evidence_kind==='canonical-unattributed/v1'?item.meta.review_target.source_group?.key:producerGroupKey(item?.meta.review_source_item,item?.meta.review_source_run,item?.meta.review_target?.reportHash);}
 export function sameProducerQueue(item,source,run){return item?.meta.review_source_item===source&&item.meta.review_source_run===run;}
 export function capturedReviewCommits(target){return [...new Set((target?.source_group?.owned_commits??target?.scope?.commits??[target?.head]).filter(commit))];}
 export function sameCapturedTarget(actual,expected){

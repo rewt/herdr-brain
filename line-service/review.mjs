@@ -12,9 +12,10 @@ import {reviewResolution,archivedReviewFile,reviewDigest} from './review-resolut
 import {producerGroupKey,queueProducerGroup,sameProducerQueue,capturedReviewCommits} from './review-group.mjs';
 import {canonical} from '../messages/schema.mjs';
 import {effectiveWorkerIdentity} from '../lib/worker-identity.mjs';
+import {additionalTarget,disjointCapture,captureEvidence} from './review-targets.mjs';
 
 const codeRoot = fs.realpathSync(fileURLToPath(new URL('../', import.meta.url)));
-const capabilityFiles = ['line-service/review.mjs','line-service/review-group.mjs', 'settle/settle.mjs', 'supervisor/supervisor.mjs'];
+const capabilityFiles = ['line-service/review.mjs','line-service/review-targets.mjs','line-service/review-group.mjs', 'settle/settle.mjs', 'supervisor/supervisor.mjs'];
 const capability = capabilityFiles.map(file => createHash('sha256').update(fs.readFileSync(path.join(codeRoot, file))).digest('hex'));
 
 const sha = value => createHash('sha256').update(value).digest('hex');
@@ -76,6 +77,10 @@ function changeReviewAttempt(item,{org,identity,events,state,repo,effects,target
     proofCache.set(file,Boolean(diagnostic));return Boolean(diagnostic);
   };
   const producerEvidence=file=>{
+    for(const q of state.items.values())if(q.meta.review_target?.evidence===file&&(sameProducerQueue(q,item.id,capturedRun)||q.meta.review_source_selector===item.id)){
+      if(file===target.evidence||disjointCapture({repo,target,peer:q.meta.review_target})){captureEvidence(q.meta.review_target);return true;}
+    }
+    if(additionalTarget(target)&&file===target.evidence){captureEvidence(target);return true;}
     if(target.evidence_kind!=='native-landings/v1'||file!==target.evidence)return producerProof(file);
     const value=read(file);if(value?.schema!=='native-landings/v1'||JSON.stringify(value)!==JSON.stringify(target.landed_evidence)||sha(fs.readFileSync(file))!==target.reportHash)throw Error('bound native producer evidence changed; retain it');
     return true;
@@ -87,11 +92,14 @@ function changeReviewAttempt(item,{org,identity,events,state,repo,effects,target
   const matches=(value,runHint)=>{
     if(!value)return false;const named=heads(value);
     const sameGroup=contains(value,new Set(runs))||value.reportHash===target.reportHash||value.review_target?.reportHash===target.reportHash;
-    if(named.size)return named.has(target.head)&&(contains(value,tokens)||item.runs.includes(runHint))||sameGroup&&[...named].some(h=>covered.has(h));
+    if(named.size)return item.id.startsWith('canonical:')?[...named].some(h=>covered.has(h)):named.has(target.head)&&(contains(value,tokens)||item.runs.includes(runHint))||sameGroup&&[...named].some(h=>covered.has(h));
     const run=value.run??value.source_run??runHint;
     return runs.has(run);
   };
-  for(const q of state.items.values())if(q.id!==ignoreQueue&&!ignoreQueues.includes(q.id)&&!archivedItems.has(q.id)&&roleIs(q,'REV')&&q.meta.review_source_item===item.id&&(q.meta.review_target?.head===target.head||capturedRun&&sameProducerQueue(q,item.id,capturedRun)))return 'existing whole producer/same-change record review';
+  for(const q of state.items.values())if(q.id!==ignoreQueue&&!ignoreQueues.includes(q.id)&&!archivedItems.has(q.id)&&roleIs(q,'REV')&&(q.meta.review_source_selector===item.id||q.meta.review_source_item===item.id&&(q.meta.review_target?.head===target.head||capturedRun&&sameProducerQueue(q,item.id,capturedRun)))){
+    if(disjointCapture({repo,target,peer:q.meta.review_target}))continue;
+    return 'existing whole producer/same-change record review';
+  }
   for(const id of runs)for(const artifact of state.runs.get(id)?.report?.artifacts??[]){
     // A producer's explicit current-source review locator is evidence of an
     // attempt, including outside-org manual receipts. Never probe another

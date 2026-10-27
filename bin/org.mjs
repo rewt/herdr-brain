@@ -53,7 +53,7 @@ Work
   record messages push --id ID            resume an existing reserved ask through Brain Chat
   record add <title> [--goal] [--role R] [--capability C] [--parent ID]
           [--blocked-by ID]... [--accept TEXT]... [--priority N] [--budget key=N]...
-  record queue-review R-n [--head SHA --base SHA]  idempotent landed-source review item
+  record queue-review R-n|canonical:SHA [--head SHA --base SHA]  idempotent landed-source review item
   record block <ID> --by <ID>             record that --by blocks ID
   record unblock <ID> --by <ID>           remove that blocking link
   record note <ID> <text> [--decision [--summary TEXT]]

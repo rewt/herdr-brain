@@ -279,6 +279,19 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         }catch(e){note(key,e.message,{item:item.id,run:run.id,head:target.head});}
         finally{reviewLock?.();}
       }
+      for(const {selector,target}of discovered.unattributed??[]){
+        if(expired()||reviewSteps>=maxStepsPerStage)break;
+        const key=`review:${selector}`;let reviewLock;
+        try{
+          reviewLock=noticeLock(path.join(directory,`review-change-${digest(selector)}.lock`),{recover:false});reviewSteps++;
+          effect(key,()=>{
+            const fresh=observe(),checked=discoverChanges({events:fresh.events,state:fresh.state,repo,org,identity:project.identity}).unattributed?.find(c=>c.selector===selector);
+            if(!checked||JSON.stringify(checked.target)!==JSON.stringify(target))throw Error('immutable canonical target/evidence changed before queue mutation');
+            return JSON.parse(cli('bin/org.mjs',['queue-review',selector,'--head',target.head,'--base',target.base]));
+          },target,'record-queue',true);
+        }catch(e){note(key,e.message,{head:target.head,review:true});}
+        finally{reviewLock?.();}
+      }
       if(index)try{
         checkpointNotices();
         const errors=Object.values(effects.record_notices??{}).filter(e=>e.review),health=recordReviewHealth({repo,org,index,passId:`${directory}:${effects.pass_number}`,errorCounts:{unique:errors.length,occurrences:errors.reduce((n,e)=>n+e.count,0)},env:childEnv});

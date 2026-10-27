@@ -18,6 +18,7 @@ import {acquireLock} from '../lanes/promotion-lock.mjs';
 import {loadDiscoveredRoutes} from '../lanes/routes.mjs';
 import {effectiveWorkerIdentity} from '../lib/worker-identity.mjs';
 import {producerGroupKey,queueProducerGroup,sameProducerQueue,capturedReviewCommits} from './review-group.mjs';
+import {additionalTarget,supplementalTarget,canonicalTarget,canonicalSelector,validateAdditionalTarget} from './review-targets.mjs';
 
 export function reviewCompletionPlan({events,state,runId}){
   const run=state.runs.get(runId),item=state.items.get(run?.item),key=item?.meta.review_key;
@@ -109,15 +110,18 @@ export function reviewHealth({events,state,index}){
   for(const row of rows){const list=groups.get(row.group_key)??[];list.push(row);groups.set(row.group_key,list);}
   const queued=new Set(),running=new Set(),done=new Set(),queuedCommits=new Set(),doneCommits=new Set(),retained=new Set(),retainedIssues=[];let unknownRunning=0,ambiguousGroups=0;
   for(const [key,owned]of groups){
-    const all=[...state.items.values()].filter(q=>roleIs(q,'REV')&&sameProducerQueue(q,owned[0].item,owned[0].run)&&!archived.has(q.id)),peers=all.filter(q=>q.meta.review_round_cap===1&&queueProducerGroup(q)===key);
+    const all=[...state.items.values()].filter(q=>roleIs(q,'REV')&&!archived.has(q.id)&&(owned[0].item?sameProducerQueue(q,owned[0].item,owned[0].run):q.meta.review_source_selector===canonicalSelector(owned[0].head))),peers=all.filter(q=>q.meta.review_round_cap===1&&(queueProducerGroup(q)===key||additionalTarget(q.meta.review_target)));
     if(all.length)retained.add(key);
-    if(all.length>1||all.length!==peers.length)retainedIssues.push({group:key,item:owned[0].item,run:owned[0].run,review_items:all.map(q=>q.id),reason:'Multiple, partial or UNKNOWN immutable producer review captures retained; no new review or retarget.'});
-    if(peers.length)queued.add(key);if(peers.length>1)ambiguousGroups++;
+    const partitioned=peers.some(q=>additionalTarget(q.meta.review_target)),seen=new Set();let overlap=false;
+    for(const q of peers)for(const h of capturedReviewCommits(q.meta.review_target)){if(seen.has(h))overlap=true;seen.add(h);}
+    const ambiguous=all.length!==peers.length||all.length>1&&(!partitioned||overlap);
+    if(ambiguous)retainedIssues.push({group:key,item:owned[0].item,run:owned[0].run,review_items:all.map(q=>q.id),reason:'Multiple, partial or UNKNOWN immutable producer review captures retained; no new review or retarget.'});
+    if(peers.length)queued.add(key);if(ambiguous&&peers.length>1)ambiguousGroups++;
     // Preserve each actual attempted immutable scope, including split legacy
     // PASS/active reviews. Unstarted partial aliases do not manufacture coverage.
-    for(const q of peers)if(q.runs.length||peers.length===1&&!q.meta.hold&&!q.meta.held)for(const h of capturedReviewCommits(q.meta.review_target))if(owned.some(r=>r.head===h))queuedCommits.add(h);
+    for(const q of peers)if(q.runs.length||(peers.length===1||partitioned&&!ambiguous)&&!q.meta.hold&&!q.meta.held)for(const h of capturedReviewCommits(q.meta.review_target))if(owned.some(r=>r.head===h))queuedCommits.add(h);
     for(const q of peers)for(const rid of q.runs){const run=state.runs.get(rid);if(!run||run.report||run.abandoned)continue;const w=effectiveWorkerIdentity(run,state);if(!w.identity_conflict&&w.agent&&w.pane&&w.terminal_id&&w.agent_session_id)running.add(key);else unknownRunning++;}
-    for(const e of events)if(e.type==='change.reviewed'&&['PASS','FAIL','NEEDS-WORK'].includes(e.verdict)&&((e.review_group_key??queueProducerGroup(state.items.get(e.review_item)))===key||e.item===owned[0].item&&owned.some(r=>r.head===e.head))){
+    for(const e of events)if(e.type==='change.reviewed'&&['PASS','FAIL','NEEDS-WORK'].includes(e.verdict)&&((e.review_group_key??queueProducerGroup(state.items.get(e.review_item)))===key||e.item===owned[0].item&&owned.some(r=>r.head===e.head)||peers.some(q=>additionalTarget(q.meta.review_target)&&q.id===e.review_item&&e.item===q.meta.review_source_item&&e.head===q.meta.review_target.head))){
       const target=state.items.get(e.review_item)?.meta.review_target,covered=e.covered_commits??(target?.head===e.head?capturedReviewCommits(target):[e.head]);
       for(const h of covered)if(owned.some(r=>r.head===h))doneCommits.add(h);
     }
@@ -158,7 +162,7 @@ function landedProducerTarget({events,state,repo,org,identity,item,run,dispatch,
 }
 
 export function publishLandedReviewEvidence(target){
-  if(target.evidence_kind!=='native-landings/v1')return;
+  if(target.evidence_kind!=='native-landings/v1'&&!additionalTarget(target))return;
   const bytes=JSON.stringify(target.landed_evidence,null,2)+'\n';if(hash(bytes)!==target.reportHash)throw Error('native landed evidence digest changed');
   fs.mkdirSync(path.dirname(target.evidence),{recursive:true});if(fs.realpathSync(path.dirname(target.evidence))!==path.dirname(target.evidence))throw Error('native landed evidence directory redirected');
   let fd;try{fd=fs.openSync(target.evidence,'wx',0o600);fs.writeFileSync(fd,bytes);fs.fsyncSync(fd);}catch(e){if(e.code!=='EEXIST')throw e;const s=fs.lstatSync(target.evidence);if(!s.isFile()||fs.realpathSync(target.evidence)!==target.evidence||hash(fs.readFileSync(target.evidence))!==target.reportHash)throw Error('immutable native landed evidence collision/changed');}finally{if(fd!==undefined)fs.closeSync(fd);}
@@ -190,7 +194,7 @@ export function recordReviewHealth({repo,org,index,passId,errorCounts,env=proces
 }
 
 export function discoverChanges({events,state,repo,org,identity,boundary,readGit=git,pendingOnly=false,index}) {
-  const changes=[],holds=[];
+  const changes=[],holds=[],unattributed=[];
   try{boundary??=phase0Boundary(events,{repo,org,identity});}catch(e){return {changes,holds:[{reason:e.message}]};}
   index??=canonicalReviewIndex({events,state,repo,org,identity,boundary,readGit});const eligible=new Set(index.heads);
   const authorized=new Map();for(const e of events)if(e.type==='review.recovery-completed'&&e.project===identity&&e.org===org&&e.target?.head)authorized.set(`${e.item}:${e.target.head}`,e);
@@ -205,7 +209,6 @@ export function discoverChanges({events,state,repo,org,identity,boundary,readGit
     // Settled history remains two batched Git index reads, no per-report disk
     // or native inventory. An immutable report's intermediate heads are one group.
     if(!(landed.get(run.id)??[]).length&&!backfills.length&&!tokens.some(token=>index.heads.some(head=>head.startsWith(token))))continue;
-    if(pendingOnly&&queues.some(q=>!archived.has(q.id)&&sameProducerQueue(q,item.id,run.id)))continue;
     try {
         const nativeEvidence=!run.report||nativeQueues.length>0||backfills.some(e=>e.target.evidence_kind==='native-landings/v1'),reportFile=run.report&&path.resolve(org,run.report.file??'');
         if(!nativeEvidence&&(!reportFile.startsWith(path.resolve(org)+path.sep)||hash(fs.readFileSync(reportFile))!==run.report.sha256))throw Error('immutable producer report bytes changed/missing');
@@ -240,11 +243,23 @@ export function discoverChanges({events,state,repo,org,identity,boundary,readGit
           if(claims.some(h=>eligible.has(h)&&h!==dispatch.base&&!foreign(h)&&!ownedCommits.includes(h)))throw Error('whole producer range omits delivered source; no partial review');const diff=git(repo,['diff','--no-ext-diff','--no-textconv',base,head]);if(!diff)throw Error('whole producer source has an empty delta; no code review target');
           target={head,base,reportHash:run.report.sha256,evidence:reportFile,diff_sha256:hash(diff),dispatch:file,scope:{base,commits:range,claims:ownedCommits,unresolved:[],deferred:false},source_group:{key:group,run:run.id,report_sha256:run.report.sha256,owned_commits:ownedCommits}};
         }
-        if(pendingOnly&&events.some(e=>e.type==='change.reviewed'&&e.item===item.id&&e.head===target.head))continue;
-        changes.push({item,run,target,...(authorization?{authorization}:{}),cutoff:{id:boundary.id,seq:boundary.seq,head:boundary.canonical_head,main:boundary.main??'main',time_qualification:boundary.time_qualification??'intended source boundary; exact adoption-time head UNKNOWN'}});
+        const retained=queues.filter(q=>!archived.has(q.id)&&sameProducerQueue(q,item.id,run.id)),cutoff={id:boundary.id,seq:boundary.seq,head:boundary.canonical_head,main:boundary.main??'main',time_qualification:boundary.time_qualification??'intended source boundary; exact adoption-time head UNKNOWN'};
+        if(!pendingOnly||!retained.length&&!events.some(e=>e.type==='change.reviewed'&&e.item===item.id&&e.head===target.head))changes.push({item,run,target,...(authorization?{authorization}:{}),cutoff});
+        if(retained.length&&!authorization){
+          // Saved originals are never retargeted. Supplemental captures reserve
+          // only strictly later, attributed source outside every retained scope.
+          for(const q of retained.filter(q=>additionalTarget(q.meta.review_target))){validateAdditionalTarget({repo,org,identity,index,state,events,target:q.meta.review_target});if(!pendingOnly)changes.push({item,run,target:q.meta.review_target,cutoff});}
+          const extra=supplementalTarget({events,state,repo,org,identity,index,item,run,queues:retained});
+          if(extra)changes.push({item,run,target:extra,cutoff});
+        }
     }catch(e){holds.push({item:item.id,run:run.id,reason:e.message});}
   }
-  return {changes,holds,index};
+  for(const row of index.entries)if(row.attribution==='missing'){
+    const selector=canonicalSelector(row.head),retained=queues.filter(q=>q.meta.review_source_selector===selector);
+    if(pendingOnly&&retained.length)continue;
+    try{unattributed.push({selector,target:retained.length===1?validateAdditionalTarget({repo,org,identity,index,state,events,target:retained[0].meta.review_target}):canonicalTarget({repo,org,identity,index,head:row.head})});}catch(e){holds.push({head:row.head,reason:e.message});}
+  }
+  return {changes,holds,index,unattributed};
 }
 
 export function blockedChangeKey({events,state,item,run,brief}) {
@@ -326,7 +341,7 @@ export function reviewResultEvents({state,events,run,report,sha256,body=report.b
   const raw=report.extra?.findings;if(Array.isArray(raw))for(const f of raw)if(f&&['major','minor'].includes(String(f.severity).toLowerCase()))findings.push({severity:String(f.severity).toLowerCase(),text:String(f.text??f.summary??'')});
   // A reviewer may use ordinary proposals. Keep them linked to this one change,
   // not an additional reviewer or recursive review chain.
-  const add=[{type:'change.reviewed',item:source,head:target.head,base:target.base,review_key:key,review_group_key:producerGroupKey(source,review.meta.review_source_run,target.reportHash),covered_commits:capturedReviewCommits(target),review_item:review.id,review_run:run.id,verdict,
+  const add=[{type:'change.reviewed',item:source,head:target.head,base:target.base,review_key:key,review_group_key:queueProducerGroup(review),covered_commits:capturedReviewCommits(target),review_item:review.id,review_run:run.id,verdict,
     verdict_evidence:{frontmatter:report.extra?.verdict!==undefined,body_lines:bodyLines},findings,report_sha256:sha256}];
   const taken=new Set(usedIds);
   for(const severity of ['major','minor']) {

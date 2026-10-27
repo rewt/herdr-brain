@@ -27,6 +27,9 @@ import {noticeLock} from '../supervisor/notice-lock.mjs';
 import {readReport} from '../lib/report.mjs';
 import {recoverInactiveReview,observeReviewProgress,recoverServiceReview} from '../line-service/review-recovery.mjs';
 import {claimedCommitTokens} from '../settle/review-range.mjs';
+import {capturedReviewCommits} from '../line-service/review-group.mjs';
+import {canonicalSelector} from '../line-service/review-targets.mjs';
+import {fold as historicalFold} from './fixtures/state-pre-session-bind.mjs';
 import {canonical} from '../messages/schema.mjs';
 
 const hash=b=>createHash('sha256').update(b).digest('hex');
@@ -294,12 +297,14 @@ test('landing-before-report queues one immutable whole native producer group and
   }finally{process.chdir(before);}
 });
 
-test('landing-before-report keeps a captured native group immutable across later report and source while exposing uncovered commits without another queue item',t=>{
+test('landing-before-report keeps a captured native group immutable and queues only its strictly later uncovered supplemental source',t=>{
   const f=fixture(t,{reported:false});unreportedNativeLandings(f);const before=process.cwd(),env={...installedService(f),ORG_ACTOR:'line-service'};process.chdir(f.cwd);
   try{const result=queueReviewMutation({...f.context(),runId:'R-1',env});f.add(result.add);const original=structuredClone(f.context().state.items.get(result.result.review_item).meta.review_target),bytes=fs.readFileSync(original.evidence);
     fs.writeFileSync(path.join(f.workspace,'later-fix'),'later committed source');f.git(['add','.']);f.git(['commit','-qm','Later source']);const later=f.git(['rev-parse','HEAD']);f.git(['merge','--ff-only',later],f.cwd);
     f.add([{type:'change.landed',item:'ENG-1',run:'R-1',head:later,base:f.heads[1],project:f.identity,landed_at:'2026-10-27T07:01:00.000Z'}, {type:'report.ingested',run:'R-1',file:'reports/R-1.md',sha256:hash(f.report),report:{outcome:'done',artifacts:[...[...f.heads,later].map(h=>`Commit: ${h}`),original.evidence],blockers:[],extra:{},proposals:[]}}]);
-    const fresh=f.context(),q=fresh.state.items.get(result.result.review_item);assert.deepEqual(validateQueuedReview({...fresh,item:q}),original);assert.deepEqual(fs.readFileSync(original.evidence),bytes);assert.equal(queueReviewMutation({...fresh,runId:'R-1',env}).add.length,0);const health=reviewHealth({...fresh,index:canonicalReviewIndex(fresh)});assert.equal(health.queued_commits,2);assert.ok(health.coverage_gaps.some(g=>g.head===later&&g.retained));assert.equal([...fresh.state.items.values()].filter(i=>i.role==='reviewer').length,1);
+    const fresh=f.context(),q=fresh.state.items.get(result.result.review_item);assert.deepEqual(validateQueuedReview({...fresh,item:q}),original);assert.deepEqual(fs.readFileSync(original.evidence),bytes);const extra=discoverChanges({...fresh,pendingOnly:true}).changes;assert.equal(extra.length,1);assert.deepEqual(capturedReviewCommits(extra[0].target),[later]);assert.equal(extra[0].target.base,original.head);assert.equal(extra[0].target.evidence_kind,'supplemental-review/v1');
+    const queued=queueReviewMutation({...fresh,runId:'R-1',head:later,env});f.add(queued.add);const next=f.context(),supplement=next.state.items.get(queued.result.review_item);assert.deepEqual(validateQueuedReview({...next,item:supplement}),supplement.meta.review_target);assert.deepEqual(validateQueuedReview({...next,item:next.state.items.get(q.id)}),original);assert.equal(queueReviewMutation({...next,runId:'R-1',env}).add.length,0);assert.equal(discoverChanges({...next,pendingOnly:true}).changes.length,0);
+    const health=reviewHealth({...next,index:canonicalReviewIndex(next)});assert.equal(health.queued_commits,3);assert.equal(health.coverage_gaps.length,0);assert.equal(health.ambiguous_groups,0);assert.equal([...next.state.items.values()].filter(i=>i.role==='reviewer').length,2);assert.deepEqual(fs.readFileSync(original.evidence),bytes);
     fs.appendFileSync(original.evidence,'altered');assert.throws(()=>validateQueuedReview({...fresh,item:q}),/changed|evidence/);
   }finally{process.chdir(before);}
 });
@@ -382,6 +387,67 @@ test('permanent index counts unclaimed commits and own unreported landings and s
   f.add([{type:'item.added',id:'REV-99',role:'reviewer',title:'Original judgment'},{type:'item.added',id:'ENG-99',role:'engineer',title:'Formal correction',parent:'REV-99',meta:{review_fix_of:'original:key'}},
     {type:'run.started',id:'R-99',item:'ENG-99',workspace:f.cwd}, {type:'change.landed',item:'ENG-99',run:'R-99',head:f.heads[1],base:f.heads[0],project:f.identity}]);
   const changed=f.context(),later=reviewHealth({...changed,index:canonicalReviewIndex(changed)});assert.equal(later.owed_commits,1);assert.equal(later.exemptions[0].head,f.heads[1]);
+});
+
+test('supplemental coverage keeps pending and verdict scopes immutable and excludes interleaved independent source',t=>{
+  const f=fixture(t);partialReview(f,'REV-1203',{head:f.heads[1],base:f.heads[0],run:'R-3403',verdict:'PASS'});partialReview(f,'REV-1204',{head:f.heads[0],base:f.base,run:'R-3404'});
+  const original=[...f.context().state.items.values()].filter(q=>q.role==='reviewer').map(q=>structuredClone(q)),foreign=independentProducer(f);
+  f.git(['merge','--ff-only',foreign]);const later=[];
+  for(const n of [3,4]){fs.writeFileSync(path.join(f.workspace,`later-${n}`),String(n));f.git(['add','.']);f.git(['commit','-qm',`Later ${n}`]);later.push(f.git(['rev-parse','HEAD']));}
+  f.git(['merge','--ff-only',later[1]],f.cwd);f.add(later.map((head,n)=>({type:'change.landed',item:'ENG-1',run:'R-1',head,base:n?later[0]:foreign,project:f.identity})));
+  const before=process.cwd(),env={...installedService(f),ORG_ACTOR:'line-service'};process.chdir(f.cwd);
+  try{
+    const changes=discoverChanges({...f.context(),pendingOnly:true}).changes.filter(c=>c.run.id==='R-1');assert.equal(changes.length,1);assert.deepEqual(capturedReviewCommits(changes[0].target),later);assert.equal(changes[0].target.base,foreign);
+    const r=queueReviewMutation({...f.context(),runId:'R-1',head:later[1],env});f.add(r.add);const c=f.context(),q=c.state.items.get(r.result.review_item);assert.deepEqual(validateQueuedReview({...c,item:q}),q.meta.review_target);
+    for(const old of original)assert.deepEqual(c.state.items.get(old.id),old);assert.equal(c.events.filter(e=>e.type==='change.reviewed').length,1);assert.equal(queueReviewMutation({...c,runId:'R-1',head:later[1],env}).add.length,0);
+    const health=reviewHealth({...c,index:canonicalReviewIndex(c)});assert.equal(health.done_commits,1);assert.ok(!health.coverage_gaps.some(g=>later.includes(g.head)));assert.ok(health.coverage_gaps.some(g=>g.head===foreign));
+    fs.mkdirSync(path.join(f.org,'settle'),{recursive:true});fs.writeFileSync(path.join(f.org,'settle/unknown.json'),JSON.stringify({run:'R-1',head:later[1],qualification:'UNKNOWN'}));assert.throws(()=>validateQueuedReview({...c,item:q}),/UNKNOWN|attempt/);
+  }finally{process.chdir(before);}
+});
+
+test('supplemental coverage refuses UNKNOWN or overlapping prior captures instead of duplicating uncovered source',t=>{
+  for(const kind of ['unknown','overlap']){
+    const f=fixture(t);partialReview(f,'REV-1200',{head:f.heads[0],base:f.base,run:'R-3400'});
+    if(kind==='overlap')partialReview(f,'REV-1201',{head:f.heads[0],base:f.base,run:'R-3401'});
+    else f.add([{type:'item.updated',id:'REV-1200',fields:{meta:{review_target:{head:f.heads[0],qualification:'UNKNOWN'}}}}]);
+    const c=f.context(),found=discoverChanges({...c,pendingOnly:true});assert.equal(found.changes.length,0);assert.match(found.holds[0].reason,/UNKNOWN|overlapping/);
+    const before=process.cwd();process.chdir(f.cwd);try{assert.throws(()=>queueReviewMutation({...c,runId:'R-1',env:{...f.env,ORG_ACTOR:'line-service',HERDR_ENV:'',HERDR_PANE_ID:''}}),/UNKNOWN|retained|scope/);}finally{process.chdir(before);}
+  }
+});
+
+test('canonical unattributed queue assigns current real reviewer responsibility without historical producer IDs and retains cap1 Major correction semantics',t=>{
+  const f=fixture(t,{reported:false}),env={...installedService(f),ORG_ACTOR:'line-service'},before=process.cwd();process.chdir(f.cwd);
+  try{
+    const c=f.context(),selector=canonicalSelector(f.heads[0]),original=structuredClone(c.events);assert.equal(discoverChanges({...c,pendingOnly:true}).unattributed.length,2);
+    const result=queueReviewMutation({...c,runId:selector,env});f.add(result.add);const next=f.context(),q=next.state.items.get(result.result.review_item),target=q.meta.review_target;
+    assert.deepEqual(validateQueuedReview({...next,item:q}),target);assert.equal(q.meta.review_source_item,q.id);assert.equal(q.meta.review_source_run,null);assert.equal(q.meta.review_round_cap,1);assert.equal(result.add.some(e=>e.type==='change.landed'||e.type==='run.started'),false);
+    assert.deepEqual(target.landed_evidence.historical_producer,{item:null,run:null,owner:null,attribution:'missing'});assert.deepEqual(capturedReviewCommits(target),[f.heads[0]]);assert.equal(target.base,f.base);assert.equal(target.head,f.heads[0]);assert.equal(hash(fs.readFileSync(target.evidence)),target.reportHash);
+    const index=canonicalReviewIndex(next);assert.equal(index.entries.find(e=>e.head===target.head).run,null);assert.equal(index.entries.find(e=>e.head===target.head).item,null);assert.equal(reviewHealth({...next,index}).queued_commits,1);assert.equal(queueReviewMutation({...next,runId:selector,env}).add.length,0);
+    assert.equal(discoverChanges({...next,pendingOnly:true}).unattributed.length,1);assert.deepEqual(next.events.slice(0,original.length),original);
+    f.add([{type:'run.started',id:'R-50',item:q.id,workspace:f.cwd}]);const started=f.context(),report={outcome:'done',extra:{verdict:'FAIL'},proposals:[]},events=reviewResultEvents({...started,run:started.state.runs.get('R-50'),report,sha256:'d'.repeat(64),body:'- [Major] source-1:1 - Fix this landed change.'});f.add(events);
+    const final=f.context(),health=reviewHealth({...final,index:canonicalReviewIndex(final)});assert.equal(health.done_commits,1);assert.equal(events[0].item,q.id);assert.equal(events[1].parent,q.id);assert.equal(events[1].meta.severity,'major');assert.equal(events[1].meta.review_owner_run,null);assert.equal(final.state.runs.has('canonical:'+target.head),false);
+    const old=historicalFold(final.events);assert.deepEqual(old.items,final.state.items);assert.deepEqual(old.runs,final.state.runs);for(const e of final.events){if(e.type==='run.started')assert.ok(final.state.items.has(e.item));if(e.type==='change.reviewed')assert.ok(final.state.items.has(e.item)&&final.state.items.has(e.review_item)&&final.state.runs.has(e.review_run));}
+    assert.throws(()=>validateQueuedReview({...final,item:final.state.items.get(q.id)}),/already has a run/);assert.equal(queueReviewMutation({...final,runId:selector,env}).add.length,0);
+  }finally{process.chdir(before);}
+});
+
+test('canonical unattributed targets retain exact-head UNKNOWN attempts, ownership ambiguity, native context and STOP fences',t=>{
+  const f=fixture(t,{reported:false}),env={...installedService(f),ORG_ACTOR:'line-service'},before=process.cwd();process.chdir(f.cwd);
+  try{
+    const selector=canonicalSelector(f.heads[0]);fs.mkdirSync(path.join(f.org,'settle'),{recursive:true});const unknown=path.join(f.org,'settle/unknown.json');fs.writeFileSync(unknown,JSON.stringify({head:f.heads[0],qualification:'UNKNOWN'}));
+    assert.throws(()=>queueReviewMutation({...f.context(),runId:selector,env}),/UNKNOWN|attempt/);assert.equal([...f.context().state.items.values()].filter(q=>q.role==='reviewer').length,0);fs.unlinkSync(unknown);
+    assert.throws(()=>queueReviewMutation({...f.context(),runId:selector,env:{...env,HERDR_ENV:'1'}}),/genuine canonical/);
+    fs.writeFileSync(path.join(f.directory,'STOP'),'hold');assert.throws(()=>queueReviewMutation({...f.context(),runId:selector,env}),/STOP/);fs.unlinkSync(path.join(f.directory,'STOP'));
+    const result=queueReviewMutation({...f.context(),runId:selector,env});f.add(result.add);const c=f.context(),q=c.state.items.get(result.result.review_item);f.add([{type:'item.added',id:'REV-999',role:'reviewer',title:'UNKNOWN duplicate',meta:{review_source_selector:selector,review_source_item:'REV-999',review_target:{head:f.heads[0],qualification:'UNKNOWN'}}}]);
+    assert.throws(()=>validateQueuedReview({...f.context(),item:q}),/overlapping|UNKNOWN/);assert.throws(()=>queueReviewMutation({...f.context(),runId:selector,env}),/UNKNOWN/);
+  }finally{process.chdir(before);}
+  const g=fixture(t,{reported:false});g.add([{type:'item.added',id:'ENG-2',role:'engineer',title:'Other producer'},{type:'run.started',id:'R-2',item:'ENG-2',workspace:g.cwd},...['R-1','R-2'].map((run,n)=>({type:'change.landed',item:`ENG-${n+1}`,run,head:g.heads[0],base:g.base,project:g.identity}))]);assert.ok(!discoverChanges(g.context()).unattributed.some(c=>c.target.head===g.heads[0]));
+});
+
+test('canonical unattributed discovery uses the installed ordinary queue and review pool without a producer run or parallel transport',t=>{
+  const f=fixture(t,{reported:false}),env=installedService(f),calls=[],before=process.cwd();process.chdir(f.cwd);
+  try{createLineService({repo:f.cwd,org:f.org,to:'brain-chat',env,maxStarts:1,capacity:()=>{throw Object.assign(Error('review pool is occupied'),{code:'DISPATCH_REVIEW_CAP'});},command:(exe,args,options)=>{calls.push(args);if(args[1]==='queue-review')return spawnSync(exe,args,options);assert.equal(args[0].endsWith('dispatch.mjs'),false,'native capacity stays authoritative');return{status:0,stdout:'{}',stderr:''};}}).pass();}finally{process.chdir(before);}
+  const q=[...f.context().state.items.values()].filter(i=>i.role==='reviewer');assert.equal(q.length,2);assert.equal(calls.filter(a=>a[1]==='queue-review'&&a[2].startsWith('canonical:')).length,2);assert.equal(q.every(i=>i.meta.review_source_item===i.id&&i.meta.review_source_run===null),true);assert.equal(f.context().events.findLast(e=>e.type==='line-service.review-health').queued_commits,2);assert.equal(calls.some(a=>/settle\//.test(a[0])),false);
 });
 
 test('permanent boundary auto records first actual main once and preserves explicit qualified boundaries and STOP native-context fences',t=>{

@@ -1,0 +1,226 @@
+{
+  "schema": "review-correction-disposition/v1",
+  "run": "R-899",
+  "item": "ENG-641",
+  "review": "REV-4",
+  "reviewer_run": "R-898",
+  "original_source_item": "ENG-400",
+  "original_source_run": "R-873",
+  "verified_by": "lane-line-eng-641--2384fa-3f19d2",
+  "verified_at": "2026-10-27T08:03:55.243419+00:00",
+  "lane_baseline": "5d095e6a6ce80a78446924c8e6e6a58b929e7661",
+  "finding": {
+    "id": "M1",
+    "severity": "Major",
+    "location": "test/session-live.test.mjs:329",
+    "disposition": "existing landed fixture correction and three passing controls associated; captured FAIL unchanged; release obligations retained"
+  },
+  "original_landings": [
+    {
+      "kind": "feature",
+      "base": "35fdd007092243676c8c12d2aef7d3768d1e1f51",
+      "head": "817de2d78506bb5099b0b6def4fc77bc8c86d5e7",
+      "verified_by": "lane-line-eng-400--6d8de9-a3c189",
+      "promotion": {
+        "schema": "operator-landing-waiver/v1",
+        "authority": "operator-20261025-until-stable-release",
+        "outcome": "waived",
+        "executed": false,
+        "exit_code": null
+      }
+    },
+    {
+      "kind": "fixture-clock correction",
+      "base": "56718459b0c4c1525fe662bfd9049c7f9dcacd82",
+      "head": "f1f86b50bb2a0d8fc77a0230541f25be09a1e864",
+      "verified_by": "lane-line-eng-400--6d8de9-a3c189",
+      "promotion": {
+        "schema": "operator-landing-waiver/v1",
+        "authority": "operator-20261025-until-stable-release",
+        "outcome": "waived",
+        "executed": false,
+        "exit_code": null
+      }
+    }
+  ],
+  "immutable_review_target": {
+    "base": "35fdd007092243676c8c12d2aef7d3768d1e1f51",
+    "head": "817de2d78506bb5099b0b6def4fc77bc8c86d5e7",
+    "verdict": "FAIL",
+    "review_report": "/Users/rewt/development/rewt/.org/reports/R-898.md",
+    "source_patch_sha256": "196f55a11d70e4c8993c06d7ac8ff239e25ff556a226a0d056eb9d54cffdf73f"
+  },
+  "focused": {
+    "key": "d55de4fb7c2c26e170bba605f78dd5bb44624605390e83cb3b2c501ac2bd01a5",
+    "head": "f1f86b50bb2a0d8fc77a0230541f25be09a1e864",
+    "tree": "dd6bebb18b55b4cc7c7eb082dbb7f34f46d8dde8",
+    "command": "/Users/rewt/.nvm/versions/node/v20.19.4/bin/node test/helpers/run.mjs --test-name-pattern=\"^(last-tab plan and apply Hold|concurrent owned resets)\" test/session-live.test.mjs",
+    "node_version": "v20.19.4",
+    "tap_totals": [
+      {
+        "tests": 46,
+        "suites": 0,
+        "pass": 3,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 43,
+        "todo": 0
+      }
+    ],
+    "exit_code": 0,
+    "started_at": "2026-10-27T00:50:53.376Z",
+    "finished_at": "2026-10-27T01:09:13.054Z",
+    "log_hash": "1094b1a6c68b9b9c08235c51bfc75575e13f4d46f10e171b1de714dfba96ed9b",
+    "limits": {
+      "wall_seconds": 0,
+      "wall_source": "watch",
+      "idle_seconds": 900,
+      "idle_source": "config",
+      "frozen_seconds": 199.580020875
+    }
+  },
+  "gate_log_hash_convention": "SHA256 of JSON.stringify(log text); evidence sha256 fields hash raw file bytes",
+  "passing_controls": [
+    "last-tab plan and apply Hold before intent; an owned second slot permits exactly one close and respawn",
+    "concurrent owned resets respawn the closed slot before closing the last tab (original manifest order)",
+    "concurrent owned resets respawn the closed slot before closing the last tab (reversed manifest order)"
+  ],
+  "execution_attempts": 1,
+  "prior_executions": [
+    {
+      "kind": "initial heap failure",
+      "key": "8a5921b33e7d6fbde2c71b4f6ee67db9e02ea8aa26ddce954b1cb71aa43be3ed",
+      "head": "8bde29ace30cfd39952f328c8ac83a67b3df40a2",
+      "command": "/Users/rewt/.nvm/versions/node/v20.19.4/bin/node test/helpers/run.mjs test/session-lifecycle.test.mjs test/session-live.test.mjs",
+      "exit_code": 1,
+      "tap_totals": [
+        {
+          "tests": 106,
+          "suites": 0,
+          "pass": 105,
+          "fail": 1,
+          "cancelled": 0,
+          "skipped": 0,
+          "todo": 0
+        }
+      ]
+    },
+    {
+      "kind": "captured-head reset failures; physical close edge passed",
+      "key": "6b36d3f4c4d8844b98d46720fe9f2b286ef3c53e78bf3d3fa17e34abf00ac0ef",
+      "head": "817de2d78506bb5099b0b6def4fc77bc8c86d5e7",
+      "command": "/Users/rewt/.nvm/versions/node/v20.19.4/bin/node test/helpers/run.mjs --test-name-pattern=\"^(last-tab plan and apply Hold|concurrent owned resets|physical close edge refuses)\" test/session-live.test.mjs",
+      "exit_code": 1,
+      "tap_totals": [
+        {
+          "tests": 46,
+          "suites": 0,
+          "pass": 1,
+          "fail": 3,
+          "cancelled": 0,
+          "skipped": 42,
+          "todo": 0
+        }
+      ]
+    }
+  ],
+  "source_blobs": [
+    {
+      "file": "test/session-live.test.mjs",
+      "corrected_head": "9e5aa93e15558a11b5e9058b1299cdc171ee5400",
+      "lane_baseline": "9e5aa93e15558a11b5e9058b1299cdc171ee5400"
+    },
+    {
+      "file": "test/helpers/session-live.mjs",
+      "corrected_head": "2c07a536ece9b1ace78f516223a2954fa56de80f",
+      "lane_baseline": "6ea2b30a3c6e3a41b0e0204fd196e875b0c53b2d"
+    },
+    {
+      "file": "sessions/reconcile.mjs",
+      "corrected_head": "638627b1f5a5598d68867771832c22d4523c6a14",
+      "lane_baseline": "638627b1f5a5598d68867771832c22d4523c6a14"
+    }
+  ],
+  "evidence": [
+    {
+      "path": "/Users/rewt/development/rewt/.org/reports/R-898.md",
+      "sha256": "c073bf17918a98fd5c17025c690e58959ae39cfcccc3cf4cfb21f0ce632462ac"
+    },
+    {
+      "path": "/Users/rewt/development/rewt/.org/reports/R-873.md",
+      "sha256": "df780b244700fa5000e003c8ef1faeee4d475944af99b5ffe00831310790bdc4"
+    },
+    {
+      "path": "/Users/rewt/development/rewt/.org/evidence/ENG-400/R-873/landing.json",
+      "sha256": "b332666f4394972daac9f03282935b76b893d5936dee061c9e8b56d8c8d48c6b"
+    },
+    {
+      "path": "/Users/rewt/development/rewt/.org/evidence/ENG-400/R-873/final-landing.json",
+      "sha256": "39832f1f585fc376e447add682593b854dbc6eeb9252b9e799ba463d171189ed"
+    },
+    {
+      "path": "/Users/rewt/development/rewt/.org/evidence/ENG-400/R-873/fixture-clock.diff",
+      "sha256": "468adafa532b818540cb08234ad9f09093fee3bf5278fe56569c03944946fd62"
+    },
+    {
+      "path": "/Users/rewt/development/rewt/.org/evidence/ENG-400/R-873/focused-gate.json",
+      "sha256": "c080516c22ff1f4f462aedf1994cbcad746fe1b25a4cfc3dd3fd9877ca8edf29"
+    },
+    {
+      "path": "/Users/rewt/development/rewt/.org/evidence/ENG-400/R-873/focused.tap",
+      "sha256": "42821e156c6b6ad0759413137d8b40e9893854cdf8b9d637b903f557f5fbd4a4"
+    },
+    {
+      "path": "/Users/rewt/development/rewt/.org/evidence/ENG-400/R-873/focused-execution.json",
+      "sha256": "8ffbb64929340823a23e20840f11911f0b5ab824331d1275b3b4b51f819aaa0b"
+    },
+    {
+      "path": "/Users/rewt/development/rewt/.org/evidence/ENG-400/R-873/recovery-gate.json",
+      "sha256": "e02c2acc536d67865bd4d4e3a6e054ca268e702fbcada3755843bc55b2c2d758"
+    },
+    {
+      "path": "/Users/rewt/development/rewt/.org/evidence/ENG-400/R-873/recovery.tap",
+      "sha256": "8da5c06a69e03572793ce4aaea2d5c90338b3f247e58f63bc40d881bc4cced9e"
+    },
+    {
+      "path": "/Users/rewt/development/rewt/.org/evidence/ENG-400/R-873/initial-gate.json",
+      "sha256": "e315a4f98c2c0353541f077ef9e1e4fd915e6cdb4313d0249cf33a1468440b9c"
+    },
+    {
+      "path": "/Users/rewt/development/rewt/.org/evidence/ENG-400/R-873/initial.tap",
+      "sha256": "cf490fa01e6b14b40be54020c19e44635868947661671ce4727883827c4696f8"
+    },
+    {
+      "path": "/Users/rewt/development/rewt/.org/evidence/ENG-400/R-873/promote.log",
+      "sha256": "d74e28d926676038b60fa0d4cd291fb8e45f76079574c19eb3b6e77fbaa3354a"
+    },
+    {
+      "path": "/Users/rewt/development/rewt/.org/evidence/ENG-400/R-873/promote-clock.log",
+      "sha256": "b47aff57cc68f18b5e290b370287a89b419b3ccd861c4165be3879438a0335a0"
+    },
+    {
+      "path": "/Users/rewt/development/rewt/.org/evidence/ENG-400/R-873/promotion-waiver.json",
+      "sha256": "812a1d09c959cb3106b3907fe6df036bb3fd5b10e435c310d1b0516731d774d7"
+    },
+    {
+      "path": "/Users/rewt/development/rewt/.org/evidence/ENG-400/R-873/promotion-clock-waiver.json",
+      "sha256": "812a1d09c959cb3106b3907fe6df036bb3fd5b10e435c310d1b0516731d774d7"
+    }
+  ],
+  "new_check_selection": [],
+  "new_test_executions": 0,
+  "release_disposition": {
+    "specific_reset_correction": "producer focused evidence bound to exact corrected head; no replay selected",
+    "whole_adapter_file": "incomplete at original execution; later unrelated evidence is not substituted",
+    "full_final_release": "required; not supplied by this evidence",
+    "actual_live_acceptance": "required; fake-native controls do not supply it",
+    "owner": "existing release coordinator; genuinely missing affected proof remains engineer/release-owner work",
+    "reviewer_suites": 0,
+    "activation_authorized": false
+  },
+  "preservation": [
+    "Original ENG-400 and REV-4 identity, captured FAIL, both landed tuples, earlier red executions and immutable held/native attempts remain unchanged",
+    "No automatic second review or replacement of an existing or UNKNOWN attempt",
+    "Project-specific PROJECT SUPERVISOR exception address UNKNOWN; no recipient invented"
+  ]
+}

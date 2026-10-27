@@ -1086,7 +1086,8 @@ try {
   // Explicit messages/queue-review source entries are scoped to this real root.
   // Immutable release continuations and every other record command retain pin
   // selection. This selector never supplies native, record or run authority.
-  const selected = ['messages', 'queue-review'].includes(process.argv[2]) && process.env.HERDR_BRAIN_ROOT ? bundleRelease() : null;
+  const selected = (['messages', 'queue-review'].includes(process.argv[2]) ||
+    process.argv[2] === 'session-bind' && process.argv.includes('--recover-finished')) && process.env.HERDR_BRAIN_ROOT ? bundleRelease() : null;
   const sourceEntry = selected && !selected.commit;
   if (sourceEntry && (fs.realpathSync(process.env.HERDR_BRAIN_ROOT) !== selected.root ||
       gitProject(selected.root, { env: projectEnvironment() }).checkout !== selected.root))

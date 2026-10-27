@@ -6,14 +6,25 @@ import { fold } from '../lib/state.mjs';
 import { gitProject } from '../lib/project.mjs';
 import { effectiveWorkerIdentity, validSessionBind, sharesWorker, sameReceipt } from '../lib/worker-identity.mjs';
 import { protectRecordMutation } from '../lib/record-guard.mjs';
+export { recoverFinishedSessionBinding } from './session-bind-recovery.mjs';
+import { recoverFinishedSessionBinding } from './session-bind-recovery.mjs';
 const fields = ['type', 'run', 'dispatch', 'receipt', 'process', 'prompted_at', 'deadline', 'observed_at', 'session'];
 
-// Dispatch is the sole caller/writer. This command consumes its saved proposal,
-// never discovers a session or backfills an old run. All races resolve in transact.
+// Ordinary dispatch consumes only its saved proposal. Explicit supervisor-only
+// finished recovery has its own native/claim/source fences and immutable archive.
 export function sessionBindCommand(argv) {
   const { values: opt, positionals } = parseArgs({ args: argv, allowPositionals: true,
-    options: { journal: { type: 'string' } } });
+    options: { journal: { type: 'string' }, 'recover-finished': { type: 'boolean' }, role: { type: 'string' },
+      id: { type: 'string' }, 'decision-seq': { type: 'string' }, 'expected-head': { type: 'string' },
+      'expected-source': { type: 'string' }, 'expected-session': { type: 'string' } } });
   if (positionals.length || !opt.journal) throw new UserError('usage: record session-bind --journal DISPATCH-JOURNAL');
+  if (opt['recover-finished']) {
+    const result = recoverFinishedSessionBinding({ org: findOrgDir(), journal: opt.journal, role: opt.role,
+      id: opt.id, decisionSeq: Number(opt['decision-seq']), expectedHead: opt['expected-head'],
+      expectedSource: opt['expected-source'], expectedSession: opt['expected-session'] });
+    process.stdout.write(JSON.stringify(result) + '\n'); return 0;
+  }
+  if (Object.keys(opt).some(k => k !== 'journal')) throw new UserError('recovery options require --recover-finished');
   const org = fs.realpathSync(findOrgDir()), journal = fs.realpathSync(opt.journal), who = writer();
   const result = transact(org, events => {
     const job = JSON.parse(fs.readFileSync(journal, 'utf8')), binding = job.sessionBinding, proposed = binding?.proposed;

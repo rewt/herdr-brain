@@ -123,6 +123,40 @@ test('standing outcome selection does not launch a child of a held or reserved a
   f.service().pass();assert.deepEqual(f.calls.map(c=>c.args[1]),[ready]);
   f.record(['set',parent,'meta.hold=false','meta.operator_reserved=true']);f.service().pass();assert.ok(!f.calls.some(c=>c.args[1]===child));
 });
+for(const change of ['standing order','candidate class','inherited class','selection'])test(`admission defers ${change} changed during capacity without spending an effect`,t=>{
+  const f=fixture(t),goal=f.record(['add','Standing outcomes','--goal']).split(' ')[0];
+  f.record(['set',goal,'meta.queue_order=["stable","rehearsal"]','meta.queue_class=rehearsal']);
+  const a=f.add('Old preferred candidate',1),b=f.add('New preferred candidate',999,change==='inherited class'?['--parent',goal]:[]);
+  f.record(['set',a,'meta.queue_class=stable']);
+  if(change!=='inherited class')f.record(['set',b,`meta.queue_class=${change==='selection'?'stable':'rehearsal'}`]);
+  if(change==='selection')f.record(['set',b,'meta.queue_selected=false']);
+  const held=f.add('Held',10000),reserved=f.add('Reserved',9000),uncertain=f.add('Uncertain launch',8000);
+  f.record(['set',held,'meta.hold=true','meta.queue_class=stable']);
+  f.record(['set',reserved,'meta.operator_reserved=true','meta.queue_class=stable']);
+  const directory=f.service().directory,journal=path.join(directory,'effects.json'),key=`dispatch:${uncertain}:${f.show(uncertain).created.seq}:ordinary`;
+  const original={state:'started',at:'2026-10-27T00:00:00Z',error:'native outcome UNKNOWN'};
+  fs.writeFileSync(journal,JSON.stringify({identity:gitProject(f.repo).identity,org:f.org,actions:{[key]:original}}));
+  let changed=false;
+  const s=f.service({maxStarts:1,capacity:()=>{
+    if(!changed){
+      changed=true;
+      if(change==='standing order')f.record(['set',goal,'meta.queue_order=["rehearsal","stable"]']);
+      else if(change==='candidate class')f.record(['set',b,'meta.queue_class=stable']);
+      else if(change==='inherited class')f.record(['set',goal,'meta.queue_class=stable']);
+      else f.record(['set',b,'meta.queue_selected=true']);
+    }
+    return {count:0,cap:1};
+  }});
+  s.pass();assert.equal(changed,true);assert.equal(f.calls.length,0,'the stale candidate never launches');
+  const actions=JSON.parse(fs.readFileSync(journal)).actions;
+  assert.deepEqual(Object.keys(actions),[key],'a harmless selection change creates no failed dispatch effect');
+  assert.deepEqual(actions[key].at,original.at);assert.equal(actions[key].state,'started');
+  s.pass();assert.deepEqual(f.calls.map(c=>c.args[1]),[b],'the next pass recomputes the newly preferred eligible candidate');
+  s.pass();assert.deepEqual(f.calls.map(c=>c.args[1]),[b,a],'the deferred candidate remains launchable later');
+  assert.equal(JSON.parse(fs.readFileSync(journal)).actions[key].state,'started','the uncertain original remains occupied');
+  const trace=fs.readFileSync(path.join(directory,'passes.jsonl'),'utf8').trim().split('\n').map(JSON.parse);
+  assert.ok(trace.some(r=>r.action==='queue-selection-changed'&&r.stage==='after-capacity'&&r.item===a));
+});
 test('blocked and reserved work stays held while another READY item dispatches', t => {
   const f = fixture(t), blocker = f.add('Blocker'); const blocked = f.add('Blocked', 20);
   f.record(['block', blocked, '--by', blocker]); const reserved = f.add('Reserved', 30); f.record(['set', reserved, 'meta.operator_reserved=true']);

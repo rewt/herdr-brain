@@ -183,7 +183,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         // fsynced delta, never native intents or a SENT/consumed assertion.
         log({action:'hold',...row,boundary,reason,canonical_key:key,scope,...(alert?{inspection_due:true}:{}),notice_record:{key,entry}});
       };
-      const effect = (key, run, binding, operation, safe=false, outcomeReadback=false) => {
+      const effect = (key, run, binding, operation, safe=false, outcomeReadback=false, before) => {
         const pendingHandoff = result => key.startsWith('closeout:') && Array.isArray(result?.evaluated) && result.evaluated.length===0 &&
           Array.isArray(result.restart?.keys) && result.restart.keys.length>0 && result.successor?.pending===true &&
           result.successor.reason==='fresh drain required' && JSON.stringify(result.successor.keys)===JSON.stringify(result.restart.keys);
@@ -198,12 +198,15 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         }
         if(expired())return;
         checkpointNotices();
-        observe();
+        const fresh=observe();
         stale = true;
+        // Admission can defer a stale selection before recording any intent.
+        // Existing failed/uncertain effects above keep their normal authority.
+        if(before&&!before(fresh))return;
         const prior=effects.actions[key],history=prior?[...(prior.history??[]),Object.fromEntries(Object.entries(prior).filter(([k])=>k!=='history'))]:[];
         const entry = effects.actions[key] = { state: 'started', at: now(),...(history.length?{history}:{}), ...(binding ? { review_target: binding, review_operation: operation } : {}) }; save();
         try {
-          entry.result = run(); entry.state = 'complete';
+          entry.result = run(fresh); entry.state = 'complete';
           if (['escalate', 'failed', 'stopped', 'judge_promotion'].includes(entry.result?.result)) {
             entry.state = 'held'; entry.error = entry.result.reason ?? entry.result.result;
           }
@@ -424,10 +427,17 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       let starts=0,admissionLogged=false,latestOccupancy;
       const countCapacity = kind => (capacity??(()=>checkSessionCap({config,org,kind,common:project.identity,
         agent:name=>native(['agent','get',name]).agent,processInfo:pane=>native(['pane','process-info','--pane',pane]).process_info})))(kind);
-      const admitItems = (items,repair=false) => { for (const item of items) {
+      const queueSelection = state => {
+        const policy=queuePolicy(state);
+        return JSON.stringify({policy,candidates:orderQueue(state,[...state.items.values()].filter(i=>!i.closed&&i.kind!=='goal'),policy)
+          .map(i=>[i.id,queueClass(state,i,policy),queueSelected(i)])});
+      };
+      const admitItems = (items,repair=false) => {
+        const selection=queueSelection(snapshot.state);
+        for (const item of items) {
         if(expired()||!repair&&starts>=(maxStarts??config.dispatch?.max_sessions??7))break;
         snapshot=current();
-        if(JSON.stringify(queuePolicy(snapshot.state))!==JSON.stringify(standing)){log({action:'queue-selection-changed'});break;}
+        if(JSON.stringify(queuePolicy(snapshot.state))!==JSON.stringify(standing)||queueSelection(snapshot.state)!==selection){log({action:'queue-selection-changed'});break;}
         if(!queueSelected(snapshot.state.items.get(item.id)))continue;
         const input=dispatchInput({...snapshot,item:snapshot.state.items.get(item.id),org,identity:project.identity});
         if(!input)continue;
@@ -467,10 +477,10 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
           const reviewTarget = isQueueReview(item) ? validateQueuedReview({ item, state: snapshot.state, events: snapshot.events, org, repo,...(continuation?{allowJournal:continuation.journal}:{}) }) : null;
           const route = continuation?.job.route??(reviewTarget ? reviewQueueRoute(config) : routeFor(item, config));
           const occupancy = countCapacity(dispatchPool({item:snapshot.state.items.get(item.id),job:{reviewQueue:reviewTarget}}));latestOccupancy=occupancy; log({ action: 'capacity', ...occupancy });
-          if(briefRecovery){effects.actions[key].prejournal_recovery={...briefRecovery,key:dispatchKey,at:now()};save();log({action:'prejournal-recovery',key,recovery:effects.actions[key].prejournal_recovery});}
-          const dispatched = effect(continuation?`dispatch-preflight:${continuation.token}:${continuation.key}`:dispatchKey, () => {
-            const fresh = observe(), current = fresh.state.items.get(item.id);
+          const dispatched = effect(continuation?`dispatch-preflight:${continuation.token}:${continuation.key}`:dispatchKey, fresh => {
+            const current = fresh.state.items.get(item.id);
             if (!current || !queueSelected(current) || itemLaunchHold(fresh.state,item.id) || dispatchInput({...fresh,item:current,org,identity:project.identity}) !== input || reserved(current) || (!continuation&&(reviewTarget ? reviewQueueRoute(config) : routeFor(current, config)) !== route)) throw Error('dispatch readiness or route changed');
+            if(briefRecovery){effects.actions[key].prejournal_recovery={...briefRecovery,key:dispatchKey,at:now()};save();log({action:'prejournal-recovery',key,recovery:effects.actions[key].prejournal_recovery});}
             if(continuation){
               const checked=preflightContinuation({journal:continuation.journal,repo,org,common:project.identity,root:fs.realpathSync(sourceRoot),events:fresh.events});
               if(!checked||checked.request_sha256!==continuation.request_sha256||checked.capability!==continuation.capability)throw Error('original preflight progress/source changed before continuation');
@@ -481,7 +491,11 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
             const target = reviewTarget ? validateQueuedReview({ item: current, state: fresh.state, events: fresh.events, org, repo }) : null;
             writeFileAtomic(brief, target ? reviewQueueBrief(current) : isDecision(current) ? decisionBrief(current) : `# ${current.title}\n\n${current.accept.join('\n')}\n\nWork from the existing item fields/notes and accepted directions. The generated execution brief supplies role guidance and project routing.\n`, 0o600);
             return JSON.parse(cli('dispatch/dispatch.mjs', [item.id, '--repo', repo, '--org', org, '--lane', `${target ? 'review' : 'line'}-${item.id.toLowerCase()}-${current.runs.length + 1}`, '--route', route, '--brief', brief, ...(target ? ['--base', target.head] : []),'--detach']));
-          },undefined,undefined,Boolean(retryAdmission));
+          },undefined,undefined,Boolean(retryAdmission),false,fresh=>{
+            if(queueSelection(fresh.state)===selection)return true;
+            log({action:'queue-selection-changed',item:item.id,stage:'after-capacity'});
+            return false;
+          });
           // Each original detached journal reserves admission before returning.
           // The next candidate gets a fresh native count; no launch is replayed.
           if (dispatched?.state === 'complete') starts++;

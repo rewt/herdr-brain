@@ -9,6 +9,9 @@ import { fold as olderFold } from './fixtures/state-v0.mjs';
 import { recordPaneRelease } from '../lib/retire-command.mjs';
 import { completionFingerprint } from '../lib/completion.mjs';
 import { fold } from '../lib/state.mjs';
+import { transact } from '../lib/store.mjs';
+import { protectRecordMutation } from '../lib/record-guard.mjs';
+import { priorityOnlyReason, priorityMigrationPlan, priorityMigrationMutation } from '../line-service/priority-migration.mjs';
 
 function fixture(t, { done = true, question = false, launched = false } = {}) {
   const f = setupOrg();
@@ -53,6 +56,47 @@ function fixture(t, { done = true, question = false, launched = false } = {}) {
     return r.err;
   };
   return { ...f, git, parent, blocker, item, child, run, file, other, queue, job, head, batch, refuse };
+}
+
+for (const restore of [false, true]) for (const stale of [false, true]) {
+  for (const scope of ['prerequisite', 'collateral parent', 'unrelated']) {
+    test(`priority ${restore ? 'restore' : 'migration'} guards every ${scope} subject of ${stale ? 'stale' : 'open'} promotion atomically`, t => {
+      const f=fixture(t),pending=f.queue.load().pending;
+      // Prepare the exact archived disposition before admission. The unrelated
+      // subject precedes the collateral child, exercising every changed item.
+      f.queue.transaction(data=>{data.pending=[];});
+      f.ok(['set',f.parent,'meta.queue_order=["stable"]','meta.queue_default=stable']);
+      const subjects=[f.other];
+      if(scope==='prerequisite'){
+        f.ok(['reopen',f.blocker]);subjects.push(f.blocker);
+      }else if(scope==='collateral parent'){
+        subjects.push(f.ok(['add','Priority-only child','--parent',f.blocker]).trim());
+      }
+      for(const id of subjects)f.ok(['set',id,'meta.queue_selected=true','meta.queue_class=stable','meta.hold=true',`meta.hold_reason=${priorityOnlyReason}`]);
+      const events=f.events(),plan=priorityMigrationPlan({state:fold(events),events,authority:'adopted-fixture-standing-order'});
+      assert.deepEqual(new Set(plan.changes.map(c=>c.id)),new Set(subjects));
+      if(scope==='collateral parent')assert.equal(plan.changes.at(-1).id,subjects[1]);
+      const archive={file:path.join(f.dir,'evidence','priority.json'),sha256:'immutable-priority-fixture'};
+      const mutate=restore=>transact(f.dir,(events,state)=>protectRecordMutation({org:f.dir,events,state,
+        mutation:priorityMigrationMutation({events,state,plan,archive,restore}),command:'priority-only hold disposition'}));
+      if(restore)mutate(false);
+      f.queue.transaction(data=>{data.pending=pending;});
+      if(stale){
+        f.batch();f.queue.transaction(data=>{
+          data.interrupted=[{...data.current,started:'2000-01-01T00:00:00Z'}];data.current=null;
+        });
+      }
+      const before=fs.readFileSync(path.join(f.dir,'events.jsonl'));
+      if(scope==='unrelated'){
+        mutate(restore);
+        assert.equal(f.events().at(-1).type,restore?'line.priority-holds-restored':'line.priority-holds-migrated');
+        assert.equal(fold(f.events()).items.get(f.other).meta.hold,restore);
+      }else{
+        assert.throws(()=>mutate(restore),/promotion write guard REFUSED/);
+        assert.deepEqual(fs.readFileSync(path.join(f.dir,'events.jsonl')),before,'no subject or audit event appended on refusal');
+      }
+    });
+  }
 }
 
 test('queued member writes, run aliases, dependencies and child creation refuse with the queue job id', t => {

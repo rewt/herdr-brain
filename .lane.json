@@ -42,9 +42,23 @@
     "engineer-max": {
       "kind": "codex",
       "model": "gpt-6.1-sol",
+      "effort": "xhigh",
+      "args": [],
+      "use": "Legacy engineering name aligned with BCH: Sol xhigh for new work. Maximum reasoning is engineer-escalate only after a documented failed high/xhigh attempt."
+    },
+    "engineer-escalate": {
+      "kind": "codex",
+      "model": "gpt-6.1-sol",
       "effort": "max",
       "args": [],
-      "use": "Engineering escalation ONLY after a documented unsuccessful high or xhigh attempt; never the default. Saved/in-flight runs retain their frozen declarations."
+      "use": "Problem-solving escalation ONLY after a documented failed high/xhigh attempt or stop-rule reframe. Never a routine build or review default."
+    },
+    "review-sol-max": {
+      "kind": "codex",
+      "model": "gpt-6.1-sol",
+      "effort": "xhigh",
+      "args": [],
+      "use": "Legacy route name: independent fixed-commit Sol xhigh review. New reviews never use max; one async post-code review, no reviewer suites. Saved attempts retain frozen settings."
     }
   }
 }

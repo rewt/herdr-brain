@@ -124,7 +124,7 @@ test('permanent review route falls back to the existing review route without rep
   assert.equal(reviewQueueRoute(config),'review');
   config.selection_policy.by_task_class.review='review-codex';assert.equal(reviewQueueRoute(config),'review-codex');
   delete config.selection_policy.by_task_class.review;delete config.routes.review;assert.throws(()=>reviewQueueRoute(config),/unknown task class: review/);
-  config.routes.review={kind:'invalid'};assert.throws(()=>reviewQueueRoute(config),/route|kind/);
+  config.routes.review=3;assert.throws(()=>reviewQueueRoute(config),/route|object/);
 });
 
 test('phase1 verdict and Major FAIL plus Minor findings become immutable scoped facts and linked work once',t=>{

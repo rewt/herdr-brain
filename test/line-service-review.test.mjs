@@ -56,7 +56,8 @@ for (const directory of ['current', 'foreign']) for (const root of [null, false,
     fs.writeFileSync(file, bytes);
     if (directory === 'current') assert.throws(() => s.pass(), /absence UNKNOWN/);
     else s.pass();
-    assert.equal(f.calls.length, directory==='current'?0:1, 'only typed current evidence can hold the captured change');
+    assert.equal(f.calls.filter(c=>c.args[1]==='queue-review').length,directory==='current'?0:1,'only typed current evidence can hold the captured change');
+    assert.ok(f.calls.every(c=>c.args[1]==='queue-review'||c.args[0].endsWith('/supervisor/closeout.mjs')&&c.args[1]==='refresh'),'independent cleanup refresh remains allowed');
     const after = fs.readFileSync(path.join(f.org, 'events.jsonl'));
     assert.deepEqual(after.subarray(0, events.length), events, 'existing record history stays immutable');
     const added = after.subarray(events.length).toString().trim().split('\n').filter(Boolean).map(JSON.parse);

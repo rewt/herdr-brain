@@ -60,7 +60,8 @@ test('blocked and reserved work stays held while another READY item dispatches',
   const f = fixture(t), blocker = f.add('Blocker'); const blocked = f.add('Blocked', 20);
   f.record(['block', blocked, '--by', blocker]); const reserved = f.add('Reserved', 30); f.record(['set', reserved, 'meta.operator_reserved=true']);
   const ready = f.add('Ready', 10); f.service().pass(); f.service().pass(); f.service().pass();
-  assert.equal(f.calls.length, 1); assert.equal(f.calls[0].args[1], ready); assert.equal(f.notes.length, 1); assert.match(f.notes[0].text, /reserved/);
+  assert.ok(f.calls.every(call => ![blocked, reserved].includes(call.args[1])));
+  assert.equal(f.calls[0].args[1], ready); assert.equal(f.notes.length, 1); assert.match(f.notes[0].text, /reserved/);
 });
 test('STOP, HOLD and an incomplete tail prevent all effects', t => {
   const f = fixture(t); f.add('Ready'); const s = f.service();

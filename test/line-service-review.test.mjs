@@ -165,3 +165,11 @@ test('producer linked review references require readable typed evidence and pres
   const saved=fs.readFileSync(file);assert.match(attempt(),/typed review reference UNKNOWN/);assert.deepEqual(fs.readFileSync(file),saved);
   const unrelated=f.commit(2);fs.writeFileSync(file,JSON.stringify({run:'R-other',head:unrelated,native_launch_attempted:true}));assert.equal(attempt(),null,'positive attempt retains only its captured subject');
 });
+
+test('producer linked failed review-queue command without a recorded item becomes one decision and never replays',t=>{
+  const f=fixture(t),s=f.service({command:(exe,args)=>{f.calls.push({exe,args});return args[1]==='queue-review'?{status:1,stdout:'',stderr:'record command returned without an item'}:{status:0,stdout:'{}',stderr:''};}});
+  s.pass();s.pass();assert.equal(f.calls.filter(c=>c.args[1]==='queue-review').length,1);
+  const state=fold(fs.readFileSync(path.join(f.org,'events.jsonl'),'utf8').trim().split('\n').map(JSON.parse));
+  const decisions=[...state.items.values()].filter(i=>i.meta.uncertain_outcome);assert.equal(decisions.length,1);assert.match(decisions[0].meta.uncertain_outcome.check.defect,/no pending status producer/);
+  assert.equal(state.links.length,0,'the failed queue subject cannot block independent work');
+});

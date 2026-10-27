@@ -575,8 +575,13 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       checkpointNotices();
       if(performance.now()-passStarted>600000)note('long-pass','line pass exceeded ten minutes',{},true);
       checkpointNotices();const duration_ms = performance.now() - passStarted;
-      for(const [key,entry]of Object.entries(effects.actions))if((entry.failure??outcomeFailure(entry)).kind==='fence')try{
-        effects.outcome_decisions??={};effects.outcome_decisions[key]??=queueOutcomeDecision({repo,org,env:childEnv,check:{key,subject:{item:key.split(':')[1],effect:key},failure:entry.failure??outcomeFailure(entry),receipt:entry.receipt}});save();
+      for(const [key,entry]of Object.entries(effects.actions))if((entry.failure??outcomeFailure(entry)).kind==='fence'||key.startsWith('review:')&&entry.state!=='complete'&&!entry.recorded_review_status)try{
+        if(key.startsWith('review:')&&entry.failure?.kind!=='fence'){
+          const q=[...current().state.items.values()].find(q=>q.meta.review_source_item===key.split(':')[1]&&q.meta.review_target?.head===entry.review_target?.head);
+          if(q){entry.recorded_review_status={item:q.id,created_seq:q.created.seq};save();continue;}
+        }
+        effects.outcome_decisions??={};effects.outcome_decisions[key]??=queueOutcomeDecision({repo,org,env:childEnv,check:{key,subject:{item:key.split(':')[1],effect:key},failure:entry.failure??outcomeFailure(entry),receipt:entry.receipt,
+          defect:key.startsWith('review:')?'Original review-queue command returned without a linked record item; no pending status producer is available.':undefined}});save();
       }catch(e){note(key,e.message);}
       const finalEvents=current().events,waits=finalEvents.filter(e=>e.type==='closeout.waiting'&&e.identity===project.identity),pending=waits.filter(w=>closeoutWaitState(w,finalEvents)!=='complete');
       log({ action: 'pass-complete', starts,unknown_open:pending.length,unknown_oldest_min:pending.length?Math.max(0,...pending.map(w=>(Date.parse(now())-Date.parse(w.at))/60000)):0,

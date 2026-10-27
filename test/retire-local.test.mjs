@@ -30,6 +30,15 @@ test('cleanup tail target seal ignores unrelated receipts but detects matching a
   }
 });
 
+test('cleanup tail target seal canonicalizes receipt path aliases before classifying a foreign scope',async t=>{
+  const {sealScopedRemovalInputs}=await import('../lib/retire-local.mjs'),f=fixture(t),common=path.join(f.root,'common'),lane=path.join(f.root,'lane'),alias=path.join(f.root,'alias');
+  fs.mkdirSync(common);fs.mkdirSync(lane);fs.mkdirSync(alias);fs.symlinkSync(common,path.join(alias,'common'));fs.symlinkSync(lane,path.join(alias,'lane'));
+  const target=path.join(f.occupants,'target.json');fs.writeFileSync(target,JSON.stringify({common:path.join(alias,'common'),cwd:path.join(alias,'lane'),run:'R-9'}));
+  const verify=sealScopedRemovalInputs([f.retirement],{common,cwd:lane,runs:['R-1'],items:['ENG-1']});
+  fs.writeFileSync(target,JSON.stringify({common:path.join(alias,'common'),cwd:path.join(alias,'lane'),run:'R-9',changed:true}));
+  assert.throws(verify,/changed/,'the ordinary reader resolves this receipt to the actual target, so the seal must include it');
+});
+
 test('an ignored receipt symlink is sealed without following it', t => {
   const f = fixture(t), link = path.join(f.occupants, 'ignored.json');
   fs.symlinkSync(f.external, link);

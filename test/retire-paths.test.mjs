@@ -1,3 +1,4 @@
+import { checkSessionIsolation } from './helpers/session-isolation-check.mjs';
 import test from './helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -968,3 +969,8 @@ for (const gitOnly of [true, false]) test(`a planner KEEP refuses ${gitOnly ? 'g
   assert.equal(f.git(['for-each-ref', '--format=%(refname) %(objectname)']), refs);
   assert.equal(fs.readFileSync(path.join(f.lane, '.lane/scratch'), 'utf8'), 'unique scratch'); assertNoRemoval(f);
 });
+
+test('retirement fixture isolates inherited session configuration and restores its caller', t =>
+  checkSessionIsolation(t, child => {
+    const f = fixture(child); isolatedEnv(child, f); adoptStandard(f); return f;
+  }));

@@ -1,3 +1,5 @@
+import { isolateSessionEnvironment } from './helpers/session-environment.mjs';
+import { checkSessionIsolation } from './helpers/session-isolation-check.mjs';
 import test from './helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -20,12 +22,13 @@ const document = value => `# prose\n\n## Manifest\n\n\`\`\`json\n${JSON.stringif
 const validate = (m, project = { root: fs.realpathSync(os.tmpdir()) }, config = ROUTE_PRESET) => validateManifest(m, { config, project });
 function repo(t) {
   const scratch = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'sessions-')));
+  isolateSessionEnvironment(t, scratch);
   t.after(() => fs.rmSync(scratch, { recursive: true, force: true }));
   const main = path.join(scratch, 'repo'), lane = path.join(scratch, 'lane'); fs.mkdirSync(main);
   const git = (...args) => execFileSync('git', ['-C', main, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
   git('init', '-q', '-b', 'main'); git('config', 'user.name', 'Test'); git('config', 'user.email', 'test@example.invalid');
   fs.writeFileSync(path.join(main, '.lane.json'), '{}'); git('add', '.'); git('commit', '-qm', 'init'); git('worktree', 'add', '-b', 'lane/topic', lane);
-  return { scratch, main, lane, git, project: canonicalProject(lane), env: { ...process.env, HERDR_MONITOR_FLEET: path.join(scratch, 'no-fleet'), LANE_CONFIG: undefined } };
+  return { scratch, main, lane, git, project: canonicalProject(lane), env: { ...process.env, LANE_CONFIG: undefined } };
 }
 
 test('session facts observe ancestry, patch landings and exact archive tags for the recorded lane', t => {
@@ -427,3 +430,6 @@ test('Workspace references enforce containment, regular resources, kind, matchin
   const outside = path.join(f.scratch, 'workspace.md'); fs.writeFileSync(outside, document(workspaceTemplate()));
   assert.equal(inspect({ cwd: f.main, env: f.env, files: [outside] }).valid, false);
 });
+
+test('sessions fixture isolates inherited session configuration and restores its caller', t =>
+  checkSessionIsolation(t, child => repo(child)));

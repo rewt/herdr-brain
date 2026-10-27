@@ -1,3 +1,5 @@
+import { isolateSessionEnvironment } from './helpers/session-environment.mjs';
+import { checkSessionIsolation } from './helpers/session-isolation-check.mjs';
 import test from './helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -36,6 +38,7 @@ function bundle(home, name) {
 }
 function fixture(t, names = ['chat', 'supervisor', 'logs-viewer', 'logs-triage']) {
   const scratch = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'setup-'))), cwd = path.join(scratch, 'repo');
+  isolateSessionEnvironment(t, scratch);
   fs.mkdirSync(cwd); t.after(() => fs.rmSync(scratch, { recursive: true, force: true }));
   const git = (...args) => execFileSync('git', ['-C', cwd, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
   git('init', '-q', '-b', 'main'); git('config', 'user.name', 'Fixture'); git('config', 'user.email', 'test@example.invalid');
@@ -47,7 +50,7 @@ function fixture(t, names = ['chat', 'supervisor', 'logs-viewer', 'logs-triage']
   const org = path.join(scratch, 'record'); fs.mkdirSync(org); fs.writeFileSync(path.join(org, 'events.jsonl'), '');
   const home = path.join(scratch, 'installed'); const current = bundle(home, 'green'); fs.symlinkSync(current, path.join(home, 'current'));
   const project = canonicalProject(cwd), env = { ...process.env, ORG_DIR: org, LANE_CONFIG: undefined,
-    HERDR_MONITOR_FLEET: path.join(scratch, 'no-fleet'), HERDR_SOCKET_PATH: path.join(scratch, 'fixture.sock'),
+    HERDR_SOCKET_PATH: path.join(scratch, 'fixture.sock'),
     BRAIN_SHADOW_ROOT: path.join(scratch, 'shadow'), XDG_STATE_HOME: path.join(scratch, 'state') };
   const observation = { server: env.HERDR_SOCKET_PATH, complete: true, workspaces: [], tabs: [], panes: [], agents: [], receipts: [], errors: [] };
   const observer = { observe: async () => structuredClone(observation), close() { throw Error('borrowed observer must not be closed'); } };
@@ -237,3 +240,6 @@ test('setup help ships in copied products and rejects unknown verbs, fields and 
     assert.match(result.stderr, /expected doctor, plan or apply|Unknown option|apply options only/);
   }
 });
+
+test('setup fixture isolates inherited session configuration and restores its caller', t =>
+  checkSessionIsolation(t, child => fixture(child)));

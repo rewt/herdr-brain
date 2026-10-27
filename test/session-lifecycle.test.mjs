@@ -1,3 +1,5 @@
+import { isolateSessionEnvironment } from './helpers/session-environment.mjs';
+import { checkSessionIsolation } from './helpers/session-isolation-check.mjs';
 import test from './helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -18,6 +20,7 @@ import { ROUTE_PRESET } from '../lanes/preset.mjs';
 const root = fileURLToPath(new URL('../', import.meta.url));
 function fixture(t, role = 'chat') {
   const scratch = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'sl-'))), cwd = path.join(scratch, 'repo');
+  const isolated = isolateSessionEnvironment(t, scratch);
   fs.mkdirSync(cwd); t.after(() => fs.rmSync(scratch, { recursive: true, force: true }));
   const git = (...args) => execFileSync('git', ['-C', cwd, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
   git('init', '-q', '-b', 'main'); git('config', 'user.email', 'test@example.invalid'); git('config', 'user.name', 'Fixture');
@@ -29,7 +32,7 @@ function fixture(t, role = 'chat') {
     return validateManifest(m, { project, config: ROUTE_PRESET });
   });
   const inspection = { project, entries, valid: true, diagnostics: [] }, journal = emptyJournal(project.common);
-  const env = { CLAUDE_CONFIG_DIR: path.join(scratch, 'claude') };
+  const env = { ...isolated, CLAUDE_CONFIG_DIR: path.join(scratch, 'claude') };
   const observation = { server: path.join(scratch, 'fixture.sock'), complete: true,
     workspaces: [{ workspace_id: 'w', worktree: { repo_key: project.common, checkout_path: cwd } }],
     tabs: [{ tab_id: 'tab-old', workspace_id: 'w' }, { tab_id: 'keep-tab', workspace_id: 'w' }],
@@ -67,7 +70,7 @@ function fixture(t, role = 'chat') {
       ? [{ pane: 'other-pane', paneSlot: 'primary' }]
       : entries.map((e, i) => ({ pane: observation.panes[i].pane_id, paneSlot: e.manifest.spec.paneSlot ?? 'primary' })) } });
   durableWrite(runtimePaths(project.common).journal, journal);
-  const f = { scratch, cwd, project, inspection, observation, facts, calls: [], uid: entries[0].manifest.metadata.uid };
+  const f = { scratch, cwd, env, project, inspection, observation, facts, calls: [], uid: entries[0].manifest.metadata.uid };
   f.journal = () => readControllerJournal(project.common);
   f.read = async () => ({ enrollment: readStandardSlots(project.common), observation: structuredClone(observation), facts: structuredClone(facts), env });
   f.preview = async () => planSessions({ inspection, ...await f.read(), journal: f.journal() });
@@ -576,3 +579,6 @@ test('plan API shows reset eligibility/vetoes and recovery state without files o
   assert.equal(fs.readFileSync(runtimePaths(f.project.common).journal, 'utf8'), before); assert.deepEqual(f.calls, []);
   assert.equal(fs.existsSync(runtimePaths(f.project.common).status), false);
 });
+
+test('session-lifecycle fixture isolates inherited session configuration and restores its caller', t =>
+  checkSessionIsolation(t, child => fixture(child)));

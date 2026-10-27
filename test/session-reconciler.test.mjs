@@ -1,3 +1,5 @@
+import { isolateSessionEnvironment } from './helpers/session-environment.mjs';
+import { checkSessionIsolation } from './helpers/session-isolation-check.mjs';
 import test from './helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -27,13 +29,14 @@ const example = name => parseManifest(fs.readFileSync(path.join(root, `test/fixt
 const document = m => `## Manifest\n\`\`\`json\n${JSON.stringify(m)}\n\`\`\`\n`;
 function fixture(t, names = ['chat']) {
   const scratch = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'sr-'))), cwd = path.join(scratch, 'repo');
+  isolateSessionEnvironment(t, scratch);
   fs.mkdirSync(cwd); t.after(() => fs.rmSync(scratch, { recursive: true, force: true }));
   const git = (...args) => execFileSync('git', ['-C', cwd, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
   git('init', '-q', '-b', 'main'); git('config', 'user.email', 'test@example.invalid'); git('config', 'user.name', 'Fixture');
   fs.writeFileSync(path.join(cwd, '.lane.json'), '{}'); git('add', '.'); git('commit', '-qm', 'fixture');
   const project = canonicalProject(cwd), org = path.join(scratch, 'record'); fs.mkdirSync(org);
   fs.writeFileSync(path.join(org, 'events.jsonl'), '');
-  const env = { ...process.env, ORG_DIR: org, HERDR_MONITOR_FLEET: path.join(scratch, 'fleet'), LANE_CONFIG: undefined,
+  const env = { ...process.env, ORG_DIR: org, LANE_CONFIG: undefined,
     XDG_STATE_HOME: path.join(scratch, 'state'), XDG_CONFIG_HOME: path.join(scratch, 'config'),
     BRAIN_SHADOW_ROOT: path.join(scratch, 'shadow'), HERDR_SOCKET_PATH: path.join(scratch, 'h.sock') };
   const entries = names.map(name => {
@@ -648,3 +651,6 @@ test('session manifests, receipts and journals retain their 1 MiB byte limit', t
   fs.writeFileSync(journalFile, journalBytes + ' ');
   assert.throws(() => readControllerJournal(f.project.common), /JSON exceeds 1 MiB/);
 });
+
+test('session-reconciler fixture isolates inherited session configuration and restores its caller', t =>
+  checkSessionIsolation(t, child => fixture(child)));

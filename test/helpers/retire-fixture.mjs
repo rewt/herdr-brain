@@ -1,3 +1,4 @@
+import { isolateSessionEnvironment } from './session-environment.mjs';
 import { fixtureEnvironment, PROMOTION_REQUEST_KEYS } from './fixture-environment.mjs';
 // Shared offline topology for retirement and the composed activation seam.
 import './memory-fixture.mjs';
@@ -28,7 +29,8 @@ export function hold(f, kind = 'file', cwd = f.repo) {
 export function isolatedEnv(t, f) {
   const old = {};
   for (const key of ['TEST_MEMORY_FILE', 'NODE_OPTIONS', 'HERDR_MONITOR_FLEET', 'HERDR_TEST_SCRATCH_ROOTS', 'MONITOR_TEST_SLOT_PATH', 'MONITOR_TEST_SLOT_COMPAT_PATH', 'XDG_STATE_HOME', ...PROMOTION_REQUEST_KEYS]) {
-    old[key] = process.env[key];
+    // HOME/fleet restoration belongs to the fixture's once-per-test owner.
+    if (key !== 'HERDR_MONITOR_FLEET') old[key] = process.env[key];
     if (f.env[key] === undefined) delete process.env[key]; else process.env[key] = f.env[key];
   }
   t.after(() => { for (const [key, value] of Object.entries(old)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; } });
@@ -39,10 +41,11 @@ export function assertNoRemoval(f) {
 }
 export function fixture(t, { merged = true, occupied = true } = {}) {
   const scratch = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'retire-path-')));
+  isolateSessionEnvironment(t, scratch);
   t.after(() => fs.rmSync(scratch, { recursive: true, force: true }));
   const repo = path.join(scratch, 'repo'), lane = path.join(scratch, 'lane'), org = path.join(scratch, 'record');
   fs.mkdirSync(repo); fs.mkdirSync(org); fs.mkdirSync(path.join(org, 'references'));
-  const env = { ...healthyMemoryEnvironment(fixtureEnvironment()), ...scratchEnvironment(scratch), ORG_DIR: org, ORG_ACTOR: 'retire-fixture', HERDR_MONITOR_FLEET: path.join(scratch, 'fleet'),
+  const env = { ...healthyMemoryEnvironment(fixtureEnvironment()), ...scratchEnvironment(scratch), ORG_DIR: org, ORG_ACTOR: 'retire-fixture',
     MONITOR_TEST_SLOT_PATH: path.join(scratch, 'slot'), MONITOR_TEST_SLOT_COMPAT_PATH: path.join(scratch, 'slot'),
     XDG_STATE_HOME: path.join(scratch, 'trusted'), HERDR_TAB_ID: '', HERDR_PANE_ID: '' };
   const git = (args, cwd = repo) => {

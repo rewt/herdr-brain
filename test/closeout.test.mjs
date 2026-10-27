@@ -38,7 +38,8 @@ import { readProjectPolicy } from '../lib/config-policy.mjs';
 import { kickCloseout } from '../lib/closeout.mjs';
 import {closeoutEvaluations} from '../lib/closeout.mjs';
 import {readCloseoutObservations,appendCloseoutObservation} from '../lib/closeout-diagnostics.mjs';
-import {closeoutWaitId,closeoutWaitState} from '../lib/closeout-status.mjs';
+import {closeoutWaitId,closeoutWaitState,registerCloseoutWait} from '../lib/closeout-status.mjs';
+import {obsoleteOutcomeDecision} from '../line-service/outcome-decision.mjs';
 import {unresolvedCloseoutEffect} from '../lib/closeout.mjs';
 
 const cli = fileURLToPath(new URL('../bin/org.mjs', import.meta.url));
@@ -639,6 +640,43 @@ test('midpoint progress line passes carry a retired session to physical removal 
   assert.deepEqual(all.filter(e=>e.type==='closeout.waiting'&&e.revision!==undefined).map(e=>e.waiting.defect),['No existing completion writer for this exact wait: bound sessions retired; physical cleanup remains queued'],'only the injected historical wait exists');
   assert.equal(f.read().actions.filter(a=>a[0]==='agent'&&a[1]==='prompt').length,1);assert.equal(f.read().actions.filter(a=>a[0]==='tab'&&a[1]==='close').length,1);
   const count=drains.length;for(let pass=0;pass<3;pass++)service.pass();assert.equal(drains.length,count,'settled history is not re-drained');
+});
+
+const floodDecision=(id,entry,source)=>({type:'item.added',id,kind:'work',role:'decision',title:'Resolve a missing completion producer or recorded refusal',accept:['fixture copy of a 052 flood proposal'],
+  meta:{route:'unblock',queue_selected:true,uncertain_outcome:{key:`flood-${id}`,check:{key:`closeout:${entry.key}`,subject:{item:'ENG-1',run:'R-1',key:entry.key,head:entry.head,source},status:'defect'}}}});
+
+test('flood backlog fixed pass defers obsolete midpoint and twin decisions from their current stage while cleanup still completes',t=>{
+  const f=setup(t,{merged:true});f.append([{type:'line-service.phase0',id:'bound',project:f.common,repo:f.repo,org:f.org,main:'main',canonical_head:f.head}]);
+  const [report]=f.report(),ready=report.closeout_targets.find(t=>t.signal==='ready'),rows=f.append([{type:'item.closed',id:'ENG-1',as:'done',completed_run:'R-1'}]),landed=rows[0].closeout_targets.find(t=>t.signal==='landed');
+  const launches=[],service=createLineService({repo:f.repo,org:f.org,to:'brain-chat',env:f.env,maxStarts:1,capacity:()=>({cap:7,count:0}),recordNotice:d=>({id:d.id,state:'record-only'}),command:(_exe,args)=>{
+    if(!args[0].endsWith('supervisor/closeout.mjs')){launches.push(args);return{status:1,stdout:'',stderr:'fixture launch refused'};}
+    const keys=JSON.parse(args[args.indexOf('--keys')+1]);return{status:0,stdout:JSON.stringify(f.drain({keys,retrySafe:true,sessionsOnly:args.includes('--sessions-only')})),stderr:''};
+  }});
+  const deferred=()=>fs.readFileSync(path.join(service.directory,'passes.jsonl'),'utf8').trim().split('\n').map(JSON.parse).findLast(r=>r.action==='pass-complete').timing.outcome_decisions_deferred;
+  service.pass();assert.equal(evaluations(f).findLast(e=>e.key===landed.key).sessions_retired,true);
+  // Parentless copies, so a closed subject's launch hold cannot be what defers them.
+  transact(f.org,()=>({add:[floodDecision('DEC-901',landed,{seq:rows[0].seq,type:'item.closed'}),floodDecision('DEC-902',ready,{seq:report.seq,type:'report.ingested'})]}),{actor:'fixture'});
+  const before=JSON.stringify(['DEC-901','DEC-902'].map(id=>fold(events(f)).items.get(id)));
+  service.pass();assert.equal(deferred(),2,'midpoint and twin proposals are both obsolete at their current stage');
+  for(let pass=0;pass<4;pass++)service.pass();
+  assert.equal(fs.existsSync(f.lane),false,'cleanup eligibility never waits on the proposals');
+  assert.equal(evaluations(f).findLast(e=>e.key===ready.key).completed,true);
+  assert.equal(deferred(),2,'completed and unqueued requests stay deferred');
+  assert.deepEqual(launches,[],'no judge launch was attempted');
+  const state=fold(events(f));assert.equal(JSON.stringify(['DEC-901','DEC-902'].map(id=>state.items.get(id))),before,'proposals are deferred, not closed or rewritten');
+  assert.equal([...state.items.values()].filter(i=>i.role==='decision').length,2,'no proposal is recreated or added');
+});
+
+test('flood backlog current refusal decisions stay owned while changed or unlinked subjects are obsolete',t=>{
+  const f=setup(t,{merged:true});f.report();const rows=f.append([{type:'item.closed',id:'ENG-1',as:'done',completed_run:'R-1'}]),source={seq:rows[0].seq,type:'item.closed'};
+  const entries=readCloseoutEntries(f.common),entry=entries.find(e=>e.source.seq===source.seq),decision=floodDecision('DEC-903',entry,source).meta.uncertain_outcome;
+  const view=()=>({events:events(f),entries,evaluations:new Map(closeoutEvaluations(f.common,f.org,events(f)).map(e=>[e.key,e]))}),item={meta:{uncertain_outcome:decision}};
+  assert.match(obsoleteOutcomeDecision(item,view()),/no current defect/,'an unevaluated request has no defect to judge');
+  const [refusal]=f.append([{type:'closeout.evaluated',key:entry.key,identity:f.common,run:'R-1',item:'ENG-1',source,revision:closeoutRevision(entry,events(f)),completed:false,reason:'EPERM native refusal'}]);
+  transact(f.org,current=>({add:registerCloseoutWait(entry,refusal,current,entries)}),{actor:'fixture'});
+  assert.equal(obsoleteOutcomeDecision(item,view()),null,'a recorded native refusal keeps its decision owner');
+  assert.match(obsoleteOutcomeDecision({meta:{uncertain_outcome:{...decision,check:{...decision.check,subject:{...decision.check.subject,source:{seq:1,type:'item.closed'}}}}}},view()),/source binding changed/);
+  assert.equal(obsoleteOutcomeDecision({meta:{uncertain_outcome:{key:'other',check:{key:'dispatch:ENG-9:input'}}}},view()),null,'non-cleanup outcome decisions keep their existing path');
 });
 
 test('session_bound supersession binds its predecessor once under the current and historical event names',t=>{

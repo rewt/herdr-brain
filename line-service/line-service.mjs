@@ -33,7 +33,7 @@ import {itemLaunchHold} from '../lib/item-launch-hold.mjs';
 import {queuePolicy,queueClass,queueSelected,orderQueue} from './priority-order.mjs';
 import {isDecision,decisionActivation,decisionRoute,decisionBrief,decisionCandidates,queueDecision,applyDecision,observeDecisionConsequences} from './decisions.mjs';
 import {outcomeFailure} from '../lib/uncertain-outcome.mjs';
-import {queueOutcomeDecision} from './outcome-decision.mjs';
+import {queueOutcomeDecision,obsoleteOutcomeDecision} from './outcome-decision.mjs';
 import {registerCloseoutWait,closeoutWait,closeoutWaitState,closeoutNextStage} from '../lib/closeout-status.mjs';
 import {transact} from '../lib/store.mjs';
 export { reviewAttempt } from './review.mjs';
@@ -160,7 +160,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
     try {
       const passStarted = performance.now();
       let workStarted=workClock();const expired=()=>workClock()-workStarted>=passBudgetMs;
-      timings = { snapshots: 0, record_snapshot_ms: 0, effect_command_ms: 0, historical_intake_skipped: 0, historical_review_skipped: 0, closeout_retained: 0,effects_journal_writes:0,notice_record_attempts:0 };
+      timings = { snapshots: 0, record_snapshot_ms: 0, effect_command_ms: 0, historical_intake_skipped: 0, historical_review_skipped: 0, closeout_retained: 0,outcome_decisions_deferred:0,effects_journal_writes:0,notice_record_attempts:0 };
       effects = readServiceJournal(journal) ?? { identity: project.identity, org, actions: {}, notices: {} };
       if (effects.identity !== project.identity || effects.org !== org) throw Error('effect journal project binding changed');
       const audit=path.join(directory,'passes.jsonl'),restored=replayNoticeAudit(audit,effects);let noticesDirty=false;
@@ -476,6 +476,12 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         return JSON.stringify({policy,candidates:orderQueue(state,[...state.items.values()].filter(i=>!i.closed&&i.kind!=='goal'),policy)
           .map(i=>[i.id,queueClass(state,i,policy),queueSelected(i)])});
       };
+      let cleanupView;
+      const obsoleteDecision=(item,{events}=snapshot)=>{
+        if(!item?.meta?.uncertain_outcome)return null;
+        if(cleanupView?.events!==events)cleanupView={events,entries:readCloseoutEntries(project.identity,{onInvalid:()=>{}}),evaluations:new Map(closeoutEvaluations(project.identity,org,events).map(e=>[e.key,e]))};
+        return obsoleteOutcomeDecision(item,cleanupView);
+      };
       const admitItems = (items,repair=false) => {
         const selection=queueSelection(snapshot.state);
         for (const item of items) {
@@ -483,6 +489,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         snapshot=current();
         if(JSON.stringify(queuePolicy(snapshot.state))!==JSON.stringify(standing)||queueSelection(snapshot.state)!==selection){log({action:'queue-selection-changed'});break;}
         if(!queueSelected(snapshot.state.items.get(item.id)))continue;
+        if(obsoleteDecision(snapshot.state.items.get(item.id))){timings.outcome_decisions_deferred++;continue;}
         const input=dispatchInput({...snapshot,item:snapshot.state.items.get(item.id),org,identity:project.identity});
         if(!input)continue;
         if(!admissionLogged){log({action:'admission-stage',preceding_work_ms:precedingWork,preceding_budget_exhausted:precedingWork>=passBudgetMs,work_budget_ms:passBudgetMs});admissionLogged=true;}
@@ -524,7 +531,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
           const occupancy = countCapacity(dispatchPool({item:snapshot.state.items.get(item.id),job:{reviewQueue:reviewTarget}}));latestOccupancy=occupancy; log({ action: 'capacity', ...occupancy });
           const dispatched = effect(continuation?`dispatch-preflight:${continuation.token}:${continuation.key}`:dispatchKey, fresh => {
             const current = fresh.state.items.get(item.id);
-            if (!current || !queueSelected(current) || itemLaunchHold(fresh.state,item.id) || dispatchInput({...fresh,item:current,org,identity:project.identity}) !== input || reserved(current) || (!continuation&&(reviewTarget ? reviewQueueRoute(config) : routeFor(current, config)) !== route)) throw Error('dispatch readiness or route changed');
+            if (!current || !queueSelected(current) || obsoleteDecision(current,fresh) || itemLaunchHold(fresh.state,item.id) || dispatchInput({...fresh,item:current,org,identity:project.identity}) !== input || reserved(current) || (!continuation&&(reviewTarget ? reviewQueueRoute(config) : routeFor(current, config)) !== route)) throw Error('dispatch readiness or route changed');
             if(briefRecovery){effects.actions[key].prejournal_recovery={...briefRecovery,key:dispatchKey,at:now()};save();log({action:'prejournal-recovery',key,recovery:effects.actions[key].prejournal_recovery});}
             if(continuation){
               const checked=preflightContinuation({journal:continuation.journal,repo,org,common:project.identity,root:fs.realpathSync(sourceRoot),events:fresh.events});

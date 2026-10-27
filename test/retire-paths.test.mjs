@@ -362,7 +362,11 @@ test('retirement hold: drain catch-up acknowledges ready first and leaves the hi
   process.send = m => { messages.push(m); return true; };
   process.stderr.write = function(chunk, ...args) { outputs.push({ text: String(chunk), ready: messages.some(m => m.ready) }); return write.call(this, chunk, ...args); };
   t.after(() => { process.send = send; process.stderr.write = write; });
-  requestRetirement({ org: f.org, eventSeq: 4, source: 'completion' }); await drain(queue);
+  requestRetirement({ org: f.org, eventSeq: 4, source: 'completion' });
+  // Notice correlation must resolve the same disposable project as the queue.
+  const cwd = process.cwd();
+  try { process.chdir(f.repo); await drain(queue); }
+  finally { process.chdir(cwd); }
   assertNoRemoval(f); assert.deepEqual(messages, [{ ready: true }]);
   assert.equal(fs.existsSync(path.join(f.org, 'retirement/handled.json')), false);
   const held = outputs.filter(row => row.text.includes('"action":"held"')); assert.ok(held.length >= 2, JSON.stringify(outputs));

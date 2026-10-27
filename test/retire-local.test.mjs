@@ -62,6 +62,53 @@ test('cleanup tail target seal follows alias additions redirects and ambiguity l
   }
 });
 
+function nativeReceipts(f){
+  const common=path.join(f.root,'common'),lane=path.join(f.root,'lane'),other=path.join(f.root,'other'),alias=path.join(f.root,'alias');
+  for(const dir of [common,lane,other,alias,path.join(f.retirement,'exits'),path.join(f.retirement,'reviews')])fs.mkdirSync(dir,{recursive:true});
+  const shell={pid:11,identity:'shell-identity',command:'zsh'},process={pid:12,identity:'process-identity',command:'node'};
+  const occupant=o=>({schema:'retirement-occupant/v1',kind:'watcher',common,cwd:other,workspace:'wOther',tab:'tOther',pane:'pOther',shell,process,...o});
+  const exit=o=>({schema:'retirement-exit/v1',common,cwd:other,workspace:'wOther',tab:'tOther',pane:'pOther',run:'R-8',
+    occupant:{name:'other',agent:'claude',pane_id:'pOther',workspace_id:'wOther',cwd:other,terminal_id:'termOther'},shell,at:'2026-10-27T00:00:00.000Z',...o});
+  const review=o=>({schema:'retirement-review/v1',common,run:'R-8',verdict:'PASS',head:'a'.repeat(40),evidence:path.join(other,'review.md'),sha256:'b'.repeat(64),
+    pane:'pOther',terminal:'termOther',session:'sOther',workspace:'wOther',cwd:other,agent:'reviewer',record_seq:1,process,shell,tab:'tOther',followup_expected:false,at:'2026-10-27T00:00:00.000Z',id:'r1',...o});
+  const put=(dir,name,data)=>fs.writeFileSync(path.join(f.retirement,dir,name),JSON.stringify(data));
+  const context={common,cwd:lane,runs:['R-1'],items:['ENG-1'],panes:['pTarget'],tabs:['tTarget'],terminals:['termTarget'],workspaces:['wTarget'],sessions:['sTarget']};
+  return {common,lane,other,alias,occupant,exit,review,put,context};
+}
+
+test('cleanup tail target seal ignores unrelated native receipt additions edits and removals by workspace ID',async t=>{
+  const {sealScopedRemovalInputs}=await import('../lib/retire-local.mjs'),f=fixture(t),n=nativeReceipts(f);
+  n.put('occupants','runless.json',n.occupant());n.put('occupants','gone.json',n.occupant({kind:'executive',run:'R-7'}));
+  n.put('exits','exit.json',n.exit());n.put('reviews','review.json',n.review());
+  n.put('occupants','target.json',n.occupant({cwd:n.lane,workspace:'wTarget',tab:'tTarget',pane:'pTarget',run:'R-1'}));
+  const verify=sealScopedRemovalInputs([f.retirement],n.context);
+  n.put('occupants','runless.json',n.occupant({process:{pid:13,identity:'replaced',command:'node'}}));
+  n.put('occupants','added.json',n.occupant({workspace:'wAnother',tab:'tAnother',pane:'pAnother'}));
+  n.put('exits','exit.json',n.exit({at:'2026-10-27T01:00:00.000Z'}));n.put('exits','added.json',n.exit({run:'R-6',workspace:'wAnother'}));
+  n.put('reviews','added.json',n.review({id:'r2',verdict:'FAIL'}));fs.unlinkSync(path.join(f.occupants,'gone.json'));fs.unlinkSync(path.join(f.retirement,'reviews','review.json'));
+  assert.doesNotThrow(verify,'native workspace IDs are not paths; unrelated native activity keeps the target seal');
+});
+
+test('cleanup tail target seal refuses matching native receipts and canonical aliases with workspace IDs present',async t=>{
+  const {sealScopedRemovalInputs}=await import('../lib/retire-local.mjs');
+  for(const kind of ['workspace-addition','session-addition','matching-edit','incomplete-addition','common-only-alias','cwd-only-alias','redirect-toward','redirect-away']){
+    const f=fixture(t),n=nativeReceipts(f),moving=path.join(n.alias,'moving');
+    fs.symlinkSync(n.common,path.join(n.alias,'common'));fs.symlinkSync(n.lane,path.join(n.alias,'lane'));fs.symlinkSync(kind==='redirect-away'?n.lane:n.other,moving);
+    n.put('occupants','target.json',n.occupant({cwd:n.lane,workspace:'wTarget',tab:'tTarget',pane:'pTarget'}));
+    const start={'common-only-alias':n.exit({common:path.join(n.alias,'common'),cwd:n.lane}),'cwd-only-alias':n.exit({cwd:path.join(n.alias,'lane')}),
+      'redirect-toward':n.exit({cwd:moving}),'redirect-away':n.exit({cwd:moving})}[kind];
+    if(start)n.put('exits','row.json',start);
+    const verify=sealScopedRemovalInputs([f.retirement],n.context);
+    if(kind==='workspace-addition')n.put('occupants','added.json',n.occupant({workspace:'wTarget'}));
+    if(kind==='session-addition')n.put('reviews','added.json',n.review({session:'sTarget'}));
+    if(kind==='matching-edit')n.put('occupants','target.json',n.occupant({cwd:n.lane,workspace:'wTarget',tab:'tTarget',pane:'pTarget',run:'R-1'}));
+    if(kind==='incomplete-addition')n.put('exits','added.json',n.exit({run:''}));
+    if(kind.endsWith('-alias'))n.put('exits','row.json',{...start,at:'2026-10-27T01:00:00.000Z'});
+    if(kind.startsWith('redirect-')){fs.unlinkSync(moving);fs.symlinkSync(kind==='redirect-toward'?n.lane:n.other,moving);}
+    assert.throws(verify,/changed/,kind);
+  }
+});
+
 test('an ignored receipt symlink is sealed without following it', t => {
   const f = fixture(t), link = path.join(f.occupants, 'ignored.json');
   fs.symlinkSync(f.external, link);

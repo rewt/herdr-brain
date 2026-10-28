@@ -17,7 +17,9 @@ import { claimRun, ownerBinding, fenceOwner, readOwnedRun, assertOwner, outstand
 import { queueFor, enqueue } from '../promote/promote.mjs';
 import { readInbox } from '../supervisor/prompt-supervisor.mjs';
 import { receiptDirectory } from '../supervisor/context.mjs';
-import { spawnChild, waitForExit, killChild } from './helpers/child.mjs';
+import { spawnChild, waitForExit, childProcessEntry } from './helpers/child.mjs';
+import { lookupProcess } from './helpers/processes.mjs';
+import { stopFixtureProcessTree } from './helpers/inbox.mjs';
 import { until } from './helpers/producer-wait.mjs';
 import { tierFiles } from './helpers/tier.mjs';
 
@@ -54,8 +56,13 @@ const waitForWatcherWait = (f, w, t) => whileWatcher(w, t, () => {
 const finishWatcher = async w => {
   // Fixture cleanup joins pending children before the child teardown hooks.
   // Reap this owned child here even when a startup/assertion failure unwinds.
-  const cleanup = killChild(w.child);
-  assert.ok(cleanup.ok && cleanup.reason !== 'changed', 'watcher cleanup ownership unconfirmed');
+  if (w.child.exitCode === null && w.child.signalCode === null) {
+    const caller = lookupProcess(process.pid);
+    assert.ok(caller.ok && caller.value, 'watcher cleanup group unconfirmed');
+    await stopFixtureProcessTree(childProcessEntry(w.child), {
+      ownerGroup: caller.value.pgid, description: 'owned run-ownership watcher',
+    });
+  }
   await w.done;
 };
 function enqueueAdapter(f, runtime = source) {
@@ -537,6 +544,22 @@ test('a blocking idle watcher keeps one wait and an unchanged receipt between si
     assert.equal(fs.statSync(file).mtimeMs, stat, 'no idle receipt rewrites');
     f.report(run); ok(await w.done);
   } finally { await finishWatcher(w); }
+});
+
+test('watcher startup failure reaps its owned blocking transport before fixture cleanup', async t => {
+  const f = fixture(t), run = f.start(), herdr = path.join(f.root, 'bin/herdr');
+  const adapter = fs.readFileSync(herdr, 'utf8'), wait = 'await new Promise(r=>setTimeout(r,100));out({});';
+  assert.ok(adapter.includes(wait));
+  fs.writeFileSync(herdr, adapter.replace(wait, 'while(true)await new Promise(r=>setTimeout(r,1000));'));
+  const w = f.concurrent(run, path.join(source, 'watch/watch.mjs'), ['--org', f.org, '--cwd', f.repo, '--start-grace', '60']);
+  try {
+    await waitForWatcherWait(f, w, t);
+    // A complete malformed row must still fail, rather than being mistaken
+    // for a pending append. The existing fixture teardown must then finish.
+    fs.appendFileSync(path.join(f.root, 'calls'), 'malformed\n');
+    await assert.rejects(waitForWatcherWait(f, w, t), SyntaxError);
+  } finally { await finishWatcher(w); }
+  assert.equal((await w.done).signal, 'SIGKILL');
 });
 
 test('self-tab close may kill its watcher without leaving an outstanding cleanup intent', async t => {

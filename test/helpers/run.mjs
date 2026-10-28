@@ -71,7 +71,9 @@ if (worker) {
       if (capture && this.stderr) {
         capture.started = true;
         capture.pid = this.pid;
-        this.once('exit', (exit_code, signal) => { capture.nativeExit = { exit_code, signal }; });
+        this.once('exit', (exit_code, signal) => {
+          capture.nativeExit = { exit_code, signal, pid: this.pid, at: new Date().toISOString() };
+        });
         // Node 20's test:stderr events are line-normalized, and its file runner
         // waits for stdout but not stderr. Retain bytes at the native pipe.
         this.stderr.on('data', bytes => { if (capture.fd !== null) fs.writeFileSync(capture.fd, bytes); });
@@ -243,6 +245,25 @@ if (worker) {
   });
   let owner, finished = false, watcher, timedOutFile;
   const fileArtifacts = new Map(), fileCompletions = new Map();
+  function recoverFileTiming(completion) {
+    const native = completion.native_exit;
+    if (!native) return;
+    // The native exit is later than the file's last possible exit hook. Only
+    // its own coordinator fills a missing finish before forwarding completion;
+    // enclosing coordinators and lost-IPC recovery then see the same closed ID.
+    const rows = timingJournal.readTimings(process.env[TIMINGS_ENV]);
+    const closed = new Set(rows.filter(row => row.event === 'finish').map(row => row.id));
+    for (const row of rows.filter(row => row.kind === 'file' && row.event === 'start' &&
+        row.suite === finishTiming.id && row.pid === native.pid &&
+        path.resolve(row.name) === completion.file && !closed.has(row.id))) {
+      const signal = native.signal ?? native.received_signal;
+      timing({ ...row, event: 'finish', file_pid: row.pid,
+        duration_s: Math.max(0, (Date.parse(native.at) - Date.parse(row.at)) / 1000),
+        exit_code: completion.exit_code, native_exit: native, ...(signal ? { signal } : {}),
+        observed_by: 'coordinator', reason: 'native-exit' });
+      closed.add(row.id);
+    }
+  }
   let pendingOutput = 0, outputFailed = false, checkDrain = () => {};
   let lastGroupProgress = 0, groupOutputBytes = 0;
   const pipes = [child.stdout, child.stderr], closedPipes = new Set();
@@ -343,6 +364,7 @@ if (worker) {
               reason: timedOutFile ? (reference.file === timedOutFile ? 'file-timeout' : 'suite-cancelled') : 'worker-exit' };
             fs.writeFileSync(reference.completion_artifact, JSON.stringify(completion) + '\n', { flag: 'wx', mode: 0o600 });
           }
+          recoverFileTiming(completion);
           // The worker may never have copied this file to the build log. Its
           // raw stderr and partial TAP remain separate durable artifacts too.
           if (fileGroup && process.connected) process.send({ fileTapComplete: completion });
@@ -377,6 +399,7 @@ if (worker) {
     if (message.fileTapComplete) {
       const completion = message.fileTapComplete;
       if (fileArtifacts.delete(completion.file)) {
+        recoverFileTiming(completion);
         if (fileGroup && process.connected) process.send(message);
         else fileCompletions.set(completion.file, completion);
       }

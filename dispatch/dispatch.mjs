@@ -65,6 +65,8 @@ let releaseAdmission;
 let controllerDeadline=Infinity;
 let preflight;
 let reviewContinuation;
+let completionAttempted = false;
+const sourceConflict = error => ['RECORD_GUARD_CONFLICT', 'RECORD_OBSERVATION_CONFLICT'].includes(error.code);
 function originalReviewContinuation(saved){
   const events=loadEvents(saved.org).events,proof=originalPrestartProof({events,org:saved.org,common:saved.common,journal,job:saved,requestHash:reviewDigest(reviewPlain(journal))});
   if(proof?.type!=='review.original-continuation'){
@@ -89,10 +91,20 @@ const atomic = (file, value) => {
   fs.renameSync(temp, file);
 };
 const save = () => {
-  const write = () => atomic(journal, job);
-  if (job.ownership && job.run) return fenceOwner(job.org, job.run, job.ownership, write);
-  if (job.predecessor) return fenceOwner(job.org, job.predecessor.run, job.predecessor.binding, write);
-  return write();
+  // Only re-prepare the read-only owner check. The guarded journal write must
+  // never replay, nor may a retry refresh the saved claim or launch a worker.
+  for (let attempt = 0; ; attempt++) {
+    let writing = false;
+    const write = () => { writing = true; return atomic(journal, job); };
+    try {
+      if (job.ownership && job.run) return fenceOwner(job.org, job.run, job.ownership, write);
+      if (job.predecessor) return fenceOwner(job.org, job.predecessor.run, job.predecessor.binding, write);
+      return write();
+    } catch (error) {
+      if (writing) error.dispatchJournalEffectStarted = true;
+      if (writing || attempt >= 31 || !sourceConflict(error)) throw error;
+    }
+  }
 };
 function claimAdmission() {
   if (!job.run) return;
@@ -781,39 +793,54 @@ async function main() {
   delete job.error;delete job.failure; save();
   outputReceipt();
 }
-function outputReceipt() {
+function outputReceipt(pending) {
+  // Publish before returning success. Exhausted publication is bookkeeping
+  // still pending on this same launch, never a failed start for callers to redo.
+  completionAttempted = true;
+  try { recordDispatchCompletion({ job, journal, exitCode: 0 }); }
+  catch (error) {
+    pending ??= { reason: error.message };
+    process.stderr.write(`dispatch: completion status could not be recorded: ${error.message}\n`);
+  }
+  const completion = pending ? { status: 'pending', ...pending, retry: `node dispatch/dispatch.mjs --retry ${job.run}` } : undefined;
   const binding = job.sessionBinding?.proposed && job.sessionBinding.status === 'observing'
     ? { status: 'unknown', retry: `node dispatch/dispatch.mjs --retry ${job.run}` }
     : { status: job.sessionBinding?.status ?? (job.worker.agentSessionId ? 'recorded' : 'unbound') };
   process.stdout.write(`${JSON.stringify({ run: job.run, item: job.item, lane: job.lane, route: job.route, ...job.declared,
-    agent: job.worker.agentName, pane: job.worker.pane, watcher: job.watcher, journal, binding, legacy: job.unlandedCap?.legacy })}\n`);
+    agent: job.worker.agentName, pane: job.worker.pane, watcher: job.watcher, journal, binding, legacy: job.unlandedCap?.legacy,
+    ...(completion ? { result: 'launched', completion } : {}) })}\n`);
 }
 try { await main(); }
 catch (error) {
-  if (job && journal && ownsLock) {
-    job.error = error.message;
-    job.failure={...outcomeFailure(error),kind:['DISPATCH_SESSION_CAP','DISPATCH_REVIEW_CAP','DISPATCH_DECISION_CAP'].includes(error.code)?'capacity':outcomeFailure(error).kind,stage:job.stage,observed_at:new Date().toISOString(),native_launch_attempted:job.native_launch_attempted??null,...(error.sessions?{capacity:error.sessions}:{}),...(error.launch_input?{launch_input:error.launch_input}:{})};
-    if(job.detached&&!job.native_launch_attempted&&!job.worker&&!['starting','launching','prompting'].includes(job.stage))job.detached_refused=true;
-    save();
-    if (job.run) try { note(`incomplete at ${job.stage}: ${error.message}; retry with --retry ${job.run}`); } catch {}
-  }
-  process.stderr.write(`dispatch: ${error.message}${journal ? `\nrequest: ${journal}` : ''}\n`);
-  if (error.code === 'DISPATCH_STOPPED') {
-    process.stdout.write(`${JSON.stringify({ result: 'stopped', run: job.run, item: job.item, lane: job.lane,
-      reason: error.message, stage: job.stage, journal })}\n`);
-  } else if (error.code === RESERVATION_WAIT_EXPIRED_CODE) {
-    process.stdout.write(`${JSON.stringify({ result: 'deferred', code: error.code, reason: error.message,
-      elapsed_ms: error.elapsed_ms, run: job.run, item: job.item, stage: job.stage, journal })}\n`);
-    process.exitCode = 75;
-  } else if (error.code === 'DISPATCH_HOOK_REVIEW') {
-    process.stdout.write(`${JSON.stringify({ result: 'blocked', code: error.code, run: job.run, item: job.item,
-      agent: job.worker.agentName, pane: job.worker.pane, reason: error.message, stage: job.stage, journal })}\n`);
-    process.exitCode = 1;
+  if (job?.stage === 'complete' && ownsLock && sourceConflict(error) && !error.dispatchJournalEffectStarted) {
+    process.stderr.write(`dispatch: launch delivered; completion pending: ${error.message}\nrequest: ${journal}\n`);
+    outputReceipt({ reason: error.message });
   } else {
-    // Coordinators inherit stderr for live waits; retain failure evidence on
-    // their captured stdout as well, including failures before a journal exists.
-    process.stdout.write(`${JSON.stringify({ result: 'failed', code: dispatchCodes.has(error.code) ? error.code : 'DISPATCH_FAILED', reason: error.message, journal })}\n`);
-    process.exitCode = 1;
+    if (job && journal && ownsLock) {
+      job.error = error.message;
+      job.failure={...outcomeFailure(error),kind:['DISPATCH_SESSION_CAP','DISPATCH_REVIEW_CAP','DISPATCH_DECISION_CAP'].includes(error.code)?'capacity':outcomeFailure(error).kind,stage:job.stage,observed_at:new Date().toISOString(),native_launch_attempted:job.native_launch_attempted??null,...(error.sessions?{capacity:error.sessions}:{}),...(error.launch_input?{launch_input:error.launch_input}:{})};
+      if(job.detached&&!job.native_launch_attempted&&!job.worker&&!['starting','launching','prompting'].includes(job.stage))job.detached_refused=true;
+      save();
+      if (job.run) try { note(`incomplete at ${job.stage}: ${error.message}; retry with --retry ${job.run}`); } catch {}
+    }
+    process.stderr.write(`dispatch: ${error.message}${journal ? `\nrequest: ${journal}` : ''}\n`);
+    if (error.code === 'DISPATCH_STOPPED') {
+      process.stdout.write(`${JSON.stringify({ result: 'stopped', run: job.run, item: job.item, lane: job.lane,
+        reason: error.message, stage: job.stage, journal })}\n`);
+    } else if (error.code === RESERVATION_WAIT_EXPIRED_CODE) {
+      process.stdout.write(`${JSON.stringify({ result: 'deferred', code: error.code, reason: error.message,
+        elapsed_ms: error.elapsed_ms, run: job.run, item: job.item, stage: job.stage, journal })}\n`);
+      process.exitCode = 75;
+    } else if (error.code === 'DISPATCH_HOOK_REVIEW') {
+      process.stdout.write(`${JSON.stringify({ result: 'blocked', code: error.code, run: job.run, item: job.item,
+        agent: job.worker.agentName, pane: job.worker.pane, reason: error.message, stage: job.stage, journal })}\n`);
+      process.exitCode = 1;
+    } else {
+      // Coordinators inherit stderr for live waits; retain failure evidence on
+      // their captured stdout as well, including failures before a journal exists.
+      process.stdout.write(`${JSON.stringify({ result: 'failed', code: dispatchCodes.has(error.code) ? error.code : 'DISPATCH_FAILED', reason: error.message, journal })}\n`);
+      process.exitCode = 1;
+    }
   }
 } finally {
   releaseAdmission?.();
@@ -821,7 +848,7 @@ catch (error) {
     fs.mkdirSync(`${journal}.driver`,{recursive:true});const fd=fs.openSync(`${journal}.driver/results.jsonl`,'a',0o600);
     try{fs.writeFileSync(fd,JSON.stringify({at:new Date().toISOString(),journal,stage:job.stage,run:job.run,exit_code:process.exitCode??0,error:job.error??null,code:job.failure?.code??null,native_launch_attempted:job.native_launch_attempted??null})+'\n');fs.fsyncSync(fd);}finally{fs.closeSync(fd);}
   }
-  if(job&&journal&&ownsLock&&(job.stage==='complete'||process.exitCode))try{recordDispatchCompletion({job,journal,exitCode:process.exitCode??0});}catch(error){process.stderr.write(`dispatch: completion status could not be recorded: ${error.message}\n`);process.exitCode??=1;}
+  if(!completionAttempted&&job&&journal&&ownsLock&&(job.stage==='complete'||process.exitCode))try{recordDispatchCompletion({job,journal,exitCode:process.exitCode??0});}catch(error){process.stderr.write(`dispatch: completion status could not be recorded: ${error.message}\n`);process.exitCode??=1;}
   if (ownsLock) try { if (fs.readFileSync(lock, 'utf8') === String(process.pid)) fs.unlinkSync(lock); } catch {}
   if (contender) try { fs.unlinkSync(contender); } catch {}
 }

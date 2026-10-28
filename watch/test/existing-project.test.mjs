@@ -9,10 +9,21 @@ import { waitForInboxIdle, stopFixtureInbox } from '../../test/helpers/inbox.mjs
 import { readInbox } from '../../supervisor/prompt-supervisor.mjs';
 import { noticeLock, ownerPid } from '../../supervisor/notice-lock.mjs';
 import { gitProject } from '../../lib/project.mjs';
+import { loadTimeout } from '../../lib/deadline.mjs';
 
 const monitor = path.resolve(import.meta.dirname, '../..');
 const arm = path.join(monitor, 'supervisor/arm-watch.sh');
 const cli = path.join(monitor, 'bin/org.mjs');
+
+async function waitForNotice(inbox, predicate) {
+  const deadline = Date.now() + loadTimeout(10000);
+  do {
+    const entry = readInbox(inbox)[0];
+    if (entry && predicate(entry)) return entry;
+    await new Promise(resolve => setTimeout(resolve, 20));
+  } while (Date.now() < deadline);
+  assert.fail(`notice did not reach the expected state: ${JSON.stringify(readInbox(inbox))}`);
+}
 
 function fixture(t, outcome = 'done', { autopilot = true } = {}) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'bch-notices-')));
@@ -24,7 +35,7 @@ function fixture(t, outcome = 'done', { autopilot = true } = {}) {
     GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1',
     MONITOR_SUPERVISOR_AGENT: 'wrong-inherited-supervisor',
     SUPERVISOR_INPUT_CONFIRM_SECONDS: '0.01', SUPERVISOR_INPUT_POLL_SECONDS: '0.01',
-    SUPERVISOR_INPUT_WAIT_SECONDS: '2' };
+    SUPERVISOR_INPUT_WAIT_SECONDS: String(loadTimeout(10000) / 1000) };
   fs.mkdirSync(repo, { recursive: true }); fs.mkdirSync(bin);
   const runCommand = (file, args, cwd = repo) => {
     const r = spawnSync(file, args, { cwd, env, encoding: 'utf8' });
@@ -57,7 +68,7 @@ function fixture(t, outcome = 'done', { autopilot = true } = {}) {
 import fs from 'node:fs';
 const a = process.argv.slice(2);
 fs.appendFileSync(${JSON.stringify(calls)}, JSON.stringify(a)+'\\n');
-if(a[0]==='agent' && a[1]==='get') console.log(JSON.stringify({result:{agent:{name:a[2],agent:'claude',agent_status:a[2]==='supervisor-opus'?${JSON.stringify(outcome === 'done' ? 'working' : 'done')}:'done',pane_id:'scratch:supervisor'}}}));
+if(a[0]==='agent' && a[1]==='get') console.log(JSON.stringify({result:{agent:{name:a[2],agent:'claude',agent_status:a[2]==='supervisor-opus'?${JSON.stringify(outcome === 'done' ? 'working' : 'done')}:'done',pane_id:'scratch:supervisor',terminal_id:'scratch:supervisor-terminal'}}}));
 else if(a[0]==='pane' && a[1]==='read') console.log('────────────────────\\n❯ \\n────────────────────');
 else if(a[0]==='agent' && a[1]==='prompt') console.log('{}');
 else process.exit(91);
@@ -134,16 +145,22 @@ test('an existing project exception reaches its named supervisor through its own
   assert.match(prompts[0][3], /outcome=blocked/); assert.equal(f.actions().length, 0);
 });
 
-test('an opted-in existing project handles a done notice while a live drainer holds the inbox lock', async t => {
+test('an opted-in existing project retains a done notice until the live drainer releases the inbox lock', async t => {
   const f = fixture(t), lock = `${f.inbox}.drain.lock`, release = noticeLock(lock);
   try {
     const child = spawnChild(t, process.execPath, [path.join(monitor, 'watch/watch.mjs'), ...f.args.slice(1)], { cwd: monitor, env: f.env });
+    // Policy and input share the drain lock so dependent notices cannot race.
+    const pending = await waitForNotice(f.inbox, entry => entry.owner_pid);
+    assert.equal(pending.state, 'pending'); assert.equal(pending.autopilot, undefined);
+    assert.equal(f.actions().length, 0);
+    assert.equal(f.calls().some(a => a[1] === 'prompt'), false);
+    assert.equal(ownerPid(lock), process.pid, 'policy must leave the live drain owner intact');
+    release();
     const finished = await waitForExit(child);
     assert.equal(finished.code, 0, finished.stderr);
     assert.equal(readInbox(f.inbox)[0].state, 'handled');
     assert.equal(f.actions().length, 1);
     assert.equal(f.calls().some(a => a[1] === 'prompt'), false);
-    assert.equal(ownerPid(lock), process.pid, 'policy must leave the live drain owner intact');
   } finally { release(); }
 });
 
@@ -155,7 +172,8 @@ test('an unconfigured existing project retains its done notice for a busy superv
   const finished = await waitForExit(child);
   assert.equal(finished.code, 1, finished.stderr);
   assert.match(finished.stderr, /could not deliver to supervisor-opus/);
-  const [entry] = readInbox(f.inbox);
+  // A zero-wait caller hands policy to the acknowledged background owner.
+  const entry = await waitForNotice(f.inbox, entry => entry.autopilot);
   assert.equal(entry.state, 'pending'); assert.equal(entry.to, 'supervisor-opus');
   assert.equal(entry.autopilot.disposition, 'wake');
   assert.equal(entry.autopilot.summary, entry.message);

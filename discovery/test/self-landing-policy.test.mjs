@@ -19,8 +19,15 @@ test('entry policies keep ordinary landing with workers and supervisor authority
   const worker = entryPolicy({ ...context, role: 'worker' }, root);
   assert.ok(worker.includes(`${root}/lanes/lane.mjs`));
   assert.match(worker, /promote TOPIC --expected-head FULL_COMMIT/);
-  assert.match(worker, /--parallel-review --run RUN --captured-head FULL_COMMIT --captured-base BASE_COMMIT --round 1 --timeout 0/);
+  assert.match(worker, /Hand immutable landed base\/head and producer evidence through your report to the single existing record queue-review path/);
+  assert.match(worker, /the line service creates\/dispatches ONE independent async post-code diff\/evidence review, cap1/);
+  assert.match(worker, /Never start a manual settle\/lane review, add a second reviewer, wait for a verdict to land, or replace an existing\/UNKNOWN attempt/);
+  assert.doesNotMatch(worker, /review TOPIC|--parallel-review|--captured-head|--captured-base/);
   assert.match(worker, /zero reviewer suites/);
+  assert.match(worker, /A final report and review verdict are not pre-main gates/);
+  assert.match(worker, /Own at most one formal correction, then fix forward/);
+  assert.match(worker, /retain an existing bootstrap watcher and its saved recipient\/runtime\/claims/);
+  assert.match(worker, /exceptions to your PROJECT SUPERVISOR at its recorded project-specific exception address/);
   assert.match(worker, /native identity\/claim.*source\/CAS\/fast-forward, STOP, HOLD and archives/);
   assert.match(worker, /Workers never run the release gate or start housekeeping/);
   assert.match(worker, /signed landing\/report clocks/);

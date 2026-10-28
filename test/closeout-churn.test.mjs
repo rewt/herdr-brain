@@ -14,19 +14,22 @@ function fixture(t){
 }
 
 test('source churn joins one immediate fresh turn after releasing locks and closes the original target',t=>{
-  const f=fixture(t);let handoffs=0,drains=0;
-  const args={project:f.project,org:f.org,env:f.env,guard:()=>{},measure:()=>{},maxSteps:1,cli:(file,argv)=>{
+  const f=fixture(t);let handoffs=0,drains=0,censuses=0;
+  const args={project:f.project,org:f.org,env:f.env,guard:()=>{},measure:()=>{censuses++;},maxSteps:1,cli:(file,argv)=>{
     if(argv[0]==='refresh')return '{}';
     if(file==='line-service/closeout.mjs'){
       handoffs++;assert.ok(argv.includes('--no-handoff'));
+      assert.equal(censuses,0,'obsolete census cannot consume the successor allowance');
       for(const lock of [path.join(f.directory,'closeout-turn.lock'),path.join(f.org,'lock'),path.join(f.common,'closeout/consumer.lock')])assert.equal(fs.existsSync(lock),false,lock);
       assert.ok(Number(argv[argv.indexOf('--deadline')+1])<=Date.now()+45000);
+      assert.ok(Number.isSafeInteger(Number(argv[argv.indexOf('--deadline')+1])));
       return JSON.stringify(runCloseoutTurn({...args,handoff:false}));
     }
     if(drains++===0)return JSON.stringify({restart:{keys:JSON.parse(argv[argv.indexOf('--keys')+1]),old:{code:'old'},current:{code:'fresh'}}});
     return JSON.stringify(f.drain({keys:JSON.parse(argv[argv.indexOf('--keys')+1]),retrySafe:true}));
   }};
   const result=runCloseoutTurn(args);assert.equal(result.result,'closeout-code-handoff');assert.equal(handoffs,1);
+  assert.equal(censuses,1);
   assert.equal(result.successor.steps,1);assert.equal(fs.existsSync(f.lane),false);
   assert.equal(effects(f).filter(e=>e.action==='agent-exit-requested').length,1);
   assert.equal(effects(f).filter(e=>e.action==='closed'&&e.tab_id).length,1);

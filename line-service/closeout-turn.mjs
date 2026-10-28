@@ -18,7 +18,8 @@ import {recordCloseoutTurn} from './closeout-measurement.mjs';
 export const closeoutServiceDirectory=(org,common)=>path.join(org,'line-service',createHash('sha256').update(JSON.stringify(common)).digest('hex').slice(0,20));
 export function runCloseoutTurn(options) {
   const clock=options.clock??(()=>performance.now()),now=options.now??(()=>Date.now()),started=clock();
-  try{return closeoutTurn(options);}
+  let successor=false,contended=false;
+  try{const result=closeoutTurn(options);contended=Boolean(result.already_running);return result;}
   catch(error){
     // The old turn's finally has released every owner/native/record lock. Join
     // exactly one fresh physical-code process inside the ORIGINAL allowance;
@@ -27,13 +28,23 @@ export function runCloseoutTurn(options) {
     if(options.handoff===false)return{result:'closeout-code-handoff-pending',reason:'bounded fresh successor also changed; original obligations retained',old:error.binding,current:error.current};
     const remaining=(options.budgetMs??45000)-(clock()-started);
     if(remaining<=0)return{result:'closeout-code-handoff-pending',reason:'original finite allowance spent',old:error.binding,current:error.current};
-    const result=JSON.parse(options.cli('line-service/closeout.mjs',['--once','--repo',options.project.canonical,'--org',options.org,
-      '--no-handoff','--deadline',String(now()+Math.max(1,remaining))]));
+    const reply=options.cli('line-service/closeout.mjs',['--once','--repo',options.project.canonical,'--org',options.org,
+      '--no-handoff','--deadline',String(Math.floor(now()+Math.max(1,remaining)))]);
+    successor=true;const result=JSON.parse(reply);
     return{result:'closeout-code-handoff',old:error.binding,current:error.current,successor:result};
+  }finally{
+    // The successor writes the one census for a handed-off logical turn. Do
+    // not spend its effect allowance on obsolete code's diagnostic inventory.
+    if(!successor&&!contended)measureTurn(options);
   }
 }
+function measureTurn({project,org,env=process.env,now=()=>Date.now(),measure=recordCloseoutTurn}) {
+  try{measure({project,org,env,now});}
+  catch(error){try{fs.appendFileSync(path.join(closeoutServiceDirectory(org,project.identity),'closeout.log'),JSON.stringify({action:'closeout-measurement-failed',
+    at:new Date(now()).toISOString(),reason:error.message})+'\n',{mode:0o600});}catch{/* Diagnostics cannot alter the turn result. */}}
+}
 function closeoutTurn({project,org,cli,guard,env=process.env,maxSteps=8,budgetMs=45000,
-  clock=()=>performance.now(),now=()=>Date.now(),fault=()=>{},measure=recordCloseoutTurn}) {
+  clock=()=>performance.now(),now=()=>Date.now(),fault=()=>{}}) {
   const directory=closeoutServiceDirectory(org,project.identity),file=path.join(directory,'closeout-turn.json');
   fs.mkdirSync(directory,{recursive:true});
   let release;
@@ -134,12 +145,5 @@ function closeoutTurn({project,org,cli,guard,env=process.env,maxSteps=8,budgetMs
       ingest:Math.max(0,pending.length-ingested),closeout:Math.max(0,scheduled.length-steps),reconcile_committed_sources:true};
     save();fault('before-ack');
     return{result:'closeout-turn-complete',ingested,steps,errors,continuation:state.continuation};
-  }finally{
-    release();
-    // Census is diagnostic, outside record/native/turn locks, and cannot alter
-    // an effect result or turn failure. The existing wake supplies its cadence.
-    try{measure({project,org,env,now});}
-    catch(error){try{fs.appendFileSync(path.join(directory,'closeout.log'),JSON.stringify({action:'closeout-measurement-failed',
-      at:new Date(now()).toISOString(),reason:error.message})+'\n',{mode:0o600});}catch{/* Preserve the original turn result even if diagnostics are unavailable. */}}
-  }
+  }finally{release();}
 }

@@ -110,3 +110,10 @@ test('batch promotion prepares every record before taking the first lock and val
   atLock(t,f,()=>fs.appendFileSync(f.file,JSON.stringify({seq:5,type:'future.unknown'})+'\n'));
   assert.throws(()=>withPromotionGuards([lane,lane],()=>assert.fail('changed batch')),/guard conflict/);
 });
+
+test('post-FF dynamic receipt loads against the already cached legacy store export surface',t=>{
+  const f=fixture(t),loader=path.join(f.root,'legacy-store-loader.mjs'),receipt=new URL('../lib/landing-receipt.mjs',import.meta.url).href;
+  fs.writeFileSync(loader,`export async function load(url,context,next){if(url.endsWith('/lib/store.mjs'))return{format:'module',shortCircuit:true,source:'export { LOG_FILE,CONFIG_FILE,DEFAULT_CONFIG,UserError,now,findOrgDir,isOrgDir,initOrg,readConfig,loadEvents,loadRecord,writer,transact,planTransaction,withLock,writeFileAtomic } from '+JSON.stringify(url+'?implementation')+';'};return next(url,context);}`);
+  const result=spawnSync(process.execPath,['--experimental-loader',loader,'--input-type=module','-e',`await import(${JSON.stringify(receipt)});`],{encoding:'utf8'});
+  assert.equal(result.status,0,result.stderr);
+});

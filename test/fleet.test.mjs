@@ -44,6 +44,53 @@ test('fleet fixture isolates inherited home bindings and restores its caller', t
     return { ...f, cwd: f.repo('app') };
   }));
 
+test('session isolation guards survive cold recursive cleanup and later checks', () => {
+  // A fresh process ensures Node first loads its recursive remover while the
+  // guard is installed, independent of other fixtures' cleanup/import order.
+  const script = `
+    import assert from 'node:assert/strict';
+    import fs from 'node:fs';
+    import os from 'node:os';
+    import path from 'node:path';
+    import { execFileSync } from 'node:child_process';
+    import { checkSessionIsolation } from ${JSON.stringify(new URL('./helpers/session-isolation-check.mjs', import.meta.url).href)};
+    import { isolateSessionEnvironment } from ${JSON.stringify(new URL('./helpers/session-environment.mjs', import.meta.url).href)};
+    const original = { readFileSync: fs.readFileSync, readdirSync: fs.readdirSync };
+    const before = { HOME: process.env.HOME, HERDR_MONITOR_FLEET: process.env.HERDR_MONITOR_FLEET };
+    const context = { async test(_name, body) {
+      const cleanup = [];
+      try { await body({ after: fn => cleanup.push(fn) }); }
+      finally { for (const fn of cleanup) await fn(); }
+    } };
+    let cachedRead;
+    function create(child) {
+      const scratch = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'fleet-cold-'));
+      const env = { ...process.env, ...isolateSessionEnvironment(child, scratch) };
+      child.after(() => fs.rmSync(scratch, { recursive: true, force: true }));
+      cachedRead ??= fs.readdirSync;
+      fs.rmSync(path.join(scratch, 'missing'), { recursive: true, force: true });
+      execFileSync('git', ['init', '-q', scratch], { env });
+      return { scratch, cwd: scratch, env };
+    }
+    await checkSessionIsolation(context, create);
+    assert.equal(fs.readFileSync, original.readFileSync);
+    assert.equal(fs.readdirSync, original.readdirSync);
+    // Even a wrapper retained by an earlier invocation must still refuse the
+    // current inherited home, and release that guard after a failed check.
+    await assert.rejects(checkSessionIsolation(context, () => {
+      cachedRead(path.join(process.env.HOME, '.herdr-monitor'));
+    }), /offline fixture reached inherited home/);
+    await checkSessionIsolation(context, create);
+    assert.deepEqual({ HOME: process.env.HOME, HERDR_MONITOR_FLEET: process.env.HERDR_MONITOR_FLEET }, before);
+    assert.equal(fs.readFileSync, original.readFileSync);
+    assert.equal(fs.readdirSync, original.readdirSync);
+  `;
+  const result = spawnSync(process.execPath, ['--input-type=module', '-e', script], {
+    env: fixtureEnvironment(), encoding: 'utf8',
+  });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+});
+
 test('a generated home key cannot replace an unrelated legacy fleet mapping', async t => {
   const f = configFixture(t); await f.adopt();
   const binding = f.binding(), name = `${binding.identity}/${binding.project}`;

@@ -5,6 +5,11 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { canonicalProject } from '../../sessions/project.mjs';
 
+// Node's lazy recursive remover can retain a patched readdirSync after fs is
+// restored. Retained wrappers must follow the current check, including teardown
+// and later invocations, rather than keep guarding a completed check's home.
+let activeGuard;
+
 export async function checkSessionIsolation(t, create, extra = {}) {
   const foreign = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'session-inherited-')));
   const keys = ['HOME', 'HERDR_MONITOR_FLEET', ...Object.keys(extra)];
@@ -13,13 +18,15 @@ export async function checkSessionIsolation(t, create, extra = {}) {
   fs.mkdirSync(path.join(foreign, '.herdr-monitor', 'foreign'), { recursive: true });
   fs.writeFileSync(path.join(foreign, '.herdr-monitor', 'foreign', 'identity.json'), '{}');
   const reads = [], originals = {};
+  const previousGuard = activeGuard;
+  activeGuard = { foreign, reads };
   // Avoid a retaining mock of every read result: the regression needs only the
   // forbidden path attempts, including discovery before identity.json is read.
   for (const method of ['readFileSync', 'readdirSync']) {
     originals[method] = fs[method];
     fs[method] = function(file, ...args) {
-      if (String(file).startsWith(foreign + path.sep)) {
-        reads.push(String(file));
+      if (activeGuard && String(file).startsWith(activeGuard.foreign + path.sep)) {
+        activeGuard.reads.push(String(file));
         throw Error('offline fixture reached inherited home');
       }
       return originals[method].call(this, file, ...args);
@@ -54,6 +61,7 @@ export async function checkSessionIsolation(t, create, extra = {}) {
       assert.deepEqual(reads, []);
     }
   } finally {
+    activeGuard = previousGuard;
     Object.assign(fs, originals);
     for (const [key, value] of Object.entries(before)) {
       if (value === undefined) delete process.env[key]; else process.env[key] = value;

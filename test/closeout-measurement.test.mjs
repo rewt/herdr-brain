@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import {pathToFileURL} from 'node:url';
+import {copyProduct} from '../lib/product-files.mjs';
 import {measureCloseouts,closeoutCohort,recordCloseoutTurn,measurementDirectory,collectCloseoutInventory} from '../line-service/closeout-measurement.mjs';
 
 function fixture(){
@@ -103,6 +105,46 @@ test('service hook appends immutable census, latest view and existing diagnostic
   assert.equal(JSON.parse(fs.readFileSync(path.join(dir,'passes.jsonl'),'utf8').split('\n')[0]).action,'closeout-measurement');
   fs.appendFileSync(audit,'torn');assert.throws(()=>recordCloseoutTurn({...args,now:()=>180000}),/incomplete measurement audit tail/);
   assert.ok(fs.readFileSync(audit,'utf8').endsWith('torn'));
+});
+
+test('installed product without docs records live measurements and separately fails each missing historical cohort',async t=>{
+  const f=fixture(),directory=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'closeout-installed-')));t.after(()=>fs.rmSync(directory,{recursive:true,force:true}));
+  const bundle=path.join(directory,'product'),org=path.join(directory,'org');
+  copyProduct(path.resolve(import.meta.dirname,'..'),bundle);
+  fs.rmSync(path.join(bundle,'docs'),{recursive:true,force:true});
+  fs.writeFileSync(path.join(bundle,'.release-commit'),f.source.commit+'\n');
+  assert.equal(fs.existsSync(path.join(bundle,'.git')),false);assert.equal(fs.existsSync(path.join(bundle,'docs')),false);
+  const installed=await import(pathToFileURL(path.join(bundle,'line-service/closeout-measurement.mjs')));
+  fs.mkdirSync(org);const eventsFile=path.join(org,'events.jsonl'),before=f.events.map(e=>JSON.stringify(e)+'\n').join('');fs.writeFileSync(eventsFile,before);
+  const args={project:f.project,org,collect:()=>f.inventory,command:()=>{throw Error('installed measurement must not need Git');}};
+  const run=at=>installed.recordCloseoutTurn({...args,now:()=>at}),result=run(120000),read=()=>JSON.parse(fs.readFileSync(result.file,'utf8'));
+  const doc=read(),ids=['r1176','sol-research','claude-research'];
+  assert.equal(result.green,false);assert.equal(doc.aggregate.green,true);assert.equal(doc.aggregate.denominator,1);
+  assert.ok(result.failures.includes('historical-inventory-missing'));
+  assert.equal(doc.source.root,bundle);assert.equal(doc.source.commit,f.source.commit);assert.equal(doc.source.loaded_commit,f.source.commit);assert.equal(doc.source.changed,false);
+  assert.deepEqual(doc.historical.map(r=>r.id),ids);
+  for(const row of doc.historical){
+    assert.equal(row.availability,'missing');assert.equal(row.inventory_complete,false);assert.equal(row.green,false);
+    assert.ok(row.failures.includes('historical-inventory-missing'));assert.equal(row.cutoff,null);assert.deepEqual(row.source,[]);assert.deepEqual(row.rows,[]);
+    assert.equal(row.file,path.join(bundle,'docs/evidence/ENG-864',`${row.id}.json`));
+  }
+  const dir=path.dirname(result.file),audit=path.join(dir,'closeout-measurements.jsonl'),bytes=fs.readFileSync(audit);
+  run(150000);assert.ok(fs.readFileSync(audit).subarray(0,bytes.length).equals(bytes));assert.equal(read().interval_ms,30000);
+  const diagnostics=fs.readFileSync(path.join(dir,'passes.jsonl'),'utf8').trim().split('\n').map(JSON.parse);
+  assert.equal(diagnostics.length,2);assert.ok(diagnostics.every(r=>r.measurement.green===false&&r.measurement.failures.includes('historical-inventory-missing')));
+
+  const history=path.join(bundle,'docs/evidence/ENG-864');fs.mkdirSync(history,{recursive:true});
+  const put=(id,extra={})=>fs.writeFileSync(path.join(history,`${id}.json`),JSON.stringify({...f.historical[0],id,inventory_complete:true,...extra}));
+  put('r1176');run(180000);const partial=read();
+  assert.equal(partial.aggregate.green,true);assert.equal(partial.green,false);assert.equal(partial.historical[0].availability,'present');assert.equal(partial.historical[0].green,true);
+  assert.deepEqual(partial.historical.filter(r=>r.availability==='missing').map(r=>r.id),ids.slice(1));
+  put('sol-research');put('claude-research');assert.equal(run(210000).green,true);
+  put('claude-research',{inventory_complete:false});assert.equal(run(240000).green,false);assert.equal(read().historical[2].green,false);
+  const completeAudit=fs.readFileSync(audit);
+  fs.writeFileSync(path.join(history,'r1176.json'),'{broken');assert.throws(()=>run(270000),SyntaxError);
+  fs.unlinkSync(path.join(history,'r1176.json'));fs.symlinkSync(path.join(history,'sol-research.json'),path.join(history,'r1176.json'));
+  assert.throws(()=>run(270000));assert.deepEqual(fs.readFileSync(audit),completeAudit);
+  assert.equal(fs.readFileSync(eventsFile,'utf8'),before);
 });
 
 test('process census selects all absolute cwd paths and orphan counts deduplicate report aliases',()=>{

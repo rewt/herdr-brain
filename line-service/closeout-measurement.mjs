@@ -141,11 +141,18 @@ export function measureCloseouts({project,org,events,inventory,source,now=Date.n
   const aggregate=summary(rows),slices=[];
   for(const p of new Set([project.identity,'unknown',...rows.map(r=>r.project)]))for(const harness of ['codex','claude','unknown'])for(const dispatch of ['line','supervisor','unknown'])
     slices.push({project:p,harness,dispatch,...summary(rows.filter(r=>r.project===p&&r.harness===harness&&r.dispatch===dispatch))});
-  const historicalRows=historical.map(record=>({id:record.id,cutoff:record.cutoff,source:record.source,
-    members:record.members,rows:rows.filter(r=>record.members.some(m=>m.run===r.run)),excluded:record.members.filter(m=>!rows.some(r=>r.run===m.run))}));
+  const historicalRows=historical.map(record=>{
+    const selected=rows.filter(r=>record.members.some(m=>m.run===r.run)),excluded=record.members.filter(m=>!rows.some(r=>r.run===m.run)),errors=[];
+    if(record.availability==='missing')errors.push('historical-inventory-missing');
+    if(record.inventory_complete===false)errors.push('historical-inventory-incomplete');
+    if(excluded.length)errors.push('historical-cohort-unaccounted');
+    return{id:record.id,cutoff:record.cutoff,source:record.source,file:record.file??null,
+      availability:record.availability??'present',inventory_complete:record.inventory_complete??null,
+      members:record.members,rows:selected,excluded,failures:errors,green:!errors.length&&summary(selected).green};
+  });
   if(historical.some(r=>r.inventory_complete===false))failures.push('historical-inventory-incomplete');
   if(historicalRows.some(r=>r.excluded.length))failures.push('historical-cohort-unaccounted');
-  if(!historical.length)failures.push('historical-inventory-missing');
+  if(!historical.length||historicalRows.some(r=>r.availability==='missing'))failures.push('historical-inventory-missing');
   for(const k of ['first_disposition','session_close'])if(aggregate.latency[k].p95_ms>120000)failures.push(`${k}-p95`);
   if(!aggregate.evidence)failures.push('empty-cohort');
   return{schema:'closeout-measurement/v1',project:project.identity,org,observed_at:iso(now),source,
@@ -192,6 +199,16 @@ function append(file,row){
     fs.writeFileSync(fd,JSON.stringify(row)+'\n');fs.fsyncSync(fd);
   }finally{fs.closeSync(fd);}
 }
+// Historical inventories are archived evidence, not installed runtime assets.
+// Missing files keep their named cohort explicitly unknown/non-green; malformed,
+// redirected or unreadable evidence retains the ordinary diagnostic failure.
+function readHistoricalInventories(){
+  return ['r1176','sol-research','claude-research'].map(id=>{
+    const file=path.join(root,'docs/evidence/ENG-864',`${id}.json`);
+    try{return{...JSON.parse(readPlainFile(file)),file,availability:'present'};}
+    catch(e){if(e.code!=='ENOENT')throw e;return{id,file,availability:'missing',inventory_complete:false,cutoff:null,source:[],members:[]};}
+  });
+}
 // Integration contract: call once AFTER each turn, outside record/native locks.
 // The existing <=60s finite launchd wake calls that same turn during slow review.
 // now is a function returning epoch milliseconds. Optional readers are test seams.
@@ -205,7 +222,7 @@ export function recordCloseoutTurn({project,org,env=process.env,now=()=>Date.now
     const loaded=loadEvents(org);if(loaded.tornTail)throw Error('incomplete measurement record tail');
     const git=args=>{const r=command('git',['-C',root,...args],{encoding:'utf8',env:{...env,GIT_OPTIONAL_LOCKS:'0'},timeout:10000});if(r.error||r.status!==0)throw Error('measurement source version unavailable');return r.stdout.trim();};
     const bundle=bundleRelease(),source=providedSource??{root,commit:bundle.commit??git(['rev-parse','HEAD']),module_sha256:loadedHash,loaded_commit:loadedCommit,changed:sha(fs.readFileSync(moduleFile))!==loadedHash||(!bundle.commit&&git(['rev-parse','HEAD'])!==loadedCommit)};
-    const historical=providedHistory??['r1176','sol-research','claude-research'].map(id=>JSON.parse(readPlainFile(path.join(root,'docs/evidence/ENG-864',`${id}.json`))));
+    const historical=providedHistory??readHistoricalInventories();
     const inventory=collect({project,org,env,command,events:loaded.events}),at=now(),doc=measureCloseouts({project,org,events:loaded.events,inventory,source,now:at,previous,historical});
     doc.inventory=inventory;
     // Keep the immutable census before updating its display-only latest view.

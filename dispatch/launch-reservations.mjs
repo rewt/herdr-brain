@@ -37,7 +37,7 @@ export function launchDisposition({job,run,events=[],now=Date.now(),laneSource})
   const keys=['agent','pane','worker_workspace','terminal_id','agent_session_id'];
   if(job.worker||job.launchProcess||job.sessionBinding||job.watcher||
       keys.some(k=>run.meta?.[k])||events.some(e=>(e.id===run.id||e.run===run.id)&&
-        (e.type==='run.session_bound'||e.type==='dispatch.completed'||e.type==='run.updated'&&keys.some(k=>e.meta?.[k]))))
+        (e.type==='run.session_bound'||e.type==='dispatch.completed'&&(e.exit_code===0||e.worker||e.stage!=='launching')||e.type==='run.updated'&&keys.some(k=>e.meta?.[k]))))
     return keep('native worker, process, session, watcher or historical binding exists');
   if(job.stage!=='launching')return keep('original journal is not at launching');
   const times=[Date.parse(run.started?.at),...(job.failure?.observed_at?[Date.parse(job.failure.observed_at)]:[])];

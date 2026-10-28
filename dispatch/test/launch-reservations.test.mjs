@@ -37,6 +37,9 @@ test('disposition requires positive pre-native proof and never infers absence fr
 test('legacy shell refusal is definitive while an import code without audited source stays ambiguous',()=>{
   const shell={stage:'launching',error:'/node dispatch: lane: could not verify initial pane environment w47W:p1; initial tab retained, nothing started'};
   assert.equal(launchDisposition({job:shell,run}).disposition,'ELIGIBLE');
+  assert.equal(launchDisposition({job:shell,run,events:[{type:'dispatch.completed',run:run.id,stage:'launching',exit_code:1}]}).disposition,'ELIGIBLE',
+    'a failed dispatcher completion is not a native worker completion');
+  assert.equal(launchDisposition({job:shell,run,events:[{type:'dispatch.completed',run:run.id,stage:'complete',exit_code:0}]}).disposition,'KEEP');
   assert.equal(launchDisposition({job:{...shell,error:shell.error+'\nunknown native outcome'},run}).disposition,'KEEP');
   const crash={stage:'launching',native_launch_attempted:true,error:'/node dispatch: lane: require() cannot be used on an ESM graph with top-level await.',failure:{code:'ERR_REQUIRE_ASYNC_MODULE',stage:'launching',observed_at:old}};
   for(const laneSource of [undefined,Buffer.from('unrelated source')])assert.equal(launchDisposition({job:crash,run,laneSource}).disposition,'KEEP');

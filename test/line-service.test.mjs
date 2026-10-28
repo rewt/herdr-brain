@@ -36,16 +36,21 @@ function fixture(t) {
   fs.writeFileSync(path.join(directory, 'installation.json'), JSON.stringify({ at: '2026-10-27T00:00:00Z', repo, org, source: sourceRoot, node: process.execPath, file: path.join(directory, 'service.plist'), target: `gui/${process.getuid()}/dev.herdr.line.${path.basename(directory)}` }));
   const add = (title, priority = 1, extra = []) => record(['add', title, '--role', 'engineer', '--priority', String(priority), ...extra]).split(' ')[0];
   const show = id => JSON.parse(record(['show', id, '--json']));
-  const calls = [], notes = [];
+  const calls = [], refreshes = [], notes = [];
   let fail;
   const command = (exe, args, options) => {
+    if (args[0] === path.join(sourceRoot, 'supervisor/closeout.mjs')) {
+      assert.deepEqual(args, [path.join(sourceRoot, 'supervisor/closeout.mjs'), 'refresh', '--repo', repo, '--org', org]);
+      refreshes.push({ exe, args, options });
+      return { status: 0, stdout: '{"created":[]}', stderr: '' };
+    }
     calls.push({ exe, args, options });
     if (fail) return { status: 1, stdout: '', stderr: fail };
     return { status: 0, stdout: JSON.stringify({ result: args[1] === 'handle' ? 'review_pending' : 'dispatched' }), stderr: '' };
   };
   const service = (overrides = {}) => createLineService({ repo, org, to: 'supervisor-test', env, command,
     haltAfter:100,capacity: () => ({ count: 0, cap: 2 }), recordNotice: data => { notes.push({ to:'supervisor-test',text:data.reason,options:data }); return { id:data.id,state:'record-only' }; }, ...overrides });
-  return { repo, org, env, record, git, add, show, calls, notes, service, setFailure: value => { fail = value; } };
+  return { repo, org, env, record, git, add, show, calls, refreshes, notes, service, setFailure: value => { fail = value; } };
 }
 
 test('default routing handles known role and narrow task aliases without recasting supervisor or orchestrator work',()=>{
@@ -75,13 +80,21 @@ test('a changed supervisor address recovers only the exact zero-effect pre-journ
 
 test('three completed engineering-idle passes file and immediately dispatch one repair across restart while original native refusal remains retained',t=>{
   const f=fixture(t),item=f.add('Native refusal'),options={haltAfter:3};f.setFailure('native permission refused');
-  for(let n=0;n<3;n++)f.service(options).pass();
+  // The first refusal files its missing-producer decision. That real input
+  // change starts a new idle episode; only unchanged observations accumulate.
+  f.service(options).pass();
+  const journal=path.join(f.service().directory,'effects.json'),key=Object.keys(JSON.parse(fs.readFileSync(journal)).actions).find(k=>k.startsWith(`dispatch:${item}:`));
+  const original=JSON.parse(fs.readFileSync(journal)).actions[key].receipt;
   const repairs=()=>[...fold(loadEvents(f.org).events).items.values()].filter(i=>i.meta.halt_repair===1);
+  assert.equal([...fold(loadEvents(f.org).events).items.values()].filter(i=>i.meta.uncertain_outcome).length,1);
+  for(let n=0;n<2;n++){f.service(options).pass();assert.equal(repairs().length,0);}
+  f.service(options).pass();
   assert.equal(repairs().length,1);const repair=repairs()[0];
   assert.equal(f.calls.filter(c=>c.args[1]===item).length,1);
   assert.equal(f.calls.filter(c=>c.args[1]===repair.id).length,1,'fresh ordinary dispatch in the threshold pass');
   for(let n=0;n<3;n++)f.service(options).pass();
   assert.equal(repairs().length,1);assert.equal(f.calls.filter(c=>c.args[1]===repair.id).length,1);
+  assert.deepEqual(JSON.parse(fs.readFileSync(journal)).actions[key].receipt,original);
   const release=noticeLock(path.join(f.service().directory,'pass.lock'));
   try{assert.throws(()=>f.service(options).pass(),/locked/);}finally{release();}
   assert.equal(repairs().length,1);
@@ -216,6 +229,7 @@ test('STOP, HOLD and an incomplete tail prevent all effects', t => {
 test('a real command refusal is recorded once and never re-executed on restart', t => {
   const f = fixture(t); f.add('Ready'); f.setFailure('native permission refused'); const s = f.service(); s.pass(); f.service().pass(); f.service().pass();
   assert.equal(f.calls.length, 1);
+  assert.equal(f.refreshes.length, 3, 'independent cleanup refresh remains allowed on every completed pass');
   const evidence = JSON.parse(fs.readFileSync(path.join(s.directory, 'effects.json'))); const action = Object.values(evidence.actions)[0];
   assert.equal(action.state, 'held'); assert.equal(action.receipt.status, 1); assert.match(action.error, /native permission/);
   assert.ok(f.notes.length <= 2);

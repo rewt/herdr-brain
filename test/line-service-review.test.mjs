@@ -42,9 +42,15 @@ function fixture(t, { admission = false } = {}) {
   const env = { ...process.env }; for (const key of ['HERDR_ENV', 'HERDR_PANE_ID', 'CODEX_THREAD_ID']) delete env[key];
   write(); fs.writeFileSync(journal, JSON.stringify({ token: 'fixture', stage: 'complete', run: 'R-1', item: 'ENG-1', org, common: identity, workspace, base }));
   const context = () => { const state = fold(events); return { repo, org, identity, events, state, item: state.items.get('ENG-1'), run: state.runs.get('R-1') }; };
-  const calls = [], notices = [];
-  const service = options => createLineService({ repo, org, to: 'test-supervisor', env, command: (exe, args) => { calls.push({ exe, args }); return { status: 0, stdout: JSON.stringify({ result: 'review_pending', item: 'ENG-1', run: 'R-1', head: args[args.indexOf('--head') + 1] }), stderr: '' }; }, recordNotice: data => { notices.push(data.reason); return { id:data.id,state:'record-only' }; }, ...options });
-  return { root, repo, org, workspace, base, head, events, write, context, service, calls, notices, git, commit };
+  const calls = [], refreshes = [], notices = [];
+  const service = options => createLineService({ repo, org, to: 'test-supervisor', env, command: (exe, args) => {
+    if (args[0] === path.join(sourceRoot, 'supervisor/closeout.mjs')) {
+      assert.deepEqual(args, [path.join(sourceRoot, 'supervisor/closeout.mjs'), 'refresh', '--repo', repo, '--org', org]);
+      refreshes.push({ exe, args }); return { status: 0, stdout: '{"created":[]}', stderr: '' };
+    }
+    calls.push({ exe, args }); return { status: 0, stdout: JSON.stringify({ result: 'review_pending', item: 'ENG-1', run: 'R-1', head: args[args.indexOf('--head') + 1] }), stderr: '' };
+  }, recordNotice: data => { notices.push(data.reason); return { id:data.id,state:'record-only' }; }, ...options });
+  return { root, repo, org, workspace, base, head, events, write, context, service, calls, refreshes, notices, git, commit };
 }
 
 for (const directory of ['current', 'foreign']) for (const root of [null, false, 0, '']) {

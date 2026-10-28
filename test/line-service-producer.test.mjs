@@ -35,8 +35,14 @@ function fixture(t,{cutoff=true,before=[]}={}) {
   const events=()=>loadEvents(org).events, state=()=>fold(events()), messages=()=>recordMessages(events());
   const add=(items)=>transact(org,()=>({add:items}));
   const diagnostics=()=>fs.readFileSync(path.join(directory,'passes.jsonl'),'utf8').trim().split('\n').map(JSON.parse);
-  const calls=[];
-  const service=options=>createLineService({repo:f.cwd,org,to:'brain-chat',env,capacity:()=>({cap:7,count:0}),command:(_exe,args)=>{calls.push(args);return {status:0,stdout:'{"result":"fixture"}',stderr:''};},...options});
+  const calls=[],refreshes=[];
+  const service=options=>createLineService({repo:f.cwd,org,to:'brain-chat',env,capacity:()=>({cap:7,count:0}),command:(_exe,args)=>{
+    if(args[0]===path.join(developmentRoot,'supervisor/closeout.mjs')){
+      assert.deepEqual(args,[path.join(developmentRoot,'supervisor/closeout.mjs'),'refresh','--repo',f.cwd,'--org',org]);
+      refreshes.push(args);return {status:0,stdout:'{"created":[]}',stderr:''};
+    }
+    calls.push(args);return {status:0,stdout:'{"result":"fixture"}',stderr:''};
+  },...options});
   const build=({historical=false,outcome='blocked'}={})=>{
     const base=boundary?.cutover.canonical_head??git(['rev-parse','HEAD']),workspace=path.join(f.scratch,'source-lane');git(['worktree','add','-qb','lane/producer',workspace]);
     let head=base;
@@ -48,7 +54,7 @@ function fixture(t,{cutoff=true,before=[]}={}) {
       {type:'report.ingested',run:'R-1',item:'ENG-1',file:'reports/R-1.md',sha256:createHash('sha256').update(text).digest('hex'),report:{outcome,summary:'Bound source',artifacts:[`Commit: ${head}`],blockers:[],extra:{}}}]);
     return {head,base,workspace};
   };
-  return {...f,org,identity,directory,actor,nativeEnv,native,env,cut,boundary,git,events,state,messages,add,service,calls,build,diagnostics};
+  return {...f,org,identity,directory,actor,nativeEnv,native,env,cut,boundary,git,events,state,messages,add,service,calls,refreshes,build,diagnostics};
 }
 
 test('producer cutoff is explicit durable canonical evidence and survives restarts without reopening history',t=>{
@@ -81,6 +87,7 @@ test('producer review creation and dispatch require actual post-cutoff landing w
 test('producer old reported source skips cheaply while an unresolved manual review stays diagnostic',t=>{
   const f=fixture(t,{before:[{type:'item.added',id:'REV-90',role:'reviewer',title:'Old manual review',meta:{}}]});f.build({historical:true});
   const before=f.events().length;f.service().pass();f.service().pass();
+  assert.equal(f.refreshes.length,2,'cleanup refresh is independent of historical source and retained review');
   assert.equal(f.calls.length,0);assert.equal(f.messages().length,0);assert.match(f.diagnostics().find(r=>r.notice_record).reason,/legacy\/manual.*UNKNOWN/);
   assert.deepEqual(f.events().slice(before),[]);assert.ok(f.diagnostics().filter(e=>e.action==='review-health').every(e=>e.health.owed===0));assert.equal(morningDigest({events:f.events(),diagnostics:f.diagnostics()}).review_errors.occurrences,2);
   assert.equal(fs.existsSync(inboxPath({org:f.org})),false);

@@ -31,7 +31,11 @@ test('record-backed landing and existing-review readback is producer evidence de
   const unknown=path.join(f.dir,'actual-review-unknown.json');fs.writeFileSync(unknown,JSON.stringify({run:'R-1',head:f.head,native_launch_attempted:true,qualification:'UNKNOWN'}));
   assert.match(f.attempt(),/UNKNOWN/);fs.unlinkSync(unknown);
   for(const patch of [{native_launch_attempted:false},{qualification:'UNKNOWN'},{landed:[{...f.value.landed[0],project:'/foreign'}]},{reviews:[{...f.value.reviews[0],runs:['R-999']}]},{reviews:[{...f.value.reviews[0],head:'d'.repeat(40)}]}]){
-    const value={...f.value,...patch};assert.equal(producerReviewObservation(value,f.context),false);fs.writeFileSync(f.file,JSON.stringify(value));assert.match(f.attempt(),/UNKNOWN/);
+    const value={...f.value,...patch};assert.equal(producerReviewObservation(value,f.context),false);fs.writeFileSync(f.file,JSON.stringify(value));
+    assert.equal(f.attempt(),null,'rejected producer observation without a typed attempt cannot hold the change');
+    const typed={...value,run:'R-1',head:f.head,native_launch_attempted:true,qualification:'UNKNOWN'};
+    fs.writeFileSync(f.file,JSON.stringify(typed));const bytes=fs.readFileSync(f.file);
+    assert.match(f.attempt(),/UNKNOWN/);assert.deepEqual(fs.readFileSync(f.file),bytes,'positive UNKNOWN attempt remains immutable');
   }
 });
 

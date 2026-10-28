@@ -59,3 +59,10 @@ test('permanent flow completion retains missing verdict held reopened foreign-ow
     }finally{release();}
   }
 });
+
+for(const change of ['report','STOP','claim'])test(`short review preparation refuses a late ${change} before publishing a verdict`,t=>{
+  const f=fixture(t),release=noticeLock(path.join(f.directory,'pass.lock')),mkdir=fs.mkdirSync;let injected=false;
+  fs.mkdirSync=function(file,...args){const out=mkdir.call(this,file,...args);if(file===path.join(f.org,'lock')&&!injected){injected=true;if(change==='report')fs.appendFileSync(path.join(f.org,'reports/R-1.md'),'changed');if(change==='STOP')fs.writeFileSync(path.join(f.directory,'STOP'),'stop');if(change==='claim')fs.appendFileSync(path.join(f.org,'events.jsonl'),JSON.stringify({seq:f.context().events.at(-1).seq+1,type:'future.unknown'})+'\n');}return out;};
+  try{assert.throws(()=>recordReviewResults(f.args),/conflict/);assert.equal(f.context().events.some(e=>e.type==='change.reviewed'),false);}
+  finally{fs.mkdirSync=mkdir;release();}
+});

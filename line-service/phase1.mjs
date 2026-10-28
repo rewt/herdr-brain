@@ -1,12 +1,13 @@
 // Landed-change facts and record-derived decisions. No native effects/models.
 import fs from '../lib/record-observation.mjs';
+import {observeGit} from '../lib/record-observation.mjs';
 import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {reviewScope,claimedCommitTokens,declaredSourceRanges} from '../settle/review-range.mjs';
 import {fold,extendFold,itemStatus,blockersOf,releases,isDeclined} from '../lib/state.mjs';
 import {roleIs} from '../lib/roles.mjs';
-import {transact,loadRecord} from '../lib/store.mjs';
+import {planTransaction,loadRecord} from '../lib/store.mjs';
 import {readReport} from '../lib/report.mjs';
 import {readOwnedRun,requireController,assertOwner} from '../lib/run-owner.mjs';
 import {protectRecordMutation} from '../lib/record-guard.mjs';
@@ -42,9 +43,9 @@ export function reviewCompletionPlan({events,state,runId}){
 export function recordReviewCompletion({repo,org,runId,env=process.env}){
   const guard=()=>{const b=serviceRecordBinding({repo,org,env});for(const f of [path.join(b.directory,'STOP'),path.join(repo,'.lane/supervisor/STOP'),path.join(repo,'.lane/supervisor/HOLD')])if(fs.existsSync(f))throw Error('STOP/HOLD prevents review completion');return b;};
   guard();
-  const result=transact(org,(events,state)=>{
+  const result=planTransaction(org,(events,state)=>{
     guard();const p=reviewCompletionPlan({events,state,runId});if(p.closed)return{add:[]};
-    const owned=readOwnedRun(org,runId);requireController(owned,'brain');assertOwner(owned,{owner:p.run.owner,generation:p.run.owner_generation});
+    const owned=readOwnedRun(org,runId,events);requireController(owned,'brain');assertOwner(owned,{owner:p.run.owner,generation:p.run.owner_generation});
     const file=path.resolve(org,p.run.report.file??'');if(!file.startsWith(org+path.sep)||hash(fs.readFileSync(file))!==p.run.report.sha256)throw Error('immutable review completion bytes changed');
     const mutation=protectRecordMutation({org,state,events,command:'line-service completed review',mutation:{add:[{type:'item.closed',id:p.item.id,as:'done',completed_run:runId,review_verdict:p.fact.seq,note:`Independent ${p.fact.verdict} judgment recorded for ${p.fact.review_key}; linked corrections remain owned and open. Preserve callbacks, HOLD, archives and guarded physical retirement.`}]}});
     return bindCloseoutSources({cwd:repo,org,events,env,mutation});
@@ -53,7 +54,7 @@ export function recordReviewCompletion({repo,org,runId,env=process.env}){
 }
 
 const hash=b=>createHash('sha256').update(b).digest('hex');
-const git=(repo,args)=>execFileSync('git',['--no-optional-locks','-C',repo,...args],{encoding:'utf8',timeout:10000,stdio:['ignore','pipe','pipe'],maxBuffer:32*1024*1024}).trim();
+const git=(repo,args)=>{observeGit(repo);return execFileSync('git',['--no-optional-locks','-C',repo,...args],{encoding:'utf8',timeout:10000,stdio:['ignore','pipe','pipe'],maxBuffer:32*1024*1024}).trim();};
 const ancestor=(repo,a,b)=>{try{git(repo,['merge-base','--is-ancestor',a,b]);return true;}catch{return false;}};
 export function phase0Boundary(events,{repo,org,identity}) {
   const rows=events.filter(e=>e.type==='line-service.phase0'&&e.project===identity&&e.org===org&&/^[a-f0-9]{40}(?:[a-f0-9]{24})?$/.test(e.canonical_head??''));
@@ -66,13 +67,16 @@ export function phase0Boundary(events,{repo,org,identity}) {
 export function ensureReviewBoundary({repo,org,env=process.env}){
   const guard=()=>{const b=serviceRecordBinding({repo,org,env});for(const file of [path.join(b.directory,'STOP'),path.join(repo,'.lane/supervisor/STOP'),path.join(repo,'.lane/supervisor/HOLD')])if(fs.existsSync(file))throw Error('STOP/HOLD prevents first review boundary');return b;};
   const binding=guard(),release=acquireLock(path.join(binding.identity,'lane-promote.lock'));
-  try{return transact(org,(events,state)=>{
+  try{return planTransaction(org,(events,state)=>{
     guard();const valid=events.filter(e=>e.type==='line-service.phase0'&&e.project===binding.identity&&e.org===org&&/^[a-f0-9]{40}(?:[a-f0-9]{24})?$/.test(e.canonical_head??''));
     if(valid.length)return{add:[],result:phase0Boundary(events,{repo,org,identity:binding.identity})};
     const main=loadDiscoveredRoutes({cwd:repo,env}).config.main??'main',head=git(repo,['rev-parse',`refs/heads/${main}`]);
     if(git(repo,['symbolic-ref','--short','HEAD'])!==main||git(repo,['rev-parse','HEAD'])!==head||git(repo,['status','--porcelain=v1']))throw Error('actual canonical main/source CAS changed before first boundary');
     const event={type:'line-service.phase0',id:`first-service-main-${hash(binding.identity).slice(0,20)}`,project:binding.identity,repo,org,source:binding.installation.source,main,canonical_head:head,mode:'first-service-observation',cutoff_at:null,time_qualification:'First actual service observation of canonical main; no historical18:55 or archive-time claim.'};
-    return protectRecordMutation({org,events,state,command:'line-service first review boundary',mutation:{add:[event],result:event}});
+    const mutation=protectRecordMutation({org,events,state,command:'line-service first review boundary',mutation:{add:[event],result:event}});
+    // Working-tree cleanliness is a live observation, not merely a ref/index
+    // version. Keep this first-boundary check at its mutation boundary.
+    return {...mutation,commit:validate=>{if(git(repo,['status','--porcelain=v1']))throw Error('actual canonical main/source CAS changed before first boundary');validate();}};
   },{actor:'line-service',strictTail:true,lockOptions:{recover:false}}).result;}finally{release();}
 }
 
@@ -350,11 +354,11 @@ export function reviewResultEvents({state,events,run,report,sha256,body=report.b
 export function recordReviewResults({repo,org,runId,env=process.env}) {
   const guard=()=>{const b=serviceRecordBinding({repo,org,env});if([path.join(b.directory,'STOP'),path.join(repo,'.lane/supervisor/STOP'),path.join(repo,'.lane/supervisor/HOLD')].some(file=>fs.existsSync(file)))throw Error('STOP/HOLD prevents review result mutation');return b;};
   guard();
-  return transact(org,(events,state)=>{
+  return planTransaction(org,(events,state)=>{
     guard();
     const run=state.runs.get(runId),item=state.items.get(run?.item);
     if(!run?.report||!roleIs(item,'REV')||!item.meta.review_target)throw Error('no ingested immutable queued review result');
-    const owned=readOwnedRun(org,runId);requireController(owned,'brain');assertOwner(owned,{owner:run.owner,generation:run.owner_generation});
+    const owned=readOwnedRun(org,runId,events);requireController(owned,'brain');assertOwner(owned,{owner:run.owner,generation:run.owner_generation});
     const file=path.resolve(org,run.report.file),text=fs.readFileSync(file,'utf8');
     if(!file.startsWith(path.resolve(org)+path.sep)||hash(text)!==run.report.sha256)throw Error('ingested review bytes changed');
     const parsed=readReport(text);if(parsed.errors.length)throw Error('immutable queued review report is invalid');

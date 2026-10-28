@@ -1,6 +1,6 @@
 // Execution-time checks shared by queued and direct lane promotion. Call only
 // under the Git promotion lock; the final record check holds its lock across FF.
-import fs from 'node:fs';
+import fs, { captureReads, observeGit } from '../lib/record-observation.mjs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
@@ -8,7 +8,7 @@ import { roleIs } from '../lib/roles.mjs';
 import { readConfig as housekeepingConfig } from '../housekeeping/config.mjs';
 import { cleanPassScope } from '../supervisor/clean-pass.mjs';
 import { execFileSync } from 'node:child_process';
-import { loadEvents, withLock } from '../lib/store.mjs';
+import { prepareRecordGuard, withLock } from '../lib/store.mjs';
 import { completionFingerprint } from '../lib/completion.mjs';
 import { fold, children, laterRuns, openRuns, blockersOf, releases, itemStatus, reviewsWithoutPass, openQuestionsFor } from '../lib/state.mjs';
 
@@ -16,7 +16,7 @@ import { resolveValidation } from '../lanes/validation.mjs';
 
 const require = createRequire(import.meta.url);
 
-export function withPromotionGuard({ canonical, identity, workspace, topic, expectedHead, run, org, admittedSeq, completionExpected, existingWorker = false, superseded = [] }, operation = () => {}, recordLocked = false) {
+export function preparePromotionGuard({ canonical, identity, workspace, topic, expectedHead, run, org, admittedSeq, completionExpected, existingWorker = false, superseded = [] }) {
   // Refuse disabled requests before Git or green initialization. Enabled
   // authority is still re-read under the record lock below.
   if (existingWorker && run !== undefined) {
@@ -24,20 +24,17 @@ export function withPromotionGuard({ canonical, identity, workspace, topic, expe
     const settings = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8'))?.autopilot : undefined;
     if (settings?.enabled !== true || !['clean-pass', 'green-pass'].includes(settings.cohort)) throw Error('AUTOPILOT_DISABLED: pilot disabled before integration; nothing merged');
   }
-  const waived = !existingWorker && Boolean(resolveValidation({ root: canonical }).landing_waiver);
   const checkGit = () => {
     if (fs.existsSync(path.join(canonical, '.lane/supervisor/STOP'))) throw new Error('supervisor STOP exists; nothing merged');
     if (expectedHead !== undefined) {
+      observeGit(workspace);
       const actual = execFileSync('git', ['-C', workspace, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
       if (actual !== expectedHead) throw new Error(`lane tip differs from expected head: expected ${expectedHead}, found ${actual}; settle and authorize the new head; nothing merged`);
     }
   };
-  checkGit();
-  if (run === undefined) return operation();
-  const check = () => {
-    const { events, tornTail } = loadEvents(org);
-    if (tornTail) throw new Error('incomplete record event; nothing merged');
-    const state = fold(events), current = state.runs.get(run), item = state.items.get(current?.item);
+  const check = (events, state) => {
+    const waived = !existingWorker && Boolean(resolveValidation({ root: canonical }).landing_waiver);
+    const current = state.runs.get(run), item = state.items.get(current?.item);
     if (!current || !item) throw new Error(`unknown promotion run ${run}; nothing merged`);
     if (item.kind !== 'work' || item.role === 'human' || item.meta.operator_reserved) throw new Error(`${run} is not ordinary authorized work; nothing merged`);
     if (completionExpected !== undefined && completionFingerprint(state, item.id) !== completionExpected) throw new Error(`${run} changed since batch preparation; nothing merged`);
@@ -45,6 +42,7 @@ export function withPromotionGuard({ canonical, identity, workspace, topic, expe
     if (current.abandoned || !(waived ? ['done', 'blocked'].includes(current.report?.outcome) : current.report?.outcome === 'done')) throw new Error(`${run} requires a recorded done report; nothing merged`);
     if (laterRuns(state, run).length) throw new Error(`${run} is superseded; nothing merged`);
     if (!current.workspace || fs.realpathSync(current.workspace) !== fs.realpathSync(workspace) || (current.meta.lane && current.meta.lane !== topic)) throw new Error(`${run} does not belong to this lane workspace; nothing merged`);
+    observeGit(current.workspace);
     const common = execFileSync('git', ['-C', current.workspace, 'rev-parse', '--path-format=absolute', '--git-common-dir'], { encoding: 'utf8' }).trim();
     if (fs.realpathSync(common) !== identity) throw new Error(`${run} Git identity changed; nothing merged`);
     if (item.outcome && item.outcome.run !== run) throw new Error(`current outcome does not belong to ${run}; nothing merged`);
@@ -89,16 +87,27 @@ export function withPromotionGuard({ canonical, identity, workspace, topic, expe
       if (!scope.eligible) throw Error(`${scope.code}: ${scope.reason}; nothing merged`);
     }
     checkGit();
-    return operation();
   };
-  return recordLocked ? check() : withLock(org, check);
+  if (run !== undefined) return prepareRecordGuard(org, check, { label: 'promotion-guard' });
+  const { validate } = captureReads(checkGit);
+  let used = false;
+  return { validate, run(operation = () => {}) {
+    if (used) throw Error('promotion guard was already used; nothing merged');
+    used = true; validate(); return operation();
+  } };
+}
+export function withPromotionGuard(options, operation = () => {}) {
+  return preparePromotionGuard(options).run(operation);
 }
 
 // Hold each distinct record once across the batch FF. Re-entering a record's
 // lock per lane would deadlock when several runs belong to the same project.
 export function withPromotionGuards(lanes, operation = () => {}) {
+  // Prepare every lane before taking even the first record lock. Validate all
+  // prepared sources again AFTER the last lock, immediately before the FF.
+  const prepared = lanes.map(preparePromotionGuard);
   const records = [...new Set(lanes.filter(l => l.run !== undefined).map(l => l.org))].sort();
-  const lock = index => index < records.length ? withLock(records[index], () => lock(index + 1)) : check(0);
-  const check = index => index < lanes.length ? withPromotionGuard(lanes[index], () => check(index + 1), true) : operation();
+  const lock = index => index < records.length ? withLock(records[index], () => lock(index + 1), { label: 'batch-promotion' }) : check();
+  const check = () => { for (const fence of prepared) fence.validate(); return operation(); };
   return lock(0);
 }

@@ -2,7 +2,7 @@
 import { resolveValidation } from '../lanes/validation.mjs';
 // A durable FIFO and one detached, finite drain worker. No model calls.
 import { loadTimeout } from '../lib/deadline.mjs';
-import fs from 'node:fs';
+import fs from '../lib/record-observation.mjs';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { closeoutPolicy, claimRetirementOwner, retryPromotionCloseout } from '../lib/closeout.mjs';
@@ -16,7 +16,7 @@ import { gitProject } from '../lib/project.mjs';
 import { policyLocation, present, homeProject } from '../lib/config-home.mjs';
 import { readPolicyFile, validatePromote } from '../lib/config-policy.mjs';
 import { parseUniqueJson } from '../sessions/json.mjs';
-import { findOrgDir, loadEvents, withLock, writeFileAtomic } from '../lib/store.mjs';
+import { findOrgDir, loadEvents, withRecordGuard, writeFileAtomic } from '../lib/store.mjs';
 import { guardPromotionJob, readOwnedRun, requireController, ownerBinding, sameOwner, brainOwner, continueOwnerRelease } from '../lib/run-owner.mjs';
 import { bundleRelease, forwardRelease, operationFile } from '../lib/releases.mjs';
 import { acquireLock, PROMOTION_LOCK_WAIT_MS } from '../lanes/promotion-lock.mjs';
@@ -155,13 +155,12 @@ export function enqueue(queue, topics, options) {
   if (options.run !== undefined && (!/^R-\d+$/.test(options.run) || options.expectedHead === undefined || !options.org)) throw new Error('run binding requires a record, run ID and expected head');
   if (options.superseded !== undefined && (!Array.isArray(options.superseded) || (options.superseded.length && !options.run) || new Set(options.superseded).size !== options.superseded.length || options.superseded.some(id => !/^R-\d+$/.test(id)))) throw Error('invalid explicit superseded runs');
   for (const topic of topics) if (!/^[a-z0-9][a-z0-9-]{1,60}$/.test(topic)) throw new Error(`invalid lane topic: ${topic}`);
-  const admit = () => queue.transaction((data) => {
+  const prepare = (events) => {
     if (options.existingWorker) {
       const authority = resolveValidation({ root: queue.project.canonical }).landing_waiver;
       if (!liveNativeWorker(queue.project.identity, { gateRequired: !authority, authority })) throw settingsRefusal('AUTOPILOT_NO_NATIVE_WORKER', 'no live native promote worker; supervisor must use the bare enqueue in its authorized context');
     }
-    return topics.map((topic) => {
-      const owned = options.run ? readOwnedRun(options.org, options.run) : null;
+      const owned = options.run ? readOwnedRun(options.org, options.run, events) : null;
       if (owned) {
         if (options.claimedBy) {
           const binding = requireController(owned, options.claimedBy);
@@ -169,15 +168,17 @@ export function enqueue(queue, topics, options) {
         } else if (owned.owner && !owned.owner.legacy) throw Error(`RUN_OWNED_ELSEWHERE: ${owned.id} owner=${JSON.stringify(owned.owner)}`);
         if (owned.owner) options.ownership = ownerBinding(owned);
       }
+    return events?.at(-1)?.seq ?? 0;
+  };
+  const admit = (admittedSeq) => queue.transaction((data) => {
+    return topics.map((topic) => {
       const existing = queueJobs({ ...data, results: [] }).find((job) => job?.topic === topic && !(job.phase === 'completed' && ['refused', 'timeout'].includes(job.result?.outcome)));
       if (existing) {
         if (JSON.stringify(existing.superseded ?? []) !== JSON.stringify(options.superseded ?? []) || JSON.stringify(existing.requiredTests ?? []) !== JSON.stringify(options.requiredTests ?? []) || existing.expectedHead !== options.expectedHead || existing.run !== options.run || (options.run !== undefined && existing.org !== options.org)) throw new Error(`pending promotion for ${topic} has a different head or run binding; inspect queue before enqueuing`);
         return { id: existing.id, topic, duplicate: true };
       }
-      const record = options.run ? loadEvents(options.org) : null;
-      if (record?.tornTail) throw Error('incomplete record event; nothing queued');
       const job = { id: randomUUID(), topic, queued: new Date().toISOString(), ...options,
-        ...(record ? { admittedSeq: record.events.at(-1)?.seq ?? 0 } : {}) };
+        ...(options.run ? { admittedSeq } : {}) };
       data.pending.push(job);
       return { id: job.id, topic, duplicate: false };
     });
@@ -185,7 +186,8 @@ export function enqueue(queue, topics, options) {
   // Serialize admission (including its durable queue commit) with record writes.
   // A writer that saw no queued member must finish before its admission snapshot;
   // otherwise a note could slip between the guard's queue read and enqueue.
-  return options.run ? withLock(options.org, admit) : admit();
+  if (options.run) return withRecordGuard(options.org, prepare, admit, { label: 'promotion-admission' });
+  prepare();return admit();
 }
 
 function cleanup(job, queue, workspace) {

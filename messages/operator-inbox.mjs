@@ -1,6 +1,6 @@
 // Record envelopes are data. Only a pending, explicitly reserved record question
 // can produce a pointer in the existing Brain Chat inbox; never operator input.
-import fs from 'node:fs';
+import fs from '../lib/record-observation.mjs';
 import path from 'node:path';
 import { canonical, digest, validateEvent } from './schema.mjs';
 import { gitProject } from '../lib/project.mjs';
@@ -24,6 +24,7 @@ export function nativeSender(org, { cwd = process.cwd(), env = process.env, call
   const discovered = findOrgDir({ cwd, env: { ...env, ORG_DIR: '' } });
   const root = identityRootAt(project.identity);
   if (!root || !discovered || fs.realpathSync(discovered) !== record) fail('foreign or missing owning record binding');
+  fs.lstatSync(path.join(root, '.identity-root')); // Include the actual identity marker in prepared guards.
   if (env.HERDR_ENV !== '1' || !env.HERDR_PANE_ID || !env.HERDR_WORKSPACE_ID) fail('native caller binding is missing');
   const native = JSON.parse(call('herdr', ['agent', 'get', env.HERDR_PANE_ID])).result?.agent;
   if (!native?.name || !native.terminal_id || !native.agent_session?.value ||

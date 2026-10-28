@@ -40,7 +40,7 @@ import { performance } from "node:perf_hooks";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { acquireLock, PROMOTION_LOCK_WAIT_MS } from "./promotion-lock.mjs";
-import { withPromotionGuard } from '../promote/guard.mjs';
+import { preparePromotionGuard } from '../promote/guard.mjs';
 import { runTrain } from '../promote/train.mjs';
 import { resolveGateProfile, HOST_ENV } from '../promote/gate-profile.mjs';
 import { waitForPromotionMemory, refuseBeforeTrain } from '../promote/memory-gate.mjs';
@@ -2674,7 +2674,10 @@ async function promoteLocked(topic, root, options) {
     } catch (error) { fail(error.message); }
   }
   const guard = (operation) => {
-    try { return ownGuard(() => withPromotionGuard({ canonical: root, identity: REPO_IDENTITY, workspace: path, topic, ...options }, operation)); }
+    try {
+      const promotion = preparePromotionGuard({ canonical: root, identity: REPO_IDENTITY, workspace: path, topic, ...options });
+      return ownGuard(() => promotion.run(operation));
+    }
     catch (error) { fail(error.message); }
   };
   guard();

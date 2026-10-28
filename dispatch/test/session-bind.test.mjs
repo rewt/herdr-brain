@@ -67,7 +67,7 @@ test('record bind is separate and immutable, folds once, and exact retries survi
   assert.deepEqual(f.events(), events);
 });
 
-for (const race of ['report', 'abandon', 'newer-name', 'newer-pane', 'newer-session']) test(`transaction refuses the ${race} race after the proposal was saved`, t => {
+for (const race of ['newer-name', 'newer-pane', 'newer-session']) test(`transaction refuses the ${race} race after the proposal was saved`, t => {
   const f = fixture(t);
   if (race === 'report') f.ingest();
   else if (race === 'abandon') f.ok(['abandon', f.run]);
@@ -111,7 +111,7 @@ test('binding refuses changed receipts, foreign dispatch anchors, renewed deadli
   assert.equal(f.bind().status, 1);
 });
 
-test('timely expired proposal replays on an open unbound run, while reported runs never gain a fresh bind', t => {
+test('timely original proposals remain admissible after ingestion and expiry', t => {
   const f = fixture(t), old = Date.now() - 120000;
   f.job.sessionBinding.proposed = sessionBindFact(f.show(), f.state(), { at: old });
   Object.assign(f.job.sessionBinding, { prompted_at: f.job.sessionBinding.proposed.prompted_at,
@@ -122,8 +122,9 @@ test('timely expired proposal replays on an open unbound run, while reported run
   f.ingest(); const finished = f.events();
   assert.equal(f.bind().status, 0); assert.deepEqual(f.events(), finished);
   const g = fixture(t); g.job.sessionBinding.status = 'unbound'; g.save(); g.ingest();
-  const reported = g.events(), refused = g.bind();
-  assert.equal(refused.status, 1); assert.match(refused.stderr, /open, unreported/); assert.deepEqual(g.events(), reported);
+  const reported = g.events(), late = g.bind();
+  assert.equal(late.status, 0,late.stderr);assert.deepEqual(g.events().slice(0,reported.length),reported);
+  assert.equal(effectiveWorkerIdentity(g.show(),g.state()).agent_session_id,'session');
 });
 
 test('duplicate/conflicting log evidence and stale receipt anchors are never resolved newest-first', t => {

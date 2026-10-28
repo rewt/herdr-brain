@@ -97,3 +97,33 @@ test('an ownership refusal is never re-prepared or converted into launched succe
   assert.equal(promptCalls(f).length, 1);
   assert.equal(completions(f).at(-1).exit_code, 1);
 });
+
+test('original unprompted failure stays nonfinal until its producer commits explicit authorized abandonment',t=>{
+  const f=fixture(t);f.fail('watch');
+  const failed=f.start();assert.equal(failed.status,1,failed.stderr);
+  const journal=f.jobs()[0],job=JSON.parse(fs.readFileSync(journal));
+  const original=completions(f).at(-1);assert.equal(original.stage,'watch');
+  assert.equal(original.closeout_binding_errors[0].code,'DISPATCH_NOT_FINAL');
+  assert.equal(f.show(job.run).abandoned,null,'prompt not sent is not finality');
+  f.fail('');
+  const abandoned=f.dispatch(['--retry',job.run,'--abandon','--abandon-reason','Explicitly end the original unprompted allocation']);
+  assert.equal(abandoned.status,0,abandoned.stderr+abandoned.stdout);
+  assert.equal(JSON.parse(abandoned.stdout).result,'abandoned');assert.equal(promptCalls(f).length,0);
+  assert.ok(f.show(job.run).abandoned);
+  const rows=fs.readFileSync(path.join(f.org,'events.jsonl'),'utf8').trim().split('\n').map(JSON.parse),ending=rows.find(e=>e.type==='run.abandoned');
+  assert.equal(ending.producer.journal,journal);assert.equal(ending.producer.attempt,job.token);
+  assert.equal(ending.authorization.proof.kind,'original-unprompted-terminal');
+  assert.ok(ending.closeout_targets?.length||ending.closeout_binding_errors?.length);
+  assert.deepEqual(rows.find(e=>e.seq===original.seq),original);
+  const repeated=f.dispatch(['--retry',job.run,'--abandon','--abandon-reason','Same authorized original']);
+  assert.equal(repeated.status,0,repeated.stderr);assert.equal(promptCalls(f).length,0);
+});
+
+test('unknown prompt delivery cannot be relabeled as terminal abandonment',t=>{
+  const f=fixture(t);f.fail('prompt-lost-reply');const failed=f.start();assert.equal(failed.status,1);
+  const journal=f.jobs()[0],job=JSON.parse(fs.readFileSync(journal));
+  assert.equal(job.stage,'prompting');
+  const result=f.dispatch(['--retry',job.run,'--abandon','--abandon-reason','Cannot prove this']);
+  assert.equal(result.status,1);assert.match(result.stderr,/UNKNOWN is retained/);
+  assert.equal(f.show(job.run).abandoned,null);assert.equal(promptCalls(f).length,1);
+});

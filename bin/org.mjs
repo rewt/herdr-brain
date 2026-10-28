@@ -1080,6 +1080,7 @@ const COMMANDS = {
   claim: lazy('../lib/run-owner.mjs', 'claimCommand'),
   handoff: lazy('../lib/retire-command.mjs', 'handoffCommand'),
   'pane-release': lazy('../lib/retire-command.mjs', 'releaseCommand'),
+  'report-available': lazy('../lib/report-availability.mjs', 'reportAvailableCommand'),
   'session-bind': lazy('../dispatch/session-bind-command.mjs', 'sessionBindCommand'),
   desks: lazy('../settle/desks-command.mjs', 'desksCommand'),
   config: lazy('../lib/config-command.mjs', 'configCommand'),

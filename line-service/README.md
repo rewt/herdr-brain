@@ -696,3 +696,42 @@ launchd revert allowlist is not this rollback entry. The last-good code stays
 live if proof fails. Public, mainnet, secrets, other-identity files and unarchived
 work stay fenced. The release coordinator retains the final full-release and
 adoption obligations.
+
+## Finite report and closeout turns
+
+The existing installation's `--once` entry first runs bounded report ingest and
+closeout, then starts (or finds) the ordinary finite general-pass child. Its
+existing launchd interval therefore continues waking while a slow review owns
+`pass.lock`. Startup and each scheduled wake reconcile committed run/report
+sources; no second launchd job, saved watcher replacement or core loop is needed.
+The new `line-service/closeout.mjs --once --repo ... --org ...` hint entry delegates
+to the same role. Both use the birth-aware `closeout-turn.lock`; the existing
+closer still owns its consumer and retirement locks and every native/Git effect.
+
+New original watchers publish `record report-available --run R-n --sha256 HASH`
+after validation, ahead of waiting for idle. That commits a source hint before
+waking the finite role; report availability itself grants no retirement authority.
+Lost hints, spawn replies and ingest acknowledgements are repaired by the next
+finite reconciliation. `closeout-turn.json` checkpoints a selection before its
+command and a continuation before acknowledgement. The default turn selects at
+most eight reports and eight closeouts with a 45-second scheduling allowance;
+native drains receive the remaining deadline. Least-recently-selected targets
+run first, including after a crash. A kept target yields to independent peers.
+Original UNKNOWN/refused commands remain governed by their original record facts.
+
+Final reports and authorized abandonments bind their original run/claim, dispatch,
+launch receipt, common directory and worktree/branch generation in the source
+transaction. Missing allocation or native identity produces a typed binding
+exception. A timely saved Codex observation may append after finality, without
+renewing its window, and complete an unattempted empty binding only when the
+original allocation still matches. Existing effect attempts never acquire a new
+source opportunity. Fresh effect checks retain current-run/report hash, claim,
+source/epoch, native session/terminal/pane and STOP/HOLD checks.
+
+A failed dispatch records its original terminal result; prompt-not-sent alone
+leaves a typed nonfinal exception. Explicit
+`dispatch/dispatch.mjs --retry R-n --abandon --abandon-reason TEXT` lets that
+original producer commit authorized abandonment only with positive pre-native
+or bound unprompted evidence. Uncertain launch/delivery stays retained. New
+allocation uses the same birth-aware retirement exclusion. These source changes
+do not restart an installation, change pins, release, or prove live latency.

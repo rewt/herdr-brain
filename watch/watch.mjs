@@ -482,6 +482,7 @@ async function watch() {
     return;
   }
 
+  let availableHash;
   for (;;) {
     // Capture the cursor before reading state so an append during inspection
     // is still checked after the filesystem subscriptions become live.
@@ -506,6 +507,11 @@ async function watch() {
     }
     const beforeStamp = fileStamp(reportPath);
     let report = reportState(reportPath);
+    if(report.kind==='valid')try{
+      const hash=crypto.createHash('sha256').update(fs.readFileSync(reportPath)).digest('hex');
+      if(hash!==availableHash){const hint=org(['report-available','--run',runId,'--sha256',hash]);
+        if(!hint.error&&hint.status===0)availableHash=hash;}
+    }catch{/* The original watcher continues; the finite line reconciles lost hints. */}
     const status = agentStatus(agent);
     const observedAt = new Date().toISOString();
     const state = status.state;

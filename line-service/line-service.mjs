@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
-import { spawnSync, execFileSync } from 'node:child_process';
+import { spawn, spawnSync, execFileSync } from 'node:child_process';
 import {foregroundCommand} from '../dispatch/foreground-command.mjs';
 import {originalDispatchOutcome} from '../dispatch/outcome.mjs';
 import { fileURLToPath } from 'node:url';
@@ -40,6 +40,7 @@ import {isDecision,decisionActivation,decisionRoute,decisionBrief,decisionCandid
 import {outcomeFailure} from '../lib/uncertain-outcome.mjs';
 import {queueOutcomeDecision,obsoleteOutcomeDecision} from './outcome-decision.mjs';
 import {registerCloseoutWait,closeoutWait,closeoutWaitState,closeoutNextStage} from '../lib/closeout-status.mjs';
+import {runCloseoutTurn} from './closeout-turn.mjs';
 import {transact} from '../lib/store.mjs';
 export { reviewAttempt } from './review.mjs';
 
@@ -158,7 +159,9 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
     if (reported && !run.report) throw Error('report not ingested');
     return { ...snapshot, run, item };
   };
+  const closeout=()=>runCloseoutTurn({project,org,env:childEnv,cli,guard:observe,maxSteps:maxStepsPerStage,budgetMs:Math.min(45000,passBudgetMs),clock:workClock});
   function pass() {
+    try { closeout(); } catch(error) { log({action:'closeout-held',reason:error.message}); }
     const release = noticeLock(path.join(directory, 'pass.lock'));
     let effects,checkpointNotices;
     const passAt=now(),heartbeat=phase=>writeFileAtomic(path.join(directory,'heartbeat.json'),JSON.stringify({at:now(),started_at:passAt,project:project.identity,source:sourceRoot,phase,pid:process.pid})+'\n',0o600);
@@ -232,23 +235,6 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       };
       log({ action: 'pass-start', pid: process.pid, identity: project.identity, source: sourceRoot,source_head:bundleRelease().commit??sourceGit(sourceRoot,['rev-parse','HEAD']) });
       try { snapshot = current(); } catch (e) { log({ action: 'pass-held', reason: e.message }); return { held: e.message, directory }; }
-      let intakeSteps=0;
-      for (const run of snapshot.state.runs.values()) {
-        if(expired()||intakeSteps>=maxStepsPerStage)break;
-        if(run.report||run.abandoned){if(snapshot.state.items.get(run.item)?.closed)timings.historical_intake_skipped++;continue;}
-        if(!run.report_path||!fs.existsSync(run.report_path))continue;
-        const item=snapshot.state.items.get(run.item);if(!item)continue;
-        if(item.closed||!run.owner||run.owner.legacy||run.owner.controller!=='brain'||item.runs.at(-1)!==run.id&&snapshot.state.runs.get(item.runs.at(-1))?.report){timings.historical_intake_skipped++;continue;}
-        try{
-          const workspace=Boolean(run.workspace&&fs.existsSync(run.workspace));
-          guardRun(run.id,{reported:false,current:false,workspace});
-          intakeSteps++;
-          effect(`ingest:${run.id}`,()=>{
-            guardRun(run.id,{reported:false,current:false,workspace});
-            return cli('bin/org.mjs',['ingest',run.report_path,'--run',run.id,...(item.runs.at(-1)===run.id?['--if-current-run',run.id]:[])]);
-          },undefined,undefined,true);
-        }catch(e){note(`ingest:${run.id}`,e.message);}
-      }
       snapshot=current();
       let cutoff;try{cutoff=phase0Boundary(snapshot.events,{repo,org,identity:project.identity});}catch{
         try{checkpointNotices();ensureReviewBoundary({repo,org,env:childEnv});stale=true;snapshot=current();cutoff=phase0Boundary(snapshot.events,{repo,org,identity:project.identity});}catch(e){note('review-cutoff',e.message);}
@@ -392,56 +378,6 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         }
         try{checkpointNotices();observeDecisionConsequences({repo,org,env:childEnv,native});stale=true;}catch(e){note('decision-consequence',e.message);}
       }
-      // Cleanup owns its own checked publication/selection scope. A REVIEW
-      // history boundary never excludes a valid original cleanup binding.
-      // Slow intake/review work must not spend cleanup's scheduling allowance.
-      // This resets selection only; each effect still rechecks all live fences.
-      const beforeCleanup=workClock()-workStarted;workStarted=workClock();
-      log({action:'cleanup-stage',preceding_work_ms:beforeCleanup,preceding_budget_exhausted:beforeCleanup>=passBudgetMs,work_budget_ms:passBudgetMs});
-      try{
-        if(!expired()&&lineServiceOwnsCleanup(project,org)){
-          cli('supervisor/closeout.mjs',['refresh','--repo',repo,'--org',org]);stale=true;
-        }
-      }catch(e){note('closeout-binding',e.message);}
-      try {
-        const observed = current(), evaluationRows=closeoutEvaluations(project.identity,org,observed.events),evaluations = new Map(evaluationRows.map(e => [e.key, e]));
-        const ownedEntries=currentCloseoutEntries(project.identity,org,observed.events);
-        for(const entry of ownedEntries)if(entry.reportCloseout){const prior=closeoutEvaluation(entry,observed.events);if(prior)evaluations.set(entry.key,prior);else evaluations.delete(entry.key);}
-        for(const e of ownedEntries){const prior=evaluations.get(e.key);if(e.org!==org||e.project!==repo||!prior||prior.completed)continue;
-          if(!closeoutNextStage(e,prior,observed.events,ownedEntries)&&!closeoutWait(e,prior,observed.events)){transact(org,events=>({add:registerCloseoutWait(e,prior,events,ownedEntries)}),{actor:'line-service'});stale=true;}
-        }
-        const linked=current();
-        const entries = ownedEntries.filter(e => {
-          if (e.org !== org || e.project !== repo) return false;
-          // Historical requests retain their exact owner/source. Neither a
-          // review cutoff nor a new code epoch clears an original refusal.
-          const prior = evaluations.get(e.key);
-          if (prior?.completed) {timings.closeout_retained++;return false;}
-          if (!prior && !fs.existsSync(e.cwd)) return false;
-          if(directCloseoutObservation(e,prior,linked.events))return true;
-          if(prior){
-            // The closer owns its next stage: progress, never a missing-producer decision.
-            const next=closeoutNextStage(e,prior,linked.events,ownedEntries);
-            if(next){if(next.ready)return true;timings.closeout_retained++;return false;}
-            const wait=closeoutWait(e,prior,linked.events),status=closeoutWaitState(wait,linked.events);
-            if(['defect','failed'].includes(status)){
-              effects.outcome_decisions??={};const key=`closeout:${e.key}`;
-              effects.outcome_decisions[key]??=queueOutcomeDecision({repo,org,env:childEnv,check:{key,subject:{item:e.item,run:e.run,key:e.key,head:e.head,source:e.source},wait,status}});save();stale=true;
-            }
-            if(status!=='complete'){timings.closeout_retained++;return false;}
-          }
-          return !prior||closeoutRevision(e,linked.events,linked.state)>(prior.revision??0);
-        });
-        effects.closeout_attempts??={};
-        let attempt=Math.max(0,...Object.values(effects.closeout_attempts));
-        for(const {entry,sessionsOnly}of scheduleLineCloseouts(entries,evaluationRows,{batch:true,attempts:effects.closeout_attempts})){
-          if(expired())break;
-          const revision=closeoutRevision(entry,linked.events,linked.state),outcomeReadback=directCloseoutObservation(entry,evaluations.get(entry.key),linked.events)||Boolean(evaluations.get(entry.key)&&closeoutWaitState(closeoutWait(entry,evaluations.get(entry.key),linked.events),linked.events)==='complete');
-          const next=evaluations.get(entry.key)&&closeoutNextStage(entry,evaluations.get(entry.key),linked.events,ownedEntries);
-          effect(`closeout:${sessionsOnly?'sessions':'physical'}:${digest(next?[entry.key,revision,next.stage]:[entry.key,revision])}`,()=>JSON.parse(cli('supervisor/closeout.mjs',['drain','--repo',repo,'--org',org,'--keys',JSON.stringify([entry.key]),'--no-restart','--retry-safe','--deadline','0',...(sessionsOnly?['--sessions-only']:[])])),undefined,undefined,true,outcomeReadback);
-          effects.closeout_attempts[entry.key]=++attempt;save();
-        }
-      } catch (e) { note('closeout', e.message); }
       // Only a real post-cutover
       // pending reserved question with an explicitly named decider may wake.
       snapshot=current();
@@ -614,12 +550,21 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       return { result: 'pass-complete', directory };
     } finally { try{checkpointNotices?.();}finally{try{heartbeat('finished');}finally{release();}} }
   }
-  return { pass, directory, log };
+  return { pass, closeout, directory, log };
+}
+
+// The existing launchd schedule stays finite while the general pass runs in
+// its own finite child. Every wake reconciles closeout even during long review.
+// pass.lock and the existing action journal still serialize all general work.
+export function wakeLineService({service,launch}){
+  const closeout=service.closeout();
+  const general=fs.existsSync(path.join(service.directory,'pass.lock'))?{already_running:true}:launch();
+  return{result:'line-wake-complete',closeout,general};
 }
 
 export async function main(argv = process.argv.slice(2), {home}={}) {
   const { values } = parseArgs({ args: argv, usage: 'line-service.mjs --once --repo CANONICAL --org RECORD --to SUPERVISOR', options: {
-    once: { type: 'boolean' },digest:{type:'boolean'},since:{type:'string'}, repo: { type: 'string' }, org: { type: 'string' }, to: { type: 'string' }, herdr: { type: 'string' },
+    once: { type: 'boolean' },'general-pass':{type:'boolean'},digest:{type:'boolean'},since:{type:'string'}, repo: { type: 'string' }, org: { type: 'string' }, to: { type: 'string' }, herdr: { type: 'string' },
   } });
   if(values.digest){
     if(!values.org)throw Error('--digest needs --org RECORD');
@@ -633,7 +578,15 @@ export async function main(argv = process.argv.slice(2), {home}={}) {
   serviceSource(values.repo,{home});
   installedContext(values.repo,values.org??findOrgDir({cwd:values.repo,env:{...process.env,ORG_DIR:''}}));
   const service = createLineService({...values,runtimeHome:home});
-  const result = service.pass();
+  const result = values['general-pass'] ? service.pass() : wakeLineService({service,launch:()=>{
+    const output=fs.openSync(path.join(service.directory,'launchd.log'),'a',0o600);
+    try{
+      const child=spawn(process.execPath,[fileURLToPath(import.meta.url),...argv,'--general-pass'],
+        {cwd:values.repo,env:process.env,detached:true,stdio:['ignore',output,output]});
+      child.on('error',error=>service.log({action:'general-start-deferred',reason:error.message}));child.unref();
+      return{pid:child.pid};
+    }finally{fs.closeSync(output);}
+  }});
   process.stdout.write(JSON.stringify(result) + '\n');
 }
 if (isMain(import.meta.url)) main().catch(e => { process.stderr.write(`line-service: ${e.message}\n`); process.exitCode = 1; });

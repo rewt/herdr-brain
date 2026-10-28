@@ -36,6 +36,7 @@ import {originalPrestartProof,reviewDigest,reviewPlain} from '../line-service/re
 import {checkDispatchEligibility,launchDigest} from './launch-guard.mjs';
 import { createWorkerBrief, validateWorkerBrief, validateLineExecution, compatibleLineBrief, lineWorkerPrompt, projectExceptionAddress } from '../lib/worker-brief.mjs';
 import {outcomeFailure} from '../lib/uncertain-outcome.mjs';
+import {claimRetirementOwner} from '../lib/closeout.mjs';
 import {recordDispatchCompletion} from './completion.mjs';
 
 const local = (file) => fileURLToPath(new URL(file, import.meta.url));
@@ -50,7 +51,7 @@ const { values: opt, positionals } = parseArgs({ usage: "Usage: node dispatch/di
   adopt: { type: 'string' }, fresh: { type: 'boolean' }, resend: { type: 'boolean' },
   'accept-delivered': { type: 'boolean' }, 'recover-run': { type: 'string' },
   'from-run': { type: 'string' }, unblocks: { type: 'string' },
-  detach:{type:'boolean'},
+  detach:{type:'boolean'}, abandon:{type:'boolean'},'abandon-reason':{type:'string'},
   'continue-preflight':{type:'boolean'},
   'continue-review':{type:'boolean'},
   'resolve-not-started':{type:'string'},disposition:{type:'string'},'decision-seq':{type:'string'},id:{type:'string'},'changed-source':{type:'string'},role:{type:'string'},
@@ -61,7 +62,7 @@ const recordCLI = cli('org', '../bin/org.mjs');
 const laneCLI = cli('lane', '../lanes/lane.mjs');
 const watchCLI = cli('watch', '../watch/watch.mjs');
 let job, journal, lock, contender, ownsLock = false, observationDeadline;
-let releaseAdmission;
+let releaseAdmission, releaseRetirement;
 let controllerDeadline=Infinity;
 let preflight;
 let reviewContinuation;
@@ -357,6 +358,7 @@ async function main() {
     process.stdout.write(`${fs.readFileSync(journal, 'utf8')}\n`);
     return;
   }
+  if((opt.abandon||opt['abandon-reason'])&&(!opt.retry||!opt.abandon||!opt['abandon-reason']?.trim()))throw Error('authorized abandonment requires --retry --abandon --abandon-reason TEXT');
   if (opt.retry) {
     if (positionals.length || ['lane', 'route', 'brief', 'report', 'reuse', 'resume-session', 'base', 'extra', 'awaited', 'awaited-step', 'unblocks'].some((key) => opt[key] !== undefined)) {
       throw new Error('--retry uses the saved request; do not supply new work flags');
@@ -397,6 +399,7 @@ async function main() {
       return;
     }
     job = saved;
+    if(job.terminal_abandonment&&!opt.abandon)throw Error('original dispatch was terminally abandoned; no launch or prompt retry');
     if (job.resumeDeliveryProtocol && (opt.fresh || opt.adopt || opt.resend || opt['accept-delivered']))
       throw Error('resume launch/delivery outcome must be retained; no replacement, adoption, confirmation or resend');
     if (opt['from-run'] !== undefined) {
@@ -494,6 +497,7 @@ async function main() {
     save();
     lockJob();
   }
+  releaseRetirement = claimRetirementOwner(job.common,{waitMs:60000,deadline:controllerDeadline});
   const common = fs.realpathSync(git(['rev-parse', '--path-format=absolute', '--git-common-dir']));
   if (common !== job.common) throw new Error('repository common-directory identity changed');
   if (!job.reuse && (['open', 'start', 'starting', 'worker'].includes(job.stage) ||
@@ -634,6 +638,23 @@ async function main() {
   }
   claimAdmission();
   const run = json(record(['show', job.run, '--json']));
+  if(opt.abandon){
+    if(run.report)throw Error('reported dispatch needs no abandonment');
+    if(!job.terminal_abandonment){
+      if(run.abandoned)throw Error('abandonment belongs to another producer; retain its evidence');
+      const zero=job.stage==='worker'&&job.native_launch_attempted===false&&!job.worker&&!job.launchProcess&&!job.sessionBinding;
+      const unprompted=['watch','prompt'].includes(job.stage)&&job.worker?.agentSessionId&&job.launchProcess?.identity&&!job.sessionBinding;
+      if(!zero&&!unprompted)throw Error('terminal abandonment requires original positive never-started or bound unprompted proof; UNKNOWN is retained');
+      let proof={kind:'original-pre-native-terminal'};
+      if(unprompted){const seen=observeNative();
+        if(!['idle','done'].includes(seen.status)||seen.session!==job.worker.agentSessionId||seen.process.pid!==job.launchProcess.pid||seen.process.identity!==job.launchProcess.identity)
+          throw Error('original unprompted native allocation changed or working; abandonment refused');
+        proof={kind:'original-unprompted-terminal',native:seen,worker:job.worker};}
+      job.terminal_abandonment={reason:opt['abandon-reason'],authorized_by:'explicit-original-dispatch-abandon',proof};save();
+    }
+    recordDispatchCompletion({job,journal,exitCode:1});completionAttempted=true;
+    process.stdout.write(JSON.stringify({result:'abandoned',run:job.run,item:job.item,journal})+'\n');return;
+  }
   if ((run.abandoned || run.report) && job.stage !== 'complete') throw new Error('run is already abandoned or reported; start a new run');
   if (run.item !== job.item || run.meta?.dispatch_journal !== journal || fs.realpathSync(run.workspace) !== job.workspace) throw new Error('run no longer matches dispatch request');
   if (run.meta?.route !== job.route || Object.entries(job.declared).some(([key, value]) => (run.meta?.[key] ?? null) !== value)) throw new Error('run routing metadata changed; inspect before recovery');
@@ -844,6 +865,7 @@ catch (error) {
   }
 } finally {
   releaseAdmission?.();
+  releaseRetirement?.();
   if((opt.retry&&job?.detached||opt.detach&&process.exitCode)&&journal&&ownsLock){
     fs.mkdirSync(`${journal}.driver`,{recursive:true});const fd=fs.openSync(`${journal}.driver/results.jsonl`,'a',0o600);
     try{fs.writeFileSync(fd,JSON.stringify({at:new Date().toISOString(),journal,stage:job.stage,run:job.run,exit_code:process.exitCode??0,error:job.error??null,code:job.failure?.code??null,native_launch_attempted:job.native_launch_attempted??null})+'\n');fs.fsyncSync(fd);}finally{fs.closeSync(fd);}

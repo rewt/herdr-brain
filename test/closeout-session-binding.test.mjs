@@ -25,18 +25,11 @@ test('pending report and abandonment keep a valid delivery-time session binding 
     assert.equal(target.panes[0].session, 'session');
     assert.equal(target.panes[0].pane, 'w:p');
     const result = f.drain({ keys: [target.key] });
-    if (outcome !== 'abandoned') {
-      assert.equal(result.evaluated[0].completed, true, JSON.stringify(result));
-      assert.equal(fs.existsSync(f.lane), false);
-      assert.equal(f.read().tabs.length, 0);
-      assert.equal(effects(f).filter(e => e.action === 'closed' && e.tab_id).length, 1);
-      assert.equal(f.git(['rev-parse', 'refs/heads/lane/topic']), f.head, 'unlanded source remains recoverable');
-    } else {
-      assert.equal(result.evaluated[0].completed, false, JSON.stringify(result));
-      assert.match(result.evaluated[0].reason, /integration chain is still open/);
-      assert.deepEqual(f.read().actions, [], 'abandonment alone cannot release unlanded content');
-      assert.ok(fs.existsSync(f.lane));
-    }
+    assert.equal(result.evaluated[0].completed, true, JSON.stringify(result));
+    assert.equal(fs.existsSync(f.lane), false);
+    assert.equal(f.read().tabs.length, 0);
+    assert.equal(effects(f).filter(e => e.action === 'closed' && e.tab_id).length, 1);
+    assert.equal(f.git(['rev-parse', 'refs/heads/lane/topic']), f.head, 'unlanded source remains recoverable');
   }
 });
 
@@ -92,4 +85,19 @@ test('empty report recovery retains original native attempts, refusals and chang
     assert.ok(fs.existsSync(f.lane), kind);
     assert.equal(events(f).some(e => e.type === 'cleanup.bound'), false, kind);
   }
+});
+
+for(const outcome of ['done','blocked','needs_human','failed','abandoned'])test(`late original Codex observation binds the immutable ${outcome} allocation`,t=>{
+  const f=setup(t,{direct:true,bound:true,merged:true}),before=events(f),proposal=before.find(e=>e.type==='run.session_bound');
+  assert.ok(proposal);
+  fs.writeFileSync(f.eventFile,before.filter(e=>e!==proposal).map(e=>JSON.stringify(e)+'\n').join(''));
+  const [ending]=f.append([outcome==='abandoned'?{type:'run.abandoned',id:'R-1'}:{type:'report.ingested',run:'R-1',sha256:'fixture',report:{outcome}}]);
+  const original=ending.closeout_targets[0],bytes=fs.readFileSync(f.eventFile);
+  assert.deepEqual(original.panes,[]);assert.equal(ending.closeout_binding_errors[0].code,'NATIVE_IDENTITY_MISSING');
+  const {seq,at,by,...fact}=proposal;const [late]=f.append([fact]);
+  assert.equal(late.closeout_targets[0].panes[0].session,'session');
+  for(const key of ['key','head','branch','worktreeIdentity','gitIdentity','allocation'])assert.deepEqual(late.closeout_targets[0][key],original[key]);
+  assert.deepEqual(fs.readFileSync(f.eventFile).subarray(0,bytes.length),bytes);
+  const [entry]=currentCloseoutEntries(f.common,f.org,events(f));assert.equal(entry.source.seq,late.seq);
+  const closed=f.drain({keys:[entry.key]});assert.equal(closed.evaluated[0].completed,true,JSON.stringify(closed));
 });

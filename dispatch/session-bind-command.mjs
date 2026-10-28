@@ -4,6 +4,7 @@ import { parseArgs } from 'node:util';
 import { findOrgDir, planTransaction, UserError, writer } from '../lib/store.mjs';
 import { gitProject } from '../lib/project.mjs';
 import { effectiveWorkerIdentity, validSessionBind, sharesWorker, sameReceipt } from '../lib/worker-identity.mjs';
+import { bindCloseoutSources, publishCloseoutEvents } from '../lib/closeout.mjs';
 import { validResumeDelivery } from './resume-delivery.mjs';
 import { protectRecordMutation } from '../lib/record-guard.mjs';
 const fields = ['type', 'run', 'dispatch', 'receipt', 'process', 'prompted_at', 'deadline', 'observed_at', 'session'];
@@ -37,14 +38,15 @@ export function sessionBindCommand(argv) {
         throw new UserError('run already has a different or conflicting session bind');
       return { add: [] }; // Lost reply remains recoverable after completion/deadline.
     }
-    if (run.report || run.abandoned) throw new UserError('session bind requires an open, unreported run');
     // validSessionBind checks the saved observation against the original window.
     // Record-lock/CLI latency must not turn a timely observation into a refusal.
     if ([...state.runs.values()].some(other => other.started.seq > run.started.seq &&
         (sharesWorker(run, other, state) || effectiveWorkerIdentity(other, state).agent_session_id === proposed.session)))
       throw new UserError('a newer run holds the worker occupant');
-    return protectRecordMutation({ org, events, state, command: 'session-bind', mutation: { add: [proposed] } });
+    return bindCloseoutSources({ cwd: job.repo, org, events, mutation:
+      protectRecordMutation({ org, events, state, command: 'session-bind', mutation: { add: [proposed] } }) });
   }, { actor: who.actor, unattributed: who.unattributed, replaySafe: true });
+  publishCloseoutEvents({ cwd: process.cwd(), org, added: result.added });
   process.stdout.write(JSON.stringify({ recorded: result.added.length > 0 }) + '\n');
   return 0;
 }

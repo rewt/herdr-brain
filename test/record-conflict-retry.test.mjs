@@ -59,6 +59,20 @@ test('guard retries are bounded and never run the effect on exhaustion', t => {
   assert.equal(rows.length, 32); assert.equal(rows.at(-1).retry, false);
 });
 
+test('conflict diagnostics preserve redirected or multiply linked files', t => {
+  const f = fixture(t), target = path.join(f.root, 'retained'), journal = path.join(f.org, 'record-conflicts.jsonl');
+  fs.writeFileSync(target, 'retain these bytes');
+  let raced = false;
+  race(t, f, () => { if (!raced) { raced = true; append(f); } });
+  for (const link of ['symlink', 'hardlink']) {
+    if (fs.lstatSync(journal, {throwIfNoEntry:false})) fs.unlinkSync(journal);
+    if (link === 'symlink') fs.symlinkSync(target, journal); else fs.linkSync(target, journal);
+    raced = false;
+    withRecordGuard(f.org, () => {}, () => {});
+    assert.equal(fs.readFileSync(target, 'utf8'), 'retain these bytes');
+  }
+});
+
 test('guard refuses nested record effects and never replays an operation conflict', t => {
   const f = fixture(t); let checks = 0, effects = 0;
   assert.throws(() => withRecordGuard(f.org, () => {

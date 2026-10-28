@@ -51,7 +51,7 @@ for (const harness of ['codex', 'claude']) for (const late of [false, true]) {
 // Native adapters assert Brain's original-cwd/UUID contract while retaining a
 // transcript. Git, record intake, retirement, lane reopening, dispatch guards
 // and prompt/watch orchestration below are the actual product code. No models.
-function resumeAdapters(f, harness, transcript) {
+function resumeAdapters(f, harness, transcript, nullNative) {
   const calls = path.join(f.scratch, 'resume-calls.jsonl'), worker = path.join(f.scratch, 'resumed-worker.json');
   const common = `import fs from 'node:fs';import {spawnSync} from 'node:child_process';
 const a=process.argv.slice(2),calls=${JSON.stringify(calls)},file=${JSON.stringify(worker)};
@@ -65,12 +65,17 @@ if(a[0]==='prepare'&&!fs.existsSync(${JSON.stringify(f.lane)}))throw Error('work
 if(a[0]==='dispatch'){
  const job=JSON.parse(fs.readFileSync(a[a.indexOf('--dispatch-journal')+1]));
  const {resumeSessionArguments}=await import(${JSON.stringify(new URL('../lanes/routes.mjs', import.meta.url).href)});
- const argv=resumeSessionArguments({kind:${JSON.stringify(harness)},launch:['/owned/bin/ai']},job.resumeSession);
- const saved=JSON.parse(fs.readFileSync(${JSON.stringify(transcript)}));
- if(saved.cwd!==job.workspace||saved.id!==job.resumeSession)throw Error('saved context unavailable at this cwd');
- fs.appendFileSync(calls,JSON.stringify({type:'ai',cwd:job.workspace,argv,context:saved.context})+'\\n');
- const agent={name:'resumed-worker',agent:${JSON.stringify(harness)},pane_id:'new:p',workspace_id:'new:w',terminal_id:'new:t',cwd:job.workspace,agent_session:{value:job.resumeSession},agent_status:'idle'};
- fs.writeFileSync(file,JSON.stringify(agent));emit({agentName:agent.name,pane:agent.pane_id,workspaceId:agent.workspace_id,terminalId:agent.terminal_id,agentSessionId:job.resumeSession,cwd:job.workspace});
+ const {resumePrompt}=await import(${JSON.stringify(new URL('../dispatch/resume-delivery.mjs', import.meta.url).href)});
+ const prompt=resumePrompt(job.resumeDelivery,job.resumeDelivery.agentName);
+ const argv=resumeSessionArguments({kind:${JSON.stringify(harness)},launch:['/owned/bin/ai']},job.resumeSession,{cwd:job.workspace,prompt});
+ const saved=fs.readFileSync(${JSON.stringify(transcript)},'utf8');
+ if(!saved.includes('prior conversation sentinel'))throw Error('saved context unavailable');
+ const rows=${JSON.stringify(harness)}==='codex'?[{type:'turn_context',payload:{cwd:job.workspace}},{type:'response_item',payload:{type:'message',role:'user',content:[{type:'input_text',text:prompt}]}}]
+ :[{type:'user',sessionId:job.resumeSession,cwd:job.workspace,message:{content:prompt}}];
+ fs.appendFileSync(${JSON.stringify(transcript)},rows.map(r=>JSON.stringify(r)+'\\n').join(''));
+ fs.appendFileSync(calls,JSON.stringify({type:'ai',cwd:job.workspace,argv,context:'prior conversation sentinel'})+'\\n');
+ const agent={name:job.resumeDelivery.agentName,agent:${JSON.stringify(harness)},pane_id:'new:p',workspace_id:'new:w',terminal_id:'new:t',cwd:job.workspace,agent_session:${nullNative ? 'null' : '{value:job.resumeSession}'},agent_status:'idle'};
+ fs.writeFileSync(file,JSON.stringify(agent));emit({agentName:agent.name,pane:agent.pane_id,workspaceId:agent.workspace_id,terminalId:agent.terminal_id,agentSessionId:agent.agent_session?.value??null,cwd:job.workspace});
 }
 if(a[0]==='verify-agent'){const w=JSON.parse(fs.readFileSync(file));if(w.name!==a[1]||w.cwd!==a[2])throw Error('wrong worker');}
 `, { mode: 0o755 });
@@ -82,11 +87,10 @@ if(a[0]==='agent'&&a[1]==='get'){
  else if(agent?.name===a[2])emit({result:{agent}});else{console.error('agent_not_found');process.exit(1);}
 }
 if(a[0]==='pane'&&a[1]==='read')process.stdout.write('› Ready for a task');
-if(a[0]==='pane'&&a[1]==='process-info')emit({result:{process_info:{foreground_processes:[]}}});
+if(a[0]==='pane'&&a[1]==='process-info')emit({result:{process_info:{shell_pid:1,foreground_processes:[{name:${JSON.stringify(harness)},pid:${process.pid}}]}}});
 if(a[0]==='agent'&&a[1]==='prompt'){
  if(agent.name!==a[2])throw Error('task targeted another agent');
- const saved=JSON.parse(fs.readFileSync(${JSON.stringify(transcript)}));saved.prompts.push(a[3]);
- fs.writeFileSync(${JSON.stringify(transcript)},JSON.stringify(saved));emit({result:{}});
+ throw Error('resume must never type the task into the pane');
 }
 `, { mode: 0o755 });
   const watch = path.join(f.scratch, 'resume-watch.mjs');
@@ -107,8 +111,12 @@ for (const harness of ['codex', 'claude']) for (const integrated of [false, true
     f.state.screen = fs.readFileSync(new URL(`../supervisor/test/fixtures/${harness}-empty.ansi`, import.meta.url), 'utf8');
     f.state.info.foreground_processes[0].name = harness;
     f.state.info.process_tree[1].command = `[${harness}]`; f.save();
-    const transcript = path.join(f.scratch, `${session}.json`);
-    fs.writeFileSync(transcript, JSON.stringify({ id: session, cwd: f.lane, context: 'prior conversation sentinel', prompts: [] }));
+    const nativeHome = path.join(f.scratch, 'native-home');
+    const transcript = harness === 'codex' ? path.join(nativeHome, 'sessions/2026/10/28', `rollout-date-${session}.jsonl`)
+      : path.join(nativeHome, 'projects', f.lane.replace(/[^A-Za-z0-9]/g, '-'), `${session}.jsonl`);
+    fs.mkdirSync(path.dirname(transcript), { recursive: true });
+    fs.writeFileSync(transcript, JSON.stringify(harness === 'codex' ? {type:'session_meta',payload:{id:session,cwd:f.lane,context:'prior conversation sentinel'}}
+      : {type:'user',sessionId:session,cwd:f.lane,message:{content:'prior conversation sentinel'}}) + '\n');
     const state = fold(events(f));
     const report = readReport('---\nrun: R-1\noutcome: blocked\nsummary: Continue from saved context\n---\n').report;
     f.append([{ type: 'report.ingested', run: 'R-1', item: 'ENG-1', report,
@@ -129,25 +137,33 @@ for (const harness of ['codex', 'claude']) for (const integrated of [false, true
     assert.throws(() => resumeSource({ ...input, harness: harness === 'codex' ? 'claude' : 'codex' }), /harness differs/);
     assert.throws(() => resumeSource({ ...input, lane: 'another' }), /original recorded lane/);
     assert.throws(() => resumeSource({ ...input, item: { id: 'ENG-2' } }), /another item/);
-    const adapters = resumeAdapters(f, harness, transcript);
+    const adapters = resumeAdapters(f, harness, transcript, integrated);
     const brief = path.join(f.scratch, 'resume-ask.md'); fs.writeFileSync(brief, 'Resume task sentinel');
     const dispatch = spawnSync(process.execPath, [path.join(source, 'dispatch/dispatch.mjs'), 'ENG-1', '--repo', f.repo,
       '--org', f.org, '--lane', 'topic', '--route', 'engineer', '--brief', brief, '--resume-session', session,
       '--lane-cli', adapters.lane, '--watch-cli', adapters.watch], {
-      cwd: f.repo, encoding: 'utf8', env: { ...f.env, MONITOR_SUPERVISOR_AGENT: 'supervisor-herdr', LANE_CONFIG: undefined },
+      cwd: f.repo, encoding: 'utf8', env: { ...f.env, MONITOR_SUPERVISOR_AGENT: 'supervisor-herdr', LANE_CONFIG: undefined, CODEX_HOME: nativeHome, CLAUDE_CONFIG_DIR: nativeHome },
     });
     assert.equal(dispatch.status, 0, dispatch.stderr);
     assert.equal(f.git(['rev-parse', 'HEAD'], f.lane), resume.base);
     const calls = fs.readFileSync(adapters.calls, 'utf8').trim().split('\n').map(JSON.parse);
     const ai = calls.find(c => c.type === 'ai');
     assert.equal(ai.cwd, f.lane); assert.equal(ai.context, 'prior conversation sentinel');
-    assert.deepEqual(ai.argv, harness === 'codex' ? ['resume', session] : ['--resume', session]);
+    assert.deepEqual(ai.argv.slice(0, 2), harness === 'codex' ? ['resume', session] : ['--resume', session]);
+    if (harness === 'codex') assert.deepEqual(ai.argv.slice(2, -1), ['-C', f.lane, '--']);
     const watcher = calls.find(c => c.type === 'resume-watch.mjs');
     assert.equal(watcher.a[watcher.a.indexOf('--to') + 1], 'supervisor-herdr');
     const resumed = JSON.parse(dispatch.stdout);
-    const prompts = JSON.parse(fs.readFileSync(transcript)).prompts;
+    const prompts = fs.readFileSync(transcript,'utf8').trim().split('\n').map(JSON.parse).flatMap(r => harness === 'codex'
+      ? r.type === 'response_item' ? [r.payload.content[0].text] : [] : r.message?.content?.startsWith('You are run') ? [r.message.content] : []);
     assert.equal(prompts.length, 1); assert.match(prompts[0], new RegExp(`run ${resumed.run} on org item ENG-1`));
     assert.ok(prompts[0].includes(brief));
+    assert.equal(calls.filter(c=>c.a?.[0]==='agent'&&c.a?.[1]==='prompt').length,0);
+    assert.equal(resumed.binding.status,'bound');
+    const facts=events(f);
+    assert.equal(facts.filter(e=>e.type==='run.session_bound'&&e.run===resumed.run).length,1);
+    assert.equal(facts.find(e=>e.type==='run.updated'&&e.id===resumed.run&&e.meta?.agent)?.meta.agent_session_id,undefined);
+    assert.ok(calls.indexOf(watcher)<calls.indexOf(ai),'supervisor watcher precedes command-line delivery');
     fs.writeFileSync(path.join(f.lane, 'unsaved'), 'keep owner changes');
     assert.throws(() => resumeSource({ ...input, events: events(f) }), /unsaved author work/);
   });

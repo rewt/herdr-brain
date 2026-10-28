@@ -100,9 +100,18 @@ export function checkDispatchLaunch({journal,sha256,repo,workspace,topic}) {
       fs.realpathSync(job.org)!==job.org||path.dirname(journal)!==path.join(job.org,'dispatch')||
       job.release?.root!==bundleRelease().root||job.stage!=='launching'||job.native_launch_attempted!==true||job.worker)
     throw Error('dispatch source/project/pending-effect identity changed');
+  if (job.resumeDeliveryProtocol && (!job.resumeSession || !job.resumeDelivery ||
+      job.resumeDelivery.session !== job.resumeSession || job.resumeDelivery.cwd !== workspace ||
+      !/^[a-z][a-z0-9_-]{0,31}$/.test(job.resumeDelivery.agentName ?? '') ||
+      typeof job.resumeDelivery.template !== 'string' || !job.resumeDelivery.template.trim() ||
+      typeof job.resumeDelivery.marker !== 'string' || !job.resumeDelivery.marker ||
+      !Number.isFinite(Date.parse(job.resumeDelivery.started_at)) ||
+      Date.now() >= Date.parse(job.resumeDelivery.started_at) + 60000))
+    throw Error('resume delivery intent is missing, changed or expired; retain the original attempt');
   const directory=path.join(actual.canonical,'.lane/supervisor');
   const stops=[path.join(directory,'STOP'),path.join(directory,'HOLD')];
   if(job.detached||job.detachedRequested)stops.push(path.join(job.org,'line-service',launchDigest(JSON.stringify(job.common)).slice(0,20),'STOP'));
   if(stops.some(file=>fs.existsSync(file)))throw Object.assign(Error('STOP/HOLD prevents native dispatch effect'),{code:'DISPATCH_STOPPED'});
-  return {...checkDispatchEligibility(job,journal),request_sha256:sha256,resumeSession:job.resumeSession??null};
+  return {...checkDispatchEligibility(job,journal),request_sha256:sha256,resumeSession:job.resumeSession??null,
+    ...(job.resumeDeliveryProtocol ? {resumeDelivery:job.resumeDelivery} : {})};
 }

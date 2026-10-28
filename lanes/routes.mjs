@@ -18,11 +18,13 @@ const launchData = Object.freeze({
 });
 export const exitCommandFor = kind => Object.hasOwn(launchData, kind) ? launchData[kind].exit : null;
 
-export function resumeSessionArguments(route, id) {
+export function resumeSessionArguments(route, id, delivery) {
   if (!/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(id ?? '')) throw Error('resume requires an explicit saved native conversation UUID');
   if (!route.launch?.some(word => basename(word) === 'ai')) throw Error('saved-session resume requires the configured ai identity wrapper');
-  if (route.kind === 'codex') return ['resume', id];
-  if (route.kind === 'claude') return ['--resume', id];
+  if (delivery && (!isAbsolute(delivery.cwd ?? '') || typeof delivery.prompt !== 'string' || !delivery.prompt.trim()))
+    throw Error('resume delivery requires an absolute folder and nonempty command-line task');
+  if (route.kind === 'codex') return ['resume', id, ...(delivery ? ['-C', delivery.cwd, '--', delivery.prompt] : [])];
+  if (route.kind === 'claude') return ['--resume', id, ...(delivery ? ['--', delivery.prompt] : [])];
   throw Error('route has no supported saved-session resume syntax');
 }
 

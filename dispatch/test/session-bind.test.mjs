@@ -2,6 +2,7 @@ import test from '../../test/helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
+import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fold } from '../../lib/state.mjs';
@@ -235,4 +236,15 @@ test('timely refused proposals replay without observing, and an elapsed observat
   await observeSessionBinding(expired.options);
   assert.equal(expired.job.sessionBinding.reason, 'native session observation deadline expired');
   assert.equal(expired.commits(), 0);
+});
+
+test('resume transaction requires qualified transcript evidence even with an observed native ID', t => {
+  const f = fixture(t), d = { file: '/known/transcript', device: 1, inode: 2, offset: 100, template: 'new task for WORKER', marker: 'WORKER', started_at: f.proposed.prompted_at };
+  Object.assign(f.job, { resumeDeliveryProtocol: 1, resumeSession: f.proposed.session, resumeDelivery: d, worker: { agentName: 'worker' } });
+  f.save(); assert.equal(f.bind().status, 1, 'native UUID and launch receipt alone cannot bind a resume');
+  d.receipt = { session: f.proposed.session, cwd: f.root, file: d.file, device: 1, inode: 2, offset: 100, end: 200,
+    prompt_sha256: createHash('sha256').update('new task for worker').digest('hex'), observed_at: f.proposed.observed_at };
+  f.save(); assert.equal(f.bind().status, 0);
+  const before = f.events(); assert.equal(f.bind().status, 0); assert.deepEqual(f.events(), before);
+  d.receipt.cwd = '/retired/old-lane'; f.save(); assert.equal(f.bind().status, 1); assert.deepEqual(f.events(), before);
 });

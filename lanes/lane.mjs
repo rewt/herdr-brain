@@ -23,6 +23,7 @@ import { waitForProvingHold, RESERVATION_WAIT_EXPIRED_CODE } from '../test-slot/
 import { projectFleet } from '../lib/fleet.mjs';
 import { resolveWorktreeRoot } from './worktree-root.mjs';
 import { literalLaunch } from '../lib/owner-launch.mjs';
+import { resumePrompt } from '../dispatch/resume-delivery.mjs';
 import { homeProject, policyLocation } from '../lib/config-home.mjs';
 import { homePolicyLayers, readPolicyFile, readProjectPolicy, validateLane } from '../lib/config-policy.mjs';
 import { resolveArchive, validateArchive } from '../lib/archive.mjs';
@@ -1251,7 +1252,7 @@ async function dispatch(topic, promptText, options = {}) {
     env: { ...process.env, ...Object.fromEntries(resolved.env.map(pair => {
       const at = pair.indexOf('='); return [pair.slice(0, at), pair.slice(at + 1)];
     })) } });
-  if (launchRequest?.resumeSession) agentArgs.push(...resumeSessionArguments(resolved, launchRequest.resumeSession));
+
   let registryPath;
   try {
     registryPath = preflightRegistryAutomation();
@@ -1366,10 +1367,15 @@ async function dispatch(topic, promptText, options = {}) {
   if (launchRequest?.resumeSession && liveAgents.some(a => (a.agent_session?.value ?? a.agent_session_id) === launchRequest.resumeSession))
     fail('saved native conversation still has a live allocation; retain it and do not resume concurrently');
   const liveAgentNames = new Set(liveAgents.map(agent => agent.name));
-  let agentName = newAgentName(topic, liveAgentNames);
+  const proposedName = launchRequest?.resumeDelivery?.agentName;
+  if (proposedName && (!/^[a-z][a-z0-9_-]{0,31}$/.test(proposedName) || liveAgentNames.has(proposedName)))
+    fail('proposed resume native name is invalid or already allocated; retain the original attempt');
+  let agentName = proposedName ?? newAgentName(topic, liveAgentNames);
   const startArgsFor = (name) => {
     const args = ["agent", "start", name, "--kind", resolved.kind, "--pane", pane];
-    if (agentArgs.length > 0) args.push("--", ...agentArgs);
+    const resumeArgs = launchRequest?.resumeSession ? resumeSessionArguments(resolved, launchRequest.resumeSession,
+      launchRequest.resumeDelivery ? { cwd: path, prompt: resumePrompt(launchRequest.resumeDelivery, name) } : undefined) : [];
+    if (agentArgs.length > 0 || resumeArgs.length) args.push("--", ...agentArgs, ...resumeArgs);
     return args;
   };
   // The pane's shell needs a moment before it can host an agent; retry

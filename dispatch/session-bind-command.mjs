@@ -5,6 +5,7 @@ import { findOrgDir, transact, UserError, writer } from '../lib/store.mjs';
 import { fold } from '../lib/state.mjs';
 import { gitProject } from '../lib/project.mjs';
 import { effectiveWorkerIdentity, validSessionBind, sharesWorker, sameReceipt } from '../lib/worker-identity.mjs';
+import { validResumeDelivery } from './resume-delivery.mjs';
 import { protectRecordMutation } from '../lib/record-guard.mjs';
 const fields = ['type', 'run', 'dispatch', 'receipt', 'process', 'prompted_at', 'deadline', 'observed_at', 'session'];
 
@@ -28,7 +29,7 @@ export function sessionBindCommand(argv) {
         proposed.prompted_at !== binding.prompted_at || proposed.deadline !== binding.deadline ||
         !sameReceipt(proposed.receipt, binding.receipt) ||
         JSON.stringify(proposed.process) !== JSON.stringify(binding.process) ||
-        !validSessionBind(run, proposed, state)) throw new UserError('session bind does not match the original dispatch and launch receipt');
+        !validResumeDelivery(job, proposed) || !validSessionBind(run, proposed, state)) throw new UserError('session bind does not match the original dispatch and launch receipt');
     const prior = state.sessionBindings.get(run.id) ?? [];
     if (prior.length) {
       if (prior.length !== 1 || effectiveWorkerIdentity(run, state).identity_conflict ||

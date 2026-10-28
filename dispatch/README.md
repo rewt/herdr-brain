@@ -74,7 +74,32 @@ expected-base checks. A dirty saved folder, relocated branch, unknown completion
 wrong harness or unrelated item refuses before native launch. Resume defaults
 its watcher recipient to the configured project supervisor, while its task
 prompt still targets the newly verified worker. Other fresh dispatches and
-saved jobs retain their existing recipient selection.
+saved jobs retain their existing recipient selection. New resume requests require that
+supervisor recipient, including when `--to` is explicit.
+
+For new resumes the supervisor watcher is armed with the proposed unique worker
+name before launch. The task is a literal native command-line argument, with
+Codex `resume UUID -C WORKTREE -- TASK` and Claude `--resume UUID -- TASK`.
+No resume task is typed into the pane. The launch guard rechecks the pinned
+request, source, claim and STOP/HOLD at the native effect boundary.
+
+Before launch, dispatch locates exactly one persisted conversation in the
+configured launch home's `CODEX_HOME/sessions` or the original project's
+`CLAUDE_CONFIG_DIR/projects`, and saves its file identity and append offset.
+Configure those homes in the existing launch environment when an identity
+wrapper selects a nondefault home; no other identity homes are searched.
+A fresh transcript user message must equal the generated task, and fresh Codex
+turn context (or the Claude user message) must name the restored folder. The
+transcript's observed session ID must agree with any native ID. Native
+PID/birth continuity, immutable worker receipt and the original 60-second
+launch/delivery deadline remain mandatory. Launch UUIDs stay diagnostic until
+qualification; they are not recorded as worker identity first. The journal
+retains the transcript range, task hash and observation time alongside the
+checked binding proposal. Missing delivery, wrong folder, replaced transcript,
+process change and expired observations remain unbound. Retries cannot renew
+that deadline, type/resend a task, adopt or replace an uncertain resume. Older
+saved requests retain their existing protocol and watcher.
+
 
 Both harnesses keep saved context outside the checkout. Claude can find an
 explicit UUID from another directory; Codex retains the recorded working
@@ -210,7 +235,7 @@ replace an existing origin. It adds a record precondition, preserving the saved
 work request and all route and worker recovery checks.
 
 The generated prompt names the ask, run brief, exact report path and run ID, plus
-`--extra` text. Neither input brief is patched or replaced. The worker starts
+`--extra` text. Neither input brief is patched or replaced. Fresh workers start
 without a work prompt; the prompt is sent only after its record is complete and
 `watch/watch.mjs --detach` has acknowledged startup while holding the run lock.
 The watcher uses a log under `.org/dispatch/` and inherits no supervisor pane,

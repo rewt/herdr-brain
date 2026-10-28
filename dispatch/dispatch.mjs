@@ -10,6 +10,7 @@ import { parseArgs } from '../lib/cli-help.mjs';
 import { loadDiscoveredRoutes, mergeRoutesConfig, resolveRoute, resolveLaunchRoute, resumeSessionArguments } from '../lanes/routes.mjs';
 import { correctionSource } from '../lib/report-closeout.mjs';
 import { resumeSource } from './resume-source.mjs';
+import { prepareResumeDelivery, observeResumeDelivery } from './resume-delivery.mjs';
 import { BRAIN_CONTROLLER, brainOwner, claimRun, readOwnedRun, requireController, fenceOwner, continueOwnerRelease } from '../lib/run-owner.mjs';
 import { findOrgDir, loadEvents, writeFileAtomic } from '../lib/store.mjs';
 import { fold } from '../lib/state.mjs';
@@ -253,7 +254,7 @@ function prepareSessionBinding(run) {
   // recovery must never pin a replacement occupant or rewrite a saved proposal.
   const receipt = binding ? binding.receipt
     : workerReceipt(json(record(['show', job.run, '--json'])), identityState());
-  const prompted = Date.now();
+  const prompted = job.resumeDeliveryProtocol ? Date.parse(job.resumeDelivery.started_at) : Date.now();
   job.sessionBinding = { status: 'observing', process: binding ? binding.process : job.launchProcess ?? null, receipt,
     prompted_at: new Date(prompted).toISOString(), deadline: new Date(prompted + 60000).toISOString() };
 }
@@ -264,6 +265,13 @@ async function bindSession() {
   observationDeadline = binding.proposed ? undefined : Date.parse(binding.deadline);
   try {
     await observeSessionBinding({ job: { ...job, journal }, save, observe: observeNative,
+      qualify: job.resumeDeliveryProtocol ? seen => {
+        const receipt = observeResumeDelivery(job.resumeDelivery, job.worker.agentName);
+        if (!receipt) return null;
+        if (seen.session && seen.session !== receipt.session) throw Error('native and transcript session identities differ');
+        job.resumeDelivery.receipt = receipt; save();
+        return receipt.session;
+      } : undefined,
       record: () => {
         // Only observations use the launch-window timeout. The writer checks
         // the saved observation against its original window under the lock.
@@ -281,6 +289,41 @@ function capture(name) {
 }
 function lockJob() {
   const held=lockRequest(journal);lock=held.lock;contender=held.contender;ownsLock=true;
+}
+function ensureWatcher() {
+  if (!job.watcher) {
+    // Fresh workers select their recipient after recording. New resumes pin
+    // their proposed native name and supervisor before command-line delivery.
+    job.to ??= job.worker.agentName;
+    save();
+    job.watcher = json(command(watchCLI, [job.run, '--controller', opt.controller, '--org', job.org, '--to', job.to,
+      '--cwd', job.repo, ...(job.resumeDeliveryProtocol ? ['--agent', job.resumeDelivery.agentName] : []), '--detach', '--log', path.join(job.org, 'dispatch', `${job.run}.watch.log`),
+      ...(opt['org-cli'] ? ['--org-cli', opt['org-cli']] : []),...(job.recordOnlyNotices?['--record-only']:[])]));
+    save();
+  } else {
+    if (!ownerAlive(job.watcher)) {
+      job.watcher = null; save();
+      throw new Error('watcher stopped; retry to re-arm it without replaying the prompt');
+    }
+  }
+  if (!Number.isInteger(job.watcher.pid) || job.watcher.pid < 1) throw new Error('watcher returned an invalid PID');
+  if (!ownerAlive(job.watcher)) throw new Error('watcher stopped before its receipt was recorded');
+  record(['set', job.run, `watcher_pid=${job.watcher.pid}`, `watcher_identity=${job.watcher.identity}`, `watcher_log=${job.watcher.log}`]);
+}
+function workPrompt(run, workerName = job.worker.agentName) {
+  const validation = job.reviewQueue ? 'Independent code/evidence review: zero build, test, prepare, install or check commands; zero reviewer suites. Preserve inherited producer evidence and never label an unrun check PASS.' : `Run only the ask's or explicit --extra scope's focused check selection once through ${JSON.stringify(process.execPath)} ${JSON.stringify(local('../lanes/lane.mjs'))} check --cmd 'COMMAND' on the clean committed candidate before reporting, using the existing project runner and preserving file groups and limits. When checks run, this writes .lane/gate.json and the shared lane-validation receipt with command, exit status, TAP totals and Node version for settle to inherit. If no check is selected or applicable, report the selection/scope and unrun truth; do not substitute a blanket default/fast/npm suite or label unrun checks PASS. Do not add a tier run or repeat tests solely to create a receipt. Self-land finished source without a test/review readiness gate; the one full final-release obligation stays with its release coordinator.`;
+  job.exceptionAddress ??= projectExceptionAddress(job.repo, JSON.parse(fs.readFileSync(job.routeConfig, 'utf8')), job.route);
+  const exception = job.exceptionAddress.to ? `your PROJECT SUPERVISOR at ${JSON.stringify(job.exceptionAddress.to)}`
+    : 'your PROJECT SUPERVISOR; its project-specific exception address is UNKNOWN, so report that missing address without inventing a recipient';
+  const reviewDirection = job.reviewQueue ? 'Review only the captured immutable diff/evidence; no source edits, landing, tests or second review.' : job.reviewQueueProtocol ? 'Hand the immutable landed base/head and producer evidence through your report to the single record queue-review path; the line service creates/dispatches the one review item. Never start a parallel settle/lane review, wait for a verdict to land, or replace an existing/UNKNOWN attempt.' : 'Start ONE independent async post-code review through the existing route, zero reviewer suites; do not wait for its verdict to land.';
+  const owner = `Your recorded worker agent is ${workerName}; the existing report watcher targets ${job.to}. Retain that watcher. ${job.reviewQueue ? '' : 'Self-land your own finished committed source through lane promote under the current operator waiver, with clean worktree/rebase/FF and native identity/claim/source/CAS/STOP/HOLD safety. '}${reviewDirection} Use --to ${workerName} for your ordinary settle/queued-promotion notices and existing prompt delivery for review completion. Own the correction/fix-forward and report actual receipts once. Route actual unsafe/native/identity/ownership/reserved/failed exceptions to ${exception}; never invoke supervisor cycle mutations or borrow supervisor identity.`;
+  // New requests pin their producer command. Older saved jobs/prompts retain
+  // their original behavior rather than receiving a retroactive instruction.
+  const wording = job.operatorPlainText ? ` --happened '<what happened in plain words>' --action '<what you need to do, usually Nothing needed.>' --details ${quote(`${job.item}; ${job.run}; technical references`)}` : '';
+  const composition = job.operatorPlainText ? ' EVERY message addressed to the operator must read naturally: one-line headline, what happened, whether you need to do anything, then ONE trailing Details line. Author the main text for a non-agent reader; bare item/run IDs, hashes, receipt/source jargon and shorthand such as bootstrap5 or record-only belong only in Details. A pending reserved decision must say a decision is needed, never Nothing needed. Internal agent coordination and owned callbacks keep their technical contracts.' : '';
+  const producer = job.operatorRecordCommand ? `For OPERATOR-addressed status/fyi/done/questions, store an envelope in the owning record with this explicit source command: ${job.operatorRecordRoot ? `HERDR_BRAIN_ROOT=${quote(job.operatorRecordRoot)} ` : ''}ORG_DIR=${quote(job.org)} ORG_ACTOR=${quote(workerName)} ${job.operatorRecordCommand.map(quote).join(' ')} messages send --id ${quote(`${job.run}:operator:STABLE_NOTICE_ID`)} --kind notice --run ${quote(job.run)} --item ${quote(job.item)} --summary '<one-line summary>'${wording}. Reuse the stable ID for a retry; use kind fyi for fyi and question/request for judgment, with --correlation THREAD and --reply-to ID when applicable. Pull messages digest on demand with the same source command. Ordinary OPERATOR-addressed messages are record-only and never typed into an operator pane. Only an actual pending human question already explicitly operator_reserved in the record, referenced with --question HUM-n, pushes once through the existing native inbox and Brain Chat filtering. Routine T2 questions do not become reserved. Internal owned report/watch callbacks and project T2/BrainChat delivery retain their existing native paths and recipients; retain the watcher. Do not fabricate native bindings or change pins, saved jobs or long-lived sessions.${composition}` : '';
+  return job.workerBrief ? lineWorkerPrompt({ job: { ...job, worker: { ...job.worker, agentName: workerName } }, run, brief: fs.readFileSync(run.brief_path, 'utf8'), producer, node: process.execPath, laneCLI: local('../lanes/lane.mjs') })
+    : `You are run ${job.run} on org item ${job.item}. Read ${job.brief} (the ask) and ${run.brief_path} (the record context and report template), then do the work. Write the report to ${run.report_path}; the report's run field is ${job.run}.\n\n${owner}${producer ? `\n\n${producer}` : ''}\n\n${validation}${job.reviewQueueBrief ? `\n\n${job.reviewQueueBrief}` : ''}${job.extra ? `\n\n${job.extra}` : ''}`;
 }
 async function main() {
   if(opt['resolve-not-started']){
@@ -342,6 +385,8 @@ async function main() {
       return;
     }
     job = saved;
+    if (job.resumeDeliveryProtocol && (opt.fresh || opt.adopt || opt.resend || opt['accept-delivered']))
+      throw Error('resume launch/delivery outcome must be retained; no replacement, adoption, confirmation or resend');
     if (opt['from-run'] !== undefined) {
       if (job.fromRun && job.fromRun !== opt['from-run']) throw new Error('--from-run cannot replace the saved origin');
       checkOrigin(opt['from-run'], json(record(['show', job.item, '--json'])), !job.run && job.stage !== 'starting');
@@ -401,7 +446,8 @@ async function main() {
     const exceptionAddress = projectExceptionAddress(repo, config, opt.route);
     const resume = opt['resume-session'] ? resumeSource({ events: loadEvents(org).events,
       session: opt['resume-session'], item, lane: opt.lane, harness: declared.kind, repo }) : null;
-    if (resume && !opt.to && !exceptionAddress.to) throw Error('resume requires a configured project supervisor watcher recipient');
+    if (resume && (!exceptionAddress.to || opt.to && opt.to !== exceptionAddress.to))
+      throw Error('resume requires its configured project supervisor as watcher recipient');
     if (resume && opt.base && git(['rev-parse', `${opt.base}^{commit}`], repo) !== resume.base)
       throw Error('resume base differs from the saved branch or main');
     const workerBrief = opt.detach ? createWorkerBrief({ item, ask: brief, askText: fs.readFileSync(brief, 'utf8'), extra: opt.extra,
@@ -424,7 +470,7 @@ async function main() {
       ...(dispatchPool({item})==='decision'?{decisionQueue:{key:item.meta.decision_request?.key}}:{}),
       brief, report: opt.report ?? null, to: opt.to ?? (resume ? exceptionAddress.to : null),
       base: git(['rev-parse', `${resume?.base ?? correction?.base ?? opt.base ?? 'HEAD'}^{commit}`], repo), extra: (opt.extra ?? '') + (correction?.brief ?? ''), reuse: null, resumeSession: opt['resume-session'] ?? null,
-      ...(resume ? { resume } : {}),
+      ...(resume ? { resume, resumeDeliveryProtocol: 1 } : {}),
       ...(correction ? { correction } : {}), fromRun: opt['from-run'] ?? null, unblocks: opt.unblocks ?? null,
       declared: declaredFields, exceptionAddress, ...(workerBrief ? { workerBrief } : {}),
       stage: 'open', run: null,native_launch_attempted:false,completion_protocol:1,...(opt.detach?{phase1_protocol:1,detachedRequested:true}:{}) };
@@ -641,6 +687,17 @@ async function main() {
       admission(job.repo, job.org, common);
       checkStop();
       if (job.workerBrief) validateLineExecution({ job, run, brief: fs.readFileSync(run.brief_path, 'utf8') });
+      if (job.resumeDeliveryProtocol) {
+        if (!job.resumeDelivery) {
+          const marker = `__BRAIN_RESUME_WORKER_${job.token}__`;
+          const route = resolveLaunchRoute(JSON.parse(fs.readFileSync(job.routeConfig, 'utf8')), { route: job.route });
+          job.resumeDelivery = prepareResumeDelivery({ route, session: job.resumeSession, workspace: job.workspace,
+            template: workPrompt(run, marker), marker });
+          job.resumeDelivery.agentName = `resume-${job.token.replaceAll('-', '').slice(0, 24)}`;
+          save();
+        }
+        ensureWatcher();
+      }
       job.stage = 'launching'; save();
       job.native_launch_attempted=true;save();
       const output = lane(['dispatch', job.lane, '--route', job.route, '--route-config', job.routeConfig, '--json', '--memory-checked',
@@ -654,6 +711,12 @@ async function main() {
         throw error;
       }
       job.worker = json(output);
+      if (job.resumeDeliveryProtocol) {
+        if (job.worker.agentName !== job.resumeDelivery.agentName) throw Error('resumed worker differs from its proposed launch name');
+        job.resumeDelivery.native_session_at_launch = job.worker.agentSessionId;
+        // A launch identity is diagnostic until fresh transcript delivery qualifies it.
+        job.worker.agentSessionId = null;
+      }
     }
     // Publish the bound worker before releasing admission. Native process
     // observation can wait on Herdr; until saved, this occupant counts unknown.
@@ -669,31 +732,18 @@ async function main() {
       '--worker-workspace', worker.workspaceId, '--cwd', job.workspace,
       ...(worker.agentSessionId ? ['--agent-session-id', worker.agentSessionId] : []),
       ...(worker.terminalId ? ['--terminal-id', worker.terminalId] : [])]);
-    note(`worker ${worker.agentName} in ${worker.pane} recorded; prompt not sent`);
+    note(`worker ${worker.agentName} in ${worker.pane} recorded; ${job.resumeDeliveryProtocol ? 'task submitted on resume command line' : 'prompt not sent'}`);
     job.stage = 'watch'; save();
   }
   if (job.stage === 'watch' || job.stage === 'prompting' || job.stage === 'prompt' || job.stage === 'complete') {
     liveWorker(job.worker);
     // Re-arm only through watch's exclusive per-run lock. It refuses duplicates.
-    if (!job.watcher) {
-      // Choose the ordinary recipient only after immutable worker recording and
-      // live occupant verification. Saved/explicit recipients remain unchanged.
-      job.to ??= job.worker.agentName;
-      save();
-      job.watcher = json(command(watchCLI, [job.run, '--controller', opt.controller, '--org', job.org, '--to', job.to,
-        '--cwd', job.repo, '--detach', '--log', path.join(job.org, 'dispatch', `${job.run}.watch.log`),
-        ...(opt['org-cli'] ? ['--org-cli', opt['org-cli']] : []),...(job.recordOnlyNotices?['--record-only']:[])]));
-      save();
-    } else {
-      if (!ownerAlive(job.watcher)) {
-        job.watcher = null; save();
-        throw new Error('watcher stopped; retry to re-arm it without replaying the prompt');
-      }
+    ensureWatcher();
+    if (job.stage === 'watch') note(`watcher ready (pid ${job.watcher.pid}); ${job.resumeDeliveryProtocol ? 'resume task awaiting transcript qualification' : 'prompt not sent'}`);
+    if (job.stage === 'watch' && job.resumeDeliveryProtocol) {
+      prepareSessionBinding(run);
+      job.stage = 'complete'; save();
     }
-    if (!Number.isInteger(job.watcher.pid) || job.watcher.pid < 1) throw new Error('watcher returned an invalid PID');
-    if (!ownerAlive(job.watcher)) throw new Error('watcher stopped before its receipt was recorded');
-    record(['set', job.run, `watcher_pid=${job.watcher.pid}`, `watcher_identity=${job.watcher.identity}`, `watcher_log=${job.watcher.log}`]);
-    if (job.stage === 'watch') note(`watcher ready (pid ${job.watcher.pid}); prompt not sent`);
     if (job.stage === 'watch') { job.stage = 'prompt'; save(); }
     if (job.stage === 'prompting' && opt['accept-delivered']) {
       prepareSessionBinding(run);
@@ -717,19 +767,7 @@ async function main() {
         }
       }
       if (job.reuse) checkReuseOccupant(json(record(['show', job.reuse, '--json'])), job.run);
-      const validation = job.reviewQueue ? 'Independent code/evidence review: zero build, test, prepare, install or check commands; zero reviewer suites. Preserve inherited producer evidence and never label an unrun check PASS.' : `Run only the ask's or explicit --extra scope's focused check selection once through ${JSON.stringify(process.execPath)} ${JSON.stringify(local('../lanes/lane.mjs'))} check --cmd 'COMMAND' on the clean committed candidate before reporting, using the existing project runner and preserving file groups and limits. When checks run, this writes .lane/gate.json and the shared lane-validation receipt with command, exit status, TAP totals and Node version for settle to inherit. If no check is selected or applicable, report the selection/scope and unrun truth; do not substitute a blanket default/fast/npm suite or label unrun checks PASS. Do not add a tier run or repeat tests solely to create a receipt. Self-land finished source without a test/review readiness gate; the one full final-release obligation stays with its release coordinator.`;
-      job.exceptionAddress ??= projectExceptionAddress(job.repo, JSON.parse(fs.readFileSync(job.routeConfig, 'utf8')), job.route);
-      const exception = job.exceptionAddress.to ? `your PROJECT SUPERVISOR at ${JSON.stringify(job.exceptionAddress.to)}`
-        : 'your PROJECT SUPERVISOR; its project-specific exception address is UNKNOWN, so report that missing address without inventing a recipient';
-      const reviewDirection = job.reviewQueue ? 'Review only the captured immutable diff/evidence; no source edits, landing, tests or second review.' : job.reviewQueueProtocol ? 'Hand the immutable landed base/head and producer evidence through your report to the single record queue-review path; the line service creates/dispatches the one review item. Never start a parallel settle/lane review, wait for a verdict to land, or replace an existing/UNKNOWN attempt.' : 'Start ONE independent async post-code review through the existing route, zero reviewer suites; do not wait for its verdict to land.';
-      const owner = `Your recorded worker agent is ${job.worker.agentName}; the existing report watcher targets ${job.to}. Retain that watcher. ${job.reviewQueue ? '' : 'Self-land your own finished committed source through lane promote under the current operator waiver, with clean worktree/rebase/FF and native identity/claim/source/CAS/STOP/HOLD safety. '}${reviewDirection} Use --to ${job.worker.agentName} for your ordinary settle/queued-promotion notices and existing prompt delivery for review completion. Own the correction/fix-forward and report actual receipts once. Route actual unsafe/native/identity/ownership/reserved/failed exceptions to ${exception}; never invoke supervisor cycle mutations or borrow supervisor identity.`;
-      // New requests pin their producer command. Older saved jobs/prompts retain
-      // their original behavior rather than receiving a retroactive instruction.
-      const wording = job.operatorPlainText ? ` --happened '<what happened in plain words>' --action '<what you need to do, usually Nothing needed.>' --details ${quote(`${job.item}; ${job.run}; technical references`)}` : '';
-      const composition = job.operatorPlainText ? ' EVERY message addressed to the operator must read naturally: one-line headline, what happened, whether you need to do anything, then ONE trailing Details line. Author the main text for a non-agent reader; bare item/run IDs, hashes, receipt/source jargon and shorthand such as bootstrap5 or record-only belong only in Details. A pending reserved decision must say a decision is needed, never Nothing needed. Internal agent coordination and owned callbacks keep their technical contracts.' : '';
-      const producer = job.operatorRecordCommand ? `For OPERATOR-addressed status/fyi/done/questions, store an envelope in the owning record with this explicit source command: ${job.operatorRecordRoot ? `HERDR_BRAIN_ROOT=${quote(job.operatorRecordRoot)} ` : ''}ORG_DIR=${quote(job.org)} ORG_ACTOR=${quote(job.worker.agentName)} ${job.operatorRecordCommand.map(quote).join(' ')} messages send --id ${quote(`${job.run}:operator:STABLE_NOTICE_ID`)} --kind notice --run ${quote(job.run)} --item ${quote(job.item)} --summary '<one-line summary>'${wording}. Reuse the stable ID for a retry; use kind fyi for fyi and question/request for judgment, with --correlation THREAD and --reply-to ID when applicable. Pull messages digest on demand with the same source command. Ordinary OPERATOR-addressed messages are record-only and never typed into an operator pane. Only an actual pending human question already explicitly operator_reserved in the record, referenced with --question HUM-n, pushes once through the existing native inbox and Brain Chat filtering. Routine T2 questions do not become reserved. Internal owned report/watch callbacks and project T2/BrainChat delivery retain their existing native paths and recipients; retain the watcher. Do not fabricate native bindings or change pins, saved jobs or long-lived sessions.${composition}` : '';
-      const prompt = job.workerBrief ? lineWorkerPrompt({ job, run, brief: fs.readFileSync(run.brief_path, 'utf8'), producer, node: process.execPath, laneCLI: local('../lanes/lane.mjs') })
-        : `You are run ${job.run} on org item ${job.item}. Read ${job.brief} (the ask) and ${run.brief_path} (the record context and report template), then do the work. Write the report to ${run.report_path}; the report's run field is ${job.run}.\n\n${owner}${producer ? `\n\n${producer}` : ''}\n\n${validation}${job.reviewQueueBrief ? `\n\n${job.reviewQueueBrief}` : ''}${job.extra ? `\n\n${job.extra}` : ''}`;
+      const prompt = workPrompt(run);
       prepareSessionBinding(run);
       job.stage = 'prompting'; save();
       checkReviewContinuationNative();

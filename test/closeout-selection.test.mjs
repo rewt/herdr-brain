@@ -13,8 +13,45 @@ import { readCloseoutOwnerStatus } from '../lib/closeout-code.mjs';
 import { prepareCloseoutPacket, readCloseoutCapabilities } from '../lib/closeout-packet.mjs';
 import { gitProject } from '../lib/project.mjs';
 import { readProjectPolicy } from '../lib/config-policy.mjs';
+import { copyProduct } from '../lib/product-files.mjs';
 import { kickCloseout } from '../lib/closeout.mjs';
-import { closer, setup, evaluations, effects, selectCurrentCleanup, assertRemoved } from './helpers/closeout-fixture.mjs';
+import { closer, setup, evaluations, effects, events, selectCurrentCleanup, assertRemoved } from './helpers/closeout-fixture.mjs';
+
+test('installed cleanup policy lets a separate product ingest reports and close merged lanes without becoming the service executor', t => {
+  const f = setup(t, { occupied: false, merged: true }), selected = selectCurrentCleanup(f);
+  const bundle = path.join(f.scratch, 'installed-product');
+  copyProduct(fileURLToPath(new URL('../', import.meta.url)), bundle);
+  f.git(['init', '-qb', 'main'], bundle);
+  f.git(['config', 'user.name', 'Fixture'], bundle);
+  f.git(['config', 'user.email', 'fixture@example.invalid'], bundle);
+  f.git(['add', '.'], bundle); f.git(['commit', '-qm', 'Copied product'], bundle);
+  const report = path.join(f.scratch, 'report.md');
+  fs.writeFileSync(report, '---\nrun: R-1\noutcome: done\nsummary: Complete.\n---\n');
+  const run = (file, args) => spawnSync(process.execPath, [path.join(bundle, file), ...args], {
+    cwd: f.repo, env: f.env, encoding: 'utf8',
+  });
+  const ingested = run('bin/org.mjs', ['ingest', report]);
+  assert.equal(ingested.status, 0, ingested.stdout + ingested.stderr);
+  assert.doesNotMatch(ingested.stderr, /closeout deferred|ownership is UNKNOWN/);
+  const bound = events(f).find(e => e.type === 'report.ingested');
+  assert.equal(bound.closeout_targets.length, 1);
+  assert.equal(bound.closeout_binding_error, undefined);
+  assert.equal(fs.existsSync(path.join(f.common, 'closeout/worker.log')), false);
+  assert.deepEqual(f.read().actions, []);
+  const unnamed = run('supervisor/closeout.mjs', ['drain', '--repo', f.repo, '--org', f.org]);
+  assert.equal(unnamed.status, 0, unnamed.stderr);
+  assert.equal(JSON.parse(unnamed.stdout).owned_by, 'line-service');
+  const named = run('supervisor/closeout.mjs', ['drain', '--repo', f.repo, '--org', f.org, '--keys', JSON.stringify([bound.closeout_targets[0].key])]);
+  assert.notEqual(named.status, 0);
+  assert.match(named.stderr, /ownership is UNKNOWN/);
+  assert.deepEqual(f.read().actions, []);
+  f.append([{ type: 'item.closed', id: 'ENG-1', as: 'done' }]);
+  const closed = run('lanes/lane.mjs', ['close', 'topic', '--git-only', '--expected-tip', f.head]);
+  assert.equal(closed.status, 0, closed.stdout + closed.stderr);
+  assert.equal(fs.existsSync(f.lane), false);
+  assert.equal(f.git(['branch', '--list', 'lane/topic']), '');
+  assert.deepEqual(JSON.parse(fs.readFileSync(selected.file)), selected.receipt);
+});
 
 test('current cleanup selection suppresses the frozen c160 kick and binds future sources for the named current closer', t => {
   const f = setup(t, { occupied: false }), project = gitProject(f.repo);

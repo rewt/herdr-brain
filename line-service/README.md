@@ -482,6 +482,12 @@ Durable effect IDs and original bindings remain intact. Conditional source compl
 the executor still proves current identity, actual integration, callback release,
 clean Git and archive preservation before any retirement/removal. The installed
 line owns routine cleanup; competing automatic kicks/unnamed drains yield to it.
+An adopted project's installed release can read its selected home policy and
+bind report closeout requests while that service runs development source. These
+producer and scheduler observations do not require matching code directories;
+the installation's project, record, Node and service target still must match.
+Named cleanup execution checks the exact service source before consuming and
+again before effects. An unreadable policy or invalid installation stays held.
 A closer verifies its committed import graph and main branch, so unrelated main
 landings no longer invalidate it. A changed closer payload still hands off.
 

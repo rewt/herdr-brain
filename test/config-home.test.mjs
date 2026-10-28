@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync, execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { configFixture } from './helpers/config-home-fixture.mjs';
 import { homeBindings, homeProject, policyLocation, readConfigJSON, contentDigest } from '../lib/config-home.mjs';
 import { readProjectPolicy, readPolicyFile, configBase, IDENTITY_ONLY_KEYS } from '../lib/config-policy.mjs';
@@ -32,6 +33,40 @@ import { pendingConfigWrite } from '../lib/config-audit.mjs';
 import { readArchivalRetirementPolicy } from '../lib/retire-archive.mjs';
 import { closeoutPolicy } from '../lib/closeout.mjs';
 import { measureLaneEvidence } from '../lib/lane-removal.mjs';
+
+test('installed cleanup policy reads the adopted home despite a different development service source and keeps invalid ownership closed', async t => {
+  const f = configFixture(t, { custom: 'adopter' }); await f.adopt();
+  const binding = f.binding(), file = policyLocation(f.cwd, 'lane').file;
+  const config = readConfigJSON(file);
+  config.retirement = { closeout_queue: false, line_service_cleanup: true };
+  fs.writeFileSync(file, JSON.stringify(config));
+  const directory = path.join(binding.record, 'line-service', createHash('sha256').update(JSON.stringify(binding.common)).digest('hex').slice(0, 20));
+  fs.mkdirSync(directory, { recursive: true });
+  const installation = path.join(directory, 'installation.json');
+  const receipt = { repo: f.cwd, org: binding.record, source: path.resolve(import.meta.dirname, '..'), node: process.execPath,
+    file: path.join(directory, 'service.plist'), target: `gui/${process.getuid()}/dev.herdr.line.${path.basename(directory)}` };
+  fs.writeFileSync(installation, JSON.stringify(receipt));
+  const probe = () => spawnSync(process.execPath, ['--input-type=module', '-e', `
+    import assert from 'node:assert/strict';
+    import { closeoutPolicy, kickCloseout } from ${JSON.stringify(path.join(f.bundle, 'lib/closeout.mjs'))};
+    import { gitProject } from ${JSON.stringify(path.join(f.bundle, 'lib/project.mjs'))};
+    import { readProjectPolicy } from ${JSON.stringify(path.join(f.bundle, 'lib/config-policy.mjs'))};
+    assert.equal(readProjectPolicy(process.cwd(), 'lane').file, ${JSON.stringify(file)});
+    assert.equal(closeoutPolicy(process.cwd(), 'report.ingested'), true);
+    assert.equal(kickCloseout(gitProject(process.cwd()), ${JSON.stringify(binding.record)}).owned_by, 'line-service');
+    assert.throws(() => closeoutPolicy(process.cwd(), undefined, { requireServiceSource: true }), /ownership is UNKNOWN/);
+  `], { cwd: f.cwd, env: f.env, encoding: 'utf8' });
+  let result = probe(); assert.equal(result.status, 0, result.stdout + result.stderr);
+  for (const changed of [{ repo: f.scratch }, { org: f.scratch }, { source: 'relative-source' }, { node: '/foreign/node' }, { target: 'foreign' }]) {
+    fs.writeFileSync(installation, JSON.stringify({ ...receipt, ...changed }));
+    result = probe(); assert.notEqual(result.status, 0, JSON.stringify(changed));
+    assert.match(result.stderr, /ownership is UNKNOWN/);
+  }
+  fs.writeFileSync(installation, JSON.stringify(receipt));
+  fs.writeFileSync(file, '{'); result = probe(); assert.notEqual(result.status, 0); assert.match(result.stderr, /invalid|unavailable/);
+  fs.unlinkSync(file); result = probe(); assert.notEqual(result.status, 0); assert.match(result.stderr, /missing/);
+  assert.equal(fs.existsSync(path.join(binding.common, 'closeout/worker.log')), false);
+});
 
 async function commandWarnings(run) {
   const output = [], stderr = process.stderr.write, stdout = process.stdout.write;

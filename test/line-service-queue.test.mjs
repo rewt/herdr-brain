@@ -18,7 +18,7 @@ import { checkSessionCap } from '../dispatch/session-cap.mjs';
 import { fixture as dispatchFixture, promptCalls } from '../dispatch/test/dispatch-fixture.mjs';
 
 const root = fs.realpathSync(sourceRoot), entry = path.join(root, 'bin/org.mjs');
-function fixture(t, { outcome = 'blocked', beforeReport = () => [], producerHarness = 'claude' } = {}) {
+function fixture(t, { outcome = 'blocked', beforeReport = () => [], producerHarness = 'claude', sourceMeta = {} } = {}) {
   const f = configFixture(t, { custom: true }), org = f.env.ORG_DIR, identity = gitProject(f.cwd).identity;
   const git = (args, cwd = f.cwd) => { const r = spawnSync('git', ['-C', cwd, ...args], { env: f.env, encoding: 'utf8' }); assert.equal(r.status, 0, r.stderr); return r.stdout.trim(); };
   fs.writeFileSync(path.join(f.cwd, 'code.mjs'), 'export const value=0;\n'); git(['add', 'code.mjs']); git(['commit', '-qm', 'Base']);
@@ -32,7 +32,7 @@ function fixture(t, { outcome = 'blocked', beforeReport = () => [], producerHarn
   transact(org, () => ({ add: [
     {type:'line-service.cutover',id:'fixture-cutover',project:identity,repo:f.cwd,org,source:root,main:'main',canonical_head:base},
     {type:'line-service.phase0',id:'fixture-phase0',project:identity,repo:f.cwd,org,source:root,main:'main',canonical_head:base},
-    { type: 'item.added', id: 'ENG-1', title: 'Build', role: 'engineer', meta: {} },
+    { type: 'item.added', id: 'ENG-1', title: 'Build', role: 'engineer', meta: sourceMeta },
     { type: 'run.started', id: 'R-1', item: 'ENG-1', workspace, meta: { lane: 'implementation', dispatch_journal: dispatch, dispatch_attempt: 'fixture', ...(producerHarness ? { harness: producerHarness } : {}) } },
     { type: 'run.claimed', run: 'R-1', record: org, project: identity, owner: { controller: 'brain', legacy: false, release: { id: 'source', commit: null, root, identity: gitProject(root).identity } } },
     ...beforeReport({head,base}),
@@ -229,8 +229,23 @@ test('review queue preserves readable typed UNKNOWN attempts while opaque locato
   assert.equal(fs.readFileSync(opaque, 'utf8'), attempt);
 });
 
+test('review queue captures other-family requirements only for classified or explicitly requested work', t => {
+  for(const sourceMeta of [{},{judgment_heavy:true},{outward:true},{review_other_family:true}]){
+    const f=fixture(t,{sourceMeta}),qid=f.create().review_item,c=f.context(),item=c.state.items.get(qid);
+    const required=Object.values(sourceMeta).includes(true);
+    assert.equal(item.meta.review_other_family,required);
+    const config={routes:{review:{kind:'claude'}}};
+    if(required){
+      assert.throws(()=>reviewQueueRoute(config,item,c.state),/other-family review unavailable/);
+      c.state.items.get('ENG-1').meta={};
+      assert.throws(()=>reviewQueueRoute(config,item,c.state),/other-family review unavailable/,'capture retains its requirement');
+    }else assert.equal(reviewQueueRoute(config,item,c.state),'review');
+    assert.equal(f.create().review_item,qid,'same queue item and cap1 are retained');
+  }
+});
+
 test('review queue requires declared producer family and an independent reviewer family', t => {
-  const f = fixture(t, {producerHarness:null}), qid = f.create().review_item, c = f.context(), item = c.state.items.get(qid);
+  const f = fixture(t, {producerHarness:null,sourceMeta:{judgment_heavy:true}}), qid = f.create().review_item, c = f.context(), item = c.state.items.get(qid);
   const config = {routes:{review:{kind:'codex'}},selection_policy:{by_task_class:{'review-other-family':{claude:'review'}}}};
   assert.throws(() => reviewQueueRoute(config, item, c.state), /declared producer route\/profile/);
   c.state.runs.get('R-1').meta.harness = 'codex';
@@ -272,13 +287,35 @@ test('line service creates a record review item then normal review-lane dispatch
   service().pass(); service().pass();
   assert.equal(calls.filter(a=>a[0]===entry&&a[1]==='queue-review').length,1);
   const dispatched=calls.filter(a=>a[0]===path.join(root,'dispatch/dispatch.mjs')); assert.equal(dispatched.length,1,notices.join('\n'));
-  const args=dispatched[0]; assert.equal(args[args.indexOf('--base')+1],f.head); assert.match(args[args.indexOf('--lane')+1],/^review-rev-/); assert.equal(args[args.indexOf('--route')+1],'review-codex');
+  const args=dispatched[0]; assert.equal(args[args.indexOf('--base')+1],f.head); assert.match(args[args.indexOf('--lane')+1],/^review-rev-/); assert.equal(args[args.indexOf('--route')+1],'review');
   assert.equal(calls.some(a=>/settle\/|supervisor\/supervisor/.test(a[0])),false);
   assert.equal(f.context().state.items.get('ENG-1').closed.as,'done','pending queued review does not gate truthful source completion');
 });
 
+test('line service routes classified reviews to the other family and refuses a missing route before native dispatch',t=>{
+  for(const producerHarness of ['claude','codex'])for(const unavailable of [false,true]){
+    const f=fixture(t,{outcome:'done',producerHarness,sourceMeta:{[producerHarness==='claude'?'judgment_heavy':'outward']:true}}),calls=[],notices=[];
+    if(unavailable){
+      const file=path.join(f.ownerRoot,'.lane.json'),config=JSON.parse(fs.readFileSync(file));
+      delete config.selection_policy.by_task_class['review-other-family'];fs.writeFileSync(file,JSON.stringify(config));
+    }
+    const command=(exe,args,options)=>{
+      if(args[0]===entry)return spawnSync(exe,args,{...options,env:f.env});
+      if(args[0]===path.join(root,'supervisor/closeout.mjs'))return{status:0,stdout:'{"evaluated":[]}',stderr:''};
+      assert.equal(args[0],path.join(root,'dispatch/dispatch.mjs'));calls.push(args);
+      return{status:0,stdout:'{"run":"R-2","item":"REV-1"}',stderr:''};
+    };
+    createLineService({repo:f.cwd,org:f.org,to:'test-supervisor',env:f.env,capacity:()=>({cap:7,count:0}),command,
+      recordNotice:data=>{notices.push(data.reason);return{id:data.id,state:'record-only'};}}).pass();
+    if(unavailable){assert.equal(calls.length,0);assert.match(notices.join('\n'),/other-family review unavailable/);}
+    else{assert.equal(calls.length,1,notices.join('\n'));const args=calls[0];assert.equal(args[args.indexOf('--route')+1],producerHarness==='claude'?'review-codex':'review');}
+    const reviews=[...f.context().state.items.values()].filter(i=>i.role==='reviewer');
+    assert.equal(reviews.length,1);assert.equal(reviews[0].meta.review_other_family,true);
+  }
+});
+
 test('review queue dispatch uses normal native route and immutable lane with zero-suite reviewer prompt', t => {
-  const f=fixture(t), qid=f.create().review_item, d=dispatchFixture(t,{project:f,sourceEntry:true});
+  const f=fixture(t,{sourceMeta:{outward:true}}), qid=f.create().review_item, d=dispatchFixture(t,{project:f,sourceEntry:true});
   const lane=path.join(d.root,'bin/lane'); fs.writeFileSync(lane,fs.readFileSync(lane,'utf8').replaceAll('lane/topic','lane/review-queue'));
   const result=d.dispatch([qid,'--lane','review-queue','--route','review-codex','--base',f.head,'--brief',d.brief],{env:{...d.env,HERDR_BRAIN_ROOT:root}});
   assert.equal(result.status,0,result.stderr);
@@ -291,7 +328,7 @@ test('review queue dispatch uses normal native route and immutable lane with zer
 
 test('permanent review capacity reaches the normal guarded reviewer launch at a full build pool and respects an explicit shared native ceiling',t=>{
   for(const shared of [false,true]){
-    const f=fixture(t),qid=f.create().review_item,file=path.join(f.cwd,'.lane.json'),config=JSON.parse(fs.readFileSync(file));config.dispatch={...config.dispatch,max_sessions:1,max_review_sessions:3,...(shared?{max_total_sessions:1}:{})};fs.writeFileSync(file,JSON.stringify(config));
+    const f=fixture(t,{sourceMeta:{judgment_heavy:true}}),qid=f.create().review_item,file=path.join(f.cwd,'.lane.json'),config=JSON.parse(fs.readFileSync(file));config.dispatch={...config.dispatch,max_sessions:1,max_review_sessions:3,...(shared?{max_total_sessions:1}:{})};fs.writeFileSync(file,JSON.stringify(config));
     fs.writeFileSync(path.join(f.org,'dispatch/pending-build.json'),JSON.stringify({stage:'open',detached:true,item:'ENG-90',common:f.identity}));
     const d=dispatchFixture(t,{project:f,sourceEntry:true}),lane=path.join(d.root,'bin/lane');fs.writeFileSync(lane,fs.readFileSync(lane,'utf8').replaceAll('lane/topic','lane/review-capacity'));
     const result=d.dispatch([qid,'--lane','review-capacity','--route','review-codex','--base',f.head,'--brief',d.brief],{env:{...d.env,HERDR_BRAIN_ROOT:root}});

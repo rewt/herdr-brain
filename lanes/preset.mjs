@@ -23,7 +23,7 @@ export const ROUTE_PRESET = {
   },
   selection_policy: { primary_implementation_pool: 'codex', by_task_class: {
     implementation: 'engineer', difficult: 'engineer-xhigh', critical: 'engineer-max',
-    chore: 'chore', planning: 'unblock', review: { claude: 'review', codex: 'review-codex' },
+    chore: 'chore', planning: 'unblock', review: 'review',
     'review-other-family': { codex: 'review', claude: 'review-codex' },
     status: 'monitor', settle: 'settle', executive: 'executive', writing: 'writer', research: 'research',
   } },

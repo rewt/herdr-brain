@@ -26,11 +26,13 @@ export function ownWorktreeGuard({ canonical, identity, workspace, topic, env = 
       const item = state.items.get(run.item), worker = effectiveWorkerIdentity(run, state);
       return item?.kind === 'work' && item.role === 'engineer' && item.runs.at(-1) === run.id &&
         !item.closed && !item.meta.operator_reserved && !run.abandoned && !run.report &&
-        run.workspace && fs.realpathSync(run.workspace) === fs.realpathSync(workspace) &&
-        (!run.meta.lane || run.meta.lane === topic) && !worker.identity_conflict &&
+        run.workspace && (!run.meta.lane || run.meta.lane === topic) && !worker.identity_conflict &&
         worker.agent === native.name && worker.pane === native.pane_id &&
         worker.worker_workspace === native.workspace_id && worker.terminal_id === native.terminal_id &&
-        worker.agent_session_id === native.agent_session.value;
+        worker.agent_session_id === native.agent_session.value &&
+        // Removed workspaces on unrelated open runs are valid. Resolve only
+        // the exact native worker's source; its real path must still match.
+        fs.realpathSync(run.workspace) === fs.realpathSync(workspace);
     });
     if (matches.length !== 1) throw Error('self-promotion requires one active owning native worker/run; nothing merged');
     const run = readOwnedRun(org, matches[0].id, events), owner = requireController(run, 'brain');

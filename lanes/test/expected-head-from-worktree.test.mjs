@@ -10,7 +10,7 @@ import { makeFixture, openLane, commitFile, git, lane, laneProcess, writeConfig,
 const flag = '--expected-head-from-worktree';
 const storeURL = new URL('../../lib/store.mjs', import.meta.url).href;
 
-function fixture(t, { waived = false } = {}) {
+function fixture(t, { waived = false, recordedWorkspace } = {}) {
   const f = makeFixture({ main: 'main', validate: 'true' });
   t.after(() => f.cleanup());
   fixtureFleet(t, f.root);
@@ -27,7 +27,9 @@ function fixture(t, { waived = false } = {}) {
     release: { id: 'source', commit: null, root: f.repo, identity } };
   const add = rows => transact(org, () => ({ add: rows }), { actor: 'fixture' });
   add([{ type: 'item.added', id: 'ENG-1', role: 'engineer', title: 'Owned source' },
-    { type: 'run.started', id: 'R-1', item: 'ENG-1', workspace, meta: { lane: topic,
+    { type: 'run.started', id: 'R-1', item: 'ENG-1',
+      workspace: recordedWorkspace === 'other' ? f.repo
+        : recordedWorkspace === 'missing' ? path.join(f.root, 'missing-own-workspace') : workspace, meta: { lane: topic,
       agent: native.name, pane: native.pane_id, worker_workspace: native.workspace_id,
       terminal_id: native.terminal_id, agent_session_id: native.agent_session.value } },
     { type: 'run.claimed', run: 'R-1', project: identity, record: org, owner }]);
@@ -91,9 +93,44 @@ test('worktree expected head captures the topic from an unrelated cwd and emits 
   assert.equal(fs.existsSync(path.join(f.root, 'gate-ran')), false);
 });
 
-for (const kind of ['no-native', 'native-name', 'native-session', 'native-workspace', 'native-cwd', 'run-worker', 'unclaimed', 'foreign-claim', 'HOLD'])
+test('worktree expected head promotes while unrelated open runs retain a removed workspace', t => {
+  const f = fixture(t, { waived: true });
+  const removed = openLane(f, 'removed-lane');
+  git(f.repo, ['worktree', 'remove', removed]);
+  assert.equal(fs.existsSync(removed), false);
+  assert.doesNotMatch(git(f.repo, ['worktree', 'list', '--porcelain']), /removed-lane/);
+  const worker = { agent: f.native.name, pane: f.native.pane_id,
+    worker_workspace: f.native.workspace_id, terminal_id: f.native.terminal_id,
+    agent_session_id: f.native.agent_session.value };
+  // Each stale run differs in just one native field and has no lane label.
+  // A partial tuple must not permit path lookup.
+  const rows = Object.keys(worker).flatMap((key, index) => {
+    const item = `ENG-${index + 2}`, run = `R-${index + 2}`;
+    return [{ type: 'item.added', id: item, role: 'engineer', title: 'Unrelated open source' },
+      { type: 'run.started', id: run, item, workspace: removed, meta: { ...worker, [key]: `other-${key}` } },
+      { type: 'run.claimed', run, project: f.identity, record: f.org, owner: f.owner }];
+  });
+  f.add(rows);
+  const before = loadEvents(f.org).events;
+  const result = f.promote();
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.ok(result.stdout.includes(`captured expected head: ${f.head}\n`));
+  assert.doesNotMatch(result.stderr, /post-FF landing receipt held/);
+  assert.equal(git(f.repo, ['rev-parse', 'main']), f.head);
+  const after = loadEvents(f.org).events;
+  assert.deepEqual(after.slice(0, before.length), before);
+  assert.equal(after.length, before.length + 1);
+  assert.equal(after.at(-1).type, 'change.landed');
+  assert.equal(after.at(-1).run, 'R-1');
+  assert.equal(after.at(-1).base, f.base);
+  assert.equal(after.at(-1).head, f.head);
+  assert.equal(fs.existsSync(removed), false);
+});
+
+for (const kind of ['no-native', 'native-name', 'native-session', 'native-workspace', 'native-cwd', 'run-worker', 'run-workspace', 'missing-run-workspace', 'unclaimed', 'foreign-claim', 'HOLD'])
 test(`worktree expected head refuses ${kind} before capture`, t => {
-  const f = fixture(t);
+  const f = fixture(t, { recordedWorkspace: kind === 'run-workspace' ? 'other'
+    : kind === 'missing-run-workspace' ? 'missing' : undefined });
   if (kind === 'no-native') delete f.env.HERDR_ENV;
   if (kind === 'native-name') f.native.name = 'another-worker';
   if (kind === 'native-session') f.native.agent_session.value = 'another-session';
@@ -106,7 +143,8 @@ test(`worktree expected head refuses ${kind} before capture`, t => {
   f.saveNative();
   const result = f.promote();
   assert.equal(result.status, 1, result.stdout);
-  assert.match(result.stderr, /native|owning|UNCLAIMED|OWNED_ELSEWHERE|HOLD/);
+  assert.match(result.stderr, kind === 'missing-run-workspace' ? /ENOENT/
+    : /native|owning|UNCLAIMED|OWNED_ELSEWHERE|HOLD/);
   assert.doesNotMatch(result.stdout, /captured expected head:/);
   f.unchanged();
 });

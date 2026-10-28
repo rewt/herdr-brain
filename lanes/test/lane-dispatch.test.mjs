@@ -326,7 +326,7 @@ for (const linkedCaller of [false, true]) test(`dispatch opens a one-tab lane wi
     const calls = fake.calls();
     assert.deepEqual(calls.find(args => args[0] === "worktree" && args[1] === "open"),
       ["worktree", "open", "--cwd", fixture.repo, "--path", path, "--label", fake.state().label, "--no-focus"]);
-    assert.match(fake.state().label, /:lane-no-parent$/);
+    assert.equal(fake.state().label, topic);
     assert.equal(calls.filter(args => args[0] === "agent" && args[1] === "start").length, 1);
     assert.equal(calls.filter(args => args[0] === "agent" && args[1] === "prompt").length, 1);
     assert.ok(!calls.some(args => args[1] === "create" || args[1] === "focus" || args.includes("--focus")));

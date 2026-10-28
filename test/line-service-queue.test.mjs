@@ -11,14 +11,14 @@ import { transact, loadEvents } from '../lib/store.mjs';
 import { fold } from '../lib/state.mjs';
 import { gitProject } from '../lib/project.mjs';
 import { createLineService, sourceRoot } from '../line-service/line-service.mjs';
-import { reviewAttempt } from '../line-service/review.mjs';
-import { validateQueuedReview, reviewQueueBrief } from '../line-service/review-queue.mjs';
+import { reviewAttempt, readServiceJournal } from '../line-service/review.mjs';
+import { validateQueuedReview, reviewQueueBrief, reviewQueueRoute } from '../line-service/review-queue.mjs';
 import { checkUnlandedCap, countUnlanded, matchesDispatchStart } from '../dispatch/unlanded-cap.mjs';
 import { checkSessionCap } from '../dispatch/session-cap.mjs';
 import { fixture as dispatchFixture, promptCalls } from '../dispatch/test/dispatch-fixture.mjs';
 
 const root = fs.realpathSync(sourceRoot), entry = path.join(root, 'bin/org.mjs');
-function fixture(t, { outcome = 'blocked', beforeReport = () => [] } = {}) {
+function fixture(t, { outcome = 'blocked', beforeReport = () => [], producerHarness = 'claude' } = {}) {
   const f = configFixture(t, { custom: true }), org = f.env.ORG_DIR, identity = gitProject(f.cwd).identity;
   const git = (args, cwd = f.cwd) => { const r = spawnSync('git', ['-C', cwd, ...args], { env: f.env, encoding: 'utf8' }); assert.equal(r.status, 0, r.stderr); return r.stdout.trim(); };
   fs.writeFileSync(path.join(f.cwd, 'code.mjs'), 'export const value=0;\n'); git(['add', 'code.mjs']); git(['commit', '-qm', 'Base']);
@@ -33,7 +33,7 @@ function fixture(t, { outcome = 'blocked', beforeReport = () => [] } = {}) {
     {type:'line-service.cutover',id:'fixture-cutover',project:identity,repo:f.cwd,org,source:root,main:'main',canonical_head:base},
     {type:'line-service.phase0',id:'fixture-phase0',project:identity,repo:f.cwd,org,source:root,main:'main',canonical_head:base},
     { type: 'item.added', id: 'ENG-1', title: 'Build', role: 'engineer', meta: {} },
-    { type: 'run.started', id: 'R-1', item: 'ENG-1', workspace, meta: { lane: 'implementation', dispatch_journal: dispatch, dispatch_attempt: 'fixture' } },
+    { type: 'run.started', id: 'R-1', item: 'ENG-1', workspace, meta: { lane: 'implementation', dispatch_journal: dispatch, dispatch_attempt: 'fixture', ...(producerHarness ? { harness: producerHarness } : {}) } },
     { type: 'run.claimed', run: 'R-1', record: org, project: identity, owner: { controller: 'brain', legacy: false, release: { id: 'source', commit: null, root, identity: gitProject(root).identity } } },
     ...beforeReport({head,base}),
     { type: 'report.ingested', run: 'R-1', item: 'ENG-1', file: 'reports/R-1.md', sha256: reportHash, report: { outcome, summary: 'Committed red code', artifacts: [`Commit: ${head}`, 'code.mjs'], blockers: [], extra: {} } },
@@ -48,23 +48,27 @@ function fixture(t, { outcome = 'blocked', beforeReport = () => [] } = {}) {
 
 for (const directory of ['current', 'foreign']) {
   for (const root of [null, false, 0, '', true, 1, 'opaque', [], {}, { actions: null }, { actions: [] }]) {
-    test(`service journal correction refuses ${JSON.stringify(root)} in ${directory} before queue and launch`, t => {
+    test(`service journal loader refuses ${JSON.stringify(root)} in ${directory} while opaque inventory is not a review attempt`, t => {
       const f = fixture(t), file = path.join(f.org, 'line-service', directory === 'current'
         ? createHash('sha256').update(JSON.stringify(f.identity)).digest('hex').slice(0, 20) : 'foreign', 'effects.json');
       fs.mkdirSync(path.dirname(file), { recursive: true });
       const bytes = ` ${JSON.stringify(root)}\n`;
       fs.writeFileSync(file, bytes);
       const events = fs.readFileSync(path.join(f.org, 'events.jsonl')), c = f.context();
-      assert.throws(() => reviewAttempt(c.item, c), /absence UNKNOWN/);
-      const refused = f.run(['queue-review', 'R-1', '--head', f.head, '--base', f.base]);
-      assert.notEqual(refused.status, 0); assert.match(refused.stderr, /absence UNKNOWN/);
+      assert.throws(() => readServiceJournal(file), /absence UNKNOWN/);
+      assert.equal(reviewAttempt(c.item, c), null);
+      if (directory === 'current') {
+        const service = createLineService({ repo: f.cwd, org: f.org, to: 'test-supervisor', env: f.env,
+          command: () => assert.fail('malformed current journal must stop before effects') });
+        assert.throws(() => service.pass(), /absence UNKNOWN/);
+      }
       assert.deepEqual(fs.readFileSync(path.join(f.org, 'events.jsonl')), events);
       assert.equal(fs.readFileSync(file, 'utf8'), bytes);
-      // Capture the one legitimate queue with no journal, then restore the
-      // unknown bytes to exercise the final guard before native dispatch.
-      fs.unlinkSync(file); const qid = f.create().review_item; fs.writeFileSync(file, bytes);
+      // The inventory scan needs positive typed evidence of an attempt; an
+      // opaque locator never substitutes for it or authorizes a native effect.
+      const qid = f.create().review_item;
       const queued = f.context(), before = fs.readFileSync(path.join(f.org, 'events.jsonl'));
-      assert.throws(() => validateQueuedReview({ ...queued, item: queued.state.items.get(qid) }), /absence UNKNOWN/);
+      assert.equal(validateQueuedReview({ ...queued, item: queued.state.items.get(qid) }).head, f.head);
       assert.equal(queued.state.items.get(qid).runs.length, 0);
       assert.deepEqual(fs.readFileSync(path.join(f.org, 'events.jsonl')), before);
       assert.equal(fs.readFileSync(file, 'utf8'), bytes);
@@ -189,18 +193,52 @@ test('explicit review holds retain scoped directives and real UNKNOWN attempts b
   assert.deepEqual(fs.readFileSync(path.join(f.org,'events.jsonl')),bytes);assert.equal(c.state.items.get(qid).runs.length,0);
 });
 
-test('review queue preserves outside-owner manual UNKNOWN and unrecognized service inventory without external probes', t => {
-  const f = fixture(t), c = f.context(), external = '/outside-owner/archive/ENG-1/producer/review-launch.json';
+test('review queue preserves readable typed UNKNOWN attempts while opaque locators supply no attempt evidence', t => {
+  const f = fixture(t), c = f.context(), external = path.join(f.scratch, 'manual-review.json');
   c.state.runs.get('R-1').report.artifacts.push(external);
-  const lstat = fs.lstatSync; let probes = 0;
-  fs.lstatSync = (file, ...args) => { if (String(file).startsWith('/outside-owner/')) probes++; return lstat(file, ...args); };
-  try { assert.match(reviewAttempt(c.item, c), /bound source-owner review reference/); } finally { fs.lstatSync = lstat; }
-  assert.equal(probes, 0);
-  fs.mkdirSync(path.join(f.org, 'line-service/unknown'), {recursive:true}); fs.writeFileSync(path.join(f.org, 'line-service/unknown/effects.json'), '{"result":"review_pending","qualification":"UNKNOWN"}');
-  const rejected = f.run(['queue-review','R-1']); assert.notEqual(rejected.status, 0); assert.match(rejected.stderr, /unrecognized service review inventory/);
+  assert.equal(reviewAttempt(c.item, c), null, 'missing fixture-owned locator is not an attempt');
+  fs.writeFileSync(external, '{"qualification":"UNKNOWN"}');
+  assert.equal(reviewAttempt(c.item, c), null, 'unbound wording is not an attempt');
+  const attempt = JSON.stringify({run:'R-1',head:f.head,native_launch_attempted:true,qualification:'UNKNOWN'});
+  fs.writeFileSync(external, attempt);
+  assert.match(reviewAttempt(c.item, c), /bound source-owner typed review reference/);
+  assert.equal(fs.readFileSync(external, 'utf8'), attempt);
+
+  const file = path.join(f.org, 'line-service/unknown/effects.json');
+  fs.mkdirSync(path.dirname(file), {recursive:true});
+  fs.writeFileSync(file, '{"result":"review_pending","qualification":"UNKNOWN"}');
+  assert.throws(() => readServiceJournal(file), /unrecognized service review inventory/);
+  assert.equal(reviewAttempt(f.context().item, f.context()), null);
+  const bytes = JSON.stringify({actions:{[`review:ENG-1:${f.head}`]:{state:'held',run:'R-1',head:f.head,qualification:'UNKNOWN'}}});
+  fs.writeFileSync(file, bytes);
+  const events = fs.readFileSync(path.join(f.org, 'events.jsonl'));
+  const rejected = f.run(['queue-review','R-1']);
+  assert.notEqual(rejected.status, 0); assert.match(rejected.stderr, /existing same-change service intent/);
+  assert.deepEqual(fs.readFileSync(path.join(f.org, 'events.jsonl')), events);
+  assert.equal(fs.readFileSync(file, 'utf8'), bytes);
   assert.equal([...f.context().state.items.values()].filter(i => i.role === 'reviewer').length, 0);
-  fs.unlinkSync(path.join(f.org,'line-service/unknown/effects.json')); fs.mkdirSync(path.join(f.org,'settle'),{recursive:true}); fs.writeFileSync(path.join(f.org,'settle/opaque.json'),'{"qualification":"UNKNOWN"}');
-  assert.throws(()=>reviewAttempt(f.context().item,f.context()),/unmapped review inventory/);
+  fs.unlinkSync(file);
+  const opaque = path.join(f.org, 'settle/opaque.json'); fs.mkdirSync(path.dirname(opaque), {recursive:true});
+  fs.writeFileSync(opaque, '{"qualification":"UNKNOWN"}');
+  assert.equal(reviewAttempt(f.context().item, f.context()), null);
+  fs.writeFileSync(opaque, attempt);
+  assert.match(reviewAttempt(f.context().item, f.context()), /existing consumer review receipt/);
+  const held = f.run(['queue-review','R-1']);
+  assert.notEqual(held.status, 0); assert.match(held.stderr, /same-change settle attempt\/UNKNOWN/);
+  assert.deepEqual(fs.readFileSync(path.join(f.org, 'events.jsonl')), events);
+  assert.equal(fs.readFileSync(opaque, 'utf8'), attempt);
+});
+
+test('review queue requires declared producer family and an independent reviewer family', t => {
+  const f = fixture(t, {producerHarness:null}), qid = f.create().review_item, c = f.context(), item = c.state.items.get(qid);
+  const config = {routes:{review:{kind:'codex'}},selection_policy:{by_task_class:{'review-other-family':{claude:'review'}}}};
+  assert.throws(() => reviewQueueRoute(config, item, c.state), /declared producer route\/profile/);
+  c.state.runs.get('R-1').meta.harness = 'codex';
+  config.selection_policy.by_task_class['review-other-family'].codex = 'review';
+  assert.throws(() => reviewQueueRoute(config, item, c.state), /matches producer family/);
+  c.state.runs.get('R-1').meta.harness = 'claude';
+  assert.equal(reviewQueueRoute(config, item, c.state), 'review');
+  assert.equal(f.context().state.items.get(qid).runs.length, 0);
 });
 
 test('review admission is separate from eight build slots while native total capacity and ambiguous dispatch remain held', t => {

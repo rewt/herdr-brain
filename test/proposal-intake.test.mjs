@@ -79,9 +79,13 @@ test('legacy proposal recovery uses complete immutable creation while preserving
 
 test('proposal allocation is recomputed under commit after concurrent filing and a lost acknowledgement', t => {
   const f = fixture(t), data = report([proposal('Race')]);
-  transact(f.dir, () => ({ add:seed().map(({ seq, at, by, ...e }) => e) }));
+  transact(f.dir, () => ({ add:[...seed().map(({ seq, at, by, ...e }) => e),
+    { type:'item.added', id:'ENG-99', role:'engineer', title:'Supervisor filing request' },
+    { type:'run.started', id:'R-99', item:'ENG-99' }] }));
   let prepared;
-  const result = transact(f.dir, events => ({ add:intake(events, data) }), { subjects:['R-1'], prepare:(_state, events) => {
+  // The supervisor's own requester is unchanged, while the original source
+  // acquires a canonical proposal. Reuse is re-derived at the final commit.
+  const result = transact(f.dir, events => ({ add:intake(events, data) }), { subjects:['R-99'], prepare:(_state, events) => {
     prepared = intake(events, data); transact(f.dir, current => ({ add:intake(current, data) }));
   } });
   assert.equal(items(prepared).length, 1); assert.equal(items(result.added).length, 0);

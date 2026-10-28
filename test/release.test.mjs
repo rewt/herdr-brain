@@ -454,6 +454,9 @@ test('genuine source and completed sealed package execute real consumer removal,
   });
   // Independent nested Node runners must not inherit the enclosing test-worker sentinel.
   delete f.env.NODE_TEST_CONTEXT;
+  // Shell helpers use bare node; keep the offline refusal adapter ahead of the runner's Node.
+  f.env.PATH = [process.env.HERDR_TEST_OFFLINE_ROOT, path.dirname(process.execPath), f.env.PATH]
+    .filter(Boolean).join(path.delimiter);
   const commit = execFileSync('git', ['-C', source, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
   fs.rmSync(f.repo, { recursive: true, force: true });
   createProductCheckout({ source, commit, destination: f.repo, ownedRoot: f.root });

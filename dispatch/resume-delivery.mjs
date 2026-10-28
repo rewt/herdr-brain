@@ -65,11 +65,17 @@ export function observeResumeDelivery(delivery, workerName, now = Date.now) {
   if (end < 0) return null;
   const rows = tail.slice(0, end).split('\n').filter(Boolean).map(line => JSON.parse(line));
   const prompt = resumePrompt(delivery, workerName);
-  let task = false, folder = false;
+  let task = false, folder = false, turn;
   for (const row of rows) {
     if (delivery.harness === 'codex') {
       if (row.type === 'session_meta' && row.payload?.id !== delivery.session) throw Error('resume transcript session changed');
+      if (row.type === 'event_msg' && row.payload?.type === 'task_started') {
+        task = folder = false;
+        turn = row.payload.turn_id;
+      }
       if (row.type === 'turn_context') {
+        if (turn && row.payload?.turn_id && turn !== row.payload.turn_id) task = false;
+        turn = row.payload?.turn_id ?? turn;
         if (row.payload?.cwd !== delivery.cwd) throw Error('resume task ran in a different folder');
         folder = true;
       }
@@ -86,6 +92,8 @@ export function observeResumeDelivery(delivery, workerName, now = Date.now) {
         task = folder = true;
       }
     }
+    // Never pair one turn's task with a later turn's folder context.
+    if (task && folder) break;
   }
   if (!task || !folder) return null;
   return { session: delivery.session, cwd: delivery.cwd, file: delivery.file, device: delivery.device, inode: delivery.inode,

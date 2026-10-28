@@ -64,6 +64,18 @@ test('Codex receipt requires fresh turn context, tolerates incomplete appends, a
   fs.renameSync(f.file, f.file + '.saved'); fs.symlinkSync(f.file + '.saved', f.file);
   assert.throws(prepare, /missing|redirected/);
 });
+test('Codex task and folder must belong to the same new turn', t => {
+  const f = fixture(t, 'codex');
+  f.append([{type:'event_msg',payload:{type:'task_started',turn_id:'earlier'}},
+    {type:'turn_context',payload:{cwd:f.cwd,turn_id:'earlier'}},
+    {type:'event_msg',payload:{type:'task_started',turn_id:'task'}}, ...f.rows().slice(1)]);
+  assert.equal(observeResumeDelivery(f.delivery,'worker'),null,'an earlier turn context cannot qualify the task');
+  f.append([{type:'event_msg',payload:{type:'task_started',turn_id:'unrelated'}},
+    {type:'turn_context',payload:{cwd:f.cwd,turn_id:'unrelated'}}]);
+  assert.equal(observeResumeDelivery(f.delivery,'worker'),null,'a later unrelated folder cannot qualify the task');
+  f.append([{type:'event_msg',payload:{type:'task_started',turn_id:'delivered'}}, ...f.rows()]);
+  assert.ok(observeResumeDelivery(f.delivery,'worker'));
+});
 test('qualification cannot bind a native ID alone, renew an expired deadline, or survive process replacement', async () => {
   for (const mode of ['qualified', 'missing', 'replacement', 'expired']) {
     let time = 1000, commits = 0, reads = 0;

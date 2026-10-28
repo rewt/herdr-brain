@@ -388,10 +388,13 @@ Ingest and conditional close retry through their idempotent contracts. Named
 closeout retries automatically on new target revisions or a pre-effect lifecycle
 mutex/budget deferral with no unresolved native intent. A pre-effect changed-code
 handoff retains its original requests for the next fresh drain. An unresolved
-bound agent-exit intent permits outcome observation only: no prompt, tab close
-or removal in that pass. A fresh exact shell/native readback can record the exit;
-only that positive receipt permits the next guarded cleanup pass. Still-live,
-replaced, permission-refused or unknown outcomes remain held, without replay.
+native exit/close intent resolves only from the actual original producer's exact
+recorded completion. Named retry-safe drains, manual retries, elapsed time and
+later service passes must neither reobserve nor resend it. A missing producer
+remains an owned defect; retain UNKNOWN, the original source/intent and its
+scoped failure/refusal evidence. Still-live, replaced, permission-refused or
+unknown outcomes remain held. No-intent pre-effect allowance and recorded owned
+stage progress are separate from resolving an unresolved native outcome.
 Durable effect IDs and original bindings remain intact. Conditional source completion binds a landed cleanup request;
 the executor still proves current identity, actual integration, callback release,
 clean Git and archive preservation before any retirement/removal. The installed
@@ -458,9 +461,13 @@ queued separately. Zero disables the elapsed retirement allowance for exact
 named targets only. A successful session phase records `sessions_retired: true`
 with full physical completion still false; later cleanup never replays quit.
 Each new native mutation rechecks the original source, claim, actual binding,
-callback, STOP/HOLD and archive guards. Uncertain original intents permit only
-their existing outcome readback, never another exit/close attempt. Evaluation
-timings are passive observations of real passes, not benchmarks.
+callback, STOP/HOLD and archive guards. Uncertain original intents remain
+UNKNOWN until their actual original producer records the exact linked
+completion; no named/manual retry, timer or later service pass authorizes native
+readback or another exit/close attempt. Missing producers and scoped failures or
+refusals remain owned and retained. Recorded session-stage progress and
+pre-effect allowance with no unresolved intent do not fabricate that completion.
+Evaluation timings are passive observations of real passes, not benchmarks.
 
 `node supervisor/closeout.mjs status --owner --repo /OWN/PROJECT --org /OWN/RECORD`
 is a read-only compatibility/claim snapshot. It does not acquire/recover a lock,

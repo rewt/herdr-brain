@@ -113,12 +113,18 @@ unattempted peers. Landed/parked physical removal retains priority over empty
 ready bookkeeping. There is no new scheduler, parallel native executor or
 elapsed eligibility rule. Every effect still rechecks its own safety boundary.
 
-Exact original pane and terminal absence with no moved/replaced session can
-produce `allocation-absent` after a complete guarded native readback. That is a
-current allocation observation, never a historical `exit-observed`, `closed`,
-signal success or consumer claim release. Observation-only recovery remains
-deferred until a fresh drain; still-present terminals never authorize a resend.
-Refusals, original uncertain ownership and missing preservation remain holds.
+In an independently admitted ordinary pass, exact original pane and terminal
+absence with no moved/replaced session can produce `allocation-absent` after a
+complete guarded native read. That is a current allocation observation, never a
+historical `exit-observed`, `closed`, signal success or consumer claim release.
+Absence cannot unlock a pending native intent. Only the actual original
+producer's exact recorded completion can resolve an unresolved exit/close
+outcome; named retry-safe drains, manual retries, elapsed time and later service
+passes must neither reobserve nor resend it. A missing producer remains an owned
+defect with UNKNOWN, the original source/intent and scoped failure/refusal
+evidence retained. Refusals, original uncertain ownership and missing
+preservation remain holds. No-intent pre-effect allowance and recorded owned
+stage progress remain separately admitted; neither supplies native completion.
 Removal seals compare target-related retirement/settle/reference evidence,
 including matching additions and invalid/redirected authority, while unrelated
 receipt updates do not invalidate the target's CAS.

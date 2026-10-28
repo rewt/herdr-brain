@@ -243,6 +243,23 @@ test('green guard admits the exact reviewed head under the record lock', async t
   const f = await fixture(t); let called = false;
   f.check(() => { called = true; assert.ok(fs.existsSync(path.join(f.org, 'lock'))); }); assert.equal(called, true);
 });
+test('native green guard refuses an unreviewed Node launcher argument', async t => {
+  const f = await fixture(t); f.check();
+  // Put the flag on the process that executes the guard. A queue worker's
+  // flags are not inherited by the separate lane promotion process.
+  const probe = path.join(f.root, 'launcher-drift.mjs');
+  fs.writeFileSync(probe, `import assert from 'node:assert/strict';
+import { withPromotionGuard } from ${JSON.stringify(pathToFileURL(path.join(f.repo, 'promote/guard.mjs')).href)};
+assert.throws(() => withPromotionGuard(${JSON.stringify(f.guard)}, () => assert.fail('drifted launcher integrated')), {
+  message: 'GREEN_REACH_UNKNOWN: Node launcher drift; nothing merged'
+});
+`);
+  f.ok(f.exec(process.execPath, ['--no-warnings', probe]));
+  assert.equal(f.git(['rev-parse', 'main'], f.project), f.base);
+  assert.equal(fs.existsSync(path.join(f.org, 'lock')), false);
+  assert.equal(fs.existsSync(f.checked), false);
+  assert.equal(f.show(f.item).closed, null);
+});
 for (const kind of Object.keys(refusals)) test(`green guard refuses ${kind} without integration`, async t => {
   const f = await fixture(t, { foreign: kind === 'foreign' });
   if (kind !== 'foreign') f.check();
@@ -285,7 +302,7 @@ test('clean-pass keeps its ordinary documentation scope and named refusals', asy
   assert.throws(() => f.check(), /AUTOPILOT_SCOPE_EXCLUDED/);
 });
 
-for (const kind of ['admitted', ...Object.keys(refusals), 'launcher-drift']) test(`native --existing-worker green candidate is ${kind}`, async t => {
+for (const kind of ['admitted', ...Object.keys(refusals)]) test(`native --existing-worker green candidate is ${kind}`, async t => {
   const f = await fixture(t, { foreign: kind === 'foreign' });
   const cli = path.join(f.repo, 'promote/promote.mjs');
   const { enqueue, queueFor } = await import(pathToFileURL(cli));
@@ -298,9 +315,7 @@ for (const kind of ['admitted', ...Object.keys(refusals), 'launcher-drift']) tes
   fs.writeFileSync(anchorGate, `const fs=require('fs');fs.writeFileSync(${JSON.stringify(started)},'started');const end=Date.now()+${loadTimeout(30000)};while(!fs.existsSync(${JSON.stringify(release)})&&Date.now()<end)Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,20);process.exitCode=1;`);
   enqueue(queue, ['anchor'], { to: 'offline', herdr: f.herdr, attempts: 1, retry: 0, org: null,
     laneCLI: path.join(f.repo, 'lanes/lane.mjs'), validate: `${process.execPath} ${anchorGate}` });
-  // An unrelated Node flag is real launcher drift, even though the file
-  // runner's already-installed observer is excluded from the fixture pin.
-  const child = spawnScenarioChild(t, process.execPath, [...(kind === 'launcher-drift' ? ['--no-warnings'] : []), cli, '--drain', '--repo', f.project], { cwd: f.project, env: f.env });
+  const child = spawnScenarioChild(t, process.execPath, [cli, '--drain', '--repo', f.project], { cwd: f.project, env: f.env });
   const done = waitForExit(child); f.worker(done);
   const deadline = Date.now() + loadTimeout(10000);
   while (!fs.existsSync(started) && child.exitCode === null && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 20));
@@ -327,8 +342,7 @@ for (const kind of ['admitted', ...Object.keys(refusals), 'launcher-drift']) tes
     assert.equal(f.show(f.item).closed.as, 'done'); assert.ok(fs.existsSync(f.checked));
     assert.equal(f.git(['rev-list', '--merges', 'main'], f.project), '');
   } else {
-    const expected = kind === 'launcher-drift' ? 'GREEN_REACH_UNKNOWN: Node launcher drift; nothing merged' : refusalMessage(f, kind);
-    assert.equal(row.outcome, 'refused', evidence); assert.equal(row.reason, expected, evidence);
+    assert.equal(row.outcome, 'refused', evidence); assert.equal(row.reason, refusalMessage(f, kind), evidence);
     assert.equal(f.git(['rev-parse', 'main'], f.project), f.base);
     assert.ok(fs.existsSync(f.workspace)); assert.equal(f.show(f.item).closed, null);
     assert.equal(fs.existsSync(f.checked), false, 'refused before candidate validation');

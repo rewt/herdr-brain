@@ -234,6 +234,17 @@ test('uncertain launches reserve capacity and incomplete evidence never becomes 
   assert.equal(count({ state: state(run(1, { meta: {} })), journals: [journal(1, { stage: 'launching', launchProcess: null })] }).length, 1);
 });
 
+test('terminal runs never regain a reservation from launching, starting or detached journals', () => {
+  for (const terminal of [{abandoned:{seq:5}}, {report:{seq:5}}]) {
+    for (const extra of [{stage:'launching'}, {stage:'starting'}, {stage:'worker',detached:true}]) {
+      assert.equal(count({state:state(run(1,{meta:{},...terminal})),
+        journals:[journal(1,{launchProcess:null,...extra})]}).length,0);
+    }
+  }
+  assert.equal(count({state:state(),journals:[journal(1,{stage:'launching',launchProcess:null})]}).length,1,
+    'missing record evidence stays occupied');
+});
+
 test('cap refusal names all runs and the worker/reviewer breakdown from durable evidence', t => {
   const org = fs.mkdtempSync(path.join(os.tmpdir(), 'session-cap-record-'));
   t.after(() => fs.rmSync(org, { recursive: true, force: true }));

@@ -200,6 +200,10 @@ export function countSessions({ state, events = [], journals = [], reviewers = [
   // its own start under its request lock without reserving a second slot.
   for (const j of journals) {
     if (!belongs(j.common, j.workspace)) continue;
+    // A terminal run must not reappear through its old launch journal. This
+    // uses the recorded disposition, never age or an absent native listing.
+    const run = state.runs.get(j.run);
+    if (run?.abandoned || run?.report) continue;
     const starting = j.stage === 'starting' && !j.startRefused && j.journal !== excludeStartJournal &&
       !events.some(e => e.type === 'run.started' && matchesDispatchStart(e,j));
     const launching = j.stage === 'launching' && !sessions.some(s => s.runs.includes(j.run));

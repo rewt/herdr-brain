@@ -154,6 +154,38 @@ slot; another request cannot reuse that reservation. Journals are read before
 record events so a transition cannot hide both forms. Age or coordinator death
 never frees an ambiguous start.
 
+An abandoned or reported run cannot regain a slot through its old launching,
+starting or detached journal. For an open run with a provably unlaunched worker,
+use the supported reservation disposition (explicit development source entry):
+
+```sh
+node dispatch/launch-reservations.mjs inspect --repo /project --org /project/.org --journal /project/.org/dispatch/TOKEN.json
+```
+
+`ELIGIBLE` requires a launching journal, no current or historical worker binding,
+and a fixed one-minute minimum age, together with positive pre-native evidence:
+an explicit false launch barrier, the definitive initial-shell refusal, or the
+audited legacy launch-guard import crash. The crash requires the exact historical
+lane source SHA256, not just an exception code. Missing source or native outcome
+remains `KEEP`; age and an empty native listing alone never authorize release.
+
+Only the actual canonical project supervisor, matching project `promote.to`,
+can resolve it. Record a decision note on the original item containing
+`NOT_STARTED`, a stable disposition ID, the exact journal path and its inspected
+SHA256. Then, from that supervisor's canonical native allocation:
+
+```sh
+HERDR_BRAIN_ROOT=/path/to/brain node /path/to/brain/dispatch/launch-reservations.mjs resolve --repo /project --org /project/.org --journal /project/.org/dispatch/TOKEN.json --id STABLE_ID --decision-seq SEQUENCE
+```
+
+The control holds request and admission locks, rechecks native identity, claim
+generation, clean committed source/project CAS, STOP/HOLD, reserved subjects,
+competing journals and fresh native occupancy. It archives the original bytes
+immutably and atomically records `dispatch.launch-resolved` with `NOT_STARTED`
+and ordinary run abandonment. It never rewrites a journal, claims native
+completion, closes a pane, adopts an identity or launches a replacement. A replay
+with the same ID returns the original receipt; changed evidence refuses.
+
 --from-run retains same-item/current-run ownership and source guards. --unblocks
 must identify a real other pending landing and retains its recorded dependency;
 neither flag bypasses running native capacity. Saved requests, original markers,

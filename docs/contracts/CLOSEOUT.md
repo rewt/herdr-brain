@@ -35,6 +35,48 @@ actual live proof, seal/activation and consumer readback remain coordinator work
 
 The following sections retain the legacy queue compatibility contract.
 
+## Never-sent closeout intents (ENG-812)
+
+A native intent with an uncertain sent outcome still requires the original
+producer's exact completion (ENG-761). A code handoff, manual retry, later pane
+absence or elapsed time does not establish non-execution. The current pre-send
+guard already writes `closeout.command-not-started` when it aborts after the
+intent journal and before invocation.
+
+For the four older stranded producer versions, the ordinary line refresh or
+claimed closer can append that same separate no-start fact only with the
+`pre-intent-code-change/v1` proof in `lib/closeout-unsent.mjs`. This bridge admits
+only the audited immutable producer commits and their recorded graph digests:
+
+| Producer commit | Guard implementation inspected |
+| --- | --- |
+| `291c4da2e2dfecda82c8626588ae841d7cc21a28` | `lib/retire-runtime.mjs` invoke guard, `lib/closeout-executor.mjs` source guard, `lib/closeout-code.mjs` graph verifier |
+| `b809c8233fc3075878d1b5d3adffd13a205d8e31` | Same pre-send ordering |
+| `cebeb152c97cf88a9875da267c381c02574058b4` | Same pre-send ordering |
+| `77317d62b69150e16672bd96366b3aeac6db27fb` | Same pre-send ordering |
+
+Both canonical main and canonical HEAD reflogs must show the exact fast-forward
+from that producer to the handoff's replacement commit before the intent was
+written, with the entire reflog second ending strictly before its timestamp.
+The two logs must agree, remain contiguous, and show no intervening ref or
+checkout transition through the handoff. The original source, native target,
+checkout/common directory and changed graph must match. A prior intervening
+command result, missing/pruned history, same-second ambiguity, unrecognized
+producer, redirected log or native refusal retains UNKNOWN. No general recovery
+permission follows from this finite legacy bridge.
+
+The original source, intent, waits and failures remain immutable. Positive
+non-execution admits one fresh ordinary observation even when the older wait
+was a missing-producer defect. A present allocation passes the usual current
+identity, status, process, source/head, claim and STOP/HOLD guards before its
+first actual exit/close; an absent bound allocation records current closure,
+explicitly naming its never-sent intent. This never proves a historical send,
+kernel exit or claim release. A missing folder can receive this observation
+without granting any Git effect or preservation proof. A later refusal,
+uncertain actual invocation or unchanged keep is not reopened by the old proof.
+Neither this bridge nor its source landing runs live housekeeping or changes
+an installed release, watcher, service or pin.
+
 # Event-driven lane closeout
 
 **Option B implementation (ENG-536), 2026-10-22.** Implements the accepted

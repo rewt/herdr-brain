@@ -80,10 +80,18 @@ test('STOP arriving during correction dispatch memory wait returns a resumable s
     try {
       await waitForChange([], () => {
         if (pending.child.exitCode !== null) throw Error(`child exited ${pending.child.exitCode}`);
-        return output().includes('dispatch: waiting');
+        if (pending.child.signalCode !== null) throw Error(`child received ${pending.child.signalCode}`);
+        return output().stderr.includes('dispatch: waiting');
       }, { timeoutMs: ADMISSION_WAIT_MS });
     } catch (error) {
-      throw Error(`${phase} dispatch memory observation: ${error.message}; settle stage ${journal(f, run).stage}; stderr: ${output() || '(empty)'}`, { cause: error });
+      // Exit can precede pipe drain. Preserve the actual completion/refusal and
+      // saved result before fixture teardown removes the evidence.
+      const completed = pending.child.exitCode !== null || pending.child.signalCode !== null
+        ? await pending.done : output();
+      const saved = journal(f, run);
+      throw Error(`${phase} dispatch memory observation: ${error.message}; ${JSON.stringify({
+        stage: saved.stage, result: saved.result ?? null, stdout: completed.stdout, stderr: completed.stderr,
+      })}`, { cause: error });
     }
   };
   f.commit('correct\n'); f.report(run);
@@ -100,7 +108,7 @@ test('STOP arriving during correction dispatch memory wait returns a resumable s
   pending.child.stdout.on('data', data => { stdout += data; });
   const stop = path.join(f.repo, '.lane/supervisor/STOP');
   try {
-    await waitForDispatch(pending, () => stderr, 'initial');
+    await waitForDispatch(pending, () => ({ stderr, stdout }), 'initial');
     assert.match(stderr, /dispatch: waiting; memory pressure/);
     fs.mkdirSync(path.dirname(stop), { recursive: true }); fs.writeFileSync(stop, 'Stop during memory wait');
   } finally {
@@ -125,7 +133,7 @@ test('STOP arriving during correction dispatch memory wait returns a resumable s
   retry.child.stderr.on('data', data => { retryStderr += data; });
   retry.child.stdout.on('data', data => { retryStdout += data; });
   try {
-    await waitForDispatch(retry, () => retryStderr, 'retry');
+    await waitForDispatch(retry, () => ({ stderr: retryStderr, stdout: retryStdout }), 'retry');
     assert.match(retryStderr, /dispatch: waiting; memory pressure/);
   } finally { fs.writeFileSync(memory, JSON.stringify({ available: 8 * 1024 ** 3, swap_used: 0 })); }
   await retry.done;

@@ -11,6 +11,7 @@ import { supervisorCase } from '../../acceptance/supervisor.mjs';
 import { queueFor } from '../../promote/promote.mjs';
 import { transact } from '../../lib/store.mjs';
 import { fold, nextRunId } from '../../lib/state.mjs';
+import { publishProvingReservation } from '../../test-slot/reservations.mjs';
 const root = fileURLToPath(new URL('../../', import.meta.url));
 process.env.ORG_ACTOR = 'supervisor-test-reader';
 const invoke = (f, args, cwd = f.repo) => f.exec(process.execPath, [path.join(root, 'supervisor/supervisor.mjs'), ...args], cwd, { ORG_DIR: f.org });
@@ -131,39 +132,51 @@ test('cold start unlanded advisory excludes review, human, closed, foreign and l
 });
 
 for (const stage of ['review', 'correction']) {
-  test(`supervisor handle exposes ${stage} memory wait before pressure clears`, async t => {
+  const barrier = stage === 'review' ? 'memory wait before pressure clears' : 'proving wait before reservation ends';
+  test(`supervisor handle exposes ${stage} ${barrier}`, async t => {
     const f = fixture(t), run = f.start(), memory = path.join(f.root, 'memory.json');
     const healthy = { available: 8 * 1024 ** 3, swap_used: 0 };
     const pressure = { available: 128 * 1024 ** 2, swap_used: 0 };
     f.commit(stage === 'review' ? 'correct\n' : 'wrong\n'); f.report(run);
     fs.writeFileSync(memory, JSON.stringify(stage === 'review' ? pressure : healthy));
     f.env.TEST_MEMORY_FILE = memory;
-    if (stage === 'correction') {
-      const herdr = path.join(f.root, 'bin/herdr');
-      fs.writeFileSync(herdr, fs.readFileSync(herdr, 'utf8').replace("fs.writeFileSync(path.join(root,'review-prompt'),prompt);",
-        `fs.writeFileSync(path.join(root,'review-prompt'),prompt); fs.writeFileSync(${JSON.stringify(memory)}, ${JSON.stringify(JSON.stringify(pressure))});`));
-    }
+    let reservation;
     if (stage === 'correction') {
       const reviewed = result(invoke(f, ['handle', run, '--role', 'supervisor']));
       assert.equal(reviewed.code, 'REVIEW_CAP_REACHED');
       assert.equal(reviewed.review_policy.cap, 1);
+      // Correction dispatch honors a live proving reservation. RAM pressure
+      // alone is advisory, and remains present after this reservation ends.
+      fs.writeFileSync(memory, JSON.stringify(pressure));
+      reservation = publishProvingReservation({ lockPath: f.env.MONITOR_TEST_SLOT_COMPAT_PATH, cwd: f.repo,
+        label: 'supervisor correction', reason: 'correction launch barrier',
+        expiresAt: new Date(Date.now() + 10 * 60 * 1000).toISOString() });
     }
     const pending = f.concurrent('handle', path.join(root, 'supervisor/supervisor.mjs'),
       [run, ...(stage === 'correction' ? ['--retry', '--fix-findings'] : []), '--role', 'supervisor']);
     let stderr = '', stdout = '';
     pending.child.stderr.on('data', data => { stderr += data; });
     pending.child.stdout.on('data', data => { stdout += data; });
+    const waiting = stage === 'review' ? /waiting; memory pressure/ : /dispatch: waiting; proving.*correction launch barrier/;
     try {
       let completed = false;
       pending.done.finally(() => { completed = true; });
-      while (!stderr.includes('waiting; memory pressure') && !completed) await new Promise(r => setTimeout(r, 20));
-      assert.match(stderr, /waiting; memory pressure/);
+      while (!waiting.test(stderr) && !completed) await new Promise(r => setTimeout(r, 20));
+      assert.match(stderr, waiting, JSON.stringify({ stdout, stderr }));
       assert.equal(pending.child.exitCode, null, 'reason must be visible while handle is still waiting');
-    } finally { fs.writeFileSync(memory, JSON.stringify(healthy)); }
+      assert.equal(f.calls().filter(a => a[1] === 'start').length, stage === 'review' ? 0 : 1,
+        'the held launch must not start another worker');
+    } finally {
+      if (reservation) assert.equal(reservation.release(), true);
+      else fs.writeFileSync(memory, JSON.stringify(healthy));
+    }
     await pending.done;
     assert.equal(pending.child.exitCode, 0, stderr);
     assert.equal(JSON.parse(stdout).result, stage === 'review' ? 'promotable' : 'fix_round');
-    assert.match(stderr, /memory pressure cleared; proceeding/);
+    assert.match(stderr, stage === 'review' ? /memory pressure cleared; proceeding/ : /proving reservation ended; proceeding/);
+    assert.equal(f.calls().filter(a => a[1] === 'start').length, stage === 'review' ? 1 : 2,
+      'the released launch runs exactly once');
+    if (stage === 'correction') assert.deepEqual(JSON.parse(fs.readFileSync(memory)), pressure);
   });
 }
 

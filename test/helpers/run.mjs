@@ -47,11 +47,53 @@ if (worker) {
   };
   process.once('disconnect', cleanup);
   process.once('message', async () => {
-    const stream = run({ files, concurrency, testNamePatterns, timeout: fileTimeout || undefined });
+    const fs = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    // A multi-file run() buffers later files behind the first unfinished file.
+    // Its owned-group cap can kill that buffer. Independent reporter streams
+    // retain each admitted file before copying completed TAP to the build log.
+    // Keep artifacts beside the durable journal, outside disposable fixtures.
+    const directory = fs.mkdtempSync(path.join(process.env[TIMINGS_ENV]
+      ? path.dirname(path.resolve(process.env[TIMINGS_ENV])) : tmpdir(), 'test-file-tap-'));
     let code = 0;
-    stream.on('test:fail', () => { code = 1; });
-    try { await pipeline(stream.compose(tap), process.stdout, { end: false }); }
-    catch (error) { console.error(error); code = 1; }
+    let next = 0, allFilesDone = false, wakeOutput;
+    const completed = [];
+    async function* completedOutput() {
+      while (!allFilesDone || completed.length) {
+        if (!completed.length) { await new Promise(resolve => { wakeOutput = resolve; }); continue; }
+        yield* fs.createReadStream(completed.shift());
+      }
+    }
+    // One output pipeline avoids accumulating stdio listeners per file.
+    const output = pipeline(completedOutput(), process.stdout, { end: false })
+      .catch(error => { console.error(error); code = 1; });
+    async function admit() {
+      while (next < files.length) {
+        const index = next++, file = files[index];
+        const artifact = path.join(directory, `${index + 1}.tap`);
+        const reference = { file: path.resolve(file), artifact };
+        console.error(`FILE_TAP: ${JSON.stringify(reference)}`);
+        const fd = fs.openSync(artifact, 'wx', 0o600);
+        let fileCode = 0;
+        try {
+          const stream = run({ files: [file], concurrency: 1, testNamePatterns, timeout: fileTimeout || undefined });
+          stream.on('test:fail', () => { fileCode = 1; });
+          await pipeline(stream.compose(tap), async source => {
+            // No pending artifact writes may be lost to the coordinator's cap.
+            for await (const chunk of source) fs.writeFileSync(fd, chunk);
+          });
+          console.error(`FILE_TAP_COMPLETE: ${JSON.stringify({ ...reference, exit_code: fileCode })}`);
+        } catch (error) { console.error(error); fileCode = 1; }
+        finally { fs.closeSync(fd); }
+        if (fileCode) code = 1;
+        // Serialize whole completed files, never wait behind an unfinished one.
+        // Admission and artifact retention continue even if log output is slow.
+        completed.push(artifact); wakeOutput?.(); wakeOutput = undefined;
+      }
+    }
+    await Promise.all(Array.from({ length: Math.min(concurrency, files.length) }, admit));
+    allFilesDone = true; wakeOutput?.();
+    await output;
     // IPC can overtake pipe data. Flush both writable queues before authorizing
     // group teardown; the coordinator still has to consume their readable ends.
     const outputFlushed = await new Promise(resolve => {

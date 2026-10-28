@@ -67,11 +67,6 @@ function closeoutTurn({project,org,cli,guard,env=process.env,maxSteps=8,budgetMs
       }catch(error){errors.push({run:run.id,stage:'ingest',reason:error.message});}
       ingested++;delete state.pending;save();
     }
-    // Refresh uses the existing original-evidence repair, never a new binder.
-    if(!expired()&&lineServiceOwnsCleanup(project,org)){
-      try{guard();cli('supervisor/closeout.mjs',['refresh','--repo',project.canonical,'--org',org]);}
-      catch(error){errors.push({stage:'refresh',reason:error.message});}
-    }
     observed=read();
     // Re-publish exact committed envelopes only. No re-binding a namesake.
     const sources=observed.events.filter(e=>e.closeout_targets?.some(t=>t.common===project.identity&&t.org===org&&!t.reportCloseout));
@@ -105,6 +100,13 @@ function closeoutTurn({project,org,cli,guard,env=process.env,maxSteps=8,budgetMs
         state.last_result={key:entry.key,result};fault('after-closeout');
       }catch(error){if(error.code==='CLOSEOUT_CODE_CHANGED')throw error;errors.push({key:entry.key,stage:'closeout',reason:error.message});}
       steps++;delete state.pending;save();
+    }
+    // Bound effects precede potentially slow legacy inventory/repair. Missing
+    // bindings already have a first typed disposition; fresh bindings join the
+    // next finite wake. A backlog refresh cannot consume every closeout turn.
+    if(steps===0&&!expired()&&lineServiceOwnsCleanup(project,org)){
+      try{guard();cli('supervisor/closeout.mjs',['refresh','--repo',project.canonical,'--org',org]);}
+      catch(error){if(error.code==='CLOSEOUT_CODE_CHANGED')throw error;errors.push({stage:'refresh',reason:error.message});}
     }
     // One grouped diagnostic, deduplicated by unchanged scope/reason. Counting
     // kept turns never re-invokes or reads an unresolved native effect.

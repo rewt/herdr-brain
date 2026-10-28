@@ -75,3 +75,25 @@ test('missing binding cannot replace an original UNKNOWN allocation or read its 
   assert.match(result.kept[0].reason,/original unbound cleanup attempt/);assert.deepEqual(f.herdrCalls(),calls);
   assert.deepEqual(events(f).slice(0,before.length),before);assert.equal(fs.existsSync(f.lane),true);
 });
+
+test('slow original-evidence refresh cannot run ahead of a bound eligible closeout',t=>{
+  const f=fixture(t);let refreshes=0;
+  const result=runCloseoutTurn({project:f.project,org:f.org,env:f.env,guard:()=>{},measure:()=>{},maxSteps:1,cli:(_file,argv)=>{
+    if(argv[0]==='refresh'){refreshes++;throw Error('slow legacy inventory must not precede eligible effects');}
+    return JSON.stringify(f.drain({keys:JSON.parse(argv[argv.indexOf('--keys')+1]),retrySafe:true}));
+  }});
+  assert.equal(result.steps,1);assert.equal(refreshes,0);assert.equal(fs.existsSync(f.lane),false);
+});
+
+test('a finite 45-second allowance records partial folder progress then recovers its exact branch separately',t=>{
+  const f=fixture(t),target=currentCloseoutEntries(f.common,f.org,events(f))[0],log=f.options.log;let now=Date.now(),charged=false;
+  t.mock.method(Date,'now',()=>now);
+  f.options.log=row=>{log(row);if(!charged&&row.action==='worktree-removed'){charged=true;now+=20000;}};
+  const drain=()=>f.drain({keys:[target.key],retrySafe:true,retirementOptions:{...f.options,deadline:now+45000}});
+  const first=drain().evaluated[0];assert.equal(first.completed,false);assert.equal(first.condition.kind,'pre-effect-budget');
+  assert.equal(first.resources.folder.status,'removed');assert.equal(first.resources.branch.status,'kept');
+  assert.equal(f.git(['rev-parse','refs/heads/lane/topic']),f.head);assert.equal(fs.existsSync(f.lane),false);
+  assert.equal(drain().evaluated[0].completed,true);
+  assert.equal(f.git(['branch','--list','lane/topic']),'');
+  assert.equal(effects(f).filter(e=>e.action==='worktree-removed').length,1);
+});

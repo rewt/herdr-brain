@@ -22,10 +22,13 @@ export const source = fileURLToPath(new URL('../../', import.meta.url));
 export function fixture(t, { inputWaitMs = 10000, inputAllowance = loadTimeout, recipientDelayMs = 0, noticeWaitMs = 30000 } = {}) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'batch-complete-'))), repo = path.join(root, 'repo');
   fixtureFleet(t, root); fs.mkdirSync(repo);
+  // Keep observed Git configuration private; /dev/null metadata can change
+  // under other processes while the record's source guard is checking it.
+  const gitConfig = path.join(root, 'gitconfig'); fs.writeFileSync(gitConfig, '');
   // A quiet confirmation needs multiple native reads in one drain window.
   // Match their load-adjusted allowances; a fixed window can expire on every
   // pass, discard confirmation and leave the inbox owner retrying forever.
-  const env = { ...healthyMemoryEnvironment(fixtureEnvironment()), GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1', SUPERVISOR_INPUT_WAIT_SECONDS: String(inputAllowance(inputWaitMs) / 1000), SUPERVISOR_INPUT_CONFIRM_SECONDS: '0.001', SUPERVISOR_INPUT_POLL_SECONDS: '0.001' };
+  const env = { ...healthyMemoryEnvironment(fixtureEnvironment()), GIT_CONFIG_GLOBAL: gitConfig, GIT_CONFIG_NOSYSTEM: '1', SUPERVISOR_INPUT_WAIT_SECONDS: String(inputAllowance(inputWaitMs) / 1000), SUPERVISOR_INPUT_CONFIRM_SECONDS: '0.001', SUPERVISOR_INPUT_POLL_SECONDS: '0.001' };
   for (const k of Object.keys(env)) if (/^(LANE_|ORG_|HERDR_|GIT_(DIR|WORK_TREE|INDEX_FILE|COMMON_DIR|CONFIG_COUNT))/.test(k)) delete env[k];
   env.HERDR_MONITOR_FLEET = process.env.HERDR_MONITOR_FLEET;
   const exec = (command, args, cwd = repo, extraEnv = {}) => spawnSync(command, args, { cwd, env: { ...env, ...extraEnv }, encoding: 'utf8', [commandAllowance]: 60000 });
@@ -42,8 +45,10 @@ export function fixture(t, { inputWaitMs = 10000, inputAllowance = loadTimeout, 
   fs.writeFileSync(path.join(repo, '.lane.validation.json'), JSON.stringify({ promotion: `${process.execPath} ${checker}` }));
   fs.writeFileSync(path.join(repo, 'base'), 'base'); git(['add', '.']); git(['commit', '-qm', 'Base']);
   const herdr = path.join(root, 'herdr');
+  // This stable test-owned notice recipient is distinct from the worker runs
+  // in the record. Supply the same complete identity as the native API.
   fs.writeFileSync(herdr, `#!${process.execPath}
-const a=process.argv.slice(2);if(a[0]==='agent'&&a[1]==='get') { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,${recipientDelayMs});console.log(JSON.stringify({result:{agent:{agent:'claude',agent_status:'idle',pane_id:'fake',terminal_id:${JSON.stringify(path.join(root, 'recipient-terminal'))}}}})); }
+const a=process.argv.slice(2);if(a[0]==='agent'&&a[1]==='get') { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,${recipientDelayMs});console.log(JSON.stringify({result:{agent:{name:'test',agent:'claude',agent_status:'idle',interactive_ready:true,pane_id:'fake',terminal_id:${JSON.stringify(path.join(root, 'recipient-terminal'))},agent_session:{value:${JSON.stringify(path.join(root, 'recipient-session'))}},workspace_id:${JSON.stringify(root)},cwd:${JSON.stringify(repo)}}}})); }
 else if(a[0]==='pane'&&a[1]==='read')console.log('────────────────────\\n❯ \\n────────────────────');
 else console.log(JSON.stringify({result:{workspaces:[],agents:[]}}));`, { mode: 0o755 });
   const fault = path.join(root, 'refuse-record'), preload = path.join(root, 'fault.cjs');

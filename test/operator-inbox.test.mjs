@@ -11,6 +11,7 @@ import { fold } from '../lib/state.mjs';
 import { nativeSender, makeEnvelope, prepareEnvelope, pushReserved, operatorDigest, recordMessages, pushId } from '../messages/operator-inbox.mjs';
 import { enqueueSupervisor, readInbox, drainInbox, resolveNotice } from '../supervisor/prompt-supervisor.mjs';
 import { renderOperatorDigest } from '../lib/render.mjs';
+import { loadTimeout } from '../lib/deadline.mjs';
 
 const cli = fileURLToPath(new URL('../bin/org.mjs', import.meta.url));
 const empty = fs.readFileSync(new URL('../supervisor/test/fixtures/claude-empty.ansi', import.meta.url), 'utf8');
@@ -39,6 +40,7 @@ const root=${JSON.stringify(root)}, inbox=${JSON.stringify(inbox)}, a=process.ar
 const targets=JSON.parse(fs.readFileSync(root+'/targets','utf8')), mode=fs.existsSync(root+'/mode')?fs.readFileSync(root+'/mode','utf8'):'';
 fs.appendFileSync(root+'/calls',JSON.stringify(a)+'\\n');
 if(a[0]==='agent'&&a[1]==='get') {
+ if(fs.existsSync(root+'/slow-read')) {fs.unlinkSync(root+'/slow-read');Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,1100);}
  const agent=targets[a[2]];
  if(mode==='changed-final'&&a[2]==='brain-chat'&&fs.existsSync(inbox)&&fs.readFileSync(inbox,'utf8').trim().split('\\n').map(JSON.parse).at(-1)?.type==='sending') agent.agent_session.value='replacement';
  console.log(JSON.stringify({result:{agent}}));
@@ -69,7 +71,9 @@ else if(a[0]==='agent'&&a[1]==='prompt') {
     call: invoke, enqueue: (to, message, options) => enqueueSupervisor(to, message, { ...options, herdr, mirror: () => {} }),
     resume: async () => {}, ...extra,
   });
-  const drain = () => drainInbox(inbox, { id: readInbox(inbox)[0]?.id, owner: true, confirmSeconds: 0, waitSeconds: 1, pollSeconds: .01 });
+  // Recipient/composer subprocess reads can exceed one second under suite load.
+  const drain = (options = {}) => drainInbox(inbox, { id: readInbox(inbox)[0]?.id, owner: true, confirmSeconds: 0,
+    waitSeconds: loadTimeout(5000) / 1000, pollSeconds: .01, ...options });
   const sent = () => fs.existsSync(path.join(root, 'sent')) ? fs.readFileSync(path.join(root, 'sent'), 'utf8').trim().split('\n').map(JSON.parse) : [];
   return { root, org, inbox, env, sender, target, targets, writeTargets, binding, append, push, drain, sent };
 }
@@ -123,6 +127,23 @@ test('a reserved reference in routine content, claimed evidence, or a resolved a
   transact(f.org, () => ({ add: [{ type: 'item.closed', id: 'HUM-1', as: 'done' }] }));
   const answered = f.append({ id: 'answered', kind: 'question', question: 'HUM-1' }).result;
   assert.equal((await f.push(answered)).state, 'record-only'); assert.deepEqual(readInbox(f.inbox), []);
+});
+
+test('a slow recipient read caps the old fixture wait before input but the load-aware allowance delivers once', async t => {
+  const f = fixture(t), e = f.append({ kind: 'question', question: 'HUM-1' }).result;
+  await f.push(e);
+  // Deterministically exceed the old cap in the fake CLI, without host-load assumptions.
+  fs.writeFileSync(path.join(f.root, 'slow-read'), '');
+  assert.equal((await f.drain({ waitSeconds: 1 })).delivered, false);
+  assert.equal(fs.existsSync(path.join(f.root, 'slow-read')), false, 'the slow observation ran');
+  assert.deepEqual(f.sent(), []);
+  assert.equal(readInbox(f.inbox)[0].state, 'pending');
+  assert.ok(fs.readFileSync(f.inbox, 'utf8').trim().split('\n').map(JSON.parse).some(row => row.type === 'capped'));
+  fs.writeFileSync(path.join(f.root, 'slow-read'), '');
+  assert.equal((await f.drain()).delivered, true);
+  assert.equal(f.sent().length, 1);
+  assert.equal((await f.push(e)).state, 'sent');
+  assert.equal(f.sent().length, 1);
 });
 
 test('short on-demand digests retain stable record references, correlation and reply IDs without reading bodies', t => {

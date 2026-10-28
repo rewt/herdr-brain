@@ -72,14 +72,17 @@ if (worker) {
     const directory = fs.mkdtempSync(path.join(process.env[TIMINGS_ENV]
       ? path.dirname(path.resolve(process.env[TIMINGS_ENV])) : tmpdir(), 'test-file-tap-'));
     let code = 0;
-    let next = 0, allFilesDone = false, wakeOutput;
+    let next = 0, allFilesDone = false, wakeOutput, copyingFileOutput = false;
     const completed = [];
     async function* completedOutput() {
       while (!allFilesDone || completed.length) {
         if (!completed.length) { await new Promise(resolve => { wakeOutput = resolve; }); continue; }
         const entry = completed.shift();
-        if (entry.stderr) await pipeline(fs.createReadStream(entry.stderr), process.stderr, { end: false });
-        yield* fs.createReadStream(entry.artifact);
+        copyingFileOutput = true;
+        try {
+          if (entry.stderr) await pipeline(fs.createReadStream(entry.stderr), process.stderr, { end: false });
+          yield* fs.createReadStream(entry.artifact);
+        } finally { copyingFileOutput = false; }
       }
     }
     // One output pipeline avoids accumulating stdio listeners per file.
@@ -93,22 +96,29 @@ if (worker) {
       // scheduler's group, so outer cancellation still disconnects every owner.
       const artifact = path.join(directory, `${index + 1}.output`);
       const fd = fs.openSync(artifact, 'wx', 0o600);
+      const stderr = `${artifact}.stderr`, stderrFD = fs.openSync(stderr, 'wx', 0o600);
       const env = { ...process.env, MONITOR_TEST_FILE_TIMEOUT_MS: String(fileTimeout) };
       delete env.NODE_TEST_CONTEXT;
       const child = spawn(process.execPath, [script, '--file-group', '--load-factor=1', ...(nameOption ? [nameOption] : []), file], {
         detached: false, stdio: ['ignore', 'pipe', 'pipe', 'ipc'], env,
       });
       child.on('message', message => {
-        if (message.fileTap || message.fileTapComplete) process.send(message);
+        if (message.fileGroupProgress) {
+          // The gate may own the enclosing watcher. Give it actual activity
+          // without inserting metadata into a file currently being copied.
+          if (!copyingFileOutput) console.error(`FILE_GROUP_PROGRESS: ${JSON.stringify(message.fileGroupProgress)}`);
+        } else if (message.fileTap || message.fileTapComplete) process.send(message);
       });
       child.stdout.on('data', bytes => fs.writeFileSync(fd, bytes));
-      child.stderr.on('data', bytes => process.stderr.write(bytes));
+      // Serialize raw stderr too: concurrent metadata or another file's output
+      // must not split a crash diagnostic, including one without a newline.
+      child.stderr.on('data', bytes => fs.writeFileSync(stderrFD, bytes));
       child.on('error', error => { console.error(error); code = 1; });
       // close includes both physical output pipes, not just leader exit.
       const status = await new Promise(resolve => child.once('close', status => resolve(status)));
-      fs.closeSync(fd);
+      fs.closeSync(fd); fs.closeSync(stderrFD);
       if (status !== 0) code = 1;
-      completed.push({ artifact }); wakeOutput?.(); wakeOutput = undefined;
+      completed.push({ artifact, stderr }); wakeOutput?.(); wakeOutput = undefined;
     }
     async function admit() {
       while (next < files.length) {
@@ -201,8 +211,9 @@ if (worker) {
     detached: true, stdio: ['ignore', 'pipe', 'pipe', 'ipc'], env,
   });
   let owner, finished = false, watcher, timedOutFile;
-  const fileArtifacts = new Map();
+  const fileArtifacts = new Map(), fileCompletions = new Map();
   let pendingOutput = 0, outputFailed = false, checkDrain = () => {};
+  let lastGroupProgress = 0, groupOutputBytes = 0;
   const pipes = [child.stdout, child.stderr], closedPipes = new Set();
   function forwardOutput(data, output) {
     pendingOutput += 1;
@@ -213,7 +224,16 @@ if (worker) {
     });
   }
   for (const [input, output] of [[child.stdout, process.stdout], [child.stderr, process.stderr]]) {
-    input.on('data', data => { watcher?.output(); forwardOutput(data, output); });
+    input.on('data', data => {
+      watcher?.output();
+      groupOutputBytes += data.length;
+      // Staging complete per-file stderr must not make live artifact activity
+      // invisible to the enclosing gate's one existing output watcher.
+      if (fileGroup && process.connected && Date.now() - lastGroupProgress >= 1000) {
+        process.send({ fileGroupProgress: { file: path.resolve(files[0]), bytes: groupOutputBytes } }); lastGroupProgress = Date.now();
+      }
+      forwardOutput(data, output);
+    });
     input.once('error', () => { outputFailed = true; });
     input.once('close', () => {
       if (!input.readableEnded) outputFailed = true;
@@ -276,6 +296,10 @@ if (worker) {
       };
       async function recoverFileArtifacts() {
         const fs = await import('node:fs');
+        // IPC can overtake raw output. Publish terminal markers only after the
+        // physical pipes drain, so they cannot interrupt a raw diagnostic.
+        for (const completion of fileCompletions.values()) forwardOutput(`\nFILE_TAP_COMPLETE: ${JSON.stringify(completion)}\n`, process.stderr);
+        fileCompletions.clear();
         for (const reference of fileArtifacts.values()) {
           let completion;
           if (fs.existsSync(reference.completion_artifact)) {
@@ -291,7 +315,7 @@ if (worker) {
           // The worker may never have copied this file to the build log. Its
           // raw stderr and partial TAP remain separate durable artifacts too.
           if (fileGroup && process.connected) process.send({ fileTapComplete: completion });
-          else forwardOutput(`FILE_TAP_COMPLETE: ${JSON.stringify(completion)}\n`, process.stderr);
+          else forwardOutput(`\nFILE_TAP_COMPLETE: ${JSON.stringify(completion)}\n`, process.stderr);
           await pipeline(fs.createReadStream(reference.stderr_artifact), process.stderr, { end: false });
           await pipeline(fs.createReadStream(reference.artifact), process.stdout, { end: false });
         }
@@ -299,7 +323,7 @@ if (worker) {
       }
       checkDrain = () => {
         if (recovering || !pipes.every(pipe => closedPipes.has(pipe)) || pendingOutput !== 0) return;
-        if (!fileArtifacts.size) { exit(outputFailed ? 1 : code); return; }
+        if (!fileArtifacts.size && !fileCompletions.size) { exit(outputFailed ? 1 : code); return; }
         // Only confirmed leader exit and drained pipes authorize synthetic
         // completion. Recovery shares the same bounded output-drain allowance.
         recovering = true;
@@ -323,7 +347,7 @@ if (worker) {
       const completion = message.fileTapComplete;
       if (fileArtifacts.delete(completion.file)) {
         if (fileGroup && process.connected) process.send(message);
-        else forwardOutput(`FILE_TAP_COMPLETE: ${JSON.stringify(completion)}\n`, process.stderr);
+        else fileCompletions.set(completion.file, completion);
       }
       return;
     }

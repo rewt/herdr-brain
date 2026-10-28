@@ -22,10 +22,14 @@ async function driverResult(journal,{count=1,limit=60000}={}){
     // The append opens the file before writing. Only newline-terminated rows
     // are complete; a continuation must wait for its own row after older ones.
     const rows=text.slice(0,text.lastIndexOf('\n')+1).split('\n').filter(Boolean).map(line=>JSON.parse(line));
-    if(rows.length>=count)return rows.at(-1);
+    // The terminal row precedes completion publication and request cleanup.
+    // Wait for both the owner lock and its arbitration ticket before retrying;
+    // observing the row alone does not mean the original driver has released it.
+    const held=fs.existsSync(journal+'.lock')||(fs.existsSync(journal+'.locks')&&fs.readdirSync(journal+'.locks').length>0);
+    if(rows.length>=count&&!held)return rows.at(-1);
     if(Date.now()>=until){
       const log=`${journal}.driver.log`;
-      assert.fail(`owned detached fixture needs ${count} complete terminal receipt(s); got ${rows.length}; driver output: ${fs.existsSync(log)?fs.readFileSync(log,'utf8'):'<unavailable>'}`);
+      assert.fail(`owned detached fixture needs ${count} complete terminal receipt(s); got ${rows.length}; request serialization held: ${held}; driver output: ${fs.existsSync(log)?fs.readFileSync(log,'utf8'):'<unavailable>'}`);
     }
     await new Promise(resolve=>setTimeout(resolve,25));
   }
@@ -44,7 +48,23 @@ test('detached driver receipt reader waits for complete appends and retains term
   fs.appendFileSync(file,'}\n');assert.deepEqual(await continued,failed);
   fs.writeFileSync(file,'malformed completed row\n');await assert.rejects(driverResult(journal),SyntaxError);
   fs.writeFileSync(file,'');fs.writeFileSync(journal+'.driver.log','retained child stderr');
-  await assert.rejects(driverResult(journal,{limit:0}),/got 0; driver output: retained child stderr/);
+  await assert.rejects(driverResult(journal,{limit:0}),/got 0; request serialization held: false; driver output: retained child stderr/);
+});
+
+test('detached driver receipt reader waits for request cleanup after a terminal row without removing ownership evidence',async t=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'phase1-cleanup-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+  const journal=path.join(root,'request.json'),lock=journal+'.lock',directory=journal+'.locks',ticket=path.join(directory,'original');
+  const failed={stage:'start',exit_code:1,native_launch_attempted:false,error:'injected prepare'};
+  fs.mkdirSync(journal+'.driver');fs.mkdirSync(directory);fs.writeFileSync(lock,String(process.pid));fs.writeFileSync(ticket,'1');
+  fs.writeFileSync(journal+'.driver/results.jsonl',JSON.stringify(failed)+'\n');
+  await assert.rejects(driverResult(journal,{limit:0}),/got 1; request serialization held: true/);
+  let resolved=false;const pending=driverResult(journal).then(result=>{resolved=true;return result;});
+  await new Promise(resolve=>setImmediate(resolve));assert.equal(resolved,false,'terminal result does not release the request');
+  assert.equal(fs.readFileSync(lock,'utf8'),String(process.pid));assert.equal(fs.readFileSync(ticket,'utf8'),'1');
+  fs.unlinkSync(lock);
+  await assert.rejects(driverResult(journal,{limit:0}),/got 1; request serialization held: true/);
+  assert.equal(resolved,false,'the original arbitration ticket still owns the request');
+  fs.unlinkSync(ticket);assert.deepEqual(await pending,failed,'cleanup preserves the original failure receipt');
 });
 
 test('permanent preflight continuation requires positive zero-native evidence and retains unknown refused foreign or spent attempts',t=>{

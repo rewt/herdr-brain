@@ -59,8 +59,7 @@ test('settle retains the review stage under simulated memory pressure and launch
   let stderr = '';
   pending.child.stderr.on('data', data => { stderr += data; });
   try {
-    const end = Date.now() + 10000;
-    while (!stderr.includes('settle review: waiting') && Date.now() < end) await new Promise(resolve => setTimeout(resolve, 20));
+    await waitForChange([], () => stderr.includes('settle review: waiting'), { timeoutMs: 10000 });
     assert.match(stderr, /settle review: waiting; memory pressure: swap/);
     assert.equal(journal(f, run).stage, 'review');
     assert.equal(f.calls().some(args => args[1] === 'start'), false);
@@ -88,9 +87,7 @@ test('STOP arriving during correction dispatch memory wait returns a resumable s
   pending.child.stdout.on('data', data => { stdout += data; });
   const stop = path.join(f.repo, '.lane/supervisor/STOP');
   try {
-    const end = Date.now() + 10000;
-    while (!stderr.includes('dispatch: waiting') && Date.now() < end)
-      await new Promise(resolve => setTimeout(resolve, 20));
+    await waitForChange([], () => stderr.includes('dispatch: waiting'), { timeoutMs: 10000 });
     assert.match(stderr, /dispatch: waiting; memory pressure/);
     fs.mkdirSync(path.dirname(stop), { recursive: true }); fs.writeFileSync(stop, 'Stop during memory wait');
   } finally {
@@ -115,8 +112,7 @@ test('STOP arriving during correction dispatch memory wait returns a resumable s
   retry.child.stderr.on('data', data => { retryStderr += data; });
   retry.child.stdout.on('data', data => { retryStdout += data; });
   try {
-    const end = Date.now() + 10000;
-    while (!retryStderr.includes('dispatch: waiting') && Date.now() < end) await new Promise(resolve => setTimeout(resolve, 20));
+    await waitForChange([], () => retryStderr.includes('dispatch: waiting'), { timeoutMs: 10000 });
     assert.match(retryStderr, /dispatch: waiting; memory pressure/);
   } finally { fs.writeFileSync(memory, JSON.stringify({ available: 8 * 1024 ** 3, swap_used: 0 })); }
   await retry.done;

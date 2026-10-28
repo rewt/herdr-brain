@@ -19,18 +19,10 @@ function config(f, cap) {
 function landed(f) { const run = f.start(); f.commit('correct\n'); f.report(run); return run; }
 const launchCalls = (f) => f.calls().filter((a) => a[1] === 'start' ||
   (a[1] === 'prompt' && (a[3].startsWith('You are run ') || a[3].includes('Private record file: '))));
-function retainWorker(f, run) {
-  // The shared fake normally expires clients with their launching CLI. These
-  // scenarios model a retained native worker after that foreground CLI exits.
-  const file = path.join(f.root, 'agents.json'), agents = JSON.parse(fs.readFileSync(file));
-  delete agents[f.show(run).meta.agent].client_owner;
-  fs.writeFileSync(file, JSON.stringify(agents));
-}
 function dispatchWorker(f, item, extra = []) {
   ignoreRuntime(gitProject(f.repo, { env: f.env }));
   const receipt = result(f.exec(process.execPath, [path.join(f.source, 'dispatch/dispatch.mjs'), item,
     '--lane', 'topic', '--route', 'engineer', '--brief', path.join(f.root, 'ask with spaces.md'), ...extra]));
-  retainWorker(f, receipt.run);
   return receipt;
 }
 
@@ -144,7 +136,7 @@ test('historical explicit cap3 control allows two automatic fix rounds then stop
   assert.equal(f.calls().filter((a) => a[1] === 'prompt' && a[3].startsWith('You are run ')).length, 2);
 });
 
-test('settle reuses the same route with continuation metadata and starts fresh when the fix route changes', { timeout: 60000 }, (t) => {
+test('settle refuses same-route worker reuse and starts fresh when the fix route changes', { timeout: 60000 }, (t) => {
   for (const changed of [false, true]) {
     const f = fixture(t, { actor: 'settle-reuse-route-test' }); review(f);
     const item = JSON.parse(f.record(['status', '--json'])).items[0].id;
@@ -154,18 +146,23 @@ test('settle reuses the same route with continuation metadata and starts fresh w
     assert.equal(reviewed.result, 'promotable_with_findings');
     // Intake has captured the reuse/route choice. Request the one formal fix
     // from that receipt; retry must not replace those saved settings.
-    const r = result(f.retry(first.run, ['--fix-findings']));
+    const before = launchCalls(f), head = f.git(['rev-parse', 'HEAD'], f.workspace);
+    const correction = f.retry(first.run, ['--fix-findings']);
+    if (!changed) {
+      assert.equal(correction.status, 1); assert.match(correction.stderr, /new work starts fresh/);
+      assert.deepEqual(f.show(item).runs, [first.run]);
+      assert.deepEqual(launchCalls(f), before, 'refused reuse cannot start or prompt a worker');
+      assert.equal(f.git(['rev-parse', 'HEAD'], f.workspace), head);
+      assert.equal(JSON.parse(fs.readFileSync(path.join(f.org, 'settle', `${first.run}.json`))).reviewPolicy.round, 1);
+      continue;
+    }
+    const r = result(correction);
     assert.equal(r.result, 'fix_round');
     const next = f.show(r.fix.run);
-    if (changed) {
-      assert.equal(r.reuse_skipped, 'route_changed'); assert.notEqual(next.meta.agent, prior.meta.agent);
-      assert.equal(next.meta.route, 'engineer-max'); assert.equal(next.meta.continuation_of, undefined);
-      assert.equal(next.meta.same_session, undefined);
-    } else {
-      assert.equal(r.reuse_skipped, undefined);
-      for (const key of ['agent', 'pane', 'agent_session_id', 'terminal_id']) assert.equal(next.meta[key], prior.meta[key]);
-      assert.equal(next.meta.continuation_of, first.run); assert.equal(next.meta.same_session, true);
-    }
+    assert.equal(r.reuse_skipped, 'route_changed'); assert.notEqual(next.meta.agent, prior.meta.agent);
+    assert.notEqual(next.meta.pane, prior.meta.pane);
+    assert.equal(next.meta.route, 'engineer-max'); assert.equal(next.meta.continuation_of, undefined);
+    assert.equal(next.meta.same_session, undefined);
     const saved = JSON.parse(fs.readFileSync(path.join(f.org, 'settle', `${first.run}.json`)));
     assert.equal(saved.reuse_skipped, r.reuse_skipped);
     const calls = launchCalls(f);
@@ -173,19 +170,28 @@ test('settle reuses the same route with continuation metadata and starts fresh w
   }
 });
 
-test('cross-item reuse neither consumes another item review round nor resets the original count', { timeout: 60000 }, (t) => {
+test('fresh cross-item workers neither consume another item review round nor reset the original count', { timeout: 60000 }, (t) => {
   const f = fixture(t, { actor: 'settle-cross-item-rounds-test' }); config(f, 2); review(f);
   const item = JSON.parse(f.record(['status', '--json'])).items[0].id;
-  const first = dispatchWorker(f, item), reviewed = result(f.settle(first.run, ['--reuse']));
+  const first = dispatchWorker(f, item), reviewed = result(f.settle(first.run));
   assert.equal(reviewed.review_policy.round, 1); assert.equal(reviewed.result, 'fix_round');
   f.record(['ingest', f.show(reviewed.fix.run).report_path]);
-  retainWorker(f, reviewed.fix.run);
   const sibling = f.record(['add', 'Sibling slice', '--role', 'engineer']).split(' ')[0];
-  const other = dispatchWorker(f, sibling, ['--reuse', reviewed.fix.run]);
+  const before = launchCalls(f);
+  const refused = f.exec(process.execPath, [path.join(f.source, 'dispatch/dispatch.mjs'), sibling,
+    '--lane', 'topic', '--route', 'engineer', '--brief', path.join(f.root, 'ask with spaces.md'), '--reuse', reviewed.fix.run]);
+  assert.equal(refused.status, 1); assert.match(refused.stderr, /new work starts fresh/);
+  assert.deepEqual(launchCalls(f), before); assert.deepEqual(f.show(sibling).runs, []);
+  const other = dispatchWorker(f, sibling);
   const otherReview = result(f.settle(other.run, ['--review-round-cap', '1']));
   assert.equal(otherReview.result, 'promotable_with_findings');
   assert.equal(otherReview.review_policy.round, 1); assert.deepEqual(otherReview.review_policy.prior_runs, []);
-  const back = dispatchWorker(f, item, ['--reuse', other.run]);
+  const back = dispatchWorker(f, item);
+  for (const current of [other, back]) {
+    const run = f.show(current.run);
+    assert.equal(run.meta.continuation_of, undefined); assert.equal(run.meta.same_session, undefined);
+  }
+  assert.equal(new Set([first.agent, reviewed.fix.agent, other.agent, back.agent]).size, 4);
   const next = result(f.settle(back.run));
   assert.equal(next.result, 'promotable_with_findings'); assert.equal(next.review_policy.round, 2);
   assert.deepEqual(next.review_policy.prior_runs, [first.run]);

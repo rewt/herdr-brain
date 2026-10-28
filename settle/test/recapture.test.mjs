@@ -23,6 +23,9 @@ for (const conflict of [false, true]) test(`recovery: moved main cannot swallow 
   const before = receipt(f, run), starts = f.calls().filter(a => a[1] === 'start').length;
   advance(f, conflict ? 'work.txt' : 'upstream', 'upstream change\n');
   const fixed = result(f.retry(run, ['--fix-findings'])); assert.equal(fixed.result, 'fix_round');
+  const dispatched = JSON.parse(fs.readFileSync(fixed.fix.journal));
+  assert.equal(dispatched.base, before.finalHead, 'correction starts from the verified lane, not moved main');
+  assert.equal(dispatched.fromRun, run); assert.equal(dispatched.workspace, f.workspace);
   assert.equal(f.calls().filter(a => a[1] === 'start').length, starts + 1);
   assert.equal(f.calls().filter(a => a[1] === 'prompt' && a[3]?.startsWith('You are run ')).length, 1);
   assert.equal(f.show(f.show(run).item).runs.length, 2);
@@ -178,6 +181,8 @@ test('a stopped fix tolerates main moving and dispatches one correction after ST
   advance(f); assert.equal(result(f.retry(run)).result, 'stopped');
   assert.equal(f.show(f.show(run).item).runs.length, 1);
   fs.unlinkSync(path.join(f.repo, '.lane/supervisor/STOP'));
-  assert.equal(result(f.retry(run)).result, 'fix_round'); assert.equal(f.show(f.show(run).item).runs.length, 2);
+  const fixed = result(f.retry(run)); assert.equal(fixed.result, 'fix_round');
+  assert.equal(JSON.parse(fs.readFileSync(fixed.fix.journal)).base, before.finalHead);
+  assert.equal(f.show(f.show(run).item).runs.length, 2);
   assert.equal(receipt(f, run).mainHead, before.mainHead); assert.equal(receipt(f, run).recaptures, undefined);
 });

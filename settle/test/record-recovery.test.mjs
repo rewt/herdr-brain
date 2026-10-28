@@ -106,7 +106,9 @@ test('a legacy correction refusal resumes the fix stage after blockers clear and
   assert.match(refused.reason, /Correction needs supervisor judgment/); legacy(f, run);
   assert.equal(result(f.retry(run)).result, 'escalate'); assert.equal(workers(f).length, 0);
   f.record(['close', blocker]); advance(f);
+  const source = receipt(f, run).finalHead;
   const fixed = result(f.retry(run)); assert.equal(fixed.result, 'fix_round');
+  assert.equal(JSON.parse(fs.readFileSync(fixed.fix.journal)).base, source);
   assert.equal(reviews(f).length, 1); assert.equal(workers(f).length, 1);
   assert.deepEqual(result(f.retry(run)), fixed); assert.equal(workers(f).length, 1);
 });

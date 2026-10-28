@@ -534,8 +534,12 @@ function rebaseForPromotion() {
   return null;
 }
 function dispatchArgs() {
+  // Legacy fixes continue this verified lane head even when main has moved.
+  // Captured post-code reviews retain their separate source-selection path.
+  if (!job.postCodePolicy) unchanged({ movingMain: true });
   return [job.item, '--controller', opt.controller, '--repo', job.repo, '--org', opt.org, '--lane', job.lane, '--route', job.fixRoute,
     '--brief', job.fixBrief, '--to', job.to, '--from-run', id, ...(job.reuse && !job.reuse_skipped ? ['--reuse', id] : []),
+    ...(!job.postCodePolicy ? ['--base', job.finalHead ?? job.head] : []),
     ...['org', 'lane', 'watch'].flatMap((key) => opt[`${key}-cli`] ? [`--${key}-cli`, opt[`${key}-cli`]] : [])];
 }
 function correctionStopped() {

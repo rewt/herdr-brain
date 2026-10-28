@@ -41,7 +41,8 @@ async function harness({ failedSpawn = false } = {}) {
     stdout: stream('stdout'), stderr: stream('stderr'), unref: () => h.events.push(['unref']) });
   h.process = proc;
   const slot = { nested: false, token: null, class: 'shared', occupancyPath: '/presence',
-    setGroup: (...args) => h.events.push(['group', ...args]), release: () => { h.events.push(['release']); return true; } };
+    setGroup: (...args) => { h.events.push(['group', ...args]); if (h.publicationError) throw h.publicationError; },
+    release: () => { h.events.push(['release']); return true; } };
   const never = () => assert.fail('unexpected injected edge');
   const missing = () => { throw Object.assign(Error('absent'), { code: 'ENOENT' }); };
   const limits = { wall_seconds: 0, idle_seconds: 9, frozen_seconds: 199.580020875 };
@@ -51,7 +52,16 @@ async function harness({ failedSpawn = false } = {}) {
       if (args.includes('HEAD')) return 'sha';
       if (args.includes('HEAD^{tree}')) return 'tree';
       return never();
-    }, spawn: (file, args, options) => { h.events.push(['spawn', file, args, options]); return h.child; },
+    }, spawn: (file, args, options) => {
+      h.events.push(['spawn', file, args, options]);
+      // Match ChildProcess's pipe interface without bypassing the real
+      // controller's occupancy-publication barrier or executing its shell.
+      h.child.stdio = [null, h.child.stdout, h.child.stderr];
+      if (options.stdio[3] === 'pipe') h.child.stdio.push(Object.assign(stream('grant'), {
+        end: data => h.events.push(['grant', String(data)]),
+      }));
+      return h.child;
+    },
       spawnSync: (file, args, options) => {
         h.queries.push({ file, args, options });
         return { status: 0, stderr: '', stdout: args.at(-1).split(',').map(pid => `${pid} 00:00.00 S`).join('\n') };
@@ -87,7 +97,10 @@ async function harness({ failedSpawn = false } = {}) {
       COMPAT_PATH_ENV: 'MONITOR_TEST_SLOT_COMPAT_PATH', LOCK_PATH_INVALID_CODE: 'INVALID',
       slotPathOf: () => '/slot', validateSlotPath: () => {} },
     '../lib/processes.mjs': { lookupProcess: lookup },
-    '../lib/files.mjs': { writeFileAtomic: (file, text) => { h.files.set(file, text); if (file === '/receipt') h.receipts.push(JSON.parse(text)); } },
+    '../lib/files.mjs': { writeFileAtomic: (file, text) => {
+      h.files.set(file, text);
+      if (file === '/receipt') { const receipt = JSON.parse(text); h.receipts.push(receipt); h.events.push(['receipt', receipt]); }
+    } },
     '../lib/cli-help.mjs': { cliHelp: () => {}, isMain: url => Boolean(h.holdMain && url.endsWith('/verify/execute.mjs')) },
   };
   const context = createContext({ process: proc, AbortController, Error, Map,
@@ -155,8 +168,8 @@ if (typeof SourceTextModule !== 'function') {
     const result = await waitForExit(child);
     assert.equal(result.signal, null, result.stderr);
     assert.equal(result.code, 0, result.stdout + result.stderr);
-    assert.match(result.stdout, /# tests 22\b/);
-    assert.match(result.stdout, /# pass 22\b/);
+    assert.match(result.stdout, /# tests 23\b/);
+    assert.match(result.stdout, /# pass 23\b/);
     assert.match(result.stdout, /# fail 0\b/);
     assert.match(result.stdout, /# skipped 0\b/);
   });
@@ -164,7 +177,19 @@ if (typeof SourceTextModule !== 'function') {
 for (const code of [0, 7]) test(`actual controller awaits close and trailing output after exit ${code}`, async () => {
   const h = await harness(); h.start();
   const spawn = h.events.find(e => e[0] === 'spawn');
-  assert.equal(spawn[1], '/payload'); assert.deepEqual(plain(spawn[2]), ['argument']); assert.equal(spawn[3].detached, true);
+  assert.equal(spawn[1], '/bin/bash');
+  assert.deepEqual(plain(spawn[2]), ['--noprofile', '--norc', '--posix', '-c',
+    'shopt -s execfail; IFS= read -r _ <&3 || exit 127; exec 3<&- "$@"; exit 127', 'test-slot-proving', '/payload', 'argument']);
+  assert.equal(spawn[3].argv0, 'sh'); assert.equal(spawn[3].detached, true);
+  assert.deepEqual(plain(spawn[3].stdio), ['inherit', 'pipe', 'pipe', 'pipe']);
+  assert.equal(spawn[3].env.MONITOR_TEST_SLOT_OCCUPANCY_PATH, '/presence');
+  const groups = h.events.filter(e => e[0] === 'group');
+  assert.equal(groups[0][1], 91); assert.ok(groups[0][4].gate_started_at);
+  assert.deepEqual(groups[1], ['group', 91, 'start', 'birth']);
+  const published = h.events.indexOf(groups[1]), started = h.events.findIndex(e => e[0] === 'receipt' && e[1].command_started);
+  const granted = h.events.findIndex(e => e[0] === 'grant');
+  assert.ok(published < started && started < granted, 'publish group and start receipt before granting the payload');
+  assert.deepEqual(h.events[granted], ['grant', 'start\n']);
   h.child.stdout.emit('data', 'before'); h.exit(code); await turn();
   assert.equal(h.pending, true); assert.equal(h.timers.length, 0, 'no pipe-drain cutoff requested');
   assert.equal(h.events.some(e => ['destroy', 'release'].includes(e[0])), false);
@@ -177,6 +202,20 @@ for (const code of [0, 7]) test(`actual controller awaits close and trailing out
   const count = h.events.length; h.child.emit('exit', 9, null); h.child.emit('close', 9, null); await turn();
   assert.equal(h.events.length, count); assert.equal(h.process.listenerCount('SIGTERM'), 0);
   assert.equal(h.receipts.at(-1).exit_code, code); assert.ok(h.intervals.every(t => t.stopped));
+});
+
+test('occupancy publication failure closes the barrier without granting the payload and joins owned cleanup', async () => {
+  const h = await harness(); h.publicationError = Error('occupancy write refused'); h.start();
+  const rejected = assert.rejects(h.done, error => error === h.publicationError);
+  await turn();
+  assert.equal(h.events.some(e => e[0] === 'grant' || e[0] === 'receipt' && e[1].command_started), false);
+  assert.ok(h.events.some(e => e[0] === 'destroy' && e[1] === 'grant'));
+  assert.deepEqual(h.events.filter(e => e[0] === 'signal'), [['signal', -91, 'SIGTERM'], ['signal', 92, 'SIGTERM']]);
+  assert.equal(h.events.some(e => e[0] === 'release'), false, 'presence remains until owned completion and stream close');
+  h.exit(); await turn(); assert.equal(h.events.some(e => e[0] === 'release'), false);
+  h.child.emit('close', 0, null); await rejected;
+  assert.ok(h.rows.has(93)); assert.equal(h.healthy, 0);
+  assert.equal(h.process.listenerCount('SIGTERM'), 0); assert.ok(h.intervals.every(t => t.stopped));
 });
 
 test('spawn error remains 127 and waits for close', async () => {

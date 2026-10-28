@@ -121,7 +121,7 @@ function closeoutTurn({project,org,cli,guard,env=process.env,maxSteps=8,budgetMs
       try{
         guard();code.verify();
         const result=JSON.parse(cli('supervisor/closeout.mjs',['drain','--repo',project.canonical,'--org',org,
-          '--keys',JSON.stringify([entry.key]),'--no-restart','--retry-safe','--deadline',String(now()+Math.max(1,budgetMs-(clock()-started))),
+          '--keys',JSON.stringify([entry.key]),'--no-restart','--retry-safe','--deadline',String(Math.floor(now()+Math.max(1,budgetMs-(clock()-started)))),
           ...(sessionsOnly?['--sessions-only']:[])]));
         if(result.restart)throw Object.assign(Error('closer returned a guarded code handoff'),{code:'CLOSEOUT_CODE_CHANGED',binding:result.restart.old,current:result.restart.current});
         state.last_result={key:entry.key,result};fault('after-closeout');

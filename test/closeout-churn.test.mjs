@@ -2,6 +2,7 @@ import test from './helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import {spawnSync} from 'node:child_process';
 import {runCloseoutTurn} from '../line-service/closeout-turn.mjs';
 import {gitProject} from '../lib/project.mjs';
 import {currentCloseoutEntries,publishCloseoutEvents,unpublishedCloseoutSources,readCloseoutEntries} from '../lib/closeout.mjs';
@@ -125,4 +126,20 @@ test('a completion with no envelope gets a typed missing identity while an indep
   const kept=events(f).find(e=>e.type==='closeout.binding-kept'&&e.run==='R-2'&&e.source.type==='item.closed');
   assert.equal(kept.source.type,'item.closed');assert.equal(kept.condition.kind,'missing-identity');
   assert.equal(kept.resources.session.status,'kept');assert.match(kept.condition.continuation.defect,/no completion subscription/);
+});
+
+test('ordinary finite drain deadlines cross the real CLI integer contract before native execution',t=>{
+  const f=fixture(t);let calls=0;
+  const result=runCloseoutTurn({project:f.project,org:f.org,env:f.env,guard:()=>{},measure:()=>{},maxSteps:1,cli:(file,argv)=>{
+    if(argv[0]==='refresh')return '{}';
+    const args=[...argv],deadline=args[args.indexOf('--deadline')+1];
+    assert.ok(Number.isSafeInteger(Number(deadline)));
+    // Empty exact keys exercise the real parser without reading/acting on a
+    // native target. The fixture executor below still proves the bound close.
+    args[args.indexOf('--keys')+1]='[]';
+    const parsed=spawnSync(process.execPath,[path.resolve(file),...args],{cwd:f.repo,env:f.env,encoding:'utf8'});
+    assert.equal(parsed.status,0,parsed.stderr+parsed.stdout);calls++;
+    return JSON.stringify(f.drain({keys:JSON.parse(argv[argv.indexOf('--keys')+1]),retrySafe:true}));
+  }});
+  assert.equal(calls,1);assert.equal(result.steps,1);assert.equal(fs.existsSync(f.lane),false);
 });

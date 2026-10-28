@@ -31,6 +31,7 @@ import {capturedReviewCommits} from '../line-service/review-group.mjs';
 import {canonicalSelector} from '../line-service/review-targets.mjs';
 import {fold as historicalFold} from './fixtures/state-pre-session-bind.mjs';
 import {canonical} from '../messages/schema.mjs';
+import {nativeCloseoutWait,closeoutWaitState} from '../lib/closeout-status.mjs';
 
 const hash=b=>createHash('sha256').update(b).digest('hex');
 function fixture(t,{reported=true}={}){
@@ -57,6 +58,7 @@ function fixture(t,{reported=true}={}){
 
 const diagnostics=f=>fs.readFileSync(path.join(f.directory,'passes.jsonl'),'utf8').trim().split('\n').map(JSON.parse);
 const diagnosticHealth=f=>diagnostics(f).findLast(r=>r.health)?.health;
+const closeoutCheckpoint=f=>JSON.parse(fs.readFileSync(path.join(f.directory,'closeout-turn.json'),'utf8'));
 
 test('cleanup tail historical requests are independent of the review phase-zero cutoff',t=>{
   const f=fixture(t),policy=JSON.parse(fs.readFileSync(path.join(f.cwd,'.lane.json')));policy.retirement={closeout_queue:true};fs.writeFileSync(path.join(f.cwd,'.lane.json'),JSON.stringify(policy));
@@ -704,9 +706,13 @@ test('permanent health and first errors stay diagnostic while one missing-produc
   }});
   for(let n=0;n<5;n++)service().pass();const health=diagnosticHealth(f),rows=diagnostics(f);
   const after=fs.readFileSync(path.join(f.org,'events.jsonl'));assert.deepEqual(after.subarray(0,bytes.length),bytes);
-  const added=after.subarray(bytes.length).toString().trim().split('\n').map(JSON.parse);assert.equal(added.length,1);assert.equal(added[0].type,'item.added');
-  assert.deepEqual(added[0].meta.uncertain_outcome.check.subject,{item:'ENG-1',effect:`review:ENG-1:${f.heads[1]}`});
-  assert.match(added[0].meta.uncertain_outcome.check.defect,/no pending status producer/);
+  const added=after.subarray(bytes.length).toString().trim().split('\n').map(JSON.parse);assert.equal(added.length,2);
+  const kept=added.find(e=>e.type==='closeout.binding-kept'),decision=added.find(e=>e.type==='item.added');
+  assert.equal(kept.identity,f.identity);assert.equal(kept.run,'R-1');assert.equal(kept.item,'ENG-1');assert.equal(kept.completed,false);
+  assert.deepEqual(kept.source,{seq:f.context().run.report.seq,type:'report.ingested'});assert.equal(kept.condition.kind,'missing-identity');
+  for(const resource of ['session','folder','branch']){assert.equal(kept.resources[resource].status,'kept');assert.equal(kept.resources[resource].owner,'R-1');}
+  assert.deepEqual(decision.meta.uncertain_outcome.check.subject,{item:'ENG-1',effect:`review:ENG-1:${f.heads[1]}`});
+  assert.match(decision.meta.uncertain_outcome.check.defect,/no pending status producer/);
   assert.equal(health.gap_passes,5);assert.equal(health.owed,1);assert.equal(health.owed_commits,2);assert.equal(health.queued,0);
   assert.equal(rows.filter(r=>r.boundary==='review-gap'&&r.inspection_due).length,1);assert.equal(calls,1);assert.equal(refreshes,5);
   const digest=morningDigest({events:f.context().events,diagnostics:rows});assert.ok(digest.review_errors.occurrences>=5);assert.equal(digest.review_health.pass_id,health.pass_id);
@@ -959,7 +965,7 @@ test('saved-phase readiness preserves immutable blocked evidence and original so
   f.add([{type:'item.reopened',id:'ENG-1',note:'Actual owner explicitly hands remaining unfinished scope back to normal work; no done claim.'}]);assert.ok(dispatchInput(f.context()));assert.deepEqual(f.context().run.report,report);assert.equal(f.context().item.closed,null);
 });
 
-test('phase1 report ingestion retains its original failure while independent starts continue without a live pane',t=>{
+test('phase1 finite report intake records failure and retries the current owned candidate while independent starts continue without a live pane',t=>{
   const f=fixture(t,{reported:false});fs.mkdirSync(path.join(f.org,'runs/R-1'),{recursive:true});fs.writeFileSync(path.join(f.org,'runs/R-1/report.md'),f.report);
   f.add([{type:'item.added',id:'ENG-2',title:'Ready',role:'engineer'},{type:'item.added',id:'ENG-3',title:'Also ready',role:'engineer'}]);
   const calls=[];let failed=false;
@@ -969,9 +975,12 @@ test('phase1 report ingestion retains its original failure while independent sta
     return {status:0,stdout:args[0].endsWith('dispatch.mjs')?JSON.stringify({result:'detached',journal:path.join(f.org,'dispatch',`new-${calls.length}.json`)}):'{}',stderr:''};};
   const service=()=>createLineService({repo:f.cwd,org:f.org,to:'brain-chat',env:f.env,command,capacity:()=>({cap:2,count:0}),recordNotice:d=>({id:d.id,state:'record-only'}),maxStarts:2});
   service().pass();assert.equal(calls.filter(a=>a[0].endsWith('dispatch.mjs')).length,2);assert.ok(calls.filter(a=>a[0].endsWith('dispatch.mjs')).every(a=>a.includes('--detach')));
-  const journal=path.join(f.directory,'effects.json'),initial=JSON.parse(fs.readFileSync(journal)).actions['ingest:R-1'];assert.equal(initial.state,'held');assert.equal(initial.receipt.error,'ETIMEDOUT');
-  service().pass();assert.equal(f.context().run.report,null);assert.equal(calls.filter(a=>a[1]==='ingest').length,1,'safe classification alone grants no replay without completion evidence');
-  assert.deepEqual(JSON.parse(fs.readFileSync(journal)).actions['ingest:R-1'].receipt,initial.receipt);assert.equal(calls.some(a=>a[0]==='agent'),false);
+  const initial=closeoutCheckpoint(f);assert.deepEqual(initial.errors,[{run:'R-1',stage:'ingest',reason:'transient'}]);assert.equal(initial.ingest['R-1'],1);assert.equal(f.context().run.report,null);
+  service().pass();assert.equal(f.context().run.report.sha256,hash(f.report));assert.equal(calls.filter(a=>a[1]==='ingest').length,2);
+  service().pass();assert.equal(calls.filter(a=>a[1]==='ingest').length,2,'committed ingestion suppresses a third validation attempt');
+  assert.equal(f.context().events.filter(e=>e.type==='report.ingested'&&e.run==='R-1').length,1);assert.deepEqual(closeoutCheckpoint(f).errors,[]);
+  assert.equal(Object.keys(JSON.parse(fs.readFileSync(path.join(f.directory,'effects.json'))).actions).some(k=>k.startsWith('ingest:')),false,'finite intake does not acquire a general-pass effect intent');
+  assert.equal(calls.some(a=>a[0]==='agent'),false);
 });
 
 test('phase1 measured inactive owned child failure does not freeze independent work or replay a native launch',t=>{
@@ -981,11 +990,15 @@ test('phase1 measured inactive owned child failure does not freeze independent w
   assert.ok(calls.some(a=>a[0].endsWith('dispatch.mjs')));assert.equal(fs.existsSync(path.join(f.directory,'pass.lock')),false);
 });
 
-test('phase1 three repeated failures make one diagnostic alert and every pass writes a heartbeat',t=>{
+test('phase1 repeated finite intake failures stay diagnostic and every pass writes a heartbeat',t=>{
   const f=fixture(t,{reported:false});fs.mkdirSync(path.join(f.org,'runs/R-1'),{recursive:true});fs.writeFileSync(path.join(f.org,'runs/R-1/report.md'),f.report);const notes=[];
   const options={repo:f.cwd,org:f.org,to:'brain-chat',env:f.env,command:()=>({status:1,stdout:'',stderr:'temporarily locked'}),capacity:()=>({cap:1,count:0}),recordNotice:d=>{notes.push(d);return {id:d.id};}};
-  for(let n=0;n<3;n++)createLineService(options).pass();assert.equal(notes.length,0);assert.equal(diagnostics(f).filter(n=>n.boundary?.startsWith('ingest:')&&n.inspection_due).length,1);
-  const heartbeat=JSON.parse(fs.readFileSync(path.join(f.directory,'heartbeat.json')));assert.ok(heartbeat.at);assert.equal(heartbeat.project,f.identity);
+  for(let n=0;n<3;n++){
+    createLineService(options).pass();const checkpoint=closeoutCheckpoint(f);
+    assert.equal(checkpoint.ingest['R-1'],n+1);assert.deepEqual(checkpoint.errors,[{run:'R-1',stage:'ingest',reason:'temporarily locked'}]);
+    const heartbeat=JSON.parse(fs.readFileSync(path.join(f.directory,'heartbeat.json')));assert.ok(heartbeat.at);assert.equal(heartbeat.project,f.identity);assert.equal(heartbeat.phase,'finished');
+  }
+  assert.equal(notes.length,0);assert.equal(f.context().run.report,null);
 });
 
 test('phase1 cleanup identity survives unrelated main landings and competing kick leaves ownership with the line',t=>{
@@ -1001,24 +1014,26 @@ test('phase1 pending pre-effect closeout source handoff continues its original k
   const f=fixture(t),policy=JSON.parse(fs.readFileSync(path.join(f.cwd,'.lane.json'),'utf8'));policy.retirement={closeout_queue:true};fs.writeFileSync(path.join(f.cwd,'.lane.json'),JSON.stringify(policy));
   const added=transact(f.org,events=>bindCloseoutSources({cwd:f.cwd,org:f.org,events,env:f.env,mutation:{add:[{type:'item.closed',id:'ENG-1',as:'done',completed_run:'R-1'}]}})).added;
   publishCloseoutEvents({cwd:f.cwd,org:f.org,added,start:false,env:f.env});
-  const key=added[0].closeout_targets.find(t=>t.signal==='landed').key,calls=[];
+  const target=added[0].closeout_targets.find(t=>t.signal==='landed'),key=target.key,source={seq:added[0].seq,type:added[0].type},calls=[],successors=[];
   const service=createLineService({repo:f.cwd,org:f.org,to:'brain-chat',env:f.env,capacity:()=>({count:0,cap:4}),recordNotice:data=>({id:data.id,state:'record-only'}),command:(_exe,args)=>{
     if(args[0]===path.join(sourceRoot,'supervisor/closeout.mjs')){
       calls.push(args);assert.deepEqual(JSON.parse(args[args.indexOf('--keys')+1]),[key]);
-      return{status:0,stdout:JSON.stringify(calls.length===1?{evaluated:[],restart:{keys:[key],old:{source:'old'},current:{source:'new'}},successor:{pending:true,reason:'fresh drain required',keys:[key]}}:{evaluated:[{key,run:'R-1',completed:true}]}),stderr:''};
+      assert.ok(args.includes('--no-restart'));assert.ok(args.includes('--retry-safe'));
+      if(calls.length===1)return{status:0,stdout:JSON.stringify({evaluated:[],restart:{keys:[key],old:{source:'old'},current:{source:'new'}}}),stderr:''};
+      const row={key,run:'R-1',completed:true};f.add([{type:'closeout.evaluated',identity:f.identity,source,...row}]);
+      return{status:0,stdout:JSON.stringify({evaluated:[row]}),stderr:''};
+    }
+    if(args[0]===path.join(sourceRoot,'line-service/closeout.mjs')){
+      successors.push(args);assert.ok(args.includes('--once'));assert.ok(args.includes('--no-handoff'));assert.ok(Number(args[args.indexOf('--deadline')+1])>Date.now());
+      return{status:0,stdout:JSON.stringify({result:'closeout-code-handoff-pending',reason:'bounded fresh successor also changed; original obligations retained'}),stderr:''};
     }
     return{status:0,stdout:'{}',stderr:''};
   }});
-  service.pass();const file=path.join(service.directory,'effects.json'),journal=JSON.parse(fs.readFileSync(file,'utf8'));
-  const entry=Object.values(journal.actions).find(e=>e.result?.restart);assert.equal(entry.state,'held');
-  // Retain compatibility with the actual previously written complete receipt.
-  entry.state='complete';delete entry.error;fs.writeFileSync(file,JSON.stringify(journal));
+  service.pass();const pending=closeoutCheckpoint(f);assert.deepEqual(pending.pending,{stage:'closeout',key,source});assert.equal(successors.length,1);
+  assert.equal(f.context().events.some(e=>e.type==='closeout.evaluated'&&e.key===key),false,'pending code handoff is not completion');
   service.pass();service.pass();assert.equal(calls.length,2,'one fresh drain, then completed effect stays complete');
-  const completed=JSON.parse(fs.readFileSync(file,'utf8')),final=Object.values(completed.actions).find(e=>e.result?.evaluated?.[0]?.key===key);
-  assert.equal(final.state,'complete');assert.equal(final.history[0].result.successor.pending,true);
-  assert.equal(final.result.evaluated[0].completed,true);
-  final.result={...final.history[0].result,evaluated:[{key,completed:false,reason:'unresolved native exit intent'}]};
-  fs.writeFileSync(file,JSON.stringify(completed));service.pass();assert.equal(calls.length,2,'a native/ambiguous evaluated request is not a pre-effect handoff');
+  const completed=closeoutCheckpoint(f);assert.equal(completed.pending,undefined);assert.equal(completed.targets[key],2);assert.equal(completed.last_result.result.evaluated[0].completed,true);
+  assert.equal(successors.length,1,'only one fresh successor runs inside the original handoff allowance');
 });
 
 test('useful admission proceeds after unrelated productive cleanup exceeds its work budget while a fresh STOP still prevents launch',t=>{
@@ -1030,12 +1045,13 @@ test('useful admission proceeds after unrelated productive cleanup exceeds its w
       if(args[0]===path.join(sourceRoot,'supervisor/closeout.mjs')){clock+=1000;if(stopped)fs.writeFileSync(path.join(f.directory,'STOP'),'fresh stop after productive cleanup');return{status:0,stdout:JSON.stringify({evaluated:[{key,completed:true}]}),stderr:''};}
       return{status:0,stdout:args[0].endsWith('dispatch.mjs')?JSON.stringify({result:'detached',journal:path.join(f.org,'dispatch/new-original.json')}):'{}',stderr:''};
     }});
-    if(stopped)assert.throws(()=>service.pass(),/STOP/);else service.pass();assert.ok(calls.some(a=>a[0].endsWith('supervisor/closeout.mjs')));assert.equal(calls.filter(a=>a[0].endsWith('dispatch.mjs')).length,stopped?0:1);
-    if(!stopped){const rows=fs.readFileSync(path.join(f.directory,'passes.jsonl'),'utf8').trim().split('\n').map(JSON.parse);assert.equal(rows.find(r=>r.action==='admission-stage').preceding_budget_exhausted,true);assert.equal(rows.find(r=>r.action==='pass-complete').starts,1);}
+    const result=service.pass();if(stopped)assert.match(result.held,/STOP/);assert.ok(calls.some(a=>a[0].endsWith('supervisor/closeout.mjs')));assert.equal(calls.filter(a=>a[0].endsWith('dispatch.mjs')).length,stopped?0:1);
+    assert.equal(clock,1000,'the independent closeout allowance was spent');
+    if(!stopped){const rows=diagnostics(f);assert.equal(rows.find(r=>r.action==='admission-stage').preceding_budget_exhausted,false,'the general pass starts with its own allowance');assert.equal(rows.find(r=>r.action==='pass-complete').starts,1);}
   }
 });
 
-test('cleanup receives an independent allowance after slow review work and a fresh STOP still prevents cleanup',t=>{
+test('cleanup runs before slow review work and a fresh STOP still prevents the review effect',t=>{
   for(const stopped of [false,true]){
     const f=fixture(t),env=installedService(f),policy=JSON.parse(fs.readFileSync(path.join(f.cwd,'.lane.json')));
     policy.retirement={closeout_queue:true};fs.writeFileSync(path.join(f.cwd,'.lane.json'),JSON.stringify(policy));
@@ -1045,27 +1061,29 @@ test('cleanup receives an independent allowance after slow review work and a fre
     const service=createLineService({repo:f.cwd,org:f.org,to:'brain-chat',env,passBudgetMs:100,workClock:()=>clock,maxStarts:0,
       capacity:()=>({cap:1,count:0}),recordNotice:d=>({id:d.id,state:'record-only'}),command:(_exe,args)=>{
         calls.push(args);
-        if(args[1]==='queue-review'){
+        if(args[1]==='drain'){
           clock+=1000;
-          if(stopped)fs.writeFileSync(path.join(f.directory,'STOP'),'fresh stop after slow review');
+          if(stopped)fs.writeFileSync(path.join(f.directory,'STOP'),'fresh stop after independent cleanup');
         }
+        if(args[1]==='queue-review')clock+=1000;
         return{status:0,stdout:args[0].endsWith('closeout.mjs')?JSON.stringify(args[1]==='refresh'?{created:[]}:{evaluated:[{key,completed:true}]}):'{}',stderr:''};
       }});
-    if(stopped)assert.throws(()=>service.pass(),/STOP/);else service.pass();
-    assert.ok(calls.some(a=>a[1]==='queue-review'),'the slow preceding effect actually ran');
-    assert.equal(calls.filter(a=>a[1]==='refresh').length,stopped?0:1);
-    assert.equal(calls.filter(a=>a[1]==='drain'&&JSON.parse(a[a.indexOf('--keys')+1]).includes(key)).length,stopped?0:1);
-    if(!stopped)assert.equal(diagnostics(f).find(r=>r.action==='cleanup-stage').preceding_budget_exhausted,true);
+    const result=service.pass();if(stopped)assert.match(result.held,/STOP/);
+    assert.equal(calls.filter(a=>a[1]==='drain'&&JSON.parse(a[a.indexOf('--keys')+1]).includes(key)).length,1);
+    assert.equal(calls.filter(a=>a[1]==='refresh').length,0,'bound work precedes legacy refresh');
+    assert.equal(calls.filter(a=>a[1]==='queue-review').length,stopped?0:1);
+    if(!stopped)assert.ok(calls.findIndex(a=>a[1]==='drain')<calls.findIndex(a=>a[1]==='queue-review'),'slow review cannot consume the prior closeout turn');
   }
 });
 
-test('phase1 service retains an unknown exit intent and files one missing-producer decision without native replay',t=>{
+test('phase1 service retains an unknown exit intent and raises one grouped alarm without a replacement decision or native replay',t=>{
   const f=fixture(t),policy=JSON.parse(fs.readFileSync(path.join(f.cwd,'.lane.json'),'utf8'));policy.retirement={closeout_queue:true};fs.writeFileSync(path.join(f.cwd,'.lane.json'),JSON.stringify(policy));
   const env=installedService(f);
   const a=f.observation.agents[0];f.add([{type:'run.updated',id:'R-1',meta:{agent:a.name,pane:a.pane_id,worker_workspace:a.workspace_id,terminal_id:a.terminal_id,agent_session_id:a.agent_session.value}}]);
   const added=transact(f.org,events=>bindCloseoutSources({cwd:f.cwd,org:f.org,events,env:f.env,mutation:{add:[{type:'item.closed',id:'ENG-1',as:'done',completed_run:'R-1'}]}})).added;
-  publishCloseoutEvents({cwd:f.cwd,org:f.org,added,start:false,env:f.env});const target=added[0].closeout_targets.find(t=>t.signal==='landed'),source={seq:added[0].seq,type:'item.closed'};
-  f.add([{type:'closeout.effect',key:target.key,identity:f.identity,source,outcome:{action:'agent-exit-requested',run:'R-1',pane:a.pane_id,tab_id:a.tab_id,occupant:[a.name,a.agent,a.pane_id,a.workspace_id,f.workspace,a.terminal_id,a.agent_session.value],shell:{pid:1,identity:'original-shell',command:'[zsh]'}}},
+  publishCloseoutEvents({cwd:f.cwd,org:f.org,added,start:false,env:f.env});const target={...added[0].closeout_targets.find(t=>t.signal==='landed'),source:{seq:added[0].seq,type:'item.closed'}},source=target.source;
+  const intent='original-exit-intent',outcome={action:'agent-exit-requested',run:'R-1',pane:a.pane_id,tab_id:a.tab_id,occupant:[a.name,a.agent,a.pane_id,a.workspace_id,f.workspace,a.terminal_id,a.agent_session.value],shell:{pid:1,identity:'original-shell',command:'[zsh]'}};
+  f.add([{type:'closeout.effect',key:target.key,identity:f.identity,source,effect:intent,producer:'native-closeout/v2',outcome},nativeCloseoutWait(target,outcome,intent),
     {type:'closeout.evaluated',key:target.key,identity:f.identity,run:'R-1',source,completed:false,revision:source.seq,reason:CLOSEOUT_EXIT_PENDING}]);
   const original=f.context().events.filter(e=>e.type==='closeout.effect'||e.type==='closeout.evaluated');
   const calls=[],refreshes=[],service=createLineService({repo:f.cwd,org:f.org,to:'brain-chat',env,capacity:()=>({count:0,cap:4}),recordNotice:data=>({id:data.id,state:'record-only'}),command:(_exe,args)=>{
@@ -1073,10 +1091,12 @@ test('phase1 service retains an unknown exit intent and files one missing-produc
     calls.push(args);
     return{status:0,stdout:'{}',stderr:''};
   }});
-  service.pass();service.pass();assert.equal(refreshes.length,2,'independent cleanup inventory remains allowed');
+  for(let n=0;n<4;n++)service.pass();assert.equal(refreshes.length,4,'independent cleanup inventory remains allowed');
   const c=f.context(),waits=c.events.filter(e=>e.type==='closeout.waiting'&&e.key===target.key);assert.equal(waits.length,1);
-  assert.match(waits[0].waiting.defect,/no existing runtime transport writes a later exit\/close status/);assert.deepEqual(waits[0].waiting.producers,[]);
-  const decisions=[...c.state.items.values()].filter(i=>i.meta.uncertain_outcome?.check.subject.key===target.key);assert.equal(decisions.length,1);
+  assert.equal(closeoutWaitState(waits[0],c.events),'pending');assert.equal(waits[0].waiting.owner,'native-closeout-command');assert.equal(waits[0].waiting.producers[0].intent,intent);
+  const decisions=[...c.state.items.values()].filter(i=>i.meta.uncertain_outcome?.check.subject.key===target.key);assert.equal(decisions.length,0);
+  const alarms=fs.readFileSync(path.join(f.directory,'closeout.log'),'utf8').trim().split('\n').map(JSON.parse).filter(e=>e.action==='closeout-supervisor-alarm');
+  assert.equal(alarms.length,1);assert.equal(alarms[0].count,1);assert.equal(alarms[0].scopes[0].key,target.key);assert.equal(alarms[0].owner,'project-supervisor');
   // The fixture's landed source remains independently reviewable while its exit intent is held.
   assert.deepEqual(calls,[[path.join(sourceRoot,'bin/org.mjs'),'queue-review','R-1','--head',f.heads[1],'--base',f.base]],'only the exact independent source-review request is allowed');
   assert.equal(Object.keys(JSON.parse(fs.readFileSync(path.join(service.directory,'effects.json'))).actions).some(key=>key.startsWith('closeout:')),false,'no native observation/drain attempt is authorized');

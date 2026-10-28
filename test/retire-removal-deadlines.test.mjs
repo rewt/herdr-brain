@@ -76,12 +76,12 @@ test('thousands of ignored dependency files get an inventory-sized removal allow
   assert.deepEqual(fs.readFileSync(f.eventFile), Buffer.from(f.eventBytes));
 });
 
-for (const availableMs of [30000, 80000]) test(`a pass with ${availableMs / 1000} seconds left defers before removal and replans successfully`, t => {
+test('a pass with 30 seconds left defers before worktree removal and replans successfully', t => {
   const f = fixture(t, { occupied: false }), time = clock(t);
   dependencies(f);
-  const result = sweep(f, time, commands(f), row => { if (row.action === 'lane-preflight') time.advance(120000 - availableMs); });
+  const result = sweep(f, time, commands(f), row => { if (row.action === 'lane-preflight') time.advance(90000); });
   assert.equal(result.results[0].action, 'deferred', JSON.stringify(result.results));
-  assert.equal(result.results[0].why, `removal needs 91 s; pass has ${availableMs / 1000} s`);
+  assert.equal(result.results[0].why, 'removal needs 61 s; pass has 30 s');
   assert.equal(result.calls.some(row => removing(row.exe, row.args) || deletingBranch(row.exe, row.args)), false);
   assert.equal(fs.existsSync(f.lane), true);
   assert.equal(f.git(['rev-parse', 'refs/heads/lane/topic']), f.head);
@@ -90,6 +90,51 @@ for (const availableMs of [30000, 80000]) test(`a pass with ${availableMs / 1000
   const proof = result.logs.find(row => row.action === 'lane-preflight').evidence;
   assert.equal(fs.existsSync(proof.directory), false, 'only the duplicate evidence copy is discarded');
   assert.equal(sweep(f, time, commands(f, slowDeletion(time))).results[0].action, 'lane-removed');
+  assert.deepEqual(fs.readFileSync(f.eventFile), Buffer.from(f.eventBytes));
+});
+
+test('a pass with 80 seconds left completes both commands when worktree removal leaves the branch allowance', t => {
+  const f = fixture(t, { occupied: false }), time = clock(t);
+  dependencies(f);
+  const result = sweep(f, time, commands(f, slowDeletion(time)), row => { if (row.action === 'lane-preflight') time.advance(40000); });
+  assert.equal(result.results[0].action, 'lane-removed', JSON.stringify(result.results));
+  assert.equal(fs.existsSync(f.lane), false);
+  assert.equal(f.git(['branch', '--list', 'lane/topic']), '');
+  assert.equal(result.calls.find(row => removing(row.exe, row.args)).timeout, 80000);
+  assert.equal(result.calls.find(row => deletingBranch(row.exe, row.args)).timeout, 30000);
+  assert.ok(result.calls.filter(row => removing(row.exe, row.args) || deletingBranch(row.exe, row.args)).every(row => row.locked));
+  assert.equal(fs.existsSync(path.join(f.common, 'lane-promote.lock')), false);
+  assert.deepEqual(fs.readFileSync(f.eventFile), Buffer.from(f.eventBytes));
+});
+
+test('a pass with 80 seconds left retains the exact branch and evidence when removal leaves less than 30 seconds', t => {
+  const f = fixture(t, { occupied: false }), time = clock(t);
+  dependencies(f);
+  fs.mkdirSync(path.join(f.lane, '.lane'));
+  fs.writeFileSync(path.join(f.lane, '.lane/report.md'), 'unique branch recovery evidence');
+  const result = sweep(f, time, commands(f, slowDeletion(time, 55000)), row => { if (row.action === 'lane-preflight') time.advance(40000); });
+  assert.equal(result.results[0].action, 'deferred', JSON.stringify(result.results));
+  assert.equal(result.results[0].why, 'removal needs 30 s; pass has 25 s');
+  assert.equal(fs.existsSync(f.lane), false);
+  assert.equal(f.git(['rev-parse', 'refs/heads/lane/topic']), f.head);
+  assert.equal(result.calls.filter(row => removing(row.exe, row.args)).length, 1);
+  assert.equal(result.calls.find(row => removing(row.exe, row.args)).timeout, 80000);
+  assert.equal(result.calls.some(row => deletingBranch(row.exe, row.args)), false);
+  const { action, ...proof } = result.logs.find(row => row.action === 'lane-preflight');
+  const saved = path.join(proof.evidence.directory, 'files/.lane/report.md');
+  assert.equal(fs.readFileSync(saved, 'utf8'), 'unique branch recovery evidence');
+  assert.equal(result.logs.some(row => row.action === 'lane-evidence-discarded'), false);
+  assert.equal(fs.existsSync(path.join(f.common, 'lane-promote.lock')), false);
+  const adapter = commands(f, slowDeletion(time)), logs = [];
+  f.retirement({ command: adapter.command, deadline: time.now() + 120000, requireRecord: true,
+    log: row => logs.push(row) }).resumeLaneRemoval(proof);
+  assert.equal(adapter.calls.some(row => removing(row.exe, row.args)), false, 'recovery must not replay worktree removal');
+  assert.equal(adapter.calls.filter(row => deletingBranch(row.exe, row.args)).length, 1);
+  assert.equal(adapter.calls.find(row => deletingBranch(row.exe, row.args)).timeout, 30000);
+  assert.equal(f.git(['branch', '--list', 'lane/topic']), '');
+  assert.equal(logs.some(row => row.action === 'lane-removed' && row.reconciled), true);
+  assert.equal(fs.readFileSync(saved, 'utf8'), 'unique branch recovery evidence');
+  assert.equal(fs.existsSync(path.join(f.common, 'lane-promote.lock')), false);
   assert.deepEqual(fs.readFileSync(f.eventFile), Buffer.from(f.eventBytes));
 });
 

@@ -7,11 +7,18 @@ import { gitProject } from '../lib/project.mjs';
 import { findOrgDir, UserError } from '../lib/store.mjs';
 import { readOwnedRun } from '../lib/run-owner-guard.mjs';
 import { effectiveWorkerIdentity } from '../lib/worker-identity.mjs';
-import { invokeHerdr } from '../supervisor/herdr-edge.mjs';
-import { enqueueSupervisor, inboxPath, readInbox, resumeInbox } from '../supervisor/prompt-supervisor.mjs';
+import { createRequire } from 'node:module';
 import { identityRootAt } from './journal.mjs';
 import { fold } from '../lib/state.mjs';
 import { validateOperatorText, operatorWording } from './operator-text.mjs';
+
+// Envelope inspection stays independent of native transport until an effect needs it.
+const require = createRequire(import.meta.url);
+const invokeHerdr = (...args) => require('../supervisor/herdr-edge.mjs').invokeHerdr(...args);
+const enqueueSupervisor = (...args) => require('../supervisor/prompt-supervisor.mjs').enqueueSupervisor(...args);
+const inboxPath = (...args) => require('../supervisor/prompt-supervisor.mjs').inboxPath(...args);
+const readInbox = (...args) => require('../supervisor/prompt-supervisor.mjs').readInbox(...args);
+const resumeInbox = (...args) => require('../supervisor/prompt-supervisor.mjs').resumeInbox(...args);
 
 const fail = message => { throw new UserError(`operator inbox: ${message}`); };
 export function recordMessages(events) {

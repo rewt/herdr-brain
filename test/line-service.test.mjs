@@ -123,17 +123,29 @@ test('engineering-idle excludes held ancestry reserved work and unchanged blocke
   const original=loadEvents(f.org).events;
   for(let n=0;n<3;n++)f.service({haltAfter:3}).pass();
   assert.equal(f.calls.length,0,'no native dispatch or recursive repair for inadmissible work');
-  const state=fold(loadEvents(f.org).events);
+  const observed=loadEvents(f.org).events,state=fold(observed);
   assert.equal([...state.items.values()].some(i=>i.meta.halt_repair===1),false);
-  assert.deepEqual(loadEvents(f.org).events,original,'holds, reports and ancestry stay unchanged');
+  assert.deepEqual(observed.slice(0,original.length),original,'holds, reports and ancestry stay unchanged');
+  // The finite closeout role observes this report's missing native binding.
+  // Admit only that typed keep; dispatch/repair must not add any other event.
+  const added=observed.slice(original.length),source=original.find(e=>e.type==='report.ingested');
+  assert.equal(added.length,1,'only the original report gets a missing-binding observation across repeated passes');
+  const [kept]=added;
+  assert.equal(kept.type,'closeout.binding-kept');
+  assert.equal(kept.identity,gitProject(f.repo).identity);
+  assert.equal(kept.run,'R-1');assert.equal(kept.item,blocked);
+  assert.deepEqual(kept.source,{seq:source.seq,type:source.type});
+  assert.equal(kept.completed,false);assert.equal(kept.condition.kind,'missing-identity');
+  for(const resource of ['session','folder','branch'])assert.equal(kept.resources[resource].status,'kept');
   const effects=JSON.parse(fs.readFileSync(path.join(f.service().directory,'effects.json')));
   assert.equal(effects.halt_progress.count,0);
   const observations=fs.readFileSync(path.join(f.service().directory,'passes.jsonl'),'utf8').trim().split('\n').map(JSON.parse).filter(r=>r.action==='engineering-idle-observation');
   assert.ok(observations.every(r=>r.observation.ready.length===0));
-  const ready=f.add('Independent eligible engineering');
+  const ready=f.add('Independent eligible engineering'),beforeDispatch=loadEvents(f.org).events;
   f.service({haltAfter:3}).pass();
   assert.deepEqual(f.calls.map(c=>c.args[1]),[ready],'existing ordinary dispatch admits independent work');
   assert.ok(!f.calls.some(c=>[held,child,blocked,reserved,ancestor,descendant].includes(c.args[1])));
+  assert.deepEqual(loadEvents(f.org).events,beforeDispatch,'independent dispatch does not repeat the missing-binding observation');
 });
 
 test('engineering-idle includes an authorized blocked restart even before the record status changes',()=>{

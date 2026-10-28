@@ -177,20 +177,49 @@ test('a saved request rechecks the current cap before creating a worker', t => {
 for (const cap of [1, 2]) test(`overlapping final launches wait for admission, then respect cap ${cap}`, async t => {
   const f = fixture(t); capSetting(f, cap);
   const other = f.rec(['add', 'Independent concurrent work', '--role', 'engineer']);
-  const hook = admissionHook(f, `const rename=fs.renameSync;let once=true;fs.renameSync=function(from,to) {
+  // Finish each request's run/claim preparation before overlapping final
+  // launches. Pausing the first (start) lock races unrelated record planners.
+  const hook = admissionHook(f, `const mkdir=fs.mkdirSync,rename=fs.renameSync;let admissions=0;
+fs.mkdirSync=function(dir,...args) {
+ if(String(dir).endsWith('/dispatch-session-cap.contenders') && ++admissions===2) {
+  fs.writeFileSync(process.env.PAUSE_MARKER+'.'+process.pid+'.prepared','ready');
+  const end=Date.now()+${loadTimeout(ADMISSION_WAIT_MS)};
+  while(!fs.existsSync(process.env.PAUSE_RELEASE+'.'+process.pid+'.prepared')) {
+   if(Date.now()>end)throw new Error('final launch preparation barrier timed out');
+   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,10);
+  }
+ }
+ return mkdir.call(this,dir,...args);
+};
+fs.renameSync=function(from,to) {
  const result=rename.call(this,from,to);
- if(once && String(to).endsWith('/dispatch-session-cap')) {once=false;pause();}
+ if(admissions===2 && String(to).endsWith('/dispatch-session-cap') && process.env.HOLD_ADMISSION==='1') pause();
  return result;
 };`);
   const args = [f.item, '--lane', 'topic', '--route', 'engineer', '--brief', f.brief];
-  const first = f.concurrent(args, hook); let second;
+  const first = f.concurrent(args, { ...hook, HOLD_ADMISSION: '1' }); let second;
+  const prepared = pending => fs.existsSync(`${hook.PAUSE_MARKER}.${pending.child.pid}.prepared`);
+  const releasePrepared = pending => { if (pending) fs.writeFileSync(`${hook.PAUSE_RELEASE}.${pending.child.pid}.prepared`, 'go'); };
   try {
-    await until(() => fs.existsSync(hook.PAUSE_MARKER));
+    await until(() => prepared(first), loadTimeout(ADMISSION_WAIT_MS));
     second = f.concurrent([other, ...args.slice(1)], hook);
+    await until(() => prepared(second), loadTimeout(ADMISSION_WAIT_MS));
+    assert.equal(f.jobs().length, 2);
+    assert.equal(fs.existsSync(path.join(f.git(['rev-parse', '--path-format=absolute', '--git-common-dir']), 'dispatch-session-cap')), false);
+    for (const journal of f.jobs()) {
+      assert.equal(JSON.parse(fs.readFileSync(journal)).stage, 'worker');
+      assert.equal(readAdmissionTiming(journal).at(-1).outcome, 'entry');
+    }
+    // Count only the final contenders, after both start locks were released.
+    fs.writeFileSync(`${hook.PAUSE_MARKER}.attempts`, '');
+    releasePrepared(first);
+    await until(() => fs.existsSync(hook.PAUSE_MARKER));
+    releasePrepared(second);
     await until(() => admissionAttempts(hook) === 2);
     assert.equal(second.child.exitCode, null, 'the overlapping launch waits instead of refusing');
     assert.equal(f.calls().some(c => c.type === 'lane' && c.a[0] === 'dispatch'), false);
   } finally {
+    releasePrepared(first); releasePrepared(second);
     fs.writeFileSync(hook.PAUSE_RELEASE, 'go');
     await Promise.all([first.done, second?.done]);
   }

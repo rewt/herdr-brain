@@ -44,7 +44,11 @@ test('zero-ready passes never file a repair and completed idle passes deduplicat
     assert.equal(pass('one').count,1);assert.equal(pass('two').count,2);const third=pass('three');assert.ok(third.item);
     assert.equal(pass('three').item,third.item,'a repeated completed pass is a readback, not a second count');
     assert.equal(pass('four').item,third.item);assert.equal([...f.read().state.items.values()].filter(i=>i.meta.halt_repair).length,1);
-    assert.match(f.read().state.items.get(third.item).accept.join('\n'),/pending status with no producer is a defect and becomes a decision item/);
+    const acceptance=f.read().state.items.get(third.item).accept.join('\n');
+    assert.match(acceptance,/Preserve item\/ancestor\/reserved holds, ownership, STOP\/HOLD and resource guards/);
+    assert.match(acceptance,/close its session and remove its worktree folder in the same step/);
+    assert.match(acceptance,/delete its branch only if it is already on main/);
+    assert.match(acceptance,/keep the folder only if it has unsaved changes/);
   }finally{lock();}
   assert.equal(f.read().events.some(e=>e.type==='line-service.halt-pass'),false,'routine counts never enter the event record');
 });
@@ -74,11 +78,18 @@ test('review activity and detached acknowledgements do not hide a stall; product
   assert.equal(haltObservation({...context(),occupancy:{sessions:[{...occupancy.sessions[0],occupancy:'uncertain launch'}]}}).productive.length,0);
 });
 
-test('held-only backlog may file diagnosis but item, ancestor, reserved and native-capacity guards still refuse their effects',t=>{
+test('held-only backlog never files diagnosis; independent ready work can stall while held and native-capacity guards still refuse effects',t=>{
   const f=fixture(t);f.add([{type:'item.added',id:'G-1',kind:'goal',title:'Held parent',meta:{held:true}}]);f.item('ENG-1',{operator_reserved:true});
   f.add([{type:'item.updated',id:'ENG-1',fields:{parent:'G-1'}}]);
-  for(let n=0;n<3;n++)f.service({capacity:()=>{throw Object.assign(Error('real native shared cap'),{code:'DISPATCH_SESSION_CAP'});}}).pass();
+  let capacityCalls=0;
+  const service=f.service({capacity:()=>{capacityCalls++;throw Object.assign(Error('real native shared cap'),{code:'DISPATCH_SESSION_CAP'});}});
+  for(let n=0;n<3;n++)service.pass();
+  assert.deepEqual(haltObservation({...f.read(),org:f.org,identity:f.identity,config:f.config}).ready,[]);
+  assert.equal([...f.read().state.items.values()].filter(i=>i.meta.halt_repair).length,0);
+  assert.equal(capacityCalls,0,'held work never reaches native admission');
+  f.item('ENG-2');for(let n=0;n<3;n++)service.pass();
   const repair=[...f.read().state.items.values()].find(i=>i.meta.halt_repair);assert.ok(repair);assert.equal(f.calls.length,0);
+  assert.ok(capacityCalls>0,'independent ready work still reaches the native-capacity guard');
   const job={org:f.org,item:'ENG-1',common:f.identity,token:'pending'};
   assert.throws(()=>checkDispatchEligibility(job,'/unused'),/held\/reserved/);
   f.add([{type:'item.updated',id:'ENG-1',fields:{meta:{operator_reserved:false}}}]);
@@ -86,14 +97,17 @@ test('held-only backlog may file diagnosis but item, ancestor, reserved and nati
   assert.equal(f.read().state.items.get('G-1').meta.held,true);assert.equal(repair.meta.route,'engineer-xhigh');
 });
 
-test('completed repair stays exclusive without changed inputs and a pending or ambiguous owner stays exclusive across changed causes',t=>{
-  const f=fixture(t);f.item();for(let n=0;n<3;n++)f.service().pass();
+test('completed repair stays exclusive without changed inputs and a pending repair stays exclusive across changed causes',t=>{
+  // A pre-admission capacity refusal keeps the idle input stable. A fake
+  // dispatch without a completion producer creates a new decision input.
+  const f=fixture(t),service=f.service({capacity:()=>{throw Object.assign(Error('real native shared cap'),{code:'DISPATCH_SESSION_CAP'});}});
+  f.item();for(let n=0;n<3;n++)service.pass();
   const first=[...f.read().state.items.values()].find(i=>i.meta.halt_repair);assert.ok(first);
-  f.add([{type:'item.closed',id:first.id,as:'done'}]);for(let n=0;n<4;n++)f.service().pass();
+  f.add([{type:'item.closed',id:first.id,as:'done'}]);for(let n=0;n<4;n++)service.pass();
   assert.equal([...f.read().state.items.values()].filter(i=>i.meta.halt_repair).length,1);
-  f.add([{type:'item.updated',id:'ENG-1',fields:{meta:{held:true}}}]);for(let n=0;n<3;n++)f.service().pass();
-  assert.equal([...f.read().state.items.values()].filter(i=>i.meta.halt_repair).length,2,'real hold change starts a new counted episode');
-  f.add([{type:'item.updated',id:'ENG-1',fields:{meta:{held:false,reserved:true}}}]);for(let n=0;n<4;n++)f.service().pass();
+  f.add([{type:'item.updated',id:'ENG-1',fields:{priority:42}}]);for(let n=0;n<3;n++)service.pass();
+  assert.equal([...f.read().state.items.values()].filter(i=>i.meta.halt_repair).length,2,'real ready-priority change starts a new counted episode');
+  f.add([{type:'item.updated',id:'ENG-1',fields:{priority:43}}]);for(let n=0;n<4;n++)service.pass();
   assert.equal([...f.read().state.items.values()].filter(i=>i.meta.halt_repair).length,2,'pending failure stays exclusive despite another cause change');
 });
 

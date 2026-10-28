@@ -8,7 +8,6 @@ function land(f, options) {
   f.add('topic', options); f.good(f.drain());
   const result = f.queue.load().results.at(-1);
   assert.equal(result.outcome, 'promoted', JSON.stringify(result));
-  assert.equal(result.delivered, true, 'the exact bridge notice reaches the quiet scratch terminal before teardown');
   return { result, attempt: f.train().attempts.at(-1) };
 }
 

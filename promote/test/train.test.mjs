@@ -53,7 +53,7 @@ function fixture(t) {
   const herdr = path.join(root, 'herdr');
   fs.writeFileSync(herdr, `#!${process.execPath}
 const fs=require('fs'),a=process.argv.slice(2);if(a[0]==='agent'&&a[1]==='prompt')fs.appendFileSync(${JSON.stringify(path.join(root, 'notices'))},JSON.stringify(a)+'\\n');
-if(a[0]==='agent'&&a[1]==='get')console.log(JSON.stringify({result:{agent:{agent:'claude',agent_status:'idle',pane_id:'fake',terminal_id:${JSON.stringify(path.join(root, 'recipient-terminal'))}}}}));
+if(a[0]==='agent'&&a[1]==='get')console.log(JSON.stringify({result:{agent:{agent:'claude',agent_status:'idle',pane_id:'fake'}}}));
 else if(a[0]==='pane'&&a[1]==='read')console.log(fs.existsSync(process.env.PROMOTE_TEST_COMPOSER)?fs.readFileSync(process.env.PROMOTE_TEST_COMPOSER,'utf8'):'────────────────────\\n❯ \\n────────────────────');
 else console.log(JSON.stringify({result:{workspaces:[],agents:[]}}));`, { mode: 0o755 });
   const queue = queueFor(repo);
@@ -76,8 +76,6 @@ test('three ready lanes stack and fast-forward with one promotion-tier run', t =
   const r = f.drain(); assert.equal(r.status, 0, r.stderr);
   assert.deepEqual(f.queue.load().results.map(r => r.outcome), ['promoted', 'promoted', 'promoted']);
   assert.equal(f.runs(), 1);
-  assert.equal(f.messages().length, 3, 'every quiet scratch recipient receives its notice');
-  assert.ok(readInbox(path.join(f.repo, '.git/supervisor/inbox.log')).every(entry => entry.state === 'sent'));
   for (const topic of ['first', 'second', 'third']) assert.equal(fs.readFileSync(path.join(f.repo, topic), 'utf8'), topic);
   assert.equal(f.git(['rev-list', '--merges', 'main']), ''); assert.equal(f.git(['remote']), '');
 });

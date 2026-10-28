@@ -62,7 +62,7 @@ if(process.argv[2]==='--plan'){
   const herdr = path.join(root, 'herdr');
   fs.writeFileSync(herdr, `#!${process.execPath}
 const a=process.argv.slice(2);
-if(a[0]==='agent'&&a[1]==='get')console.log(JSON.stringify({result:{agent:{agent:'claude',agent_status:'idle',pane_id:'fake',terminal_id:${JSON.stringify(path.join(root, 'recipient-terminal'))}}}}));
+if(a[0]==='agent'&&a[1]==='get')console.log(JSON.stringify({result:{agent:{agent:'claude',agent_status:'idle',pane_id:'fake'}}}));
 else if(a[0]==='pane'&&a[1]==='read')console.log('────────────────────\\n❯ \\n────────────────────');
 else console.log(JSON.stringify({result:{workspaces:[],agents:[]}}));`, { mode: 0o755 });
   const add = (topic = 'topic', options = {}) => enqueue(queue, [topic], { to: 'test', herdr, attempts: 1, retry: 0, laneCLI: path.join(source, 'lanes/lane.mjs'), org: null,

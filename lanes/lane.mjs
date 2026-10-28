@@ -50,7 +50,8 @@ import { VALIDATION_TIERS, resolveValidation, validateValidation, validateTree, 
 import { readReceiptDeclaration, restrictEnvironment, excludedAdditions, requireExactPlan, selectionUnknown } from './exact-validation.mjs';
 import { changedPaths, plannedCommand } from '../promote/test-plan.mjs';
 import { canonicalTestPlan } from '../settle/test-plan.mjs';
-import { createRequire } from 'node:module';
+import { recordOwnLanding } from '../lib/landing-receipt.mjs';
+import { checkDispatchLaunch } from '../dispatch/launch-guard.mjs';
 
 import {
   loadRegistry,
@@ -70,9 +71,6 @@ import {
   validateRoutesConfig,
   standaloneRouting,
 } from "./routes.mjs";
-
-// Dispatch-only eligibility must not load the line service into ordinary lanes.
-const require = createRequire(import.meta.url);
 
 cliHelp(import.meta.url, 'Usage: lane open|status|seams|routes|config|dispatch|review|prepare|check|rebase-check|verify-agent|promote|ready|close [TOPIC] [OPTIONS]');
 // Explicit source entry also reaches pinned projects' lane children. Immutable
@@ -1215,9 +1213,7 @@ function dispatch(topic, promptText, options = {}) {
   let launchRequest;
   const checkLaunch=()=>{
     if(!options.dispatchJournal)return;
-    try{
-      const { checkDispatchLaunch } = require('../dispatch/launch-guard.mjs');
-      launchRequest=checkDispatchLaunch({journal:options.dispatchJournal,sha256:options.dispatchSha256,repo:REPO_ROOT,workspace:path,topic});}
+    try{launchRequest=checkDispatchLaunch({journal:options.dispatchJournal,sha256:options.dispatchSha256,repo:REPO_ROOT,workspace:path,topic});}
     catch(error){
       process.stdout.write(JSON.stringify({result:'failed',code:error.code??'DISPATCH_FAILED',reason:error.message,
         journal:options.dispatchJournal,...(error.launch_input?{launch_input:error.launch_input}:{})})+'\n');
@@ -2737,8 +2733,6 @@ function promoteLocked(topic, root, options) {
   // The FF is finished. A receipt failure retains that fact and is reported
   // separately; it never turns source landing into a report/review gate.
   if(process.env.HERDR_ENV==='1')try{
-    // Transport and claim bookkeeping load only after guarded integration.
-    const { recordOwnLanding } = require('../lib/landing-receipt.mjs');
     const receipt=recordOwnLanding({canonical:root,workspace:path,base:mainHead,head:validatedHead,landedAt});
     process.stdout.write(`landing receipt: ${JSON.stringify(receipt)}\n`);
   }catch(error){process.stderr.write(`post-FF landing receipt held: ${error.message}; source is landed, exact record timing UNKNOWN\n`);}

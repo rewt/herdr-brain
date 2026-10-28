@@ -71,14 +71,23 @@ if (worker) {
       while (next < files.length) {
         const index = next++, file = files[index];
         const artifact = path.join(directory, `${index + 1}.tap`);
-        const reference = { file: path.resolve(file), artifact };
+        const reference = { file: path.resolve(file), artifact, stderr_artifact: `${artifact}.stderr`, completion_artifact: `${artifact}.complete.json` };
         console.error(`FILE_TAP: ${JSON.stringify(reference)}`);
         const fd = fs.openSync(artifact, 'wx', 0o600);
-        let fileCode = 0;
+        const stderrFD = fs.openSync(reference.stderr_artifact, 'wx', 0o600);
+        let fileCode = 0, failure, runnerError;
         let bytes = 0, lastProgress = Date.now();
         try {
+          // Publish admission before starting a file that could kill the worker.
+          await new Promise((resolve, reject) => process.send({ fileTap: reference }, error => error ? reject(error) : resolve()));
           const stream = run({ files: [file], concurrency: 1, testNamePatterns, timeout: fileTimeout || undefined });
-          stream.on('test:fail', () => { fileCode = 1; });
+          stream.on('test:stderr', data => fs.writeFileSync(stderrFD, data.message));
+          stream.on('test:fail', data => {
+            fileCode = 1;
+            const error = data.details?.error;
+            if (error) failure = { message: error.message, code: error.code, failureType: error.failureType,
+              exit_code: error.exitCode, signal: error.signal, stack: error.stack };
+          });
           await pipeline(stream.compose(tap), async source => {
             // No pending artifact writes may be lost to the coordinator's cap.
             for await (const chunk of source) {
@@ -92,9 +101,13 @@ if (worker) {
               }
             }
           });
-          console.error(`FILE_TAP_COMPLETE: ${JSON.stringify({ ...reference, exit_code: fileCode })}`);
-        } catch (error) { console.error(error); fileCode = 1; }
-        finally { fs.closeSync(fd); }
+        } catch (error) { console.error(error); fileCode = 1; runnerError = error.stack ?? String(error); }
+        finally { fs.closeSync(fd); fs.closeSync(stderrFD); }
+        const completion = { ...reference, exit_code: fileCode, tap_complete: !runnerError, observed_by: 'worker',
+          ...(failure ? { failure } : {}), ...(runnerError ? { reason: 'reporter-error', runner_error: runnerError } : {}) };
+        // The durable terminal receipt survives a lost final IPC reply.
+        fs.writeFileSync(reference.completion_artifact, JSON.stringify(completion) + '\n', { flag: 'wx', mode: 0o600 });
+        process.send({ fileTapComplete: completion });
         if (fileCode) code = 1;
         // Serialize whole completed files, never wait behind an unfinished one.
         // Admission and artifact retention continue even if log output is slow.
@@ -130,17 +143,19 @@ if (worker) {
     detached: true, stdio: ['ignore', 'pipe', 'pipe', 'ipc'], env,
   });
   let owner, finished = false, watcher, timedOutFile;
+  const fileArtifacts = new Map();
   let pendingOutput = 0, outputFailed = false, checkDrain = () => {};
   const pipes = [child.stdout, child.stderr], closedPipes = new Set();
-  for (const [input, output] of [[child.stdout, process.stdout], [child.stderr, process.stderr]]) {
-    input.on('data', data => {
-      watcher?.output(); pendingOutput += 1;
-      output.write(data, error => {
-        pendingOutput -= 1;
-        if (error) outputFailed = true;
-        checkDrain();
-      });
+  function forwardOutput(data, output) {
+    pendingOutput += 1;
+    output.write(data, error => {
+      pendingOutput -= 1;
+      if (error) outputFailed = true;
+      checkDrain();
     });
+  }
+  for (const [input, output] of [[child.stdout, process.stdout], [child.stderr, process.stderr]]) {
+    input.on('data', data => { watcher?.output(); forwardOutput(data, output); });
     input.once('error', () => { outputFailed = true; });
     input.once('close', () => {
       if (!input.readableEnded) outputFailed = true;
@@ -176,7 +191,7 @@ if (worker) {
         console.error(`Runner output drain exceeded ${outputDrainMs}ms; output may be incomplete`);
         exit(1);
       }, outputDrainMs);
-      let drained = false;
+      let drained = false, recovering = false;
       const exit = result => {
         if (drained) return;
         drained = true; clearTimeout(timer); checkDrain = () => {};
@@ -200,8 +215,38 @@ if (worker) {
         child.stdout.destroy(); child.stderr.destroy(); child.unref();
         process.exit(result);
       };
+      async function recoverFileArtifacts() {
+        const fs = await import('node:fs');
+        for (const reference of fileArtifacts.values()) {
+          let completion;
+          if (fs.existsSync(reference.completion_artifact)) {
+            // Retain a worker's finished evidence if its last IPC reply was lost.
+            completion = JSON.parse(fs.readFileSync(reference.completion_artifact, 'utf8'));
+          } else {
+            completion = { ...reference, exit_code: 1, tap_complete: false,
+              observed_by: 'coordinator', signal: teardown.ok && teardown.signaled ? child.signalCode : null,
+              worker_signal: child.signalCode, group_teardown_confirmed: Boolean(teardown.ok && teardown.signaled),
+              reason: timedOutFile ? (reference.file === timedOutFile ? 'file-timeout' : 'suite-cancelled') : 'worker-exit' };
+            fs.writeFileSync(reference.completion_artifact, JSON.stringify(completion) + '\n', { flag: 'wx', mode: 0o600 });
+          }
+          // The worker may never have copied this file to the build log. Its
+          // raw stderr and partial TAP remain separate durable artifacts too.
+          forwardOutput(`FILE_TAP_COMPLETE: ${JSON.stringify(completion)}\n`, process.stderr);
+          await pipeline(fs.createReadStream(reference.stderr_artifact), process.stderr, { end: false });
+          await pipeline(fs.createReadStream(reference.artifact), process.stdout, { end: false });
+        }
+        fileArtifacts.clear();
+      }
       checkDrain = () => {
-        if (pipes.every(pipe => closedPipes.has(pipe)) && pendingOutput === 0) exit(outputFailed ? 1 : code);
+        if (recovering || !pipes.every(pipe => closedPipes.has(pipe)) || pendingOutput !== 0) return;
+        if (!fileArtifacts.size) { exit(outputFailed ? 1 : code); return; }
+        // Only confirmed leader exit and drained pipes authorize synthetic
+        // completion. Recovery shares the same bounded output-drain allowance.
+        recovering = true;
+        recoverFileArtifacts().catch(error => {
+          console.error(`File evidence recovery failed: ${error.stack ?? error}`);
+          outputFailed = true; fileArtifacts.clear();
+        }).finally(() => { recovering = false; checkDrain(); });
       };
       checkDrain();
     };
@@ -209,6 +254,12 @@ if (worker) {
     else child.once('exit', drain);
   }
   child.on('message', message => {
+    if (message.fileTap) { fileArtifacts.set(message.fileTap.file, message.fileTap); return; }
+    if (message.fileTapComplete) {
+      const completion = message.fileTapComplete;
+      if (fileArtifacts.delete(completion.file)) forwardOutput(`FILE_TAP_COMPLETE: ${JSON.stringify(completion)}\n`, process.stderr);
+      return;
+    }
     if (finished) return;
     if (message.ready) {
       try { owner = registerProcess(child.pid, true); child.send('start'); }

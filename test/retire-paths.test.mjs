@@ -1,5 +1,8 @@
 import { checkSessionIsolation } from './helpers/session-isolation-check.mjs';
-import test from './helpers/bounded-test.mjs';
+import boundedTest from './helpers/bounded-test.mjs';
+import { setImmediate as yieldToReporter } from 'node:timers/promises';
+import os from 'node:os';
+import { spawnScenarioChild, waitForExit } from './helpers/child.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -19,6 +22,13 @@ import { recordStandardSlot, slotReceiptFile } from '../sessions/receipts.mjs';
 import { classifyRetirement } from '../lib/retire-status.mjs';
 import { initialShellDirectory } from '../lib/initial-shell.mjs';
 import { fixture, hold, heldReason, isolatedEnv, RETIREMENT_ENV_KEYS, assertNoRemoval, completionFixture, traceLane } from './helpers/retire-fixture.mjs';
+
+// Synchronous Git/native fixtures otherwise keep node:test's IPC queued across
+// dozens of completed tests. Let the previous result and teardown reach the
+// reporter before starting another fixture, including under suite cancellation.
+function test(name, body) {
+  return boundedTest(name, async t => { await yieldToReporter(); return body(t); });
+}
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const laneCLI = path.join(root, 'lanes/lane.mjs'), recordCLI = path.join(root, 'bin/org.mjs');
@@ -984,3 +994,68 @@ test('retirement fixture isolates inherited session configuration and restores i
     const f = fixture(child); isolatedEnv(child, f); adoptStandard(f); return f;
   }, Object.fromEntries(RETIREMENT_ENV_KEYS.filter(key => !['HOME', 'HERDR_MONITOR_FLEET'].includes(key))
     .map(key => [key, key === 'NODE_OPTIONS' ? '--no-warnings' : `/caller/${key}`]))));
+
+function runnerEvidenceFixture(t) {
+  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'retire-runner-evidence-'));
+  t.after(() => fs.rmSync(scratch, { recursive: true, force: true }));
+  const file = (name, source) => {
+    const target = path.join(scratch, `${name}.test.mjs`);
+    fs.writeFileSync(target, `import test from 'node:test'; import fs from 'node:fs';\n${source}`);
+    return target;
+  };
+  const run = async (files, extra = {}) => {
+    const child = spawnScenarioChild(t, process.execPath, [path.join(root, 'test/helpers/run.mjs'), '--load-factor=1', ...files], {
+      env: { ...process.env, MONITOR_TEST_TIMINGS_PATH: path.join(scratch, 'timings.jsonl'),
+        MONITOR_TEST_CONCURRENCY: '2', MONITOR_TEST_FILE_TIMEOUT_MS: '0', ...extra },
+    });
+    const result = await waitForExit(child);
+    const completions = [...result.stderr.matchAll(/^FILE_TAP_COMPLETE: (.*)$/gm)].map(match => JSON.parse(match[1]));
+    for (const completion of completions) {
+      assert.deepEqual(JSON.parse(fs.readFileSync(completion.completion_artifact, 'utf8')), completion);
+    }
+    return { ...result, completions };
+  };
+  return { file, run };
+}
+
+test('retirement runner retains raw stderr and a terminal receipt when a file dies before its first result', async t => {
+  const f = runnerEvidenceFixture(t), diagnostic = `native crash: ${'é'.repeat(128 * 1024)} END\n`;
+  const file = f.file('native-crash', `fs.writeSync(2, ${JSON.stringify(diagnostic)}); process.kill(process.pid, 'SIGTERM');`);
+  const result = await f.run([file]);
+  assert.equal(result.signal, null, result.stderr.slice(-1000));
+  assert.equal(result.code, 1);
+  assert.equal(result.completions.length, 1, result.stderr.slice(-1000));
+  const completion = result.completions[0];
+  assert.equal(completion.file, file);
+  assert.equal(completion.exit_code, 1);
+  assert.equal(completion.failure.signal, 'SIGTERM');
+  assert.equal(fs.readFileSync(completion.stderr_artifact, 'utf8'), diagnostic);
+  assert.ok(result.stdout.includes(diagnostic.trimEnd()), 'crash stderr must also reach the build log');
+  assert.match(result.stdout, /not ok 1/);
+  t.diagnostic(JSON.stringify({ file_crash_signal: completion.failure.signal, raw_stderr_bytes: Buffer.byteLength(diagnostic), exit_code: completion.exit_code }));
+});
+
+test('retirement runner records partial TAP and stderr for a peer cancelled by another file timeout', async t => {
+  const f = runnerEvidenceFixture(t);
+  const blocked = f.file('first-timeout', "fs.writeSync(2,'FIRST-TIMEOUT-DIAGNOSTIC\\n'); test('blocked first file',()=>Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0));");
+  const peer = f.file('cancelled-peer', "fs.writeSync(2,'CANCELLED-PEER-DIAGNOSTIC\\n'); test('blocked peer file',()=>Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0));");
+  const result = await f.run([blocked, peer], { MONITOR_TEST_FILE_TIMEOUT_MS: '5000' });
+  assert.equal(result.signal, null, result.stderr);
+  assert.equal(result.code, 1);
+  assert.equal(result.completions.length, 2, result.stderr);
+  assert.equal(new Set(result.completions.map(row => row.file)).size, 2, 'one completion per admission');
+  const cancelled = result.completions.filter(row => row.observed_by === 'coordinator');
+  assert.ok(cancelled.length >= 1, result.stderr);
+  for (const completion of cancelled) {
+    assert.equal(completion.exit_code, 1);
+    assert.equal(completion.tap_complete, false);
+    assert.equal(completion.signal, 'SIGKILL');
+    assert.ok(['file-timeout', 'suite-cancelled'].includes(completion.reason));
+    const diagnostic = fs.readFileSync(completion.stderr_artifact, 'utf8');
+    assert.match(diagnostic, /(?:FIRST-TIMEOUT|CANCELLED-PEER)-DIAGNOSTIC/);
+    assert.ok(result.stderr.includes(diagnostic), 'cancelled file stderr must reach the build log');
+    assert.ok(result.stdout.includes(fs.readFileSync(completion.artifact, 'utf8')), 'partial TAP must reach the build log');
+  }
+  assert.ok(result.completions.some(row => row.reason === 'suite-cancelled'), result.stderr);
+  t.diagnostic(JSON.stringify({ cancelled: cancelled.map(row => ({ reason: row.reason, signal: row.signal, tap_complete: row.tap_complete })), completions: result.completions.length }));
+});

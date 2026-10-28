@@ -363,7 +363,7 @@ for (const [command, action, count] of [
   f.drain();
   const entry = readCloseoutEntries(f.common).find(e => unresolvedCloseoutEffect(e, events(f)));
   assert.ok(entry);
-  const intent = unresolvedCloseoutEffect(entry, events(f)), original = events(f), native = f.herdrCalls(), recorded = effects(f);
+  const original = events(f), intent = unresolvedCloseoutEffect(entry, original), native = f.herdrCalls(), recorded = effects(f);
   assert.equal(lost, 1);
   assert.equal(intent.action, action);
   const physical = f.read(), workspace = command === 'workspace close';
@@ -378,7 +378,7 @@ for (const [command, action, count] of [
     assert.equal(recorded.some(e => e.action === 'lane-removed'), false);
   }
   const completed = e => action === 'agent-exit-requested' ? e.action === 'exit-observed' && e.pane === 'w:p' :
-    e.action === 'closed' && (workspace ? e.workspace_id === 'w' : e.tab_id === 'w:t');
+    e.action === 'closed' && (workspace ? e.workspace_id === 'w' && !e.tab_id : e.tab_id === 'w:t');
   assert.equal(recorded.some(completed), false, 'physical effect is not the original producer completion');
   const file = path.join(f.common, 'closeout/entries', entry.key + '.json'), bytes = fs.readFileSync(file);
   let nativeCalls = 0;

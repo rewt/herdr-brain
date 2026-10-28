@@ -998,7 +998,8 @@ test('phase1 service retains an unknown exit intent and files one missing-produc
   const c=f.context(),waits=c.events.filter(e=>e.type==='closeout.waiting'&&e.key===target.key);assert.equal(waits.length,1);
   assert.match(waits[0].waiting.defect,/no existing runtime transport writes a later exit\/close status/);assert.deepEqual(waits[0].waiting.producers,[]);
   const decisions=[...c.state.items.values()].filter(i=>i.meta.uncertain_outcome?.check.subject.key===target.key);assert.equal(decisions.length,1);
-  assert.ok(calls.every(a=>a[0]===path.join(sourceRoot,'dispatch/dispatch.mjs')&&a[1]===decisions[0].id),`only the owned decision may dispatch; actual commands: ${JSON.stringify(calls)}`);
+  // The fixture's landed source remains independently reviewable while its exit intent is held.
+  assert.deepEqual(calls,[[path.join(sourceRoot,'bin/org.mjs'),'queue-review','R-1','--head',f.heads[1],'--base',f.base]],'only the exact independent source-review request is allowed');
   assert.equal(Object.keys(JSON.parse(fs.readFileSync(path.join(service.directory,'effects.json'))).actions).some(key=>key.startsWith('closeout:')),false,'no native observation/drain attempt is authorized');
   assert.deepEqual(c.events.filter(e=>e.type==='closeout.effect'||e.type==='closeout.evaluated'),original,'the original unknown outcome is never relabelled');
   assert.equal(c.events.some(e=>e.type==='closeout.effect'&&e.outcome?.action==='exit-observed'),false);

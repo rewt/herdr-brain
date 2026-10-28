@@ -49,6 +49,22 @@ if (worker) {
   process.once('message', async () => {
     const fs = await import('node:fs');
     const { tmpdir } = await import('node:os');
+    const { ChildProcess } = await import('node:child_process');
+    const stderrCaptures = new Map(), originalSpawn = ChildProcess.prototype.spawn;
+    ChildProcess.prototype.spawn = function (options) {
+      const capture = options.envPairs.includes('NODE_TEST_CONTEXT=child-v8') &&
+        stderrCaptures.get(path.resolve(options.args.at(-1)));
+      const result = originalSpawn.call(this, options);
+      if (capture && this.stderr) {
+        capture.started = true;
+        // Node 20's test:stderr events are line-normalized, and its file runner
+        // waits for stdout but not stderr. Retain bytes at the native pipe.
+        this.stderr.on('data', bytes => { if (capture.fd !== null) fs.writeFileSync(capture.fd, bytes); });
+        this.stderr.once('close', capture.resolve);
+        this.stderr.once('error', capture.reject);
+      }
+      return result;
+    };
     // A multi-file run() buffers later files behind the first unfinished file.
     // Its owned-group cap can kill that buffer. Independent reporter streams
     // retain each admitted file before copying completed TAP to the build log.
@@ -61,7 +77,9 @@ if (worker) {
     async function* completedOutput() {
       while (!allFilesDone || completed.length) {
         if (!completed.length) { await new Promise(resolve => { wakeOutput = resolve; }); continue; }
-        yield* fs.createReadStream(completed.shift());
+        const entry = completed.shift();
+        if (entry.stderr) await pipeline(fs.createReadStream(entry.stderr), process.stderr, { end: false });
+        yield* fs.createReadStream(entry.artifact);
       }
     }
     // One output pipeline avoids accumulating stdio listeners per file.
@@ -75,13 +93,16 @@ if (worker) {
         console.error(`FILE_TAP: ${JSON.stringify(reference)}`);
         const fd = fs.openSync(artifact, 'wx', 0o600);
         const stderrFD = fs.openSync(reference.stderr_artifact, 'wx', 0o600);
+        const capture = { fd: stderrFD, started: false };
+        capture.closed = new Promise((resolve, reject) => { capture.resolve = resolve; capture.reject = reject; });
+        capture.closed.catch(() => {});
+        stderrCaptures.set(reference.file, capture);
         let fileCode = 0, failure, runnerError;
         let bytes = 0, lastProgress = Date.now();
         try {
           // Publish admission before starting a file that could kill the worker.
           await new Promise((resolve, reject) => process.send({ fileTap: reference }, error => error ? reject(error) : resolve()));
           const stream = run({ files: [file], concurrency: 1, testNamePatterns, timeout: fileTimeout || undefined });
-          stream.on('test:stderr', data => fs.writeFileSync(stderrFD, data.message));
           stream.on('test:fail', data => {
             fileCode = 1;
             const error = data.details?.error;
@@ -101,8 +122,12 @@ if (worker) {
               }
             }
           });
+          if (capture.started) await new Promise((resolve, reject) => {
+            const timer = setTimeout(() => reject(Error(`File stderr drain exceeded ${outputDrainMs}ms`)), outputDrainMs);
+            capture.closed.then(() => { clearTimeout(timer); resolve(); }, error => { clearTimeout(timer); reject(error); });
+          });
         } catch (error) { console.error(error); fileCode = 1; runnerError = error.stack ?? String(error); }
-        finally { fs.closeSync(fd); fs.closeSync(stderrFD); }
+        finally { capture.fd = null; stderrCaptures.delete(reference.file); fs.closeSync(fd); fs.closeSync(stderrFD); }
         const completion = { ...reference, exit_code: fileCode, tap_complete: !runnerError, observed_by: 'worker',
           ...(failure ? { failure } : {}), ...(runnerError ? { reason: 'reporter-error', runner_error: runnerError } : {}) };
         // The durable terminal receipt survives a lost final IPC reply.
@@ -111,7 +136,7 @@ if (worker) {
         if (fileCode) code = 1;
         // Serialize whole completed files, never wait behind an unfinished one.
         // Admission and artifact retention continue even if log output is slow.
-        completed.push(artifact); wakeOutput?.(); wakeOutput = undefined;
+        completed.push({ artifact, stderr: fileCode ? reference.stderr_artifact : null }); wakeOutput?.(); wakeOutput = undefined;
       }
     }
     await Promise.all(Array.from({ length: Math.min(concurrency, files.length) }, admit));

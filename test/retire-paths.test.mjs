@@ -1019,8 +1019,8 @@ function runnerEvidenceFixture(t) {
 }
 
 test('retirement runner retains raw stderr and a terminal receipt when a file dies before its first result', async t => {
-  const f = runnerEvidenceFixture(t), diagnostic = `native crash: ${'é'.repeat(128 * 1024)} END\n`;
-  const file = f.file('native-crash', `fs.writeSync(2, ${JSON.stringify(diagnostic)}); process.kill(process.pid, 'SIGTERM');`);
+  const f = runnerEvidenceFixture(t), diagnostic = `native crash: ${'é'.repeat(128 * 1024)} END`;
+  const file = f.file('native-crash', `await new Promise(resolve => process.stderr.write(${JSON.stringify(diagnostic)}, resolve)); process.kill(process.pid, 'SIGTERM');`);
   const result = await f.run([file]);
   assert.equal(result.signal, null, result.stderr.slice(-1000));
   assert.equal(result.code, 1);
@@ -1029,8 +1029,9 @@ test('retirement runner retains raw stderr and a terminal receipt when a file di
   assert.equal(completion.file, file);
   assert.equal(completion.exit_code, 1);
   assert.equal(completion.failure.signal, 'SIGTERM');
-  assert.equal(fs.readFileSync(completion.stderr_artifact, 'utf8'), diagnostic);
-  assert.ok(result.stdout.includes(diagnostic.trimEnd()), 'crash stderr must also reach the build log');
+  const captured = fs.readFileSync(completion.stderr_artifact, 'utf8');
+  assert.ok(captured === diagnostic, `raw stderr differs: expected ${Buffer.byteLength(diagnostic)} bytes, captured ${Buffer.byteLength(captured)}`);
+  assert.ok(result.stderr.includes(diagnostic), 'complete raw crash stderr must also reach the build log');
   assert.match(result.stdout, /not ok 1/);
   t.diagnostic(JSON.stringify({ file_crash_signal: completion.failure.signal, raw_stderr_bytes: Buffer.byteLength(diagnostic), exit_code: completion.exit_code }));
 });

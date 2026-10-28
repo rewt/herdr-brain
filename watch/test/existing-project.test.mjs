@@ -120,11 +120,12 @@ test('an existing project autopilots a done notice with a busy supervisor from a
   assert.equal(detached.status, 0, detached.stderr);
   assert.equal(JSON.parse(detached.stdout).run, f.run);
   // Filesystem events are optional under a native worker sandbox. This is a
-  // detached startup/deduplication check, so inspect its completion log.
+  // detached startup/deduplication check of the already-ingested report.
+  const confirmed = new RegExp(`${f.run} final notice confirmed from its ingested report`);
   const deadline = Date.now() + 5000;
-  while (!/validated by/.test(fs.readFileSync(log, 'utf8')) && Date.now() < deadline)
+  while (!confirmed.test(fs.readFileSync(log, 'utf8')) && Date.now() < deadline)
     await new Promise(resolve => setTimeout(resolve, 20));
-  assert.match(fs.readFileSync(log, 'utf8'), /validated by/);
+  assert.match(fs.readFileSync(log, 'utf8'), confirmed);
   await waitForInboxIdle(f.inbox);
   entries = readInbox(f.inbox);
   assert.equal(entries.length, 1); assert.equal(f.actions().length, 1);

@@ -45,7 +45,7 @@ for (const receipt of ['legacy', 'unclaimed', 'claimed']) for (const disposition
 
 const claimProtections = [
   ['unreported run', s => { s.record.runs[0].report = null; }],
-  ['another unreported claimant', s => s.record.runs.push({ id: 'R-2', item: 'ENG-1', meta: { terminal_id: 'terminal' } })],
+  ['another unreported claimant', s => s.record.runs.push({ id: 'R-2', item: 'ENG-1', started: { seq: 3 }, meta: { terminal_id: 'terminal' } })],
   ['report without record sequence', s => { delete s.record.runs[0].report.seq; }],
   ['conflicting identity', s => { s.record.sessionBindings = { 'R-1': [{ seq: 3 }] }; }],
   ['live process', s => s.panes[0].process_info.process_tree.push({ pid: 9, identity: 'worker', state: 'S', command: '[codex]' })],

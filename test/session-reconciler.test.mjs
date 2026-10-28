@@ -20,6 +20,7 @@ import { readControllerJournal, runtimePaths, acquireControllerLease } from '../
 import { ROUTE_PRESET } from '../lanes/preset.mjs';
 import { planRetirement } from '../lib/retire.mjs';
 import { fold } from '../lib/state.mjs';
+import { loadEvents } from '../lib/store.mjs';
 import { workerIdentityEvidence } from '../lib/worker-identity.mjs';
 import { sessionBindFact } from './helpers/session-bind.mjs';
 import { CreateNotInvokedError } from '../sessions/create-safety.mjs';
@@ -495,7 +496,7 @@ test('read-only live adapter uses only snapshot and exact agent.get; mismatch an
   delete snapshot.tabs; assert.match((await observer.observe()).errors[0], /incomplete Herdr snapshot/);
 });
 
-test('plan default observer honours supplied fixture env; API and CLI leave files unchanged and reject --apply', async t => {
+test('plan default observer honours supplied fixture env; API and CLI preserve files with a prepared record cache and reject --apply', async t => {
   const f = fixture(t), rpc = [], sockets = new Set();
   const server = net.createServer(socket => {
     sockets.add(socket); socket.on('close', () => sockets.delete(socket)); let pending = '';
@@ -515,6 +516,10 @@ test('plan default observer honours supplied fixture env; API and CLI leave file
     assert.equal(socketPath, f.env.HERDR_SOCKET_PATH, 'never contact ambient or live socket');
     return connect.call(net, socketPath, ...args);
   });
+  // Record reads may create a rebuildable cache. Prepare it as fixture state
+  // before verifying that preview preserves every file, including that cache.
+  assert.deepEqual(loadEvents(f.org).events, []);
+  assert.ok(fs.statSync(path.join(f.org, 'record.snapshot')).isFile());
   const before = digestTree(f.scratch);
   const api = await plan({ cwd: f.cwd, env: f.env });
   assert.equal(api.valid, true); // Default UIDs have no matching incarnation; no enrollment guessing.

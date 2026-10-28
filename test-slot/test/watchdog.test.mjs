@@ -209,6 +209,9 @@ for (const operation of ['lane', 'queue', 'fast']) test(`${operation} records ti
   const fakeHerdr = path.join(f.root, 'herdr'); fs.writeFileSync(fakeHerdr, '#!/bin/sh\nexit 0\n', { mode: 0o755 });
   const declaration = JSON.parse(fs.readFileSync(path.join(f.repo, '.lane.validation.json')));
   fs.writeFileSync(path.join(f.repo, '.lane.validation.json'), JSON.stringify({ ...declaration, fast: declaration.promotion, timeout_seconds: { promotion: .4, fast: .4 }, idle_timeout_seconds: 0 }));
+  // Repeated fast checks write this runtime state. Do not depend on the real
+  // account's default XDG Git ignore file, which scratch HOME does not inherit.
+  if (operation === 'fast') fs.writeFileSync(path.join(f.repo, '.gitignore'), '.lane/\n');
   f.git(['add', '.']); f.git(['commit', '-qm', 'Bound gate']); f.lane('topic');
   const base = f.git(['rev-parse', 'main']); f.body('setInterval(()=>{},1000);');
   if (operation === 'fast') {

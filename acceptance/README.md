@@ -55,6 +55,12 @@ project record or operator pane. Focus monitoring and ownership checks remain
 required for a complete live gate. Run `node --test acceptance/test/FILE.test.mjs`
 for the changed offline contract tests.
 
+`node test/helpers/run.mjs acceptance/test/release.test.mjs` runs the isolated
+scratch release step without launching the live gate. It also checks the two
+slot fixtures under acceptance's scratch HOME, XDG, TMPDIR and checkout layout.
+The tagged switch fixtures declare their small release gate in
+`.lane.validation.json`, the declaration consumed by the release builder.
+
 The focus gate keeps every observation in `focus-trace.jsonl` and its classified
 changes in `focus-summary.json`. A move to a call's destination while it is active
 or within five seconds of its completion fails, even during operator navigation.

@@ -62,7 +62,9 @@ test('compat permits private temporary scratch, refuses writable and out-of-scra
   fs.chmodSync(f.root, 0o700);
   assert.throws(() => validateSlotPath(f.lock, { compat: true, uid: process.getuid() + 1, provers: [] }), /LOCK_PATH_INVALID/);
   assert.throws(() => validateSlotPath(path.join(os.tmpdir(), 'not-private.lock'), { compat: true, provers: [] }), /LOCK_PATH_INVALID/);
-  const external = path.join(process.cwd(), 'unused-reservation-test-slot');
+  // The checkout itself can be under TMPDIR during release acceptance. The
+  // filesystem root is outside both temporary roots; no writer touches it.
+  const external = path.join(path.parse(f.root).root, 'unused-reservation-test-slot');
   assert.throws(() => validateSlotPath(external, { compat: true, provers: [] }), /LOCK_PATH_INVALID/);
   assert.equal(slotPathOf({ MONITOR_TEST_SLOT_PATH: external }, { readOnly: true }), external);
   const result = f.run([process.execPath, '-e', 'console.log("started")']);

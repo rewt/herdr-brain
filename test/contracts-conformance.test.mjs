@@ -1,6 +1,7 @@
 // Writer -> current-reader witnesses for the shared contracts. Never enroll live storage.
 import test from './helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
+import { recipientAgent } from './helpers/recipient-agent.mjs';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -328,7 +329,9 @@ const contracts = [
     // Fake only Herdr's physical seam; no real desk is created or prompted.
     for (const enriched of [false, true]) {
       const calls = [], text = 'What: inspect. Why: contract. Done: reply. Evidence: fixture.\nKeep literal $(text).';
-      const agent = { name: 'desk-fixture', workspace_id: 'w1', pane_id: 'w1:p1', agent_status: 'idle', ...(enriched ? extra : {}) };
+      const agent = recipientAgent('desk-fixture', path.join(f.root, 'development/fixture'), {
+        agent: 'codex', workspace_id: 'w1', pane_id: 'w1:p1', ...(enriched ? extra : {}),
+      });
       const result = await writer.request(['fixture', text], { env: f.env, mirror: () => {}, execute: (_command, args) => {
         calls.push(args);
         const result = args[1] === 'list' ? { agents: [agent] } : args[1] === 'get' ? { agent } : {};

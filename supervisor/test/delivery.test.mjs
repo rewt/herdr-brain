@@ -1,3 +1,4 @@
+import { recipientAgent } from '../../test/helpers/recipient-agent.mjs';
 import { loadTimeout } from '../../lib/deadline.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -55,7 +56,7 @@ function fixture(t, harness = 'claude') {
 import fs from 'node:fs'; import path from 'node:path';
 const root=${JSON.stringify(root)}, args=process.argv.slice(2), file=(name)=>path.join(root,name);
 fs.appendFileSync(file('calls'), JSON.stringify(args)+'\\n');
-if(args[0]==='agent'&&args[1]==='get') console.log(JSON.stringify({result:{agent:{agent:${JSON.stringify(harness)},pane_id:'fake:p1',terminal_id:fs.existsSync(file('occupant'))?fs.readFileSync(file('occupant'),'utf8'):'same',agent_status:fs.readFileSync(file('status'),'utf8')}}}));
+if(args[0]==='agent'&&args[1]==='get') console.log(JSON.stringify({result:{agent:{...${JSON.stringify(recipientAgent('supervisor', root, { agent: harness, pane_id: 'fake:p1' }))},name:args[2],terminal_id:fs.existsSync(file('occupant'))?fs.readFileSync(file('occupant'),'utf8'):'same',agent_status:fs.readFileSync(file('status'),'utf8')}}}));
 else if(args[0]==='pane'&&args[1]==='read') {
  if(fs.existsSync(file('read-fail'))) process.exit(1);
  if(fs.existsSync(file('type-on-final')) && JSON.parse(fs.readFileSync(file('inbox.log'),'utf8').trim().split('\\n').at(-1)).type==='sending') {

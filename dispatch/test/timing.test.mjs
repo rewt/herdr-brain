@@ -1,3 +1,4 @@
+import { recipientAgent } from '../../test/helpers/recipient-agent.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -222,7 +223,7 @@ test('watch writes terminal observation through the record CLI and metrics reads
   const current = JSON.parse(f.record(['show', 'R-1', '--json']));
   fs.writeFileSync(current.report_path, '---\nrun: R-1\noutcome: done\nsummary: Timing fixture done.\nheadline: Timing fixture done\nblockers: []\nproposals: []\nlearnings: []\nartifacts: []\n---\n');
   const herdr = path.join(f.root, 'herdr');
-  fs.writeFileSync(herdr, `#!/bin/sh\ncase "$1 $2 $3" in\n'agent get supervisor-fixture') printf '%s\\n' '{"result":{"agent":{"agent_status":"idle","agent":"claude","pane_id":"fake:supervisor"}}}' ;;\n'agent get worker') printf '%s\\n' '{"result":{"agent":{"agent_status":"done"}}}' ;;\n'pane read fake:supervisor') printf '%s\\n' '────────────────────' '❯ ' '────────────────────' ;;\n*) printf '%s\\n' '{"result":{}}' ;;\nesac\n`, { mode: 0o755 });
+  fs.writeFileSync(herdr, `#!/bin/sh\ncase "$1 $2 $3" in\n'agent get supervisor-fixture') printf '%s\\n' '{"result":{"agent":${JSON.stringify(recipientAgent('supervisor-fixture', f.root, { pane_id: 'fake:supervisor' }))}}}' ;;\n'agent get worker') printf '%s\\n' '{"result":{"agent":{"agent_status":"done"}}}' ;;\n'pane read fake:supervisor') printf '%s\\n' '────────────────────' '❯ ' '────────────────────' ;;\n*) printf '%s\\n' '{"result":{}}' ;;\nesac\n`, { mode: 0o755 });
   // Timing owns diagnostic persistence; native supervisor delivery has its own fixtures.
   const r = spawnSync(process.execPath, [WATCH, 'R-1', '--org', f.org, '--herdr', herdr, '--record-only'],
     { env: { ...f.env, SUPERVISOR_INPUT_CONFIRM_SECONDS: '0.01', SUPERVISOR_INPUT_POLL_SECONDS: '0.01', SUPERVISOR_INPUT_WAIT_SECONDS: '1' }, cwd: f.root, encoding: 'utf8', timeout: 10000 });
@@ -261,7 +262,7 @@ if (a[0] === 'agent' && a[1] === 'get' && a[2] === 'worker') {
   if (n >= 4) fs.writeFileSync(${JSON.stringify(current.report_path)}, ${JSON.stringify(report)});
   console.log(JSON.stringify({ result: { agent: { agent_status: ['working', 'idle', 'working', 'done'][Math.min(n - 1, 3)] } } }));
 } else if (a[0] === 'agent' && a[1] === 'get') {
-  console.log(JSON.stringify({ result: { agent: { agent_status: 'idle', agent: 'claude', pane_id: 'fake:supervisor' } } }));
+  console.log(JSON.stringify({ result: { agent: { ...${JSON.stringify(recipientAgent('supervisor-fixture', f.root, { pane_id: 'fake:supervisor' }))}, name: a[2] } } }));
 } else if (a[0] === 'pane' && a[1] === 'read') {
   console.log('────────────────────\\n❯ \\n────────────────────');
 } else console.log('{}');

@@ -1,3 +1,4 @@
+import { recipientAgent } from '../../test/helpers/recipient-agent.mjs';
 // Real Git, record, lane review/check, dispatch and detached watch. Only Herdr's
 // transport/model execution is scripted. No routes or validation config exists.
 import fs from 'node:fs';
@@ -224,7 +225,7 @@ else if(args[0]==='agent'&&args[1]==='list') out({agents:liveAgents().map(a=>{
 })});
 // The foreground fallback recipient needs the same stable pane/terminal tuple
 // as registered clients so the real quiet-input gate can establish occupancy.
-else if(args[0]==='agent'&&args[1]==='get') out({agent:agents[args[2]]??{name:args[2],agent:'claude',agent_status:'idle',cwd,pane_id:'original:p',terminal_id:'original:t',workspace_id:'w-lane'}});
+else if(args[0]==='agent'&&args[1]==='get') out({agent:agents[args[2]]??{...${JSON.stringify(recipientAgent('original', workspace, { pane_id: 'original:p', terminal_id: 'original:t', workspace_id: 'w-lane' }))},name:args[2]}});
 else if(args[0]==='agent'&&args[1]==='read') console.log('');
 else if(args[0]==='agent'&&args[1]==='wait') {await new Promise(r=>setTimeout(r,100));out({});}
 else if(args[0]==='agent'&&args[1]==='prompt') {

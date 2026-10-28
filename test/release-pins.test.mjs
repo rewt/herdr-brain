@@ -1,3 +1,4 @@
+import { recipientAgent } from './helpers/recipient-agent.mjs';
 import { fixtureEnvironment } from './helpers/fixture-environment.mjs';
 import { healthyMemoryEnvironment } from './helpers/promotion-memory-fixture.mjs';
 import test from './helpers/bounded-test.mjs';
@@ -143,7 +144,7 @@ test('a green drain resumes a blue promotion and its children from the recorded 
   const f = fixture(t, { markers: false }), repo = f.project('project'); f.pin(repo, 'blue');
   const org = path.join(f.root, 'record'); fs.mkdirSync(org); fs.writeFileSync(path.join(org, 'events.jsonl'), '');
   const trace = path.join(f.root, 'promotion-child.jsonl'), fake = path.join(f.root, 'herdr.cjs');
-  fs.writeFileSync(fake, `#!${process.execPath}\nconst a=process.argv.slice(2);let result={workspaces:[],agents:[]};if(a[0]==='agent'&&a[1]==='get')result={agent:{agent:'claude',agent_status:'idle',pane_id:'fake:supervisor'}};if(a[0]==='pane'&&a[1]==='read'){console.log('────────────────────\\n❯ \\n────────────────────');}else console.log(JSON.stringify({result}));`, { mode: 0o755 });
+  fs.writeFileSync(fake, `#!${process.execPath}\nconst a=process.argv.slice(2);let result={workspaces:[],agents:[]};if(a[0]==='agent'&&a[1]==='get')result={agent:${JSON.stringify(recipientAgent('supervisor-fixture', repo, { pane_id: 'fake:supervisor' }))}};if(a[0]==='pane'&&a[1]==='read'){console.log('────────────────────\\n❯ \\n────────────────────');}else console.log(JSON.stringify({result}));`, { mode: 0o755 });
   const inbox = path.join(org, 'supervisor/inbox.log');
   f.teardown.push(async () => {
     const owner = path.join(`${inbox}.owner.lock`, 'owner.json');
@@ -183,7 +184,7 @@ test('mixed-version interrupted batches are attempted once per drain', t => {
   const org = path.join(f.root, 'record'); fs.mkdirSync(org); fs.writeFileSync(path.join(org, 'events.jsonl'), '');
   const trace = path.join(f.root, 'attempts.jsonl'), handoffs = path.join(f.root, 'handoffs.json');
   const fake = path.join(f.root, 'herdr.cjs');
-  fs.writeFileSync(fake, `#!${process.execPath}\nconst a=process.argv.slice(2);if(a[0]==='pane'&&a[1]==='read')console.log('────────────────────\\n❯ \\n────────────────────');else console.log(JSON.stringify({result:a[0]==='agent'&&a[1]==='get'?{agent:{agent:'claude',agent_status:'idle',pane_id:'fake:supervisor'}}:{workspaces:[],agents:[]}}));`, { mode: 0o755 });
+  fs.writeFileSync(fake, `#!${process.execPath}\nconst a=process.argv.slice(2);if(a[0]==='pane'&&a[1]==='read')console.log('────────────────────\\n❯ \\n────────────────────');else console.log(JSON.stringify({result:a[0]==='agent'&&a[1]==='get'?{agent:${JSON.stringify(recipientAgent('supervisor-fixture', repo, { pane_id: 'fake:supervisor' }))}}:{workspaces:[],agents:[]}}));`, { mode: 0o755 });
   const inbox = path.join(org, 'supervisor/inbox.log');
   f.teardown.push(async () => {
     const file = path.join(`${inbox}.owner.lock`, 'owner.json');

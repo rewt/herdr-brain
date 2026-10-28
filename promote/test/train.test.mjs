@@ -1,3 +1,4 @@
+import { recipientAgent } from '../../test/helpers/recipient-agent.mjs';
 import { fixtureEnvironment } from '../../test/helpers/fixture-environment.mjs';
 import test from '../../test/helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
@@ -53,7 +54,7 @@ function fixture(t) {
   const herdr = path.join(root, 'herdr');
   fs.writeFileSync(herdr, `#!${process.execPath}
 const fs=require('fs'),a=process.argv.slice(2);if(a[0]==='agent'&&a[1]==='prompt')fs.appendFileSync(${JSON.stringify(path.join(root, 'notices'))},JSON.stringify(a)+'\\n');
-if(a[0]==='agent'&&a[1]==='get')console.log(JSON.stringify({result:{agent:{agent:'claude',agent_status:'idle',pane_id:'fake',terminal_id:${JSON.stringify(path.join(root, 'recipient-terminal'))}}}}));
+if(a[0]==='agent'&&a[1]==='get')console.log(JSON.stringify({result:{agent:${JSON.stringify(recipientAgent('test', repo, { pane_id: 'fake', terminal_id: path.join(root, 'recipient-terminal') }))}}}));
 else if(a[0]==='pane'&&a[1]==='read')console.log(fs.existsSync(process.env.PROMOTE_TEST_COMPOSER)?fs.readFileSync(process.env.PROMOTE_TEST_COMPOSER,'utf8'):'────────────────────\\n❯ \\n────────────────────');
 else console.log(JSON.stringify({result:{workspaces:[],agents:[]}}));`, { mode: 0o755 });
   const queue = queueFor(repo);

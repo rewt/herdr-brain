@@ -1,3 +1,4 @@
+import { recipientAgent } from '../../test/helpers/recipient-agent.mjs';
 import { provingRun } from './helpers/proving.mjs';
 import test from '../../test/helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
@@ -120,7 +121,7 @@ for (const phase of ['validated', 'integrated']) test(`profiled STOP resumes its
   // The inbox requires a stable pane/terminal pair before quiet delivery.
   fs.writeFileSync(herdr, `#!${process.execPath}
 const a=process.argv.slice(2);
-if(a[0]==='agent'&&a[1]==='get')console.log(JSON.stringify({result:{agent:{agent:'claude',agent_status:'idle',pane_id:'fake',terminal_id:'fake-terminal'}}}));
+if(a[0]==='agent'&&a[1]==='get')console.log(JSON.stringify({result:{agent:${JSON.stringify(recipientAgent('offline', f.repo, { pane_id: 'fake', terminal_id: 'fake-terminal' }))}}}));
 else if(a[0]==='pane'&&a[1]==='read')console.log('────────────────────\\n❯ \\n────────────────────');
 else console.log(JSON.stringify({result:{workspaces:[],agents:[]}}));
 `, { mode: 0o755 });
@@ -234,7 +235,7 @@ test('queue delivers a coded memory refusal with no bisection and permits re-enq
   // Match the real inbox's recipient identity contract here too.
   fs.writeFileSync(herdr, `#!${process.execPath}
 const a=process.argv.slice(2);
-if(a[0]==='agent'&&a[1]==='get')console.log(JSON.stringify({result:{agent:{agent:'claude',agent_status:'idle',pane_id:'fake',terminal_id:'fake-terminal'}}}));
+if(a[0]==='agent'&&a[1]==='get')console.log(JSON.stringify({result:{agent:${JSON.stringify(recipientAgent('offline', f.repo, { pane_id: 'fake', terminal_id: 'fake-terminal' }))}}}));
 else if(a[0]==='pane'&&a[1]==='read')console.log('────────────────────\\n❯ \\n────────────────────');
 else console.log(JSON.stringify({result:{workspaces:[],agents:[]}}));
 `, { mode: 0o755 });

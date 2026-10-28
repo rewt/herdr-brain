@@ -1,3 +1,4 @@
+import { recipientAgent } from '../../test/helpers/recipient-agent.mjs';
 import { fixtureEnvironment } from '../../test/helpers/fixture-environment.mjs';
 import { healthyMemoryEnvironment } from '../../test/helpers/promotion-memory-fixture.mjs';
 import test from '../../test/helpers/bounded-test.mjs';
@@ -128,7 +129,7 @@ async function fixture(t, { foreign = false, cohort = 'green-pass' } = {}) {
   const check = operation => withPromotionGuard(guard, operation);
   const herdr = path.join(root, 'herdr');
   fs.writeFileSync(herdr, `#!${process.execPath}
-const a=process.argv.slice(2);if(a[0]==='agent'&&a[1]==='get')console.log(JSON.stringify({result:{agent:{agent:'claude',agent_status:'idle',pane_id:'fake'}}}));
+const a=process.argv.slice(2);if(a[0]==='agent'&&a[1]==='get')console.log(JSON.stringify({result:{agent:{...${JSON.stringify(recipientAgent('offline', project, { pane_id: 'fake' }))},name:a[2]}}}));
 else if(a[0]==='pane'&&a[1]==='read')console.log('────────────────────\\n❯ \\n────────────────────');
 else console.log(JSON.stringify({result:{workspaces:[],agents:[]}}));`, { mode: 0o755 });
   let workerDone;

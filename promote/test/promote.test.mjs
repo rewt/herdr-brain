@@ -1,3 +1,4 @@
+import { recipientAgent } from '../../test/helpers/recipient-agent.mjs';
 import { fixtureEnvironment } from '../../test/helpers/fixture-environment.mjs';
 import { healthyMemoryEnvironment } from '../../test/helpers/promotion-memory-fixture.mjs';
 import test, { currentTest } from '../../test/helpers/bounded-test.mjs';
@@ -27,8 +28,8 @@ async function waitForFile(file, predicate = () => true, options) {
 const CLI = fileURLToPath(new URL('../promote.mjs', import.meta.url));
 const LANE = fileURLToPath(new URL('../../lanes/lane.mjs', import.meta.url));
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-const quietFake = `
-if (args[0]==='agent' && args[1]==='get') {console.log(JSON.stringify({result:{agent:{agent:'claude',agent_status:'idle',pane_id:'fake:supervisor',terminal_id:'fake:supervisor-terminal'}}}));process.exit(0);}
+const quietFake = cwd => `
+if (args[0]==='agent' && args[1]==='get') {console.log(JSON.stringify({result:{agent:{...${JSON.stringify(recipientAgent('supervisor', cwd, { pane_id: 'fake:supervisor', terminal_id: 'fake:supervisor-terminal' }))},name:args[2],agent_session:{value:${JSON.stringify(cwd)}+':'+args[2]+':session'}}}}));process.exit(0);}
 if (args[0]==='pane' && args[1]==='read') {console.log(process.env.PROMOTE_TEST_COMPOSER && fs.existsSync(process.env.PROMOTE_TEST_COMPOSER) ? fs.readFileSync(process.env.PROMOTE_TEST_COMPOSER,'utf8') : '────────────────────\\n❯ \\n────────────────────');process.exit(0);}
 `;
 function fixture(t) {
@@ -62,7 +63,7 @@ function fixture(t) {
   fs.writeFileSync(path.join(repo, '.lane.json'), '{"retirement":{"closeout_queue":false}}');
   const herdr = path.join(root, 'herdr');
   const notices = path.join(root, 'notices.jsonl');
-  fs.writeFileSync(herdr, `#!${process.execPath}\nimport fs from 'node:fs';\nconst args = process.argv.slice(2);\n${quietFake}\nif (args[0] === 'agent' && args[1] === 'prompt') {\nfs.appendFileSync(${JSON.stringify(notices)}, JSON.stringify(args) + '\\n');\nif (fs.existsSync(${JSON.stringify(path.join(root, 'delivery-fail'))})) process.exit(1);\n}\nprocess.stdout.write(JSON.stringify({result:{workspaces:[],agents:[]}}));\n`);
+  fs.writeFileSync(herdr, `#!${process.execPath}\nimport fs from 'node:fs';\nconst args = process.argv.slice(2);\n${quietFake(repo)}\nif (args[0] === 'agent' && args[1] === 'prompt') {\nfs.appendFileSync(${JSON.stringify(notices)}, JSON.stringify(args) + '\\n');\nif (fs.existsSync(${JSON.stringify(path.join(root, 'delivery-fail'))})) process.exit(1);\n}\nprocess.stdout.write(JSON.stringify({result:{workspaces:[],agents:[]}}));\n`);
   fs.chmodSync(herdr, 0o755);
   const queue = queueFor(repo);
   const lane = (topic, content = topic) => {
@@ -731,7 +732,7 @@ function blockCleanup(f) {
   const marker = path.join(f.root, 'cleanup-pid');
   const release = path.join(f.root, 'cleanup-release');
   fs.writeFileSync(f.herdr, `#!${process.execPath}\nimport fs from 'node:fs'; const args=process.argv.slice(2);
-${quietFake}
+${quietFake(f.repo)}
 if (args[0]==='workspace' && args[1]==='list') {
   fs.writeFileSync(${JSON.stringify(marker + ".tmp")}, String(process.pid));
   fs.renameSync(${JSON.stringify(marker + ".tmp")}, ${JSON.stringify(marker)});

@@ -30,7 +30,8 @@ async function offlineNative(root, repo) {
     ? { pane_id: id, workspace_id: 'supervisor', foreground_cwd: repo }
     : { ...state.pane, foreground_cwd: state.movedCwd ?? state.workspace?.cwd };
   const agent = id => id === 'offline-supervisor' || id === 'supervisor:p1'
-    ? { name: 'offline-supervisor', pane_id: 'supervisor:p1', workspace_id: 'supervisor', cwd: repo, agent_status: 'idle' }
+    ? { name: 'offline-supervisor', agent: 'codex', pane_id: 'supervisor:p1', workspace_id: 'supervisor', cwd: repo,
+      terminal_id: 'offline-supervisor-terminal', agent_session: { value: 'offline-supervisor-session' }, agent_status: 'idle' }
     : state.agent;
   if (group === 'workspace' && verb === 'list') result = { workspaces: state.workspace ? [state.workspace] : [] };
   else if (group === 'worktree' && verb === 'list') result = { source: { repo_key: path.join(repo, '.git'), repo_root: repo, source_checkout_path: repo }, worktrees: state.workspace

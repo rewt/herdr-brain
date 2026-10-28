@@ -1,3 +1,4 @@
+import { recipientAgent } from '../../test/helpers/recipient-agent.mjs';
 import test from '../../test/helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -28,7 +29,7 @@ const shapes={
   'agent start':['agent','start','desk-bastian','--kind','codex','--pane','p1','--timeout','30000'],
 };
 if(JSON.stringify(shapes[a.slice(0,2).join(' ')])!==JSON.stringify(a)){console.error('unknown command or options');process.exit(2);}
-const agent={name:'desk-bastian',agent:'codex',agent_status:${JSON.stringify(status)},pane_id:'p1',workspace_id:'w1'};
+const agent={...${JSON.stringify(recipientAgent('desk-bastian', path.join(root, 'development/bastian'), { agent: 'codex', pane_id: 'p1', workspace_id: 'w1' }))},agent_status:${JSON.stringify(status)}};
 let result;
 switch(a.slice(0,2).join(' ')) {
 case 'agent list': result={agents:${existing ? '[agent]' : '[]'}};break;

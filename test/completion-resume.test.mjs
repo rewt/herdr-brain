@@ -1,3 +1,4 @@
+import { recipientAgent } from './helpers/recipient-agent.mjs';
 import test from './helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -83,7 +84,7 @@ if(a[0]==='verify-agent'){const w=JSON.parse(fs.readFileSync(file));if(w.name!==
   fs.writeFileSync(native, `#!${process.execPath}\n` + common + `
 const agent=fs.existsSync(file)?JSON.parse(fs.readFileSync(file)):null;
 if(a[0]==='agent'&&a[1]==='get'){
- if(a[2]==='supervisor-herdr')emit({result:{agent:{name:a[2],agent_status:'idle'}}});
+ if(a[2]==='supervisor-herdr')emit({result:{agent:${JSON.stringify(recipientAgent('supervisor-herdr', f.repo, { agent: 'codex' }))}}});
  else if(agent?.name===a[2])emit({result:{agent}});else{console.error('agent_not_found');process.exit(1);}
 }
 if(a[0]==='pane'&&a[1]==='read')process.stdout.write('› Ready for a task');

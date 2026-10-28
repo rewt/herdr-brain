@@ -1,3 +1,4 @@
+import { recipientAgent } from '../../test/helpers/recipient-agent.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -68,7 +69,7 @@ function fixture(t, outcome = 'done', { autopilot = true } = {}) {
 import fs from 'node:fs';
 const a = process.argv.slice(2);
 fs.appendFileSync(${JSON.stringify(calls)}, JSON.stringify(a)+'\\n');
-if(a[0]==='agent' && a[1]==='get') console.log(JSON.stringify({result:{agent:{name:a[2],agent:'claude',agent_status:a[2]==='supervisor-opus'?${JSON.stringify(outcome === 'done' ? 'working' : 'done')}:'done',pane_id:'scratch:supervisor',terminal_id:'scratch:supervisor-terminal'}}}));
+if(a[0]==='agent' && a[1]==='get') console.log(JSON.stringify({result:{agent:{...${JSON.stringify(recipientAgent('supervisor-opus', repo, { pane_id: 'scratch:supervisor', terminal_id: 'scratch:supervisor-terminal' }))},name:a[2],agent_status:a[2]==='supervisor-opus'?${JSON.stringify(outcome === 'done' ? 'working' : 'done')}:'done'}}}));
 else if(a[0]==='pane' && a[1]==='read') console.log('────────────────────\\n❯ \\n────────────────────');
 else if(a[0]==='agent' && a[1]==='prompt') console.log('{}');
 else process.exit(91);

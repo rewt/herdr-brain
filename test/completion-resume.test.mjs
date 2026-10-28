@@ -118,7 +118,8 @@ for (const harness of ['codex', 'claude']) for (const integrated of [false, true
     assert.ok(closed.length); assert.ok(closed.every(e => e.agent_session_id === session && e.harness === harness));
     const record = events(f).find(e => e.type === 'closeout.effect' && e.outcome.action === 'closed' && e.outcome.tab_id);
     assert.equal(completedSession([record], session).resume.workspace, f.lane);
-    const config = { worktree_root: f.scratch, launch: ['/owned/bin/ai'], routes: { engineer: { kind: harness } }, retirement: { closeout_queue: false } };
+    fs.writeFileSync(path.join(f.scratch, '.lane.json'), JSON.stringify({ launch: ['/owned/bin/ai'] }));
+    const config = { worktree_root: f.scratch, routes: { engineer: { kind: harness } }, retirement: { closeout_queue: false } };
     fs.writeFileSync(path.join(f.repo, '.lane.json'), JSON.stringify(config));
     const input = { events: [record], session, item: { id: 'ENG-1' }, lane: 'topic', harness, repo: f.repo };
     const resume = resumeSource(input);
@@ -131,7 +132,7 @@ for (const harness of ['codex', 'claude']) for (const integrated of [false, true
     const dispatch = spawnSync(process.execPath, [path.join(source, 'dispatch/dispatch.mjs'), 'ENG-1', '--repo', f.repo,
       '--org', f.org, '--lane', 'topic', '--route', 'engineer', '--brief', brief, '--resume-session', session,
       '--lane-cli', adapters.lane, '--watch-cli', adapters.watch], {
-      cwd: f.repo, encoding: 'utf8', env: { ...f.env, MONITOR_SUPERVISOR_AGENT: 'supervisor-herdr', LANE_CONFIG: path.join(f.repo, '.lane.json') },
+      cwd: f.repo, encoding: 'utf8', env: { ...f.env, MONITOR_SUPERVISOR_AGENT: 'supervisor-herdr', LANE_CONFIG: undefined },
     });
     assert.equal(dispatch.status, 0, dispatch.stderr);
     assert.equal(f.git(['rev-parse', 'HEAD'], f.lane), resume.base);

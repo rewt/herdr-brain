@@ -1,6 +1,7 @@
 // Read-only recipient lifecycle evidence. Native idle/done/unknown is not a
 // completed run; only the owning record can establish that outcome.
 import fs from 'node:fs';
+import path from 'node:path';
 import { gitProject } from '../lib/project.mjs';
 import { loadEvents } from '../lib/store.mjs';
 import { fold } from '../lib/state.mjs';
@@ -17,13 +18,21 @@ export function recipientOutcomes() {
         const actual = gitProject(project.repo);
         if (actual.canonical !== project.repo || actual.identity !== project.identity || fs.realpathSync(project.org) !== project.org)
           throw Error('recipient record/project binding changed');
-        const { events, tornTail } = loadEvents(project.org);
-        if (tornTail) throw Error('recipient record has an incomplete tail');
-        records.set(key, { state: fold(events) });
+        try {
+          const { events, tornTail } = loadEvents(project.org);
+          if (tornTail) throw Error('recipient record has an incomplete tail');
+          records.set(key, { state: fold(events) });
+        } catch (error) {
+          if (error.code !== 'ENOENT' || error.path !== path.join(project.org, 'events.jsonl')) throw error;
+          // A missing log cannot establish recipient completion. Let the
+          // existing native/quiet gate deliver the original exception notice.
+          records.set(key, {});
+        }
       } catch (error) { records.set(key, { error: error.message }); }
     }
     const { state, error } = records.get(key);
     if (error) return { hold: error };
+    if (!state) return null;
     const agent = binding.agent;
     const named = [...state.runs.values()].map(run => ({ run, worker: effectiveWorkerIdentity(run, state) }))
       .filter(({ worker }) => [entry.to, agent.name].includes(worker.agent));

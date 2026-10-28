@@ -85,21 +85,21 @@ async function existingWorker(t, f, { refuse = false } = {}) {
 const pass = { result: 'promotable', review: { verdict: 'PASS' } };
 const minor = '- [Minor] supervisor/x.mjs:1 - Improve text; Fix: clarify it';
 
-function noticeTransport(f) {
+function noticeTransport(f, { composer = '' } = {}) {
   const herdr = path.join(f.root, 'delivery-herdr.mjs');
   fs.writeFileSync(herdr, `#!${process.execPath}\nimport fs from 'node:fs';
 const args=process.argv.slice(2);fs.appendFileSync(${JSON.stringify(path.join(f.root, 'calls'))},JSON.stringify(args)+'\\n');
 if(args[0]==='agent'&&args[1]==='get') {
  const name=args[2];console.log(JSON.stringify({result:{agent:{name,agent:'claude',pane_id:name+':p',terminal_id:name+':t',
   agent_session:{value:name+':s'},workspace_id:'w-parent',cwd:${JSON.stringify(f.repo)},agent_status:name==='busy-supervisor'?'working':'idle'}}}));
-} else if(args[0]==='pane'&&args[1]==='read') console.log('────────────────────\\n❯ \\n────────────────────');
+} else if(args[0]==='pane'&&args[1]==='read') console.log('────────────────────\\n❯ ${composer}\\n────────────────────');
 else console.log('{}');\n`, { mode: 0o755 });
   return herdr;
 }
 // Function adapters belong to the foreground owner; a zero-wait sender hands
 // off to a separate process that cannot inherit JavaScript functions.
-async function foregroundNotice(f, message, options) {
-  const settings = { org: f.org, cwd: f.repo, herdr: noticeTransport(f),
+async function foregroundNotice(f, message, options = {}) {
+  const settings = { org: f.org, cwd: f.repo, herdr: options.herdr ?? noticeTransport(f),
     waitSeconds: 2, confirmSeconds: 0, pollSeconds: 0.01, owner: true, ...options };
   const { id, inbox } = enqueueSupervisor(f.entry.to, message, settings);
   return drainInbox(inbox, { ...settings, id });
@@ -545,6 +545,35 @@ test(`${notice} exception delivery preserves the exact original notice through t
   if (notice === 'promotion') assert.match(JSON.parse(fs.readFileSync(entry.autopilot.receipt)).reason, /promotion queue binding/);
   assert.equal(entry.autopilot.disposition, 'wake');
   assert.equal(entry.message, f.entry.message);
+  assert.equal(entry.state, 'sent');
+  assert.equal(entry.undeliverable, undefined);
+  if (notice === 'missing-record-intermediate') assert.equal(f.calls.length, 0);
+});
+for (const fault of ['missing-record-typed-input', 'torn-record', 'malformed-record'])
+test(`${fault} exception remains pending without input or recipient retirement`, async t => {
+  const f = setup(t), log = path.join(f.org, 'events.jsonl'), original = fs.readFileSync(log);
+  f.entry.message = `[watch-long-running] run=${f.run} item=${f.item} worker=lane-nine still-running=2m`;
+  const herdr = noticeTransport(f, { composer: fault === 'missing-record-typed-input' ? 'Unsent user input' : '' });
+  if (fault === 'missing-record-typed-input') fs.unlinkSync(log);
+  else fs.appendFileSync(log, fault === 'torn-record' ? '{' : 'invalid event\n');
+  let result;
+  try {
+    result = await foregroundNotice(f, f.entry.message, { id: `watch:${f.run}:long-running`, herdr,
+      executeAutopilot: f.execute, nativeAutopilotWorker: f.nativeWorker });
+  } finally { fs.writeFileSync(log, original); }
+  assert.equal(result.delivered, false);
+  assert.equal(result.queued, true);
+  const entry = readInbox(result.inbox)[0];
+  assert.equal(entry.state, 'pending');
+  assert.equal(entry.message, f.entry.message);
+  assert.equal(entry.undeliverable, undefined);
+  assert.equal(entry.autopilot.disposition, 'wake');
+  assert.equal(f.calls.length, 0);
+  assert.deepEqual(f.herdrCalls().filter(a => a[0] === 'agent' && a[1] === 'prompt'), []);
+  const events = fs.readFileSync(result.inbox, 'utf8').trim().split('\n').map(JSON.parse);
+  assert.equal(events.some(e => ['sending', 'sent'].includes(e.type)), false);
+  if (fault !== 'missing-record-typed-input')
+    assert.match(entry.error, fault === 'torn-record' ? /incomplete tail/ : /not valid JSON/);
 });
 test('a busy chat drain cannot prevent a routine policy action', async t => {
   const f = setup(t, [pass, { phase: 'acknowledged' }]);

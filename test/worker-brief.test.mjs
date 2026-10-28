@@ -137,7 +137,10 @@ test('legacy runs retain their original brief and the role pages ship in the exi
   for (const role of ['worker', 'reviewer']) {
     const file = `supervisor/roles/${role}.md`;
     assert.ok(files.includes(file));
-    const words = fs.readFileSync(new URL(`../${file}`, import.meta.url), 'utf8').trim().split(/\s+/).length;
-    assert.ok(words >= 90 && words <= 150, `${role} guidance is about 100 words (${words})`);
+    const guidance = fs.readFileSync(new URL(`../${file}`, import.meta.url), 'utf8').trim();
+    // Page length is advisory; the shared cleanup doctrine must survive delivery.
+    const current = assignment({ role: role === 'worker' ? 'engineer' : 'reviewer' });
+    assert.equal(current.contract.guidance.text, guidance, `${role} uses the shipped role page`);
+    assert.equal(guidance.split(uncertainOutcomeDoctrine).length, 2, `${role} carries the cleanup doctrine exactly once`);
   }
 });

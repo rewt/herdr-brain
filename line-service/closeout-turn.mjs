@@ -88,6 +88,28 @@ export function runCloseoutTurn({project,org,cli,guard,env=process.env,maxSteps=
       }catch(error){errors.push({key:entry.key,stage:'closeout',reason:error.message});}
       steps++;delete state.pending;save();
     }
+    // One grouped diagnostic, deduplicated by unchanged scope/reason. Counting
+    // kept turns never re-invokes or reads an unresolved native effect.
+    const final=read(),latest=new Map(closeoutEvaluations(project.identity,org,final.events).map(e=>[e.key,e]));
+    state.keeps??={};const alarms=[];
+    for(const entry of entries){
+      const row=entry.reportCloseout?closeoutEvaluation(entry,final.events):latest.get(entry.key);
+      if(!row||row.completed){delete state.keeps[entry.key];continue;}
+      const signature=JSON.stringify([entry.source,row.reason,row.resources]),prior=state.keeps[entry.key];
+      const keep=state.keeps[entry.key]=prior?.signature===signature?{...prior,turns:prior.turns+1}:
+        {signature,turns:1,first_seen:prior?.first_seen??row.condition?.first_seen??row.at??new Date(now()).toISOString()};
+      const age=Math.max(0,now()-Date.parse(keep.first_seen));
+      if(keep.turns>=3||age>=1800000)alarms.push({key:entry.key,run:entry.run,source:entry.source,reason:row.reason,
+        kind:row.condition?.kind??'legacy-owner-evidence',owner:row.condition?.owner??entry.run,first_seen:keep.first_seen,
+        continuation:row.condition?.continuation??{kind:'owner-evidence',owner:entry.run}});
+    }
+    const signature=JSON.stringify(alarms);
+    if(signature!==state.alarm_signature){
+      if(alarms.length||state.alarm_signature)fs.appendFileSync(path.join(directory,'closeout.log'),JSON.stringify({
+        action:'closeout-supervisor-alarm',at:new Date(now()).toISOString(),owner:'project-supervisor',count:alarms.length,
+        oldest:alarms.map(a=>a.first_seen).sort()[0]??null,scopes:alarms,authority:'visibility only; original holds and effects retained'})+'\n',{mode:0o600});
+      state.alarm_signature=signature;
+    }
     state.completed_at=new Date(now()).toISOString();state.errors=errors;state.continuation={
       ingest:Math.max(0,pending.length-ingested),closeout:Math.max(0,scheduled.length-steps),reconcile_committed_sources:true};
     save();fault('before-ack');

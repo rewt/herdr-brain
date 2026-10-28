@@ -699,6 +699,35 @@ adoption obligations.
 
 ## Finite report and closeout turns
 
+Each `closeout.evaluated` now carries independent `resources.session`, `.folder`
+and `.branch` dispositions. Only exact `closeout.effect` receipts establish
+`closed`, `removed`, `deleted` or `retained`; `absent` is a current allocation
+observation and never an exit-command success. `kept` includes scope, reason,
+evidence, owner, first_seen, continuation and escalation. `author_packet` names
+the preserved report packet or remains `unproven`. Item/review completion and
+source versions cannot supply missing effect receipts.
+
+`condition` (`closeout-condition/v1`) distinguishes contention, active-process,
+dirty-work, pre-effect-budget/change, missing-identity, safety-hold, native-refusal,
+legacy-refusal, uncertain-invocation and owner-evidence-required. The finite role
+can freshly observe ordinary pre-effect conditions with the original guards.
+Unresolved native/Git invocation and actual refusal do not enter that path.
+New native intents name `producer: native-closeout/v2`; their terminal effects
+must link the exact `intent`. Original completion or the existing admitted
+never-started bridge resolves uncertainty. No force-kill, expiry or absence
+supplies that proof. Report prose never supplies a native refusal. Historical
+recorded prose holds and structured refusals retain their original owner.
+
+Unchanged kept dispositions deduplicate. After three no-progress finite turns
+or thirty minutes, one grouped `closeout-supervisor-alarm` in the existing
+service `closeout.log` identifies counts, oldest scope and original-owner routes.
+Unchanged alarms do not create more decisions or retry native effects. The
+checkpoint counts observation turns only; neither count nor age grants authority.
+Binding transactions fence semantic Git identity/ref results. Removal still
+checks target index/generation, effective Git policy, actual loaded source,
+preservation, STOP/HOLD and main CAS under the existing lifecycle lock; unrelated
+main index/config activity is outside that footprint.
+
 The existing installation's `--once` entry first runs bounded report ingest and
 closeout, then starts (or finds) the ordinary finite general-pass child. Its
 existing launchd interval therefore continues waking while a slow review owns

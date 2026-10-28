@@ -91,6 +91,11 @@ test('fixture ${i}', async () => {
   assert.equal(process.env.MONITOR_TEST_FILE_TIMEOUT_MS, undefined);
   const log = event => fs.appendFileSync(${JSON.stringify(log)}, JSON.stringify({i:${i}, event})+'\\n');
   log('start');
+  fs.writeFileSync(${JSON.stringify(directory)}+'/ready-${i}', '');
+  // Hold the first admitted pair until both are running, even under load.
+  if (${i} < 2) while (![0, 1].every(i => fs.existsSync(${JSON.stringify(directory)}+'/ready-'+i))) {
+    await new Promise(resolve => setTimeout(resolve, 10));
+  }
   await new Promise(resolve => setTimeout(resolve, 100));
   log('finish');
   ${i === 0 ? "assert.fail('deliberate fixture failure');" : ''}
@@ -98,12 +103,27 @@ test('fixture ${i}', async () => {
 `);
   const child = spawnScenarioChild(t, process.execPath, [path.join(root, 'test/helpers/run.mjs'), '--load-factor=1',
     '--file-timeout=1', '--suite-timeout=1', ...files], {
-    env: { ...process.env, MONITOR_TEST_CONCURRENCY: '2', MONITOR_TEST_FILE_TIMEOUT_MS: '0' },
+    env: { ...process.env, MONITOR_TEST_CONCURRENCY: '2', MONITOR_TEST_FILE_TIMEOUT_MS: '0',
+      MONITOR_TEST_TIMINGS_PATH: path.join(directory, 'timings.jsonl') },
   });
   const result = await waitForExit(child);
   assert.equal(result.code, 1, result.stdout + result.stderr);
-  assert.match(result.stdout, /# pass 2\b/);
-  assert.match(result.stdout, /# fail 1\b/);
+  const references = [...result.stderr.matchAll(/^FILE_TAP_COMPLETE: (.*)$/gm)].map(match => JSON.parse(match[1]));
+  assert.deepEqual(references.map(entry => entry.file).sort(), [...files].sort(), result.stderr);
+  let passes = 0, failures = 0;
+  for (const [i, file] of files.entries()) {
+    const reference = references.find(entry => entry.file === file);
+    const failed = i === 0 ? 1 : 0;
+    assert.equal(reference.exit_code, failed);
+    const tap = fs.readFileSync(reference.artifact, 'utf8');
+    assert.match(tap, new RegExp(`^${failed ? 'not ' : ''}ok 1 - fixture ${i}$`, 'm'));
+    assert.match(tap, new RegExp(`1\\.\\.1\\n# tests 1\\n# suites 0\\n# pass ${1 - failed}\\n# fail ${failed}\\n# cancelled 0\\n`));
+    assert.ok(result.stdout.includes(tap), 'each complete file summary must reach the build log');
+    passes += Number(tap.match(/^# pass (\d+)$/m)[1]);
+    failures += Number(tap.match(/^# fail (\d+)$/m)[1]);
+  }
+  assert.equal(passes, 2);
+  assert.equal(failures, 1);
   const rows = fs.readFileSync(log, 'utf8').trim().split('\n').map(JSON.parse);
   assert.deepEqual(rows.filter(row => row.event === 'start').map(row => row.i).sort(), [0, 1, 2]);
   let active = 0, peak = 0;

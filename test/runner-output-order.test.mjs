@@ -42,7 +42,13 @@ test('a capped first file retains complete failing and passing TAP from later ad
   assert.equal(result.signal, null, result.stderr);
   assert.equal(result.code, 1, result.stderr);
   assert.match(result.stderr, /FILE_TIMEOUT: .*blocked\.test\.mjs exceeded 5000ms/);
-  assert.equal(result.references.length, 2, result.stderr);
+  // Node may finish the cancelled reporter before the coordinator kills the
+  // group. Its optional completion does not change the finished peers' proof.
+  assert.equal(new Set(result.references.map(entry => entry.file)).size, result.references.length, result.stderr);
+  for (const reference of result.references) {
+    assert.ok([blocked, failing, passing].includes(reference.file), result.stderr);
+    if (reference.file === blocked) assert.equal(reference.exit_code, 1);
+  }
   for (const [file, count, failures] of [[failing, 32, 1], [passing, 1, 0]]) {
     const reference = result.references.find(entry => entry.file === file);
     assert.ok(reference, result.stderr);

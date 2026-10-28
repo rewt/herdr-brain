@@ -1,6 +1,7 @@
 import test from '../../test/helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import {fixture} from './dispatch-fixture.mjs';
 import {preflightContinuation,initialCapacityRefusal,implementationChangeOutcome} from '../preflight.mjs';
@@ -14,12 +15,37 @@ function phase1Fixture(t,options={}){
   return f;
 }
 
-async function driverResult(journal){
-  const file=`${journal}.driver/results.jsonl`,until=Date.now()+60000;
-  while(!fs.existsSync(file)&&Date.now()<until)await new Promise(resolve=>setTimeout(resolve,25));
-  assert.equal(fs.existsSync(file),true,'owned detached fixture reaches a durable terminal receipt');
-  return JSON.parse(fs.readFileSync(file,'utf8').trim());
+async function driverResult(journal,{count=1,limit=60000}={}){
+  const file=`${journal}.driver/results.jsonl`,until=Date.now()+limit;
+  for(;;){
+    const text=fs.existsSync(file)?fs.readFileSync(file,'utf8'):'';
+    // The append opens the file before writing. Only newline-terminated rows
+    // are complete; a continuation must wait for its own row after older ones.
+    const rows=text.slice(0,text.lastIndexOf('\n')+1).split('\n').filter(Boolean).map(line=>JSON.parse(line));
+    if(rows.length>=count)return rows.at(-1);
+    if(Date.now()>=until){
+      const log=`${journal}.driver.log`;
+      assert.fail(`owned detached fixture needs ${count} complete terminal receipt(s); got ${rows.length}; driver output: ${fs.existsSync(log)?fs.readFileSync(log,'utf8'):'<unavailable>'}`);
+    }
+    await new Promise(resolve=>setTimeout(resolve,25));
+  }
 }
+
+test('detached driver receipt reader waits for complete appends and retains terminal failure evidence',async t=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'phase1-receipt-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+  const journal=path.join(root,'request.json'),file=journal+'.driver/results.jsonl';fs.mkdirSync(journal+'.driver');
+  const first={stage:'complete',exit_code:0},failed={stage:'worker',exit_code:1,error:'frozen request changed'};
+  for(const prefix of ['',JSON.stringify(first).slice(0,-1)]){
+    fs.writeFileSync(file,prefix);const pending=driverResult(journal);
+    fs.appendFileSync(file,JSON.stringify(first).slice(prefix.length)+'\n');
+    assert.deepEqual(await pending,first);
+  }
+  fs.appendFileSync(file,JSON.stringify(failed).slice(0,-1));const continued=driverResult(journal,{count:2});
+  fs.appendFileSync(file,'}\n');assert.deepEqual(await continued,failed);
+  fs.writeFileSync(file,'malformed completed row\n');await assert.rejects(driverResult(journal),SyntaxError);
+  fs.writeFileSync(file,'');fs.writeFileSync(journal+'.driver.log','retained child stderr');
+  await assert.rejects(driverResult(journal,{limit:0}),/got 0; driver output: retained child stderr/);
+});
 
 test('permanent preflight continuation requires positive zero-native evidence and retains unknown refused foreign or spent attempts',t=>{
   const f=fixture(t),root=fs.realpathSync(new URL('../../',import.meta.url)),common=f.git(['rev-parse','--path-format=absolute','--git-common-dir']);
@@ -60,9 +86,8 @@ test('permanent preflight continuation resumes one original detached request wit
   const f=phase1Fixture(t);f.fail('prepare');const first=f.start(['--detach']);assert.equal(first.status,0,first.stderr);const {journal}=JSON.parse(first.stdout),terminal=await driverResult(journal);assert.equal(terminal.native_launch_attempted,false);
   const launch=fs.readFileSync(journal+'.driver/launch.json'),original=JSON.parse(fs.readFileSync(journal));fs.unlinkSync(path.join(f.root,'fail'));
   const resumed=f.dispatch(['--retry',journal,'--continue-preflight']);assert.equal(resumed.status,0,resumed.stderr);assert.equal(JSON.parse(resumed.stdout).journal,journal);
-  const results=journal+'.driver/results.jsonl',until=Date.now()+60000;let rows=[];
-  while(Date.now()<until){rows=fs.readFileSync(results,'utf8').trim().split('\n').map(JSON.parse);if(rows.length>=2&&rows.at(-1).stage==='complete')break;await new Promise(resolve=>setTimeout(resolve,25));}
-  assert.equal(rows.at(-1).stage,'complete',JSON.stringify(rows));assert.deepEqual(fs.readFileSync(journal+'.driver/launch.json'),launch);assert.equal(f.jobs().length,1);
+  const terminalResumed=await driverResult(journal,{count:2});
+  assert.equal(terminalResumed.stage,'complete',JSON.stringify(terminalResumed));assert.deepEqual(fs.readFileSync(journal+'.driver/launch.json'),launch);assert.equal(f.jobs().length,1);
   const continued=JSON.parse(fs.readFileSync(journal));
   for(const field of ['token','base','release','routeConfig'])assert.deepEqual(continued[field],original[field],`saved ${field} remains bound to the original request`);
   assert.equal(f.calls().filter(c=>c.type==='herdr'&&c.a[0]==='agent'&&c.a[1]==='prompt').length,1);
@@ -109,8 +134,5 @@ test('phase1 detached start saves the original journal receipt before returning 
   assert.equal(receipt.result,'detached');assert.ok(receipt.journal);const saved=JSON.parse(fs.readFileSync(receipt.journal));assert.equal(saved.item,f.item);assert.equal(saved.detached,true);
   // The saved job owns recovery. The request is not submitted again by the line.
   assert.equal(fs.existsSync(receipt.journal),true);assert.equal(f.jobs().length,1);
-  const resultFile=`${receipt.journal}.driver/results.jsonl`,until=Date.now()+20000;
-  while(!fs.existsSync(resultFile)&&Date.now()<until)await new Promise(resolve=>setTimeout(resolve,25));
-  assert.equal(fs.existsSync(resultFile),true,'owned detached fixture writes its terminal receipt before cleanup');
-  const finished=JSON.parse(fs.readFileSync(resultFile,'utf8').trim());assert.equal(finished.exit_code,1);assert.equal(finished.native_launch_attempted,false);
+  const finished=await driverResult(receipt.journal,{limit:20000});assert.equal(finished.exit_code,1);assert.equal(finished.native_launch_attempted,false);
 });

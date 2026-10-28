@@ -85,29 +85,51 @@ test('native observation, exit and preservation preflight hold only consumer/ret
   assert.deepEqual([...phases].sort(), ['Git', 'exit', 'native', 'preflight']);
 });
 
-test('closer lock contention discards preparation; an unowned lock wait stays held after release and retry', t => {
+test('closer lock contention discards preparation; only a named safe turn retries removal', t => {
   const f = setup(t, { occupied: false, terminal: true }), release = acquireLock(path.join(f.common, 'lane-promote.lock'));
+  const log = f.options.log, preparation = [], discarded = [];
+  f.options.log = row => {
+    log(row);
+    if (row.action === 'lane-preflight') preparation.push(row);
+    if (row.action === 'lane-evidence-discarded') discarded.push(row.directory);
+  };
   const read = fs.readFileSync; let producerReads = 0;
   fs.readFileSync = function(file, ...args) {
-    if (file === path.join(f.common, 'promote/queue.json')) {
-      producerReads++;
-      assert.equal(fs.existsSync(path.join(f.org, 'lock')), false, 'wait producer derivation is outside the append lock');
-    }
+    if (file === path.join(f.common, 'promote/queue.json')) producerReads++;
     return read.call(this, file, ...args);
   };
   t.after(() => { fs.readFileSync = read; });
+  let blocked;
   try {
     f.drain();
-    assert.ok(evaluations(f).some(e => /locked:/.test(e.reason) && e.waiting.defect && !e.waiting.producers.length));
+    blocked = evaluations(f).find(e => /^locked:/.test(e.reason));
+    assert.ok(blocked, JSON.stringify(evaluations(f)));
+    assert.equal(blocked.completed, false);
+    assert.equal(blocked.condition.kind, 'contention');
+    assert.equal(blocked.condition.continuation.kind, 'pre-effect-observation');
+    assert.equal(blocked.failure, undefined);
+    assert.deepEqual(blocked.waiting, { owner: 'lane-closeout', next: 'pre-effect-observation', producers: [] });
+    assert.equal(events(f).some(e => e.type === 'closeout.waiting' && e.key === blocked.key), false);
+    assert.equal(preparation.length, 1);
+    assert.deepEqual(discarded, [preparation[0].evidence.directory]);
+    assert.equal(fs.existsSync(preparation[0].evidence.directory), false);
     assert.equal(fs.existsSync(f.lane), true);
-    assert.equal(effects(f).some(e => e.action === 'worktree-removed'), false);
+    assert.equal(effects(f).some(e => ['git-removal-started', 'worktree-removed'].includes(e.action)), false);
   } finally { release(); }
   const old = evaluations(f).length, native = f.herdrCalls().length;
   f.drain(); assert.equal(evaluations(f).length, old, 'lock release is not a polling signal');
-  assert.ok(producerReads > 0, 'the locked wait producer path was observed');
   retryCloseout({ cwd: f.repo, org: f.org, topic: 'topic', why: 'lifecycle-lock-released', start: false });
   assert.deepEqual(f.drain().evaluated, []);
   assert.equal(fs.existsSync(f.lane), true); assert.equal(f.herdrCalls().length, native);
+  const before = events(f), next = f.drain({ keys: [blocked.key], retrySafe: true });
+  assert.equal(next.evaluated.length, 1);
+  assert.equal(next.evaluated[0].completed, true, JSON.stringify(next));
+  assert.equal(preparation.length, 2, 'the named turn prepares removal again');
+  assert.notEqual(preparation[1].evidence.directory, preparation[0].evidence.directory);
+  assert.equal(effects(f).find(e => e.action === 'worktree-removed').evidence.directory, preparation[1].evidence.directory);
+  assert.equal(producerReads, 0, 'pre-effect contention needs no outside promotion-job producer');
+  assert.deepEqual(events(f).slice(0, before.length), before, 'the original contention evidence stays immutable');
+  assertRemoved(f);
 });
 
 for(const change of ['activity','owner','reference','HOLD'])test(`retirement housekeeping final CAS ${change==='activity'?'allows unrelated activity':'retains '+change+' changes'}`,t=>{

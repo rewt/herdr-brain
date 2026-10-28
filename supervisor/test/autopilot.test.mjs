@@ -686,9 +686,17 @@ console.log(JSON.stringify(await drainInbox(inbox,{id:last.id,owner:true,waitSec
   assert.equal(wakes.length, awaited ? 1 : 0);
   if (awaited) {
     assert.equal(wakes[0][3], `[autopilot] ${f.item} landed; unblocks: Cut RC-11 notice-id=${notices[1].id}`);
-    const again = await promptSupervisor(f.entry.to, notices[1].message, { org: f.org, cwd: f.repo, id: notices[1].id, herdr: path.join(f.root, 'bin/herdr'), waitSeconds: 0 });
+    const duplicateState = () => ({
+      events: loadEvents(f.org).events,
+      queue: fs.readFileSync(path.join(directory, 'queue.json'), 'utf8'),
+      inbox: fs.readFileSync(result.inbox, 'utf8'),
+      head: f.git(['rev-parse', 'HEAD']),
+    });
+    const beforeDuplicate = duplicateState();
+    const again = await promptSupervisor(f.entry.to, notices[1].message, { org: f.org, cwd: f.repo, id: notices[1].id, herdr: notices[1].herdr, waitSeconds: 0 });
     assert.equal(again.delivered, true);
     assert.equal(f.herdrCalls().filter(a => a[0] === 'agent' && a[1] === 'prompt' && a[3].startsWith('[autopilot]')).length, 1);
+    assert.deepEqual(duplicateState(), beforeDuplicate, 'duplicate notice leaves record, queue, inbox and main unchanged');
   }
   } finally { releaseWorker(); await releaseWorker.done; }
 });

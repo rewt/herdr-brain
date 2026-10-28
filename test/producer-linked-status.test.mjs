@@ -138,7 +138,15 @@ test('producer linked midpoint and ready-twin stages are owned progress while re
   const intent={type:'closeout.effect',effect:'intent',identity:entry.common,key:entry.key,source:entry.source,outcome:{action:'shell-close-requested',tab_id:'tab',panes:[{pane:'pane',terminal:'terminal'}]}};
   assert.equal(closeoutNextStage(entry,midpoint,append(events,[intent]),[entry]),undefined,'an unresolved original intent is never progress');
   const unsent=closeoutCommandNotStarted(entry,'intent','shell-close-requested',Object.assign(Error('closer code changed'),{code:'CLOSEOUT_CODE_CHANGED'}));
-  assert.deepEqual(closeoutNextStage(entry,midpoint,append(events,[intent,unsent]),[entry]),{stage:'physical',ready:true});
+  const neverSent=append(events,[intent,unsent]);
+  assert.deepEqual(closeoutNextStage(entry,midpoint,neverSent,[entry]),{stage:'never-sent',ready:true},'new positive non-execution evidence takes precedence over the physical midpoint');
+  assert.deepEqual(registerCloseoutWait(entry,midpoint,neverSent,[entry]),[],'never-sent is owned progress, not a missing producer');
+  assert.deepEqual(closeoutNextStage(entry,{...midpoint,seq:neverSent.at(-1).seq},neverSent,[entry]),{stage:'physical',ready:true},'an already observed no-start receipt does not reopen the never-sent stage');
+  for(const reason of ['EPERM native refusal','EACCES native refusal','native refusal','retirement held: HOLD-WORKER-TAB-CLOSE','STOP']){
+    assert.equal(closeoutNextStage(entry,{...refused,reason},neverSent,[entry]),undefined,`${reason} is not reopened by a no-start receipt`);
+  }
+  assert.equal(closeoutNextStage(entry,{...refused,reason:'native command failed',failure:{kind:'unknown'}},neverSent,[entry]),undefined,'a recorded failure is not reopened by a no-start receipt');
+  assert.equal(closeoutNextStage(entry,midpoint,append(neverSent,[{...intent,effect:'later-intent'}]),[entry]),undefined,'an earlier no-start receipt cannot release a later unresolved intent');
   const native=nativeCloseoutWait(entry,{action:'shell-close-requested',tab_id:'tab'},'intent'),base=append(events,[intent,native]);
   assert.equal(closeoutWaitState(native,append(base,[unsent,...linkedCloseoutStatuses(base,[unsent])])),'complete');
   assert.equal(closeoutWaitState(native,append(base,[{...unsent,intent:'other'},...linkedCloseoutStatuses(base,[{...unsent,intent:'other'}])])),'pending');

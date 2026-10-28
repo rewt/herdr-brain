@@ -50,11 +50,13 @@ test('typed initial capacity refusal accepts only a completed no-journal guard r
 
 test('permanent preflight continuation resumes one original detached request without replacing launch evidence or repeating native input',async t=>{
   const f=fixture(t);f.fail('prepare');const first=f.start(['--detach']);assert.equal(first.status,0,first.stderr);const {journal}=JSON.parse(first.stdout),terminal=await driverResult(journal);assert.equal(terminal.native_launch_attempted,false);
-  const launch=fs.readFileSync(journal+'.driver/launch.json');fs.unlinkSync(path.join(f.root,'fail'));
+  const launch=fs.readFileSync(journal+'.driver/launch.json'),original=JSON.parse(fs.readFileSync(journal));fs.unlinkSync(path.join(f.root,'fail'));
   const resumed=f.dispatch(['--retry',journal,'--continue-preflight']);assert.equal(resumed.status,0,resumed.stderr);assert.equal(JSON.parse(resumed.stdout).journal,journal);
   const results=journal+'.driver/results.jsonl',until=Date.now()+60000;let rows=[];
   while(Date.now()<until){rows=fs.readFileSync(results,'utf8').trim().split('\n').map(JSON.parse);if(rows.length>=2&&rows.at(-1).stage==='complete')break;await new Promise(resolve=>setTimeout(resolve,25));}
   assert.equal(rows.at(-1).stage,'complete',JSON.stringify(rows));assert.deepEqual(fs.readFileSync(journal+'.driver/launch.json'),launch);assert.equal(f.jobs().length,1);
+  const continued=JSON.parse(fs.readFileSync(journal));
+  for(const field of ['token','base','release','routeConfig'])assert.deepEqual(continued[field],original[field],`saved ${field} remains bound to the original request`);
   assert.equal(f.calls().filter(c=>c.type==='herdr'&&c.a[0]==='agent'&&c.a[1]==='prompt').length,1);
   assert.equal(f.dispatch(['--retry',journal,'--continue-preflight']).status,1,'native-attempted continuation cannot be replayed');
   assert.equal(f.calls().filter(c=>c.type==='herdr'&&c.a[0]==='agent'&&c.a[1]==='prompt').length,1);

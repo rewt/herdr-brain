@@ -223,7 +223,8 @@ test('watch writes terminal observation through the record CLI and metrics reads
   fs.writeFileSync(current.report_path, '---\nrun: R-1\noutcome: done\nsummary: Timing fixture done.\nheadline: Timing fixture done\nblockers: []\nproposals: []\nlearnings: []\nartifacts: []\n---\n');
   const herdr = path.join(f.root, 'herdr');
   fs.writeFileSync(herdr, `#!/bin/sh\ncase "$1 $2 $3" in\n'agent get supervisor-fixture') printf '%s\\n' '{"result":{"agent":{"agent_status":"idle","agent":"claude","pane_id":"fake:supervisor"}}}' ;;\n'agent get worker') printf '%s\\n' '{"result":{"agent":{"agent_status":"done"}}}' ;;\n'pane read fake:supervisor') printf '%s\\n' '────────────────────' '❯ ' '────────────────────' ;;\n*) printf '%s\\n' '{"result":{}}' ;;\nesac\n`, { mode: 0o755 });
-  const r = spawnSync(process.execPath, [WATCH, 'R-1', '--org', f.org, '--herdr', herdr, '--to', 'supervisor-fixture', '--delivery-attempts', '1'],
+  // Timing owns diagnostic persistence; native supervisor delivery has its own fixtures.
+  const r = spawnSync(process.execPath, [WATCH, 'R-1', '--org', f.org, '--herdr', herdr, '--record-only'],
     { env: { ...f.env, SUPERVISOR_INPUT_CONFIRM_SECONDS: '0.01', SUPERVISOR_INPUT_POLL_SECONDS: '0.01', SUPERVISOR_INPUT_WAIT_SECONDS: '1' }, cwd: f.root, encoding: 'utf8', timeout: 10000 });
   assert.equal(r.error, undefined, r.stderr);
   assert.equal(r.status, 0, r.stderr);
@@ -265,7 +266,7 @@ if (a[0] === 'agent' && a[1] === 'get' && a[2] === 'worker') {
   console.log('────────────────────\\n❯ \\n────────────────────');
 } else console.log('{}');
 `, { mode: 0o755 });
-  const r = spawnSync(process.execPath, [WATCH, 'R-1', '--org', f.org, '--herdr', herdr, '--to', 'supervisor-fixture', '--idle-grace', idleGrace, '--delivery-attempts', '1'],
+  const r = spawnSync(process.execPath, [WATCH, 'R-1', '--org', f.org, '--herdr', herdr, '--record-only', '--idle-grace', idleGrace],
     { env: { ...f.env, SUPERVISOR_INPUT_CONFIRM_SECONDS: '0.01', SUPERVISOR_INPUT_POLL_SECONDS: '0.01', SUPERVISOR_INPUT_WAIT_SECONDS: '1' }, cwd: f.root, encoding: 'utf8', timeout: 10000 });
   assert.equal(r.error, undefined, r.stderr); assert.equal(r.status, 0, r.stdout + r.stderr);
   if (idleGrace === '1') assert.match(r.stdout, /report or resume/);

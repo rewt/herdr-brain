@@ -258,22 +258,29 @@ test('recovery between the journal and event snapshots cannot hide both an uncer
   const job = { token: 'snapshot', common, item: 'ENG-1', stage: 'starting', unlandedCap: { admission: { kind: 'regular', admitted: true } } };
   fs.writeFileSync(journal, JSON.stringify(job));
   fs.writeFileSync(log, r.events.map(e => JSON.stringify(e)).join('\n') + '\n');
-  const read = fs.readFileSync;
-  let recovered = false;
-  fs.readFileSync = function(file, ...args) {
-    const value = read.call(this, file, ...args);
-    if (file === log && !recovered) {
+  const open = fs.openSync, close = fs.closeSync;
+  let recovered = false, logFd;
+  fs.openSync = function(file, flags, ...args) {
+    const fd = open.call(this, file, flags, ...args);
+    if (file === log && flags === 'r') logFd = fd;
+    return fd;
+  };
+  fs.closeSync = function(fd) {
+    const value = close.call(this, fd);
+    if (fd === logFd && !recovered) {
       recovered = true;
       r.start(1, undefined, { dispatch_journal: journal, dispatch_attempt: job.token });
       fs.writeFileSync(log, r.events.map(e => JSON.stringify(e)).join('\n') + '\n');
       fs.writeFileSync(journal, JSON.stringify({ ...job, stage: 'worker', run: 'R-1' }));
     }
-    return value; // Return the event snapshot from just before the writer commits.
+    // The snapshot reader has finished validating its old view. Recovery now
+    // advances both files before a reversed-order caller could read journals.
+    return value;
   };
   try {
     assert.throws(() => checkUnlandedCap({ org, common, config: { dispatch: { max_unlanded: 1 } }, request: { item: 'ENG-new' } }),
-      e => e.code === 'DISPATCH_UNLANDED_CAP');
-  } finally { fs.readFileSync = read; }
+      e => e.code === 'DISPATCH_UNLANDED_CAP' && e.unlanded.pending_starts.length === 1);
+  } finally { fs.openSync = open; fs.closeSync = close; }
   assert.equal(recovered, true);
   const after = checkUnlandedCap({ org, common, config: { dispatch: { max_unlanded: 2 } }, request: { item: 'ENG-new' } });
   assert.equal(after.count, 1); assert.deepEqual(after.pending_starts, []);

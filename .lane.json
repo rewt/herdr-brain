@@ -21,7 +21,7 @@
   },
   "selection_policy": {
     "by_task_class": {
-      "review": "review-sol-max",
+      "review": "review",
       "review-other-family": {
         "codex": "review",
         "claude": "review-codex"
@@ -58,18 +58,18 @@
       "use": "Problem-solving escalation ONLY after a documented failed high/xhigh attempt or stop-rule reframe. Never a routine build or review default."
     },
     "review-sol-max": {
-      "kind": "codex",
-      "model": "gpt-6.1-sol",
-      "effort": "xhigh",
+      "kind": "claude",
+      "model": "opus",
+      "effort": "high",
       "args": [],
-      "use": "Legacy route name: independent fixed-commit Sol xhigh review. New reviews never use max; one async post-code review, no reviewer suites. Saved attempts retain frozen settings."
+      "use": "Legacy name retained for new Claude Opus high reviews; max is reserved for documented problem-solving escalation. Saved attempts retain frozen settings."
     },
     "review": {
       "kind": "claude",
       "model": "opus",
       "effort": "high",
       "args": [],
-      "use": "Independent other-family judgment and outward review of Codex producers."
+      "use": "Default independent Claude Opus high post-code review of Sol engineering; no reviewer suites."
     },
     "review-codex": {
       "kind": "codex",
@@ -77,6 +77,13 @@
       "effort": "xhigh",
       "args": [],
       "use": "Independent other-family judgment and outward review of Claude producers."
+    },
+    "review-max": {
+      "kind": "claude",
+      "model": "opus",
+      "effort": "high",
+      "args": [],
+      "use": "Legacy name retained for Claude Opus high review; no default max or xhigh review."
     }
   }
 }

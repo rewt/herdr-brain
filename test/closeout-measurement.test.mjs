@@ -121,7 +121,7 @@ test('installed product without docs records live measurements and separately fa
   const doc=read(),ids=['r1176','sol-research','claude-research'];
   assert.equal(result.green,false);assert.equal(doc.aggregate.green,true);assert.equal(doc.aggregate.denominator,1);
   assert.ok(result.failures.includes('historical-inventory-missing'));
-  assert.equal(doc.source.root,bundle);assert.equal(doc.source.commit,f.source.commit);assert.equal(doc.source.loaded_commit,f.source.commit);assert.equal(doc.source.changed,false);
+  assert.equal(path.resolve(doc.source.root),bundle);assert.equal(doc.source.commit,f.source.commit);assert.equal(doc.source.loaded_commit,f.source.commit);assert.equal(doc.source.changed,false);
   assert.deepEqual(doc.historical.map(r=>r.id),ids);
   for(const row of doc.historical){
     assert.equal(row.availability,'missing');assert.equal(row.inventory_complete,false);assert.equal(row.green,false);

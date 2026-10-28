@@ -37,6 +37,10 @@ newline before Enter and require the worker's input receipt. Correction rounds
 dispatch a fresh allocation from the saved author branch, then integrate and
 retire both workers. A process-cwd KEEP is accepted only with the exact lane and
 a matching native worker shell/foreground PID.
+The stand-in puts its owned PTY in raw mode before readiness, matching native
+model input and avoiding canonical line-buffer loss on long dispatch briefs.
+Raw Ctrl-C keeps the existing graceful stop behavior. The input trace retains
+bounded byte tails and lifecycle completion for diagnosing pending delivery.
 
 `--skip-live` is retained as a compatibility option. The former real-model cases,
 entry installation probes, generated permission-profile verification and copied

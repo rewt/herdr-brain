@@ -23,6 +23,15 @@ const traceInput = (event, extra = {}) => {
   if (fs.existsSync(evidence)) fs.appendFileSync(path.join(evidence, 'script-input.jsonl'),
     JSON.stringify({ at: Date.now(), pane, role, event, ...extra }) + '\n');
 };
+// Native model UIs read a raw PTY. Canonical input has a bounded line buffer
+// and can lose a long dispatch brief before the script drains its next line.
+// Set the mode before publishing idle/readiness, and restore the owned PTY.
+if (process.stdin.isTTY) {
+  const wasRaw = Boolean(process.stdin.isRaw);
+  process.stdin.setRawMode(true);
+  traceInput('raw-mode', { enabled: true });
+  process.once('exit', () => { try { process.stdin.setRawMode(wasRaw); } catch { /* closed PTY */ } });
+}
 // A PTY inherits the server environment, not the runner's TMPDIR. Keep child
 // dispatch environment files inside the same scratch capability boundary.
 const slotFile = path.join(root, 'test-slot-env.json');
@@ -130,8 +139,13 @@ async function ingestDefault(line) {
   } catch (error) { fs.writeFileSync(receipt, JSON.stringify({ error: error.message })); }
 }
 const delay = (ms) => new Promise((r) => setTimeout(r, ms));
-const input = readline.createInterface({ input: process.stdin });
-process.stdin.on('data', bytes => traceInput('data', { bytes: bytes.length, tailHex: bytes.subarray(-160).toString('hex') }));
+const input = readline.createInterface({ input: process.stdin, terminal: false });
+process.stdin.on('data', bytes => {
+  traceInput('data', { bytes: bytes.length, tailHex: bytes.subarray(-160).toString('hex') });
+  // Raw Ctrl-C no longer generates a kernel signal. Keep native retirement's
+  // interrupt path equivalent to the explicit SIGINT/SIGTERM handlers above.
+  if (bytes.includes(3)) workerStopping = true;
+});
 for (const event of ['pause', 'resume', 'end', 'close']) process.stdin.on(event, () => traceInput(`stdin-${event}`));
 input.on('line', line => traceInput('line', { bytes: Buffer.byteLength(line), tailHex: Buffer.from(line).subarray(-160).toString('hex') }));
 input.on('close', () => traceInput('readline-close'));

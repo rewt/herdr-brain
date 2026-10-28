@@ -94,7 +94,7 @@ test('the real worker acknowledges a second task after a deliberately missing re
   await until(() => trace().filter(row => row.event === 'state-complete' && row.value === 'idle').length === 2);
   child.stdin.write(task);
   await until(() => fs.readFileSync(path.join(root, 'worker-input.jsonl'), 'utf8').trim().split('\n').length === 2);
-  child.kill('SIGTERM'); assert.equal((await waitForExit(child)).code, 0);
+  child.stdin.write('\x03'); assert.equal((await waitForExit(child)).code, 0);
 });
 
 test('the scripted agent launch has a real Codex executable identity without starting a model', t => {

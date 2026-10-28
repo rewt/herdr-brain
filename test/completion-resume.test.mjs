@@ -58,7 +58,7 @@ const emit=x=>console.log(JSON.stringify(x));
 const call=(exe,args)=>{const r=spawnSync(exe,args,{encoding:'utf8'});if(r.status)throw Error(r.stderr);return r.stdout;};
 fs.appendFileSync(calls,JSON.stringify({type:process.argv[1].split('/').at(-1),a})+'\\n');\n`;
   const lane = path.join(f.scratch, 'resume-lane.mjs');
-  fs.writeFileSync(lane, common + `
+  fs.writeFileSync(lane, `#!${process.execPath}\n` + common + `
 if(a[0]==='open')process.stdout.write(call(process.execPath,[${JSON.stringify(lanes)},...a]));
 if(a[0]==='prepare'&&!fs.existsSync(${JSON.stringify(f.lane)}))throw Error('worktree missing');
 if(a[0]==='dispatch'){
@@ -72,7 +72,7 @@ if(a[0]==='dispatch'){
  fs.writeFileSync(file,JSON.stringify(agent));emit({agentName:agent.name,pane:agent.pane_id,workspaceId:agent.workspace_id,terminalId:agent.terminal_id,agentSessionId:job.resumeSession,cwd:job.workspace});
 }
 if(a[0]==='verify-agent'){const w=JSON.parse(fs.readFileSync(file));if(w.name!==a[1]||w.cwd!==a[2])throw Error('wrong worker');}
-`);
+`, { mode: 0o755 });
   const native = path.join(f.scratch, 'herdr');
   fs.writeFileSync(native, `#!${process.execPath}\n` + common + `
 const agent=fs.existsSync(file)?JSON.parse(fs.readFileSync(file)):null;
@@ -89,10 +89,10 @@ if(a[0]==='agent'&&a[1]==='prompt'){
 }
 `, { mode: 0o755 });
   const watch = path.join(f.scratch, 'resume-watch.mjs');
-  fs.writeFileSync(watch, common + `
+  fs.writeFileSync(watch, `#!${process.execPath}\n` + common + `
 const {ownerIdentity}=await import(${JSON.stringify(new URL('../lib/process-owner.mjs', import.meta.url).href)});
 emit({pid:process.ppid,identity:ownerIdentity(process.ppid),log:${JSON.stringify(path.join(f.scratch, 'watch.log'))}});
-`);
+`, { mode: 0o755 });
   return { lane, watch, calls };
 }
 

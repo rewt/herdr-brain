@@ -4,16 +4,17 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {performance} from 'node:perf_hooks';
 import {createHash} from 'node:crypto';
-import {loadEvents,writeFileAtomic} from '../lib/store.mjs';
+import {loadEvents,writeFileAtomic,planTransaction} from '../lib/store.mjs';
 import {bindCloseoutCode} from '../lib/closeout-code.mjs';
 import {gitProject} from '../lib/project.mjs';
 import {fold} from '../lib/state.mjs';
 import {retirementLock} from '../lib/retire-lock.mjs';
 import {requireController,readOwnedRun} from '../lib/run-owner-guard.mjs';
 import {currentCloseoutEntries,closeoutEvaluations,closeoutEvaluation,closeoutRevision,
-  scheduleLineCloseouts,directCloseoutObservation,publishCloseoutEvents,lineServiceOwnsCleanup} from '../lib/closeout.mjs';
+  scheduleLineCloseouts,directCloseoutObservation,publishCloseoutEvents,lineServiceOwnsCleanup,unpublishedCloseoutSources} from '../lib/closeout.mjs';
 import {closeoutNextStage,closeoutWait,closeoutWaitState} from '../lib/closeout-status.mjs';
 import {recordCloseoutTurn} from './closeout-measurement.mjs';
+import {missingCloseoutBinding} from '../lib/closeout-facts.mjs';
 
 export const closeoutServiceDirectory=(org,common)=>path.join(org,'line-service',createHash('sha256').update(JSON.stringify(common)).digest('hex').slice(0,20));
 export function runCloseoutTurn(options) {
@@ -80,8 +81,23 @@ function closeoutTurn({project,org,cli,guard,env=process.env,maxSteps=8,budgetMs
     }
     observed=read();
     // Re-publish exact committed envelopes only. No re-binding a namesake.
-    const sources=observed.events.filter(e=>e.closeout_targets?.some(t=>t.common===project.identity&&t.org===org&&!t.reportCloseout));
+    const sources=unpublishedCloseoutSources(project.identity,org,observed.events);
     if(sources.length)publishCloseoutEvents({cwd:project.canonical,org,env,added:sources,start:false});
+    // Old completion writers sometimes had no envelope at all. Type those
+    // missing identities in a bounded batch without policy/native rediscovery
+    // or a fictitious supervisor-recovery subscription. No executable key is
+    // created; only the existing original-evidence refresh can bind a target.
+    const boundRuns=new Set(observed.events.flatMap(e=>(e.closeout_targets??[]).filter(t=>t.common===project.identity&&t.panes?.length).map(t=>t.run)));
+    const kept=new Set(observed.events.filter(e=>e.type==='closeout.binding-kept'&&e.identity===project.identity).map(e=>JSON.stringify([e.run,e.source])));
+    const missing=[];
+    for(const source of observed.events.toReversed()){
+      if(missing.length>=maxSteps)break;
+      const runId=source.type==='report.ingested'?source.run:source.type==='run.abandoned'?(source.run??source.id):source.type==='item.closed'?source.completed_run:null;
+      const run=observed.state.runs.get(runId);
+      if(!run||run.meta?.dispatch_project&&run.meta.dispatch_project!==project.identity||boundRuns.has(runId)||kept.has(JSON.stringify([runId,{seq:source.seq,type:source.type}])))continue;
+      missing.push(missingCloseoutBinding({project,org,source,run,signal:source.type==='item.closed'?'landed':'ready',events:observed.events}));
+    }
+    if(missing.length)planTransaction(org,current=>({add:missing.filter(row=>!current.some(e=>e.type===row.type&&e.key===row.key&&e.identity===row.identity))}),{actor:'finite missing-binding observation',replaySafe:true});
     fault('after-publication');
     const entries=currentCloseoutEntries(project.identity,org,observed.events,{onInvalid:()=>{}}),
       rows=closeoutEvaluations(project.identity,org,observed.events),evaluations=new Map(rows.map(e=>[e.key,e]));

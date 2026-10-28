@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {runCloseoutTurn} from '../line-service/closeout-turn.mjs';
 import {gitProject} from '../lib/project.mjs';
-import {currentCloseoutEntries,publishCloseoutEvents} from '../lib/closeout.mjs';
+import {currentCloseoutEntries,publishCloseoutEvents,unpublishedCloseoutSources,readCloseoutEntries} from '../lib/closeout.mjs';
 import {refreshCloseouts} from '../lib/closeout-consumer.mjs';
 import {setup,events,effects,selectCurrentCleanup} from './helpers/closeout-fixture.mjs';
 
@@ -99,4 +99,30 @@ test('a finite 45-second allowance records partial folder progress then recovers
   assert.equal(drain().evaluated[0].completed,true);
   assert.equal(f.git(['branch','--list','lane/topic']),'');
   assert.equal(effects(f).filter(e=>e.action==='worktree-removed').length,1);
+});
+
+test('publication reconciliation skips 604 already queued historical envelopes and repairs only a lost key',t=>{
+  const f=setup(t,{occupied:false,terminal:true}),all=events(f),source=all.find(e=>e.type==='promotion.reconciled');
+  const history=Array.from({length:604},(_,i)=>({...source,seq:all.at(-1).seq+i+1}));
+  assert.deepEqual(unpublishedCloseoutSources(f.common,f.org,[...all,...history]),[]);
+  const target=readCloseoutEntries(f.common).find(e=>e.signal==='landed');
+  fs.unlinkSync(path.join(f.common,'closeout/entries',target.key+'.json'));
+  assert.deepEqual(unpublishedCloseoutSources(f.common,f.org,all).map(e=>e.seq),[target.source.seq]);
+  assert.deepEqual(f.read().actions,[]);
+});
+
+test('a completion with no envelope gets a typed missing identity while an independent bound target closes',t=>{
+  const f=fixture(t);
+  f.append([{type:'item.added',id:'ENG-2',role:'engineer',title:'Missing original allocation'},
+    {type:'run.started',id:'R-2',item:'ENG-2',workspace:f.lane+'-missing',meta:{dispatch_project:f.common}},
+    {type:'report.ingested',run:'R-2',sha256:'missing',report:{outcome:'done'}},
+    {type:'item.closed',id:'ENG-2',as:'done',completed_run:'R-2'}]);
+  const result=runCloseoutTurn({project:f.project,org:f.org,env:f.env,guard:()=>{},measure:()=>{},maxSteps:1,cli:(_file,argv)=>{
+    if(argv[0]==='refresh')throw Error('bound target must precede recovery');
+    return JSON.stringify(f.drain({keys:JSON.parse(argv[argv.indexOf('--keys')+1]),retrySafe:true}));
+  }});
+  assert.equal(result.steps,1);assert.equal(fs.existsSync(f.lane),false);
+  const kept=events(f).find(e=>e.type==='closeout.binding-kept'&&e.run==='R-2');
+  assert.equal(kept.source.type,'item.closed');assert.equal(kept.condition.kind,'missing-identity');
+  assert.equal(kept.resources.session.status,'kept');assert.match(kept.condition.continuation.defect,/no completion subscription/);
 });

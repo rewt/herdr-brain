@@ -10,6 +10,7 @@ import { resumeSource } from '../dispatch/resume-source.mjs';
 import { fold } from '../lib/state.mjs';
 import { fold as olderFold } from './fixtures/state-v0.mjs';
 import { sessionBindFact } from './helpers/session-bind.mjs';
+import { readReport } from '../lib/report.mjs';
 
 const session = '01a173a6-8116-7051-a945-b630511218dd';
 const source = path.resolve(import.meta.dirname, '..');
@@ -109,7 +110,8 @@ for (const harness of ['codex', 'claude']) for (const integrated of [false, true
     const transcript = path.join(f.scratch, `${session}.json`);
     fs.writeFileSync(transcript, JSON.stringify({ id: session, cwd: f.lane, context: 'prior conversation sentinel', prompts: [] }));
     const state = fold(events(f));
-    f.append([{ type: 'report.ingested', run: 'R-1', item: 'ENG-1', report: { outcome: 'blocked', summary: 'Continue from saved context' },
+    const report = readReport('---\nrun: R-1\noutcome: blocked\nsummary: Continue from saved context\n---\n').report;
+    f.append([{ type: 'report.ingested', run: 'R-1', item: 'ENG-1', report,
       ...completionSession(state.runs.get('R-1'), state) }]);
     const result = f.drain();
     assert.equal(fs.existsSync(f.lane), false, JSON.stringify(result));

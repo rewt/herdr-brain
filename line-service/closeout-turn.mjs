@@ -16,7 +16,23 @@ import {closeoutNextStage,closeoutWait,closeoutWaitState} from '../lib/closeout-
 import {recordCloseoutTurn} from './closeout-measurement.mjs';
 
 export const closeoutServiceDirectory=(org,common)=>path.join(org,'line-service',createHash('sha256').update(JSON.stringify(common)).digest('hex').slice(0,20));
-export function runCloseoutTurn({project,org,cli,guard,env=process.env,maxSteps=8,budgetMs=45000,
+export function runCloseoutTurn(options) {
+  const clock=options.clock??(()=>performance.now()),now=options.now??(()=>Date.now()),started=clock();
+  try{return closeoutTurn(options);}
+  catch(error){
+    // The old turn's finally has released every owner/native/record lock. Join
+    // exactly one fresh physical-code process inside the ORIGINAL allowance;
+    // it retains every original native intent and re-runs all mutation guards.
+    if(error.code!=='CLOSEOUT_CODE_CHANGED')throw error;
+    if(options.handoff===false)return{result:'closeout-code-handoff-pending',reason:'bounded fresh successor also changed; original obligations retained',old:error.binding,current:error.current};
+    const remaining=(options.budgetMs??45000)-(clock()-started);
+    if(remaining<=0)return{result:'closeout-code-handoff-pending',reason:'original finite allowance spent',old:error.binding,current:error.current};
+    const result=JSON.parse(options.cli('line-service/closeout.mjs',['--once','--repo',options.project.canonical,'--org',options.org,
+      '--no-handoff','--deadline',String(now()+Math.max(1,remaining))]));
+    return{result:'closeout-code-handoff',old:error.binding,current:error.current,successor:result};
+  }
+}
+function closeoutTurn({project,org,cli,guard,env=process.env,maxSteps=8,budgetMs=45000,
   clock=()=>performance.now(),now=()=>Date.now(),fault=()=>{},measure=recordCloseoutTurn}) {
   const directory=closeoutServiceDirectory(org,project.identity),file=path.join(directory,'closeout-turn.json');
   fs.mkdirSync(directory,{recursive:true});
@@ -85,8 +101,9 @@ export function runCloseoutTurn({project,org,cli,guard,env=process.env,maxSteps=
         const result=JSON.parse(cli('supervisor/closeout.mjs',['drain','--repo',project.canonical,'--org',org,
           '--keys',JSON.stringify([entry.key]),'--no-restart','--retry-safe','--deadline',String(now()+Math.max(1,budgetMs-(clock()-started))),
           ...(sessionsOnly?['--sessions-only']:[])]));
+        if(result.restart)throw Object.assign(Error('closer returned a guarded code handoff'),{code:'CLOSEOUT_CODE_CHANGED',binding:result.restart.old,current:result.restart.current});
         state.last_result={key:entry.key,result};fault('after-closeout');
-      }catch(error){errors.push({key:entry.key,stage:'closeout',reason:error.message});}
+      }catch(error){if(error.code==='CLOSEOUT_CODE_CHANGED')throw error;errors.push({key:entry.key,stage:'closeout',reason:error.message});}
       steps++;delete state.pending;save();
     }
     // One grouped diagnostic, deduplicated by unchanged scope/reason. Counting

@@ -14,7 +14,7 @@ import {installedContext} from './cutoff.mjs';
 import {runCloseoutTurn,closeoutServiceDirectory} from './closeout-turn.mjs';
 const root=fileURLToPath(new URL('../',import.meta.url));
 export function closeoutTurnMain(argv=process.argv.slice(2)){
-  const {values:v}=parseArgs({args:argv,options:{once:{type:'boolean'},repo:{type:'string'},org:{type:'string'}}});
+  const {values:v}=parseArgs({args:argv,options:{once:{type:'boolean'},repo:{type:'string'},org:{type:'string'},'no-handoff':{type:'boolean'},deadline:{type:'string'}}});
   if(!v.once||!v.repo)throw Error('use --once --repo CANONICAL; the owning line supplies finite wakes');
   const project=gitProject(v.repo),org=fs.realpathSync(v.org??findOrgDir({cwd:v.repo,env:{...process.env,ORG_DIR:''}}));
   serviceSource(project.canonical);installedContext(project.canonical,org);
@@ -30,7 +30,9 @@ export function closeoutTurnMain(argv=process.argv.slice(2)){
     const r=foregroundCommand(process.execPath,[path.join(root,file),...args],{cwd:project.canonical,env,encoding:'utf8',maxBuffer:32*1024*1024,timeout:0});
     if(r.error||r.status!==0)throw Error(r.stderr||r.stdout||r.error?.message||`exit ${r.status}`);return r.stdout.trim();
   };
-  return runCloseoutTurn({project,org,env,cli,guard});
+  const deadline=v.deadline===undefined?Date.now()+45000:Number(v.deadline);
+  if(!Number.isSafeInteger(deadline)||deadline<0)throw Error('invalid finite closeout deadline');
+  return runCloseoutTurn({project,org,env,cli,guard,handoff:!v['no-handoff'],budgetMs:Math.max(0,Math.min(45000,deadline-Date.now()))});
 }
 if(isMain(import.meta.url))try{process.stdout.write(JSON.stringify(closeoutTurnMain())+'\n');}
 catch(error){process.stderr.write(`line-closeout: ${error.message}\n`);process.exitCode=1;}

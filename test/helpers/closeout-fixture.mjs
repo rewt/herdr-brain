@@ -30,8 +30,8 @@ async function waitForChange(_files, predicate, { timeoutMs = 60000 } = {}) {
   const deadline = Date.now() + loadTimeout(timeoutMs);
   while (!predicate()) { if (Date.now() >= deadline) throw Error('bounded fixture observation timed out'); await pause(25); }
 }
-function setup(t, { occupied = true, merged = false, terminal = false, direct = false } = {}) {
-  const f = occupied ? exitFixture(t) : fixture(t, { occupied, merged });
+function setup(t, { occupied = true, merged = false, terminal = false, direct = false, bound = false } = {}) {
+  const f = occupied ? exitFixture(t, { bound }) : fixture(t, { occupied, merged });
   if (occupied && !merged) f.git(['reset', '--hard', `${f.head}^`]);
   isolatedEnv(t, f);
   fs.symlinkSync(f.org, path.join(f.repo, '.org'));

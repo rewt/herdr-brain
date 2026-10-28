@@ -485,7 +485,9 @@ test('actual executing root retains its real owner and continuation',t=>{
   assert.equal(frozen.payloadCommit, capturedCommit);
   assert.equal(frozen.declaration.release, command);
   assert.deepEqual(Buffer.from(frozen.inputBase64, 'base64'), Buffer.from(input));
-  const build = f.run(['build', 'consumer']);
+  // This real consumer build uses the enclosing runner's limits, rather than
+  // the 30-second command ceiling for the small mocked builds in scratch().
+  const build = spawnSync('bash', [SCRIPT, 'build', 'consumer'], { env: f.env, encoding: 'utf8' });
   stages.push({ stage: 'source-build', argv: ['bash', SCRIPT, 'build', 'consumer'], cwd: source, command, ...build, error: build.error?.message });
   assert.equal(build.status, 0, build.stdout + build.stderr);
   assert.deepEqual(JSON.parse(fs.readFileSync(path.join(f.home, 'builds/consumer/validation.json'))), frozen);

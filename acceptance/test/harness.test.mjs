@@ -77,6 +77,26 @@ test('the real scripted supervisor presents an empty composer before publishing 
   child.kill('SIGTERM'); assert.equal((await waitForExit(child)).code, 0);
 });
 
+test('the real worker acknowledges a second task after a deliberately missing report', async t => {
+  const root = scratch(t);
+  fs.mkdirSync(path.join(root, 'evidence'));
+  for (const file of ['worker.mjs', 'producers.mjs', 'environment.mjs']) fs.copyFileSync(path.join(source, 'acceptance', file), path.join(root, file));
+  fs.copyFileSync(path.join(source, 'lib/deadline.mjs'), path.join(root, 'deadline.mjs'));
+  fs.writeFileSync(path.join(root, 'herdr.mjs'), "console.log('{\"result\":{}}');\n");
+  fs.writeFileSync(path.join(root, 'mode'), 'missing');
+  const child = spawnChild(t, process.execPath, [path.join(root, 'worker.mjs'), root, 'worker', 'offline-worker'],
+    { env: { ...process.env, HERDR_PANE_ID: 'owned:pane' }, stdio: ['pipe', 'pipe', 'pipe'] });
+  child.stdout.resume(); child.stderr.resume();
+  await until(() => fs.existsSync(path.join(root, 'script-panes/owned:pane')));
+  const task = `You are run R-1. Write the report to ${path.join(root, 'report.md')};\n`;
+  child.stdin.write(task);
+  const trace = () => fs.readFileSync(path.join(root, 'evidence/script-input.jsonl'), 'utf8').trim().split('\n').map(JSON.parse);
+  await until(() => trace().filter(row => row.event === 'state-complete' && row.value === 'idle').length === 2);
+  child.stdin.write(task);
+  await until(() => fs.readFileSync(path.join(root, 'worker-input.jsonl'), 'utf8').trim().split('\n').length === 2);
+  child.kill('SIGTERM'); assert.equal((await waitForExit(child)).code, 0);
+});
+
 test('the scripted agent launch has a real Codex executable identity without starting a model', t => {
   const root = scratch(t), binary = path.join(root, 'native.mjs');
   for (const file of ['herdr.mjs', 'receipts.mjs', 'producers.mjs', 'environment.mjs', 'poll.mjs'])

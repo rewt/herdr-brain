@@ -18,6 +18,11 @@ const stopTimer = setInterval(() => {
 process.once('exit', () => clearInterval(stopTimer));
 for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => { workerStopping = true; });
 const pane = process.env.HERDR_PANE_ID;
+const traceInput = (event, extra = {}) => {
+  const evidence = path.join(root, 'evidence');
+  if (fs.existsSync(evidence)) fs.appendFileSync(path.join(evidence, 'script-input.jsonl'),
+    JSON.stringify({ at: Date.now(), pane, role, event, ...extra }) + '\n');
+};
 // A PTY inherits the server environment, not the runner's TMPDIR. Keep child
 // dispatch environment files inside the same scratch capability boundary.
 const slotFile = path.join(root, 'test-slot-env.json');
@@ -72,9 +77,12 @@ function emptyComposer() {
     `${shade}${' '.repeat(width)}${reset}\n` +
     `scripted · ${root} · ${role}\n`);
 }
-const state = (value) => {
+const state = async (value) => {
   if (value === 'idle') emptyComposer();
-  return call('pane', 'report-agent', pane, '--source', 'acceptance-script', '--agent', 'codex', '--state', value, '--seq', String(++seq));
+  traceInput('state-start', { value });
+  const result = await call('pane', 'report-agent', pane, '--source', 'acceptance-script', '--agent', 'codex', '--state', value, '--seq', String(++seq));
+  traceInput('state-complete', { value });
+  return result;
 };
 await state('idle');
 fs.mkdirSync(path.join(root, 'script-panes'), { recursive: true });
@@ -123,6 +131,10 @@ async function ingestDefault(line) {
 }
 const delay = (ms) => new Promise((r) => setTimeout(r, ms));
 const input = readline.createInterface({ input: process.stdin });
+process.stdin.on('data', bytes => traceInput('data', { bytes: bytes.length, tailHex: bytes.subarray(-160).toString('hex') }));
+for (const event of ['pause', 'resume', 'end', 'close']) process.stdin.on(event, () => traceInput(`stdin-${event}`));
+input.on('line', line => traceInput('line', { bytes: Buffer.byteLength(line), tailHex: Buffer.from(line).subarray(-160).toString('hex') }));
+input.on('close', () => traceInput('readline-close'));
 for await (const raw of input) {
   assertProducing(root);
   const line = raw.replace(/\x1b\[200~|\x1b\[201~/g, '').trim();

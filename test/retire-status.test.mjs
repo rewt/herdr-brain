@@ -98,6 +98,7 @@ const reasonCases = [
   ["${ref.kind ?? 'live'} reference ${ref.job ?? ref.owner ?? ''}", 'ACTIVE', 'host-check reference job'],
   ['unnamed operator occupant', 'UNKNOWN'],
   ["occupant ${agent.name} is ${agent.agent_status ?? agent.status ?? 'unknown'}", 'ACTIVE', 'occupant worker is working'],
+  ['ambiguous recorded launch identity for ${agent.name}', 'UNKNOWN', 'ambiguous recorded launch identity for worker'],
   ['unknown or mismatched recorded launch identity for ${agent.name}', 'UNKNOWN', 'unknown or mismatched recorded launch identity for worker'],
   ['unknown recorded native session identity for ${agent.name}', 'UNKNOWN', 'unknown recorded native session identity for worker'],
   ['retained successor for handoff from ${incoming.from}', 'ACTIVE', 'retained successor for handoff from R-2'],
@@ -174,12 +175,26 @@ test('every planner reason expression is enumerated and mapped; source drift fai
   const source = fs.readFileSync(new URL('../lib/retire.mjs', import.meta.url), 'utf8');
   const policy = source.slice(0, source.indexOf('// One executor')) + source.slice(source.indexOf('export function laneRemovalReason'));
   const emitted = [...policy.matchAll(/\b(?:return|reason\s*(?:\?\?=|=))\s*('(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`)/g)].map(m => m[1].slice(1, -1));
+  // Conditional returns emit either literal; inventory both identity guards.
+  const conditional = /\breturn\s+\w+\s*\?\s*('(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`)\s*:\s*('(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`)/g;
+  emitted.push(...[...policy.matchAll(conditional)].flatMap(m => m.slice(1).map(value => value.slice(1, -1))));
   assert.deepEqual([...new Set(emitted)].sort(), reasonCases.map(([expression]) => expression).sort());
   const s = fixture(); item(s).closed = null; s.references.push({ kind: 'host-check', job: 'job', owner: 'owner' });
   for (const [expression, expected, sample = expression] of reasonCases) {
     const result = classifyRetirement({ decision: 'keep', why: sample }, { snapshot: s, agents: s.agents });
     assert.equal(result.class, expected, expression);
     if (expected === 'UNKNOWN' || expected === null) assert.equal(result.nextAction, `keep; ${sample}`, expression);
+  }
+  for (const ambiguous of [false, true]) {
+    const current = fixture();
+    if (ambiguous) current.record.runs.set('R-2', { ...run(current), id: 'R-2' });
+    else run(current).meta.terminal_id = 'replacement';
+    const why = ambiguous ? 'ambiguous recorded launch identity for worker' : 'unknown or mismatched recorded launch identity for worker';
+    assert.equal(planRetirement(current).keep[0].why, why);
+    for (const row of retirementStatus(current).rows) {
+      assert.equal(row.class, 'UNKNOWN'); assert.equal(row.run, null);
+      assert.equal(row.nextAction, `keep; ${why}`);
+    }
   }
   const releaseReasons = [
     'recorded initial shell; unchanged terminal and shell identity',

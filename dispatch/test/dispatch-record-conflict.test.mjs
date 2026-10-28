@@ -9,6 +9,7 @@ import { fixture, DISPATCH, RECORD, promptCalls } from './dispatch-fixture.mjs';
 function hook(f, body) {
   const file = path.join(f.root, 'record-race.mjs');
   fs.writeFileSync(file, `import fs from 'node:fs';
+Error.stackTraceLimit=50;
 const lock=${JSON.stringify(path.join(f.org, 'lock'))},log=${JSON.stringify(path.join(f.org, 'events.jsonl'))};
 const mkdir=fs.mkdirSync;let attempts=0;
 const dispatch=process.argv[1]===${JSON.stringify(DISPATCH)},record=process.argv[1]===${JSON.stringify(RECORD)};

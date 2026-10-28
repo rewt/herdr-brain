@@ -17,7 +17,8 @@ import { claimRun, ownerBinding, fenceOwner, readOwnedRun, assertOwner, outstand
 import { queueFor, enqueue } from '../promote/promote.mjs';
 import { readInbox } from '../supervisor/prompt-supervisor.mjs';
 import { receiptDirectory } from '../supervisor/context.mjs';
-import { spawnChild, waitForExit } from './helpers/child.mjs';
+import { spawnChild, waitForExit, killChild } from './helpers/child.mjs';
+import { until } from './helpers/producer-wait.mjs';
 import { tierFiles } from './helpers/tier.mjs';
 
 const source = path.resolve(import.meta.dirname, '..');
@@ -36,6 +37,26 @@ const put = (file, value) => writeFileAtomic(file, JSON.stringify(value) + '\n')
 const waitUntil = async predicate => {
   const by = Date.now() + 10000;
   while (!predicate()) { assert.ok(Date.now() < by, 'fixture barrier timed out'); await new Promise(r => setTimeout(r, 20)); }
+};
+const whileWatcher = (w, t, predicate, description) => until(predicate, {
+  signal: t.signal, description,
+  producer: () => ({ state: w.child.exitCode === null && w.child.signalCode === null ? 'live' : 'exited',
+    detail: `watcher exit=${w.child.exitCode} signal=${w.child.signalCode}` }),
+});
+const waitForWatcherWait = (f, w, t) => whileWatcher(w, t, () => {
+  let text;
+  try { text = fs.readFileSync(path.join(f.root, 'calls'), 'utf8'); }
+  catch (error) { if (error.code === 'ENOENT') return false; throw error; }
+  // appendFileSync opens a new file before writing. Only terminated records
+  // are evidence; empty files and an in-flight last row are still pending.
+  return text.split('\n').slice(0, -1).map(JSON.parse).some(a => a[0] === 'agent' && a[1] === 'wait');
+}, 'watcher agent wait call');
+const finishWatcher = async w => {
+  // Fixture cleanup joins pending children before the child teardown hooks.
+  // Reap this owned child here even when a startup/assertion failure unwinds.
+  const cleanup = killChild(w.child);
+  assert.ok(cleanup.ok && cleanup.reason !== 'changed', 'watcher cleanup ownership unconfirmed');
+  await w.done;
 };
 function enqueueAdapter(f, runtime = source) {
   const file = path.join(f.root, 'enqueue.mjs');
@@ -231,14 +252,29 @@ fenceOwner(${JSON.stringify(f.org)},${JSON.stringify(run)},${JSON.stringify(curr
 
 test('a watcher observes a moved claim and exits without delivery or cleanup; late handle refuses', async t => {
   const f = fixture(t), run = f.start(), current = binding(f, run);
+  const herdr = path.join(f.root, 'bin/herdr'), opened = path.join(f.root, 'log-opened'), release = path.join(f.root, 'log-release');
+  const adapter = fs.readFileSync(herdr, 'utf8'), append = "fs.appendFileSync(path.join(root,'calls'),JSON.stringify(args)+'\\n');";
+  assert.ok(adapter.includes(append));
+  // Hold the genuine open-before-first-write window until the consumer has
+  // inspected it. This previously threw in f.calls() and stranded cleanup.
+  fs.writeFileSync(herdr, adapter.replace(append, `if(!fs.existsSync(${JSON.stringify(opened)})) {
+fs.writeFileSync(path.join(root,'calls'),'');fs.writeFileSync(${JSON.stringify(opened)},'');
+while(!fs.existsSync(${JSON.stringify(release)}))await new Promise(r=>setTimeout(r,20));
+}
+${append}`));
   const w = f.concurrent(run, path.join(source, 'watch/watch.mjs'), ['--org', f.org, '--cwd', f.repo, '--start-grace', '60', '--close-tab-on-exit']);
-  await waitUntil(() => f.calls().some(a => a[0] === 'agent' && a[1] === 'wait'));
-  ok(node(f, 'bin/org.mjs', transferArgs(run, current)));
-  const ended = await w.done; ok(ended); assert.match(ended.stdout, /stopping without delivery/);
-  assert.equal(readInbox(path.join(f.org, 'supervisor/inbox.log')).length, 0);
-  assert.equal(f.calls().filter(a => a[0] === 'tab' && a[1] === 'close').length, 0);
-  assert.match(handle(f, run).stderr, /RUN_OWNED_ELSEWHERE/);
-  assert.equal(reviews(f), 0);
+  try {
+    await whileWatcher(w, t, () => fs.existsSync(opened), 'empty call log');
+    const waiting = waitForWatcherWait(f, w, t);
+    fs.writeFileSync(release, '');
+    await waiting;
+    ok(node(f, 'bin/org.mjs', transferArgs(run, current)));
+    const ended = await w.done; ok(ended); assert.match(ended.stdout, /stopping without delivery/);
+    assert.equal(readInbox(path.join(f.org, 'supervisor/inbox.log')).length, 0);
+    assert.equal(f.calls().filter(a => a[0] === 'tab' && a[1] === 'close').length, 0);
+    assert.match(handle(f, run).stderr, /RUN_OWNED_ELSEWHERE/);
+    assert.equal(reviews(f), 0);
+  } finally { fs.writeFileSync(release, ''); await finishWatcher(w); }
 });
 
 test('two TMPDIR watchers, repeated ingest and supervisor restarts produce one notice, review and enqueue', async t => {
@@ -493,12 +529,14 @@ test('a blocking idle watcher keeps one wait and an unchanged receipt between si
   const report = f.show(run).report_path;
   fs.writeFileSync(herdr, fs.readFileSync(herdr, 'utf8').replace('await new Promise(r=>setTimeout(r,100));out({});', `while(!fs.existsSync(${JSON.stringify(report)}))await new Promise(r=>setTimeout(r,50));out({});`));
   const w = f.concurrent(run, path.join(source, 'watch/watch.mjs'), ['--org', f.org, '--cwd', f.repo, '--start-grace', '0']);
-  await waitUntil(() => f.calls().some(a => a[0] === 'agent' && a[1] === 'wait'));
-  const file = path.join(f.org, 'watch', `${run}.json`), stat = fs.statSync(file).mtimeMs, count = f.calls().length;
-  await new Promise(resolve => setTimeout(resolve, 2300));
-  assert.equal(f.calls().length, count, 'no 1 Hz transport/probe loop');
-  assert.equal(fs.statSync(file).mtimeMs, stat, 'no idle receipt rewrites');
-  f.report(run); ok(await w.done);
+  try {
+    await waitForWatcherWait(f, w, t);
+    const file = path.join(f.org, 'watch', `${run}.json`), stat = fs.statSync(file).mtimeMs, count = f.calls().length;
+    await new Promise(resolve => setTimeout(resolve, 2300));
+    assert.equal(f.calls().length, count, 'no 1 Hz transport/probe loop');
+    assert.equal(fs.statSync(file).mtimeMs, stat, 'no idle receipt rewrites');
+    f.report(run); ok(await w.done);
+  } finally { await finishWatcher(w); }
 });
 
 test('self-tab close may kill its watcher without leaving an outstanding cleanup intent', async t => {

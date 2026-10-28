@@ -1235,7 +1235,7 @@ test('optional ready, repeated ready and ingested done are one entry; NEEDS-WORK
   assert.equal(readCloseoutEntries(f.common).filter(e => e.run === 'R-1').length, 1);
   f.drain();
   assert.deepEqual(f.read().actions, []);
-  assert.ok(evaluations(f).some(e => !e.completed && e.waiting.event === 'target-record-changed'));
+  assert.ok(evaluations(f).some(e => !e.completed && e.waiting.defect && e.waiting.producers.length === 0));
   const count = evaluations(f).length;
   f.drain(); assert.equal(evaluations(f).length, count, 'no rescan without a resolving revision');
 });
@@ -1327,7 +1327,8 @@ for (const abandoned of [false, true, 'at-landing']) test(`a fix round retains i
   f.drain(); assertRemoved(f);
   assert.deepEqual(f.read().actions.filter(a => a[0] === 'agent').map(a => a[2]), ['worker', 'fix-worker']);
   assert.equal(f.read().actions.filter(a => a[0] === 'tab').length, 2);
-  if (abandoned) assert.ok(events(f).some(e => e.type === 'retirement.release' && e.run === 'R-1'));
+  if (abandoned) assert.equal(events(f).filter(e => e.type === 'run.abandoned' && e.id === 'R-1').length, 1,
+    'the original abandonment remains recorded; closing its exact bound pane does not invent another release');
 });
 
 function reviewFixture(t, followup_expected = false) {
@@ -1365,16 +1366,20 @@ test('an explicit same-session reviewer follow-up keeps until its recorded end',
   f.drain(); assert.equal(f.read().actions.filter(a => a[0] === 'tab').length, 1);
 });
 
-test('HOLD stays deferred with a named resolving event; explicit removal retry re-enqueues and closes', t => {
+test('HOLD without a completion producer stays deferred after removal and a manual retry', t => {
   const f = setup(t, { terminal: true }), releaseHold = hold(f);
   f.drain();
   assert.deepEqual(f.read().actions, []);
-  assert.ok(evaluations(f).every(e => !e.completed && e.waiting.event === 'hold-removed'));
+  assert.ok(evaluations(f).every(e => !e.completed && e.waiting.owner));
+  assert.ok(evaluations(f).some(e => /HOLD/.test(e.reason) && e.waiting.defect && !e.waiting.producers.length));
+  const entries = readCloseoutEntries(f.common);
   releaseHold();
   const before = evaluations(f).length;
   f.drain(); assert.equal(evaluations(f).length, before, 'removing an unobservable file is not an implicit poll');
   retryCloseout({ cwd: f.repo, org: f.org, topic: 'topic', why: 'hold-removed', start: false });
-  f.drain(); assertRemoved(f);
+  assert.deepEqual(f.drain().evaluated, []);
+  assert.equal(fs.existsSync(f.lane), true); assert.deepEqual(f.read().actions, []);
+  assert.deepEqual(readCloseoutEntries(f.common), entries, 'retry cannot replace the held source or invent its completion');
 });
 
 for (const changed of ['head', 'pane', 'dirty', 'reference']) test(`${changed} changes keep the bound target with a recorded reason`, t => {
@@ -1386,7 +1391,7 @@ for (const changed of ['head', 'pane', 'dirty', 'reference']) test(`${changed} c
     kind: 'named follow-up', job: 'follow-up', run: 'R-1', item: 'ENG-1', state: 'running', created_at: '2020-01-01', expires_at: '2099-01-01' }));
   f.drain();
   assert.deepEqual(f.read().actions, []);
-  assert.ok(evaluations(f).every(e => !e.completed && e.reason && e.waiting.retry));
+  assert.ok(evaluations(f).every(e => !e.completed && e.reason && e.waiting.owner && Array.isArray(e.waiting.producers)));
   assert.equal(fs.existsSync(f.lane), true);
 });
 
@@ -1399,7 +1404,10 @@ test('a blocked target does not hold an unrelated eligible target at the head of
   const head = f.git(['rev-parse', 'HEAD'], other); f.git(['merge', '--ff-only', head]);
   f.append([{ type: 'item.added', id: 'ENG-2', kind: 'work', role: 'engineer' },
     { type: 'run.started', id: 'R-2', item: 'ENG-2', workspace: other, meta: {} },
-    { type: 'report.ingested', run: 'R-2', report: { outcome: 'done' } }, { type: 'item.closed', id: 'ENG-2', as: 'done' },
+    { type: 'report.ingested', run: 'R-2', report: { outcome: 'done' } }]);
+  // These are saved legacy report requests. Commit that representation before
+  // landing so today's atomic direct-report writer does not suppress its twin.
+  f.append([{ type: 'item.closed', id: 'ENG-2', as: 'done' },
     { type: 'promotion.reconciled', identity: f.common, heads: [{ run: 'R-2', item: 'ENG-2', head }], runs: ['R-2'], items: ['ENG-2'] }]);
   fs.writeFileSync(path.join(f.common, 'closeout/entries', `${'f'.repeat(64)}.json`), '{"schema":"closeout-entry/v999"}\n');
   f.drain();
@@ -1417,13 +1425,16 @@ test('an ended, explicitly dropped unmerged lane is archive-tagged and its evide
   assert.ok(effects(f).some(e => e.action === 'archive-created'));
 });
 
-test('restart after agent exit and a failed shell close resumes the shell without sending exit twice', t => {
+test('a failed shell close retains its original native intent after a manual retry', t => {
   const f = setup(t, { terminal: true });
   f.state.failClose = true; f.save();
   f.drain(); assert.equal(fs.existsSync(f.lane), true);
+  const entry = readCloseoutEntries(f.common).find(e => unresolvedCloseoutEffect(e, events(f)));
+  assert.ok(entry); const retained = retainNativeOutcome(f, entry);
   const current = f.read(); current.failClose = false; fs.writeFileSync(f.file, JSON.stringify(current));
   retryCloseout({ cwd: f.repo, org: f.org, topic: 'topic', why: 'native close transport recovered', start: false });
-  f.drain(); assertRemoved(f);
+  assert.deepEqual(f.drain().evaluated, []); retained();
+  assert.equal(fs.existsSync(f.lane), true);
   assert.equal(f.read().actions.filter(a => a[0] === 'agent').length, 1);
   assert.equal(effects(f).filter(e => e.action === 'exit-observed').length, 1);
 });
@@ -1464,7 +1475,7 @@ test('restart after worktree removal revalidates preservation and finishes branc
   assert.equal(effects(f).filter(e => e.action === 'lane-preflight').length, 2, 'each preservation manifest retains its own receipt');
 });
 
-test('lost native exit, shell-close and workspace-close replies reconcile exact identity without repeating effects', t => {
+test('lost native replies retain the unresolved workspace intent despite physical absence and a manual retry', t => {
   const f = setup(t, { terminal: true }), base = f.options.command, lost = new Set();
   f.options.command = (exe, args, opt) => {
     const result = base(exe, args, opt), key = args.slice(0, 2).join(' ');
@@ -1474,11 +1485,20 @@ test('lost native exit, shell-close and workspace-close replies reconcile exact 
     return result;
   };
   f.drain();
+  const entry = readCloseoutEntries(f.common).find(e => unresolvedCloseoutEffect(e, events(f)));
+  assert.ok(entry);
+  const intent = unresolvedCloseoutEffect(entry, events(f)), original = events(f), native = f.herdrCalls(), recorded = effects(f);
+  const file = path.join(f.common, 'closeout/entries', entry.key + '.json'), bytes = fs.readFileSync(file);
   retryCloseout({ cwd: f.repo, org: f.org, topic: 'topic', why: 'reconcile lost native replies', start: false });
-  f.drain(); assertRemoved(f);
+  assert.deepEqual(f.drain().evaluated, []); assertRemoved(f);
+  assert.deepEqual(unresolvedCloseoutEffect(entry, events(f)), intent);
+  assert.deepEqual(events(f).slice(0, original.length), original);
+  assert.deepEqual(f.herdrCalls(), native); assert.deepEqual(effects(f), recorded); assert.deepEqual(fs.readFileSync(file), bytes);
+  assert.equal(evaluations(f).some(e => e.key === entry.key && e.completed), false);
   assert.deepEqual(f.read().actions, [['agent', 'prompt', 'worker', '/quit'], ['tab', 'close', 'w:t'], ['workspace', 'close', 'w']]);
   assert.ok(effects(f).some(e => e.action === 'closed' && e.tab_id === 'w:t' && e.reconciled));
-  assert.ok(effects(f).some(e => e.action === 'closed' && e.workspace_id === 'w' && e.reconciled));
+  assert.equal(effects(f).some(e => e.action === 'closed' && e.workspace_id === 'w'), false,
+    'workspace absence is not the original producer completion');
 });
 
 test('queue ownership skips both scheduled retirement passes and promotion-owned cleanup', t => {
@@ -1505,14 +1525,15 @@ test('finished-lane age counts worktrees once, including protected/kept lanes, f
 test('the closer is finite, has no timers or polling, and a second claim cannot evaluate targets', t => {
   const f = setup(t, { terminal: true });
   const source = fs.readFileSync(new URL('../lib/closeout-executor.mjs', import.meta.url), 'utf8');
-  assert.doesNotMatch(source, /\bset(?:Interval|Timeout)\s*\(|\bwhile\s*\(|for\s*\(\s*;\s*;/);
+  assert.doesNotMatch(source, /\bset(?:Interval|Timeout)\s*\(|\bwhile\s*\(\s*(?:true|1)\s*\)|for\s*\(\s*;\s*;/);
   let second;
   f.drain({ onClaim: () => { second = f.drain(); } });
   assert.equal(second.already_running, true);
   assert.equal(fs.existsSync(path.join(f.common, 'closeout/consumer.lock')), false, 'consumer exits after drain');
+  const calls = f.herdrCalls(); assert.deepEqual(f.drain().evaluated, []); assert.deepEqual(f.herdrCalls(), calls);
 });
 
-test('activation refuses legacy housekeeping ownership until inspected replacement and an explicit retry', t => {
+test('legacy housekeeping ownership stays held without a linked transfer completion after an explicit retry', t => {
   const f = setup(t, { terminal: true }), owner = path.join(f.org, 'housekeeping/default/lock/owner.json');
   fs.mkdirSync(path.dirname(owner), { recursive: true });
   fs.writeFileSync(owner, JSON.stringify({ cwd: f.repo, org: f.org, pid: process.pid }));
@@ -1520,7 +1541,9 @@ test('activation refuses legacy housekeeping ownership until inspected replaceme
   assert.ok(evaluations(f).every(e => /ownership transfer/.test(e.reason)));
   fs.writeFileSync(owner, JSON.stringify({ cwd: f.repo, org: f.org, pid: process.pid, retirement_queue_protocol: 2 }));
   retryCloseout({ cwd: f.repo, org: f.org, topic: 'topic', why: 'legacy retirement stopped and inspected; adopted runtime restarted', start: false });
-  f.drain(); assertRemoved(f);
+  assert.deepEqual(f.drain().evaluated, []);
+  assert.equal(fs.existsSync(f.lane), true); assert.deepEqual(f.read().actions, []);
+  assert.ok(evaluations(f).every(e => !e.completed && e.waiting.defect && !e.waiting.producers.length));
 });
 
 test('source publication recovery retains the original binding when the old worktree name has been recreated', t => {
@@ -1536,16 +1559,17 @@ test('source publication recovery retains the original binding when the old work
   assert.ok(evaluations(f).some(e => /identity/.test(e.reason)));
 });
 
-test('a report on disk is inert; the actual ingest CLI carries the same optional ready signal', async t => {
+test('a report on disk is inert; the actual ingest CLI closes the finished session and saves its unlanded branch', async t => {
   const f = setup(t), file = path.join(f.scratch, 'report.md');
   fs.writeFileSync(file, '---\nrun: R-1\noutcome: done\nsummary: Complete.\nheadline: The change is complete.\nblockers: []\nproposals: []\nlearnings: []\nartifacts: []\ndecisions: []\nquestions: []\nchallenges: []\n---\n');
   assert.deepEqual(readCloseoutEntries(f.common), []);
   readyLane({ cwd: f.repo, org: f.org, topic: 'topic', start: false });
   const result = spawnSync(process.execPath, [cli, 'ingest', file], { cwd: f.repo, env: f.env, encoding: 'utf8' });
   assert.equal(result.status, 0, result.stdout + result.stderr);
-  await waitForChange([f.eventFile], () => evaluations(f).length && !fs.existsSync(path.join(f.common, 'closeout/consumer.lock')), { timeoutMs: 60000 });
+  await waitForChange([f.eventFile], () => evaluations(f).some(e => e.reportCloseout && e.completed) && !fs.existsSync(path.join(f.common, 'closeout/consumer.lock')), { timeoutMs: 60000 });
   assert.equal(readCloseoutEntries(f.common).length, 1);
-  assert.deepEqual(f.read().actions, []);
+  assert.deepEqual(f.read().actions, [['agent', 'prompt', 'worker', '/quit'], ['tab', 'close', 'w:t'], ['workspace', 'close', 'w']]);
+  assert.equal(fs.existsSync(f.lane), false); assert.equal(f.git(['rev-parse', 'lane/topic']), f.head);
   assert.equal(events(f).filter(e => e.type === 'report.ingested').length, 1);
 });
 
@@ -1583,7 +1607,11 @@ test('the opted-in native train lands and delegates closeout', async t => {
   const queue = queueFor(f.repo);
   enqueue(queue, ['topic'], { org: f.org, run: 'R-1', expectedHead: f.head,
     validate: 'true', laneCLI: lanes, herdr: f.job.herdr, to: 'fixture-supervisor', attempts: 1, retry: 0 });
-  await drainPromotions(queue);
+  const drained = await child(process.execPath, ['--input-type=module', '-e', `
+    import { drain, queueFor } from ${JSON.stringify(new URL('../promote/promote.mjs', import.meta.url).href)};
+    await drain(queueFor(process.cwd()));
+  `], { cwd: f.repo, env: f.env });
+  assert.equal(drained.status, 0, drained.stdout + drained.stderr);
   const result = queue.load().results[0];
   assert.equal(result.outcome, 'promoted', JSON.stringify(result));
   assert.equal(result.cleanup.owner, 'closeout-queue');
@@ -1702,7 +1730,7 @@ function child(exe, args, options) {
   });
 }
 
-test('two concurrent ready enqueues bind one entry and one live closer; shutdown enqueue is not stranded', async t => {
+test('two concurrent ready enqueues bind one entry; a shutdown retry preserves a missing-producer HOLD wait', async t => {
   const f = setup(t), stop = hold(f); f.report(); f.land();
   f.state.delayWorkspace = 25; f.save();
   const results = await Promise.all([1, 2].map(() => child(process.execPath, [lanes, 'ready', 'topic'], { cwd: f.repo, env: f.env })));
@@ -1714,12 +1742,13 @@ test('two concurrent ready enqueues bind one entry and one live closer; shutdown
   let wake;
   f.drain({ beforeExit: () => { stop(); wake = child(process.execPath, [closer, 'retry', 'topic', '--why', 'hold-removed'], { cwd: f.repo, env: f.env }); } });
   const result = await wake; assert.equal(result.status, 0, result.stdout + result.stderr);
-  await waitForChange([f.eventFile], () => effects(f).some(e => e.action === 'lane-removed') && !fs.existsSync(path.join(f.common, 'closeout/consumer.lock')), { timeoutMs: 60000 });
-  assertRemoved(f);
-  assert.equal(f.read().actions.filter(a => a[0] === 'agent').length, 1);
+  await waitForChange([f.eventFile], () => events(f).some(e => e.type === 'closeout.retry') && !fs.existsSync(path.join(f.common, 'closeout/consumer.lock')), { timeoutMs: 60000 });
+  assert.equal(fs.existsSync(f.lane), true); assert.deepEqual(f.read().actions, []);
+  assert.equal(readCloseoutEntries(f.common).filter(e => e.signal === 'ready').length, 1);
+  assert.ok(evaluations(f).some(e => /HOLD/.test(e.reason) && e.waiting.defect && !e.waiting.producers.length));
 });
 
-test('an active consumer skips an unhanded landing and explicit event replay cannot start it', t => {
+test('an active consumer skips an unhanded landing and explicit event replay cannot execute it', async t => {
   const f = setup(t, { occupied: false, merged: true }); f.report(); f.autoTail = false;
   let source;
   const first = f.drain({ onClaim: () => {
@@ -1728,7 +1757,10 @@ test('an active consumer skips an unhanded landing and explicit event replay can
   } });
   assert.equal(first.evaluated.some(e => e.source.type === 'promotion.reconciled'), false);
   assert.equal(fs.existsSync(f.lane), true);
-  assert.equal(fs.existsSync(path.join(f.common, 'closeout/worker.log')), false);
+  const entry = readCloseoutEntries(f.common).find(e => e.source.seq === source.seq);
+  assert.equal(entry.handoff, undefined);
+  assert.equal(effects(f).some(e => e.action === 'lane-removed'), false);
+  await waitForChange([f.eventFile], () => !fs.existsSync(path.join(f.common, 'closeout/consumer.lock')));
   const keys = handoffCloseout({ cwd: f.repo, org: f.org, receipt: f.receipts.get(source.batch), env: f.env });
   const result = f.drain({ keys });
   assert.equal(result.evaluated.filter(e => e.completed && e.source.type === 'promotion.reconciled').length, 1, JSON.stringify(result));
@@ -1772,18 +1804,19 @@ test('native observation, exit and preservation preflight hold only consumer/ret
   assert.deepEqual([...phases].sort(), ['Git', 'exit', 'native', 'preflight']);
 });
 
-test('closer lock contention is immediate and discards preparation; an explicit revision observes again', t => {
+test('closer lock contention discards preparation; an unowned lock wait stays held after release and retry', t => {
   const f = setup(t, { occupied: false, terminal: true }), release = acquireLock(path.join(f.common, 'lane-promote.lock'));
   try {
     f.drain();
-    assert.ok(evaluations(f).some(e => e.waiting?.event === 'lifecycle-lock-released'));
+    assert.ok(evaluations(f).some(e => /locked:/.test(e.reason) && e.waiting.defect && !e.waiting.producers.length));
     assert.equal(fs.existsSync(f.lane), true);
     assert.equal(effects(f).some(e => e.action === 'worktree-removed'), false);
   } finally { release(); }
   const old = evaluations(f).length, native = f.herdrCalls().length;
   f.drain(); assert.equal(evaluations(f).length, old, 'lock release is not a polling signal');
   retryCloseout({ cwd: f.repo, org: f.org, topic: 'topic', why: 'lifecycle-lock-released', start: false });
-  f.drain(); assertRemoved(f); assert.ok(f.herdrCalls().length > native);
+  assert.deepEqual(f.drain().evaluated, []);
+  assert.equal(fs.existsSync(f.lane), true); assert.equal(f.herdrCalls().length, native);
 });
 
 for(const change of ['activity','owner','reference','HOLD'])test(`retirement housekeeping final CAS ${change==='activity'?'allows unrelated activity':'retains '+change+' changes'}`,t=>{
@@ -1971,7 +2004,9 @@ test('a drain launched before fast-forward exits before evaluating the new landi
   assert.equal(fs.existsSync(path.join(f.common, 'closeout/consumer.lock')), false);
   assert.equal(fs.existsSync(retirementOwnerLock(f.common)), false);
   retryCloseout({ cwd: f.repo, org: f.org, topic: 'topic', why: 'hold removed after joined fresh successor', start: false });
-  f.drain(); assertRemoved(f);
+  assert.deepEqual(f.drain().evaluated, []);
+  assert.equal(fs.existsSync(f.lane), true); assert.deepEqual(f.read().actions, []);
+  assert.ok(landed[0].waiting.defect && !landed[0].waiting.producers.length);
 });
 
 
@@ -2072,13 +2107,13 @@ test('replacing an obsolete disposable handoff survives publication recovery, re
   assert.equal(effects(f).filter(e => e.action === 'worktree-removed').length, 1);
 });
 
-test('named drains and their stale-code successors isolate two eligible lanes, including an empty key set', t => {
+test('named drains isolate two eligible lanes and tolerate an unrelated main commit, including an empty key set', t => {
   const f = setup(t, { occupied: false, terminal: true }), other = path.join(f.scratch, 'other-lane');
   f.git(['worktree', 'add', '-b', 'lane/other', other]);
   f.append([{ type: 'item.added', id: 'ENG-2', kind: 'work', role: 'engineer' },
     { type: 'run.started', id: 'R-2', item: 'ENG-2', workspace: other, meta: {} },
-    { type: 'report.ingested', run: 'R-2', report: { outcome: 'done' }, sha256: 'fixture-two' },
-    { type: 'item.closed', id: 'ENG-2', as: 'done' },
+    { type: 'report.ingested', run: 'R-2', report: { outcome: 'done' }, sha256: 'fixture-two' }]);
+  f.append([{ type: 'item.closed', id: 'ENG-2', as: 'done' },
     { type: 'promotion.reconciled', identity: f.common, batch: 'other-landing', tip: f.head,
       heads: [{ run: 'R-2', item: 'ENG-2', head: f.head }], runs: ['R-2'], items: ['ENG-2'] }]);
   const entries = readCloseoutEntries(f.common), one = entries.find(e => e.run === 'R-1' && e.signal === 'landed');
@@ -2087,17 +2122,17 @@ test('named drains and their stale-code successors isolate two eligible lanes, i
   const before = events(f);
   assert.deepEqual(f.drain({ keys: [], onClaim: () => assert.fail('empty keys cannot claim or observe') }), { evaluated: [] });
   assert.deepEqual(events(f), before); assert.deepEqual(f.herdrCalls(), []);
-  const stale = f.drain({ keys: [one.key], onClaim: () => f.git(['commit', '--allow-empty', '-qm', 'main epoch changed']) });
-  assert.deepEqual(stale.evaluated, []); assert.deepEqual(stale.restart.keys, [one.key]);
-  assert.deepEqual(events(f).findLast(e => e.type === 'closeout.code-handoff').keys, [one.key]);
-  f.drain({ keys: stale.restart.keys });
+  const result = f.drain({ keys: [one.key], onClaim: () => f.git(['commit', '--allow-empty', '-qm', 'unrelated main epoch changed']) });
+  assert.deepEqual(result.evaluated.map(e => [e.key, e.completed]), [[one.key, true]]);
+  assert.equal(result.restart, undefined);
+  assert.equal(events(f).some(e => e.type === 'closeout.code-handoff'), false, 'unchanged closer bytes need no handoff');
   assert.equal(fs.existsSync(f.lane), false); assert.equal(fs.existsSync(other), true);
   assert.ok(otherEntries.every(e => !events(f).some(event => event.key === e.key)));
   assert.deepEqual(otherEntries.map(e => fs.readFileSync(path.join(f.common, 'closeout/entries', `${e.key}.json`), 'utf8')), bytes);
   f.drain(); assert.equal(fs.existsSync(other), false); assert.equal(f.git(['branch', '--list', 'lane/other']), '');
 });
 
-test('KEEP followed by a successful named closer retry clears the promotion result and ownership readers', t => {
+test('a missing-producer HOLD wait keeps promotion cleanup and ownership readers pending after a named retry', t => {
   const f = setup(t, { occupied: false, terminal: true }), stop = hold(f), queue = queueFor(f.repo);
   const source = events(f).find(e => e.type === 'promotion.reconciled'), target = source.closeout_targets[0];
   f.drain({ keys: [target.key] });
@@ -2113,9 +2148,10 @@ test('KEEP followed by a successful named closer retry clears the promotion resu
   retryCleanup(queue); assert.equal(queue.load().results[0].cleanup.state, 'pending');
   const receipt = fs.readFileSync(row.reconciliation.receipt), reconciled = events(f).filter(e => e.type === 'promotion.reconciled');
   stop(); retryCloseout({ cwd: f.repo, org: f.org, topic: target.key, why: 'hold removed', env: f.env, start: false });
-  f.drain({ keys: [target.key] }); assertRemoved(f);
-  assert.deepEqual(read(), [], 'the reader recognizes the durable exact outcome before bookkeeping catches up');
-  retryCleanup(queue); assert.equal(queue.load().results[0].cleanup.state, 'complete');
+  assert.deepEqual(f.drain({ keys: [target.key] }).evaluated, []);
+  assert.equal(fs.existsSync(f.lane), true);
+  assert.ok(read().includes('promotion:unreconciled/pending-callback'), 'a manual retry is not a completion receipt');
+  retryCleanup(queue); assert.equal(queue.load().results[0].cleanup.state, 'pending');
   assert.deepEqual(events(f).filter(e => e.type === 'promotion.reconciled'), reconciled);
   assert.deepEqual(fs.readFileSync(row.reconciliation.receipt), receipt);
 });
@@ -2158,7 +2194,9 @@ while (!fs.existsSync(${JSON.stringify(release)})) {
   assert.match(observed[0].reason, /HOLD/);
   assert.equal(events(f).filter(e => e.type === 'closeout.code-handoff').length, 1);
   retryCloseout({ cwd: f.repo, org: f.org, topic: key, why: 'hold removed after fresh loading successor', env: f.env, start: false });
-  f.drain({ keys: [key] }); assertRemoved(f);
+  assert.deepEqual(f.drain({ keys: [key] }).evaluated, []);
+  assert.equal(fs.existsSync(f.lane), true); assert.deepEqual(f.read().actions, []);
+  assert.ok(observed[0].waiting.defect && !observed[0].waiting.producers.length);
 });
 
 for (const budgetMs of [50000, 180000, 240000]) test(`loaded removal reserves both Git steps inside a fixed ${budgetMs / 1000} s closeout pass`, t => {

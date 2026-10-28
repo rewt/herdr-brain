@@ -176,3 +176,17 @@ test('a nested configuration audit revokes planner replay and preserves its orig
   assert.equal(plans, 1); assert.equal(commits, 0);
   assert.deepEqual(loadEvents(f.dir).events.map(e => e.operation), ['original-audit']);
 });
+
+test('a queue/config change during native authorization refuses publication without repeating native work', t => {
+  const f = fixture(t), file = path.join(f.root, 'queue.json'); fs.writeFileSync(file, '{}');
+  let plans = 0, native = 0, published = 0;
+  assert.throws(() => planTransaction(f.dir, () => {
+    plans++; observed.readFileSync(file);
+    return { add: [{ type: 'future.forbidden' }], commit: validate => {
+      native++; fs.writeFileSync(file, '{"changed":true}');
+      validate(); published++;
+    } };
+  }, { replaySafe: true }), /record observation conflict/);
+  assert.equal(plans, 1); assert.equal(native, 1); assert.equal(published, 0);
+  assert.equal(fs.readFileSync(f.file, 'utf8'), '');
+});

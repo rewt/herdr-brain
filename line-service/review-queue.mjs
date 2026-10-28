@@ -123,7 +123,7 @@ export function queueReviewMutation({ state, events, org, repo, runId, head, bas
   const archived=new Set(bound.authorization?.archived_review_items??[]),key = `${item.id}:${target.head}`,group=producerGroupKey(item.id,run.id,target.reportHash),existing = [...state.items.values()].filter(q => !archived.has(q.id)&&(sameProducerQueue(q,item.id,run.id)||q.meta.review_key===key)&&!disjointCapture({repo,target,peer:q.meta.review_target}));
   if (existing.length) {
     if (existing.length !== 1 || !isQueueReview(existing[0]) || queueProducerGroup(existing[0])!==group || !sameCapturedTarget(existing[0].meta.review_target,target)) throw Error('whole producer review already retained with different/partial/UNKNOWN capture; preserve attempts, verdicts and cap1');
-    return { add: [], ...(deferCommit ? { commit: verifyProducer } : {}), result: { result: 'review_queued', review_item: existing[0].id, source_item: item.id, head: target.head, existing: true } };
+    return { add: [], ...(deferCommit ? { commit: validate => { verifyProducer(); validate(); } } : {}), result: { result: 'review_queued', review_item: existing[0].id, source_item: item.id, head: target.head, existing: true } };
   }
   const prior = reviewAttempt(item, { state, events, org, repo, identity, target,capturedRun:run.id, ignoreService: ignoreIntent(org, identity, item, target) });
   if (prior) throw Error(`item review already retained: ${prior}`);
@@ -134,7 +134,7 @@ export function queueReviewMutation({ state, events, org, repo, runId, head, bas
   const landing=events.some(e=>e.type==='change.landed'&&e.item===item.id&&e.head===target.head)?[]:[{
     type:'change.landed',item:item.id,run:run.id,head:target.head,base:target.base,project:identity,landed_at:null,observed_at:new Date().toISOString(),evidence:target.evidence,time_qualification:'Canonical containment observed; exact historical landing time UNKNOWN.'
   }];
-  return { ...(deferCommit ? { commit: () => { verifyProducer(); publishLandedReviewEvidence(target); } } : {}), add: [...landing,{ type: 'item.added', id, kind: 'work', role: 'reviewer', capability: 'review', parent: item.parent, priority: item.priority,
+  return { ...(deferCommit ? { commit: validate => { verifyProducer(); validate(); publishLandedReviewEvidence(target); } } : {}), add: [...landing,{ type: 'item.added', id, kind: 'work', role: 'reviewer', capability: 'review', parent: item.parent, priority: item.priority,
     title: `Review ${item.title}`, budget: {}, accept: ['Independent immutable diff/evidence review; zero suites and no edits. Record PASS or FAIL verdict. Major findings become linked engineer follow-up proposals, never an automatic second review. '+uncertainOutcomeDoctrine],
     meta: { review_key: key,review_group_key:group, review_source_item: item.id, review_source_run: run.id, review_target: target, review_round_cap: 1, review_other_family: true, review_cutover:bound.cutoff,...(bound.authorization?{review_recovery_id:bound.authorization.id}:{}) } }],
     result: { result: 'review_queued', review_item: id, source_item: item.id, head: target.head, existing: false } };
@@ -158,7 +158,7 @@ function queueCanonicalReview({state,events,org,repo,identity,selector,head,base
   const prior=canonicalAttempt({selector,target,state,events,org,repo,identity,ignoreService:{file:journalFor(org,identity),key:`review:${selector}`,target,operation:'record-queue'}});if(prior)throw Error(`canonical review already retained: ${prior}`);
   if (!deferCommit) publishLandedReviewEvidence(target);
   const id=nextItemId(state,{kind:'work',role:'reviewer'});
-  return{...(deferCommit ? { commit: () => { openBoundary(org,repo,identity); installedContext(repo,org); publishLandedReviewEvidence(target); } } : {}),add:[{type:'item.added',id,kind:'work',role:'reviewer',capability:'review',title:`Review unattributed canonical change ${target.head.slice(0,12)}`,budget:{},
+  return{...(deferCommit ? { commit: validate => { openBoundary(org,repo,identity); installedContext(repo,org); validate(); publishLandedReviewEvidence(target); } } : {}),add:[{type:'item.added',id,kind:'work',role:'reviewer',capability:'review',title:`Review unattributed canonical change ${target.head.slice(0,12)}`,budget:{},
     accept:['Review this exact canonical diff/evidence with zero suites. Historical producer attribution remains UNKNOWN. Record PASS or FAIL; Major findings require a linked correction before release. '+uncertainOutcomeDoctrine],
     meta:{review_key:`${id}:${target.head}`,review_group_key:target.source_group.key,review_source_selector:selector,review_source_item:id,review_source_run:null,review_target:target,review_round_cap:1,review_cutover:reviewCutoff(found.index.boundary)}}],
     result:{result:'review_queued',review_item:id,source_item:id,head:target.head,existing:false}};

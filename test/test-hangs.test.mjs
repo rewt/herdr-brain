@@ -51,6 +51,45 @@ test('compound fixture scenarios retain legacy arguments and owned cleanup', asy
   assert.equal(result.code, 0, result.stderr); assert.match(result.stdout, /scenario completed/);
 });
 
+for (const phase of ['pending body', 'blocked body', 'pending after-hook']) {
+  test(`an explicit file cap ends a never-finishing ${phase} with a failed timing finish`, async t => {
+    const f = fixture(t, root => {
+      const publish = `fs.writeFileSync(${JSON.stringify(path.join(root, 'entered.json'))},JSON.stringify({file:process.pid,worker:process.ppid,fixture:child.pid}));`;
+      const hang = phase === 'blocked body' ? 'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0);' : 'await new Promise(()=>{});';
+      return `test(${JSON.stringify(phase)},async(t)=>{
+${phase === 'pending after-hook' ? `t.after(async()=>{${publish}${hang}});` : ''}
+const child=spawnChild(t,process.execPath,['-e','setInterval(()=>{},1000)']);
+${phase === 'pending after-hook' ? '' : publish + hang}
+});`;
+    });
+    const journal = path.join(f.root, 'timings.jsonl');
+    const sentinel = spawnChild(t, process.execPath, ['-e', 'setInterval(()=>{},1000)']);
+    const child = runFixture(t, [f.file], { env: { ...process.env,
+      MONITOR_TEST_FILE_TIMEOUT_MS: '2500', MONITOR_TEST_TIMINGS_PATH: journal } });
+    const result = await waitForExit(child);
+    assert.equal(result.signal, null, result.stderr);
+    assert.equal(result.code, 1, result.stdout + result.stderr);
+    assert.match(result.stderr, /FILE_TIMEOUT: .* exceeded 2500ms; ending owned suite group/);
+    const owned = JSON.parse(fs.readFileSync(path.join(f.root, 'entered.json'), 'utf8'));
+    for (const pid of Object.values(owned)) await assertGone(pid);
+    assert.doesNotThrow(() => process.kill(sentinel.pid, 0), 'file cap killed an unrelated fixture');
+    sentinel.kill('SIGKILL'); await waitForExit(sentinel);
+    const rows = fs.readFileSync(journal, 'utf8').trim().split('\n').map(line => JSON.parse(line));
+    const start = rows.find(row => row.kind === 'file' && row.event === 'start' && row.pid === owned.file);
+    assert.ok(start, 'the admitted file must have started');
+    const finishes = rows.filter(row => row.id === start.id && row.event === 'finish');
+    assert.equal(finishes.length, 1, JSON.stringify(rows));
+    assert.equal(finishes[0].exit_code, 1);
+    assert.equal(finishes[0].reason, 'file-timeout');
+    assert.equal(finishes[0].signal, 'SIGKILL');
+    assert.equal(finishes[0].file_pid, owned.file);
+    assert.equal(finishes[0].observed_by, 'coordinator');
+    assert.equal(rows.filter(row => row.id === start.suite && row.event === 'finish' && row.exit_code === 1).length, 1);
+    // Preserve a small witness outside disposable fixture roots in gate evidence.
+    t.diagnostic(JSON.stringify({ phase, file_timeout_ms: 2500, result: result.code, finishes }));
+  });
+}
+
 test('a late waiter receives a child result and output after close', async (t) => {
   const child = spawnChild(t, process.execPath, ['-e', "console.log('already closed')"]);
   await waitForExit(child);

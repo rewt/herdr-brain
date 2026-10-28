@@ -11,7 +11,8 @@ import { runnerLimits } from './runner-limits.mjs';
 import path from 'node:path';
 import { watchRun } from '../../test-slot/watch.mjs';
 import { silenceNotice } from '../../test-slot/watch-notice.mjs';
-import { TIMINGS_ENV, startTiming, timing } from '../../test-slot/timings.mjs';
+import * as timingJournal from '../../test-slot/timings.mjs';
+const { TIMINGS_ENV, startTiming, timing } = timingJournal;
 
 const cleanupHerdr = offlineHerdr();
 
@@ -76,7 +77,7 @@ if (worker) {
   const child = spawn(process.execPath, [script, '--worker', ...argv.filter(arg => !arg.startsWith('--load-factor=')), `--load-factor=${factor}`], {
     detached: true, stdio: ['ignore', 'pipe', 'pipe', 'ipc'], env,
   });
-  let owner, finished = false, watcher;
+  let owner, finished = false, watcher, timedOutFile;
   let pendingOutput = 0, outputFailed = false, checkDrain = () => {};
   const pipes = [child.stdout, child.stderr], closedPipes = new Set();
   for (const [input, output] of [[child.stdout, process.stdout], [child.stderr, process.stderr]]) {
@@ -113,8 +114,8 @@ if (worker) {
     }
     // Audit is report-only. Ordinary teardown always targets the one known group,
     // with a fresh individual leader lookup even when the batch audit fails.
-    const result = owner ? killProcess(owner) : { ok: false };
-    if (!result.ok || !result.signaled) code = 1;
+    const teardown = owner ? killProcess(owner) : { ok: false };
+    if (!teardown.ok || !teardown.signaled) code = 1;
     if (child.connected) child.disconnect();
     const drain = () => {
       // Keep slot occupancy until actual leader exit, both physical pipe closes
@@ -127,6 +128,21 @@ if (worker) {
       const exit = result => {
         if (drained) return;
         drained = true; clearTimeout(timer); checkDrain = () => {};
+        // SIGKILL cannot run file-timing's exit hook. Pair every still-open
+        // file observation only after confirmed group teardown and leader exit;
+        // peer files cancelled by the same signal must not remain "running".
+        if (timedOutFile && result !== 0 &&
+            teardown.ok && teardown.signaled && child.signalCode === 'SIGKILL') {
+          const rows = timingJournal.readTimings(process.env[TIMINGS_ENV]);
+          const closed = new Set(rows.filter(row => row.event === 'finish').map(row => row.id));
+          for (const row of rows.filter(row => row.kind === 'file' && row.event === 'start' && row.suite === finishTiming.id && !closed.has(row.id))) {
+            timing({ ...row, event: 'finish', file_pid: row.pid,
+              duration_s: Math.max(0, (Date.now() - Date.parse(row.at)) / 1000),
+              exit_code: 1, signal: 'SIGKILL', observed_by: 'coordinator',
+              reason: path.resolve(row.name) === timedOutFile ? 'file-timeout' : 'suite-cancelled',
+              file_timeout_ms: fileTimeout });
+          }
+        }
         finishTiming({ exit_code: result, ...(watcher ? watcher.snapshot() : {}) });
         cleanupHerdr();
         child.stdout.destroy(); child.stderr.destroy(); child.unref();
@@ -145,6 +161,14 @@ if (worker) {
     if (message.ready) {
       try { owner = registerProcess(child.pid, true); child.send('start'); }
       catch (error) { console.error(error); finish(1); }
+    } else if (message.timeout) {
+      // fixture-policy keeps the file and leader alive for this coordinator's
+      // fresh owned-group signal. Waiting for run()'s stream here can hang on
+      // either a test body or an after-hook even after Node cancels the file.
+      timedOutFile = path.resolve(message.timeout);
+      console.error(`FILE_TIMEOUT: ${timedOutFile} exceeded ${fileTimeout}ms; ending owned suite group`);
+      timing({ kind: 'file-timeout', name: timedOutFile, suite: finishTiming.id, file_timeout_ms: fileTimeout });
+      finish(1);
     } else if (message.complete) {
       if (message.outputFlushed === false) console.error('Worker output flush failed or exceeded its drain limit; output may be incomplete');
       finish(message.outputFlushed === false ? 1 : message.code, true);

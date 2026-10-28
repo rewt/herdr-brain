@@ -72,7 +72,8 @@ test('full fix context survives review intake and detached prompt with both repo
       exception: { to: 'supervisor-herdr', source: 'project config' } });
     contract.workspace = path.join(f.scratch, 'fresh-fixer');
     const state = fold([...c.events, { type: 'run.started', id: 'R-9', item: item.id, workspace: contract.workspace,
-      brief_path: '/record/R-9/brief.md', report_path: '/record/R-9/report.md', meta: { worker_brief: JSON.stringify(contract) } }]);
+      brief_path: '/record/R-9/brief.md', report_path: '/record/R-9/report.md',
+      meta: { lane, route: 'engineer', harness: 'codex', worker_brief: JSON.stringify(contract) } }]);
     const run = state.runs.get('R-9'), brief = renderBrief(state, run.id, { config: DEFAULT_CONFIG, cli: 'record', archive: [] });
     const job = { workerBrief: contract, repo: f.repo, org: f.org, brief: contract.ask, lane, workspace: contract.workspace,
       route: 'engineer', declared: { harness: 'codex' }, worker: { agentName: 'fresh-fixer' }, to: 'supervisor-herdr', extra: source.brief };

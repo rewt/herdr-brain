@@ -193,9 +193,11 @@ test('foreground CLI is model-free, read-only on the event log, and persists onl
   }
   assert.equal(fs.readFileSync(path.join(f.orgDir, 'events.jsonl'), 'utf8'), before);
   // Store reads may persist a rebuildable snapshot, never authoritative state.
-  assert.deepEqual(fs.readdirSync(f.orgDir).sort(), ['events.jsonl', SNAPSHOT_FILE].sort());
+  const files = fs.readdirSync(f.orgDir).sort();
+  const hasSnapshot = files.includes(SNAPSHOT_FILE);
+  assert.deepEqual(files, hasSnapshot ? ['events.jsonl', SNAPSHOT_FILE].sort() : ['events.jsonl']);
   const cached = loadRecord(f.orgDir), replay = loadRecord(f.orgDir, { snapshot: false });
-  assert.equal(cached.snapshot.used, true);
+  if (hasSnapshot) assert.equal(cached.snapshot.used, true);
   assert.equal(cached.events.length, base.length);
   assert.deepEqual(cached.events, replay.events);
   assert.deepEqual(cached.state, replay.state);

@@ -433,6 +433,7 @@ process.stdout.write(r.stdout);process.stderr.write(r.stderr);process.exit(r.sta
   for(let i=0;i<2;i++)f.rec(['start',f.item,'--route',job.route,'--route-config',job.routeConfig,
     '--workspace',job.workspace,'--meta',`lane=${job.lane}`,'--meta',`dispatch_journal=${journal}`,
     '--meta',`dispatch_project=${job.common}`,'--meta',`dispatch_attempt=${job.token}`,
+    '--meta',`dispatch_record=${job.org}`,
     '--meta',`dispatch_unlanded_admitted=${job.unlandedCap.admission.admitted}`]);
   r=f.dispatch(['--retry',journal]);assert.equal(r.status,1);assert.match(r.stderr,/multiple matches/);
   assert.equal(promptCalls(f).length,0);assert.equal(f.show(f.item).runs.length,2);

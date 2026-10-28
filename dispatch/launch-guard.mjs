@@ -19,6 +19,15 @@ const changed = (reason, input) => {
   throw Object.assign(Error(`dispatch launch input changed: ${reason}`), {code:'DISPATCH_INPUT_CHANGED',launch_input:input});
 };
 
+function checkCorrectionAllocation(job, refuse) {
+  const actual=gitProject(job.workspace),git=args=>execFileSync('git',['-C',job.workspace,...args],{encoding:'utf8',stdio:['ignore','pipe','pipe']}).trim();
+  const entry=git(['worktree','list','--porcelain']).split('\n\n').find(e=>e.split('\n').includes(`branch refs/heads/lane/${job.lane}`));
+  const registered=entry?.split('\n').find(l=>l.startsWith('worktree '))?.slice(9);
+  if(actual.identity!==job.common||actual.checkout!==job.workspace||actual.canonical!==job.repo||job.workspace===job.repo||
+      registered!==job.workspace||git(['rev-parse','HEAD'])!==job.base||git(['status','--porcelain=v1']))
+    refuse('launched fresh fix source changed before prompt or launch');
+}
+
 export function checkDispatchEligibility(job, journal, {boundary='launch'}={}) {
   if(!['launch','prompt'].includes(boundary))throw Error('unknown dispatch input boundary');
   const {events,tornTail}=loadEvents(job.org),state=fold(events);
@@ -43,7 +52,17 @@ export function checkDispatchEligibility(job, journal, {boundary='launch'}={}) {
   if(job.correction) {
     if(boundary==='launch') {
       const source=correctionSource({item,state,events,repo:job.repo,org:job.org,request:{job,journal}});
-      if(source?.base!==job.correction.base||source?.ref!==job.correction.ref)refuse('saved author source changed before fresh fix launch');
+      // New main-based fixes own the selected commit, including when their
+      // retained author lane is already integrated. Concurrent FF landings do
+      // not change that input. Kept unlanded refs and older saved requests keep
+      // their exact source CAS; a rewind or newly unlanded author still refuses.
+      if(job.correctionLaunchProtocol===1&&!job.correction.ref&&!source?.ref&&source) {
+        if(job.base!==job.correction.base)refuse('saved author source changed before fresh fix launch');
+        try { execFileSync('git',['-C',job.repo,'merge-base','--is-ancestor',job.base,source.base],{stdio:'pipe'}); }
+        catch(error) { if(error.status!==1)throw error;refuse('saved author source changed before fresh fix launch'); }
+        if(job.workspace)checkCorrectionAllocation(job,refuse);
+      } else if(source?.base!==job.correction.base||source?.ref!==job.correction.ref)
+        refuse('saved author source changed before fresh fix launch');
     } else {
       // Mutable author refs/main select the source BEFORE native launch. Once
       // launched, this allocation owns the frozen commit; unrelated landings or
@@ -51,12 +70,7 @@ export function checkDispatchEligibility(job, journal, {boundary='launch'}={}) {
       // Keep the prompt bound to the actual registered, unchanged allocation.
       if(!job.run||!job.worker||job.native_launch_attempted!==true||job.base!==job.correction.base)
         refuse('fresh fix has no owned launched source before prompt');
-      const actual=gitProject(job.workspace),git=args=>execFileSync('git',['-C',job.workspace,...args],{encoding:'utf8',stdio:['ignore','pipe','pipe']}).trim();
-      const entry=git(['worktree','list','--porcelain']).split('\n\n').find(e=>e.split('\n').includes(`branch refs/heads/lane/${job.lane}`));
-      const registered=entry?.split('\n').find(l=>l.startsWith('worktree '))?.slice(9);
-      if(actual.identity!==job.common||actual.checkout!==job.workspace||actual.canonical!==job.repo||job.workspace===job.repo||
-          registered!==job.workspace||git(['rev-parse','HEAD'])!==job.base||git(['status','--porcelain=v1']))
-        refuse('launched fresh fix source changed before prompt');
+      checkCorrectionAllocation(job,refuse);
     }
   }
   if (job.resume) {

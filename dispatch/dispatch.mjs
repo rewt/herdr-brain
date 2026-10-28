@@ -471,7 +471,7 @@ async function main() {
       brief, report: opt.report ?? null, to: opt.to ?? (resume ? exceptionAddress.to : null),
       base: git(['rev-parse', `${resume?.base ?? correction?.base ?? opt.base ?? 'HEAD'}^{commit}`], repo), extra: [opt.extra, correction?.brief].filter(Boolean).join('\n\n'), reuse: null, resumeSession: opt['resume-session'] ?? null,
       ...(resume ? { resume, resumeDeliveryProtocol: 1 } : {}),
-      ...(correction ? { correction } : {}), fromRun: opt['from-run'] ?? null, unblocks: opt.unblocks ?? null,
+      ...(correction ? { correction, correctionLaunchProtocol: 1 } : {}), fromRun: opt['from-run'] ?? null, unblocks: opt.unblocks ?? null,
       declared: declaredFields, exceptionAddress, ...(workerBrief ? { workerBrief } : {}),
       stage: 'open', run: null,native_launch_attempted:false,completion_protocol:1,...(opt.detach?{phase1_protocol:1,detachedRequested:true}:{}) };
     // Only routing fields are frozen. Lifecycle paths keep their original config provenance.

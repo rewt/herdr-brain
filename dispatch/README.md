@@ -47,6 +47,10 @@ agent tab and preserves operator focus. Existing workspaces retain their tabs.
 Reviews and fixes start in fresh native allocations and lanes. A fresh fixer uses
 the exact kept unlanded author branch, otherwise main. A dirty saved author
 folder is retained and reported to its owner; dispatch does not branch around it.
+For new requests, a fully merged retained branch selects main, and later
+fast-forward landings on main preserve the selected commit. Launch still checks
+the exact clean registered allocation; changed unlanded author refs and main
+rewinds refuse. Older saved requests retain their original source comparison.
 The brief carries both reports, immutable base/head/diff, failed and unrun proof
 locations, and the specific correction control for each Major.
 It names the ingested report copies and their hashes, the exact Git diff command,

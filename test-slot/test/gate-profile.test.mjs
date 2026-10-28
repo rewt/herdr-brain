@@ -117,9 +117,10 @@ for (const phase of ['validated', 'integrated']) test(`profiled STOP resumes its
   fs.writeFileSync(f.receipt, JSON.stringify(train));
   const queue = queueFor(f.repo);
   const herdr = path.join(f.root, 'herdr');
+  // The inbox requires a stable pane/terminal pair before quiet delivery.
   fs.writeFileSync(herdr, `#!${process.execPath}
 const a=process.argv.slice(2);
-if(a[0]==='agent'&&a[1]==='get')console.log(JSON.stringify({result:{agent:{agent:'claude',agent_status:'idle',pane_id:'fake'}}}));
+if(a[0]==='agent'&&a[1]==='get')console.log(JSON.stringify({result:{agent:{agent:'claude',agent_status:'idle',pane_id:'fake',terminal_id:'fake-terminal'}}}));
 else if(a[0]==='pane'&&a[1]==='read')console.log('────────────────────\\n❯ \\n────────────────────');
 else console.log(JSON.stringify({result:{workspaces:[],agents:[]}}));
 `, { mode: 0o755 });
@@ -146,7 +147,7 @@ else console.log(JSON.stringify({result:{workspaces:[],agents:[]}}));
     memory.set(healthyMemory);
     const result = await done; assert.equal(result.code, 0, result.stderr);
     const data = queue.load(); assert.deepEqual(data.results.map(r => r.outcome), ['promoted', 'refused'], f.diagnostics());
-    assert.ok(data.results.every(r => r.delivered));
+    assert.ok(data.results.every(r => r.delivered), JSON.stringify(data.results));
     assert.match(data.results[1].reason, /STOP/); assert.equal(data.interrupted?.length ?? 0, 0); assert.equal(data.current, null);
     const saved = JSON.parse(fs.readFileSync(f.receipt));
     assert.equal(saved.phase, 'complete'); assert.deepEqual(saved.groups, []);
@@ -230,9 +231,10 @@ test('queue delivers a coded memory refusal with no bisection and permits re-enq
   const f = fixture(t, { externalLock: true }), memory = promotionMemoryFixture(f, '--execute');
   fs.writeFileSync(f.gate.external_lock, '');
   const herdr = path.join(f.root, 'herdr');
+  // Match the real inbox's recipient identity contract here too.
   fs.writeFileSync(herdr, `#!${process.execPath}
 const a=process.argv.slice(2);
-if(a[0]==='agent'&&a[1]==='get')console.log(JSON.stringify({result:{agent:{agent:'claude',agent_status:'idle',pane_id:'fake'}}}));
+if(a[0]==='agent'&&a[1]==='get')console.log(JSON.stringify({result:{agent:{agent:'claude',agent_status:'idle',pane_id:'fake',terminal_id:'fake-terminal'}}}));
 else if(a[0]==='pane'&&a[1]==='read')console.log('────────────────────\\n❯ \\n────────────────────');
 else console.log(JSON.stringify({result:{workspaces:[],agents:[]}}));
 `, { mode: 0o755 });
@@ -243,7 +245,7 @@ else console.log(JSON.stringify({result:{workspaces:[],agents:[]}}));
   const first = drain(); assert.equal(first.status, 0, first.stderr);
   const data = queue.load(), refused = data.results[0];
   assert.equal(refused.outcome, 'refused'); assert.equal(refused.code, 'PROMOTION_MEMORY_PRESSURE');
-  assert.equal(refused.delivered, true);
+  assert.equal(refused.delivered, true, JSON.stringify(refused));
   assert.equal(data.interrupted?.length ?? 0, 0); assert.equal(data.current, null); assert.equal(refused.gate, undefined);
   const plan = JSON.parse(fs.readFileSync(refused.receipt));
   assert.equal(plan.phase, 'complete'); assert.deepEqual(plan.groups, []); assert.equal(plan.attempts?.length ?? 0, 0);

@@ -1383,8 +1383,8 @@ test('reviewer completion rejects another review run or source before accepting 
     assert.deepEqual(f.read().actions, []);
   }
   f.append([end]);
-  assert.equal(closeoutWaitState(wait, events(f)), 'complete');
   f.drain();
+  assert.equal(closeoutWaitState(wait, events(f)), 'complete');
   assert.equal(f.read().actions.filter(a => a[0] === 'tab').length, 1);
   assert.ok(fs.existsSync(f.lane), 'review completion preserves the worker lane for fixes');
 });

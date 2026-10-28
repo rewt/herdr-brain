@@ -795,6 +795,50 @@ test('code handoff after a journaled exit intent records zero native start and s
   assert.equal(f.read().actions.filter(a=>a[0]==='agent'&&a[1]==='prompt').length,1,'the first actual send happens once, after the handoff');
 });
 
+test('code handoff unsent then uncertain native retry',t=>{
+  for (const action of ['agent-exit-requested','shell-close-requested','workspace-close-requested']) {
+    // Empty-workspace recovery runs after the independently authorized Git
+    // removal. Exit/tab attempts must retain the still-present lane throughout.
+    const workspace=action==='workspace-close-requested',f=setup(t,{merged:true,occupied:!workspace});
+    f.report();const rows=f.append([{type:'item.closed',id:'ENG-1',as:'done',completed_run:'R-1'}]),key=rows[0].closeout_targets.find(t=>t.signal==='landed').key;
+    if(action==='shell-close-requested'){
+      const candidate=f.retirement(f.options).plan(f.lane).close[0];
+      f.append([{type:'closeout.effect',key,identity:f.common,source:{seq:rows[0].seq,type:'item.closed'},effect:'fixture-observed-exit',
+        outcome:{action:'agent-exit-requested',run:candidate.run,pane:candidate.pane,tab_id:candidate.tab_id,occupant:candidate.occupant,shell:candidate.shell}}]);
+      f.state.agents=[];f.state.info={shell_pid:1,foreground_processes:[{pid:1,name:'zsh'}],process_tree_complete:true,process_tree:[f.state.info.process_tree[0]]};f.save();
+    }
+    let moved=false;const log=f.options.log;
+    f.options.log=row=>{log(row);if(row.action===action&&!moved){moved=true;f.git(['checkout','-qb','moved-main']);}};
+    let first;try{first=f.drain({keys:[key],sessionsOnly:!workspace});}finally{f.options.log=log;if(moved)f.git(['checkout','-q','main']);}
+    assert.equal(moved,true,action);assert.ok(first.restart?.keys.includes(key),JSON.stringify(first));assert.deepEqual(f.read().actions,[],action);
+    const before=events(f),original=before.find(e=>e.type==='closeout.effect'&&e.key===key&&e.outcome.action===action),unsent=before.find(e=>e.type==='closeout.command-not-started'&&e.intent===original.effect);
+    assert.equal(unsent.native_started,false);assert.equal(unsent.code,'CLOSEOUT_CODE_CHANGED');
+    const entry=readCloseoutEntries(f.common).find(e=>e.key===key),waitFor=(all,id)=>all.find(e=>e.type==='closeout.waiting'&&e.waiting.producers?.[0]?.intent===id);
+    assert.equal(unresolvedCloseoutEffect(entry,before),undefined);assert.equal(closeoutWaitState(waitFor(before,original.effect),before),'complete');
+    const removals=before.filter(e=>e.type==='closeout.effect'&&e.outcome.action==='lane-removed');assert.equal(removals.length,workspace?1:0);
+    let sends=0;const command=f.options.command;
+    f.options.command=(exe,args,opt)=>{
+      if(exe===f.job.herdr&&(action==='agent-exit-requested'?args[0]==='agent'&&args[1]==='prompt':args[0]===(workspace?'workspace':'tab')&&args[1]==='close')){
+        sends++;const state=f.read();state.actions.push(args);fs.writeFileSync(f.file,JSON.stringify(state));
+        return{status:1,stdout:'',stderr:'native reply unavailable; outcome unknown'};
+      }
+      return command(exe,args,opt);
+    };
+    const actual=f.drain({keys:[key],sessionsOnly:!workspace}),all=events(f),attempts=all.filter(e=>e.type==='closeout.effect'&&e.key===key&&e.outcome.action===action),later=attempts.at(-1);
+    assert.equal(actual.evaluated[0]?.completed,false,JSON.stringify(actual));assert.equal(attempts.length,2);assert.notEqual(later.effect,original.effect);
+    const laterWait=waitFor(all,later.effect);assert.ok(laterWait);assert.notEqual(laterWait.wait_id,waitFor(all,original.effect).wait_id);assert.ok(laterWait.seq>later.seq);
+    assert.deepEqual(all.find(e=>e.seq===unsent.seq),unsent,'original positive no-start evidence stays immutable');
+    assert.equal(closeoutWaitState(waitFor(all,original.effect),all),'complete');assert.equal(closeoutWaitState(laterWait,all),'failed');
+    assert.deepEqual(unresolvedCloseoutEffect(entry,all),later.outcome);
+    const failure=all.find(e=>e.type==='closeout.command-failed'&&e.intent===later.effect);assert.ok(failure);
+    assert.ok(all.some(e=>e.type==='closeout.producer-status'&&e.wait_id===laterWait.wait_id&&e.producer.intent===later.effect&&e.status==='failed'&&e.completion.seq===failure.seq));
+    for(let pass=0;pass<3;pass++)f.drain({keys:[key],retrySafe:true,sessionsOnly:!workspace});
+    const retained=events(f);assert.equal(sends,1);assert.equal(f.read().actions.length,1);assert.deepEqual(unresolvedCloseoutEffect(entry,retained),later.outcome);
+    assert.deepEqual(retained.filter(e=>e.type==='closeout.effect'&&e.outcome.action==='lane-removed'),removals,'uncertain invocation and safe drains authorize no lane removal');
+    assert.equal(fs.existsSync(f.lane),!workspace);assert.deepEqual(retained.filter(e=>e.type==='closeout.command-not-started'),[unsent]);
+  }
+});
+
 test('continuity tab-close readback protects present replaced held refused and unbound targets without another native effect',t=>{
   for(const kind of ['present','replaced','moved','held','stop','native-read-refused','refused','unbound']){
     const f=setup(t,{merged:true});f.report();const rows=f.append([{type:'item.closed',id:'ENG-1',as:'done',completed_run:'R-1'}]),entry={...rows[0].closeout_targets.find(t=>t.signal==='landed'),source:{seq:rows[0].seq,type:'item.closed'}};

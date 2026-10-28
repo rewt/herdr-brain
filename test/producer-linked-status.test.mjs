@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import {closeoutWaitState,registerCloseoutWait,linkedCloseoutStatuses,nativeCloseoutWait,closeoutProducer,closeoutNextStage,closeoutCommandNotStarted} from '../lib/closeout-status.mjs';
-import {closeoutRevision,bindCloseoutSources} from '../lib/closeout.mjs';
+import {closeoutRevision,bindCloseoutSources,unresolvedCloseoutEffect} from '../lib/closeout.mjs';
 import {outcomeFailure,uncertainOutcomeDoctrine} from '../lib/uncertain-outcome.mjs';
 import {originalDispatchOutcome} from '../dispatch/outcome.mjs';
 import {recordDispatchCompletion} from '../dispatch/completion.mjs';
@@ -61,6 +61,33 @@ test('producer linked native command writes only observed exit or actual close r
   assert.equal(closeoutWaitState(wait,append(base,[failure,...linkedCloseoutStatuses(base,[failure])])),'failed');
   assert.equal(closeoutProducer(entry,{...prior,reason:'unresolved native exit/close intent retained'},{events,entries:[entry]}).producers.length,0);
   assert.match(closeoutProducer(entry,{...prior,reason:'retirement held: HOLD-WORKER-TAB-CLOSE'},{events,entries:[entry]}).defect,/no existing record completion writer/);
+});
+
+test('producer linked unsent intent isolates later attempts',()=>{
+  for(const row of [{action:'agent-exit-requested',pane:'pane',occupant:['worker','codex','pane','workspace','/lane','terminal','session']},
+    {action:'shell-close-requested',tab_id:'tab',panes:[{pane:'pane',terminal:'terminal'}]},{action:'workspace-close-requested',workspace_id:'workspace'}]){
+    const effect=id=>({type:'closeout.effect',effect:id,identity:entry.common,key:entry.key,source:entry.source,outcome:row}),
+      original=nativeCloseoutWait(entry,row,'unsent'),later=nativeCloseoutWait(entry,row,'actual'),
+      unsent=closeoutCommandNotStarted(entry,'unsent',row.action,Object.assign(Error('code changed'),{code:'CLOSEOUT_CODE_CHANGED'}));
+    let history=append(events,[effect('unsent'),original]);history=append(history,[unsent,...linkedCloseoutStatuses(history,[unsent])]);
+    const originalEvidence=structuredClone(history);assert.equal(closeoutWaitState(original,history),'complete');assert.equal(unresolvedCloseoutEffect(entry,history),undefined);
+    history=append(history,[effect('actual'),later]);assert.notEqual(later.wait_id,original.wait_id);assert.equal(closeoutWaitState(later,history),'pending');assert.deepEqual(unresolvedCloseoutEffect(entry,history),row);
+    assert.deepEqual(linkedCloseoutStatuses(history,[unsent]),[],'an earlier unsent receipt cannot complete the later producer');
+    const failure={type:'closeout.command-failed',identity:entry.common,key:entry.key,source:entry.source,intent:'actual',failure:{code:'OUTCOME_UNKNOWN'}};
+    assert.deepEqual(linkedCloseoutStatuses(history,[{...failure,intent:'unsent'}]),[],'failure ownership is exact');
+    const links=linkedCloseoutStatuses(history,[failure]);assert.equal(links.length,1);assert.equal(links[0].producer.intent,'actual');
+    history=append(history,[failure,...links]);assert.equal(closeoutWaitState(later,history),'failed');assert.deepEqual(unresolvedCloseoutEffect(entry,history),row);
+    const outcome=row.action==='agent-exit-requested'?{action:'exit-observed',pane:'pane',occupant:{terminal_id:'terminal',agent_session_id:'session'}}:
+      row.action==='shell-close-requested'?{action:'closed',tab_id:'tab'}:{action:'closed',workspace_id:'workspace'},
+      completion={type:'closeout.effect',identity:entry.common,key:entry.key,source:entry.source,intent:'actual',outcome};
+    assert.deepEqual(linkedCloseoutStatuses(history,[{...completion,intent:'unsent'}]),[]);
+    assert.deepEqual(linkedCloseoutStatuses(history,[{...completion,source:{seq:999,type:'item.closed'}}]),[]);
+    assert.equal(closeoutWaitState(later,history),'failed');
+    const completed=linkedCloseoutStatuses(history,[completion]);assert.equal(completed.length,1);assert.equal(completed[0].producer.intent,'actual');assert.equal(completed[0].status,'complete');
+    history=append(history,[completion,...completed]);assert.equal(closeoutWaitState(later,history),'complete');assert.equal(unresolvedCloseoutEffect(entry,history),undefined);
+    assert.equal(closeoutWaitState(original,history),'complete');assert.deepEqual(history.slice(0,originalEvidence.length),originalEvidence);
+    assert.deepEqual(linkedCloseoutStatuses(history,[failure,completion]),[],'completed attempts remain immutable and are not failed again');
+  }
 });
 
 test('producer linked typed failures and positive no-execution never infer native absence from missing fields',t=>{

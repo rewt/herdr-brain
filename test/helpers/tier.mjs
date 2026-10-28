@@ -7,7 +7,15 @@ import { main as suite } from './suite.mjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const fast = ['test/main-module.test.mjs', 'test/report.test.mjs', 'test/discernment.test.mjs', 'test/sanitization.test.mjs', 'test/processes.test.mjs', 'test/tier-plan.test.mjs', 'lanes/test/routes.test.mjs'];
-const completionFiles = ['promote/test/completion.test.mjs', 'promote/test/completion-recovery.test.mjs'];
+// Keep every completion partition in the original release tier and early group.
+const completionFiles = [
+  'promote/test/completion.test.mjs',
+  'promote/test/completion-admission.test.mjs',
+  'promote/test/completion-manual-recovery.test.mjs',
+  'promote/test/completion-recovery.test.mjs',
+  'promote/test/completion-legacy-recovery.test.mjs',
+  'promote/test/completion-record-guards.test.mjs',
+];
 // Whole-file promotion coverage stays explicit; future files default to release.
 // Mixed files also supply selected fast cases through the promotion scripts.
 const promotion = [

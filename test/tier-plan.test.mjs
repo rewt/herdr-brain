@@ -47,6 +47,20 @@ test('split dispatch files retain whole-file promotion coverage and exclude thei
   }
 });
 
+test('split closeout files retain whole-file promotion coverage and exclude their shared fixture', () => {
+  const files = ['test/closeout.test.mjs', 'test/closeout-selection.test.mjs',
+    'test/closeout-continuity.test.mjs', 'test/closeout-policy.test.mjs',
+    'test/closeout-lifecycle.test.mjs', 'test/closeout-cli.test.mjs',
+    'test/closeout-contention.test.mjs', 'test/closeout-removal.test.mjs'];
+  for (const file of files) {
+    for (const tier of ['promotion', 'core']) assert.equal(tierFiles(tier, root).filter(candidate => candidate === file).length, 1);
+    for (const tier of ['fast', 'release']) assert.ok(!tierFiles(tier, root).includes(file));
+  }
+  for (const tier of ['fast', 'promotion', 'release', 'core']) {
+    assert.ok(!tierFiles(tier, root).includes('test/helpers/closeout-fixture.mjs'));
+  }
+});
+
 test('split lane CLI files keep release placement and individual suite deadlines', () => {
   const files = ['lanes/test/lane.test.mjs', 'lanes/test/lane-dispatch.test.mjs', 'lanes/test/lane-review.test.mjs'];
   const release = tierFiles('release', root);

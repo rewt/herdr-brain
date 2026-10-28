@@ -479,7 +479,7 @@ test('actual executing root retains its real owner and continuation',t=>{
  fs.appendFileSync(${JSON.stringify(path.join(evidence, 'owner-claims.jsonl'))},JSON.stringify({root,run,owner:owned.owner,release})+'\\n');
 });\n`);
   const quote = value => "'" + value.replaceAll("'", "'\\''") + "'";
-  const command = `${quote(process.execPath)} --test ${quote(probe)} && ${quote(process.execPath)} --test ${quote('--test-name-pattern=^herdr-brain: a landed event immediately releases and removes its exact lane, branch and empty workspace$')} test/closeout.test.mjs`;
+  const command = `${quote(process.execPath)} --test ${quote(probe)} && ${quote(process.execPath)} --test ${quote('--test-name-pattern=^herdr-brain: a landed event immediately releases and removes its exact lane, branch and empty workspace$')} test/closeout-lifecycle.test.mjs`;
   const input = JSON.stringify({ release: command });
   f.write('.lane.validation.json', input);
   f.git('add', '.lane.validation.json'); f.git('commit', '-qm', 'Focused real consumer declaration'); f.git('tag', 'consumer');

@@ -8,12 +8,12 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { execFileSync, spawn } from 'node:child_process';
 import { setTimeout as pause } from 'node:timers/promises';
 
-for (const change of ['code', 'main epoch']) test(`launch binding survives a fast-forward during consumer graph loading (${change})`, async t => {
+for (const change of ['code', 'main epoch', 'main branch']) test(`launch binding checks the consumer graph and main branch during loading (${change})`, async t => {
   const scratch = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'closer-loading-')));
   t.after(() => fs.rmSync(scratch, { recursive: true, force: true }));
   const code = path.join(scratch, 'code'), repo = path.join(scratch, 'project');
   const marker = path.join(scratch, 'loading'), release = path.join(scratch, 'continue');
-  const env = { ...process.env, HERDR_MONITOR_FLEET: path.join(scratch, 'fleet') };
+  const env = { ...process.env, HERDR_MONITOR_FLEET: path.join(scratch, 'fleet'), HERDR_BRAIN_ROOT: code };
   const git = (cwd, args) => execFileSync('git', ['-C', cwd, ...args], { env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
   git(scratch, ['clone', '--quiet', '--shared', fileURLToPath(new URL('../', import.meta.url)), code]);
   git(code, ['branch', '-M', 'main']);
@@ -56,14 +56,33 @@ while (!fs.existsSync(${JSON.stringify(release)})) {
   try {
     const deadline = Date.now() + 30000;
     while (!fs.existsSync(marker)) { assert.ok(Date.now() < deadline, 'old consumer graph reached its loading barrier'); await pause(10); }
-    git(changing, ['merge', '--ff-only', 'next']);
+    if (change === 'main branch') git(changing, ['checkout', '-q', 'next']);
+    else git(changing, ['merge', '--ff-only', 'next']);
   } finally { fs.writeFileSync(release, 'continue'); result = await running; }
   assert.equal(result.status, 0, result.stderr);
-  const stale = JSON.parse(result.stdout);
-  assert.equal(stale.code, 'CLOSEOUT_CODE_CHANGED');
-  assert.equal(stale.old.code.commit, oldCode); assert.equal(stale.old.epoch.tip, oldEpoch);
-  assert.equal(stale.current.code.commit, git(code, ['rev-parse', 'HEAD']));
-  assert.equal(stale.current.epoch.tip, git(repo, ['rev-parse', 'HEAD']));
+  const observed = JSON.parse(result.stdout);
+  const currentCode = git(code, ['rev-parse', 'HEAD']), currentEpoch = git(repo, ['rev-parse', 'HEAD']);
+  if (change === 'main epoch') {
+    // Checkout bindings follow the consumer graph and branch, while each
+    // effect separately checks its exact request and current Git state.
+    assert.equal(observed.code, undefined);
+    assert.equal(observed.binding.code.commit, oldCode);
+    assert.equal(observed.binding.epoch.tip, oldEpoch, 'the launch capture is retained across a main fast-forward');
+    assert.notEqual(currentEpoch, oldEpoch);
+  } else {
+    assert.equal(observed.code, 'CLOSEOUT_CODE_CHANGED');
+    assert.equal(observed.old.code.commit, oldCode); assert.equal(observed.old.epoch.tip, oldEpoch);
+    assert.equal(observed.current.code.commit, currentCode);
+    assert.equal(observed.current.epoch.tip, currentEpoch);
+    if (change === 'main branch') {
+      assert.equal(observed.old.epoch.branch, 'main'); assert.equal(observed.current.epoch.branch, 'next');
+    } else assert.notEqual(observed.old.code.files, observed.current.code.files, 'consumer graph changes still invalidate the launch');
+  }
   const fresh = await start(); assert.equal(fresh.status, 0, fresh.stderr);
-  assert.deepEqual(JSON.parse(fresh.stdout).binding, stale.current, 'a fresh process binds the newly loaded bytes and main epoch');
+  const freshBinding = JSON.parse(fresh.stdout).binding;
+  assert.equal(freshBinding.code.commit, currentCode); assert.equal(freshBinding.epoch.tip, currentEpoch);
+  if (change === 'main epoch') {
+    assert.deepEqual(freshBinding.code, observed.binding.code, 'unchanged consumer bytes retain their identity');
+    assert.equal(freshBinding.epoch.branch, observed.binding.epoch.branch);
+  } else assert.deepEqual(freshBinding, observed.current, 'a fresh process binds the newly loaded bytes and main branch');
 });

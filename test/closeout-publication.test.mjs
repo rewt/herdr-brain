@@ -25,10 +25,11 @@ test('notes and dispatch metadata do not inspect native state or touch an empty 
   const f = setup(t), directory = path.join(f.common, 'closeout');
   for (const pending of [false, true]) {
     if (pending) {
-      const source = f.append([{ type: 'report.ingested', run: 'R-1', report: { outcome: 'done' }, sha256: 'fixture' }]);
+      const source = f.append([{ type: 'lane.ready', common: f.common, run: 'R-1', head: f.head }]);
       assert.equal(f.publish(source).length, 1, 'the source creates a real pending request');
     }
     const before = readCloseoutEntries(f.common);
+    assert.equal(before.length, Number(pending), 'the pending case contains an actual queued request');
     const added = f.append([{ type: 'note.added', id: 'R-1', text: 'Dispatch: watcher ready; prompt not sent' },
       { type: 'run.updated', id: 'R-1', meta: { watcher_pid: 123, dispatch_waits: '[]' } }]);
     const probe = t.mock.method(childProcess, 'execFileSync', () => { throw Error('routine publication reached native discovery'); });
@@ -44,7 +45,7 @@ test('notes and dispatch metadata do not inspect native state or touch an empty 
 
 test('a revision without a pending request does not create an idle queue', t => {
   const f = setup(t);
-  const added = f.append([{ type: 'run.abandoned', id: 'R-1', note: 'Superseded before closeout was requested' }]);
+  const added = f.append([{ type: 'retirement.release', run: 'R-1', item: 'ENG-1', confirmed: true }]);
   assert.deepEqual(f.publish(added, true), []);
   assert.equal(fs.existsSync(path.join(f.common, 'closeout')), false);
 });
@@ -59,7 +60,9 @@ test('an existing empty queue still checks policy before processing a revision',
 
 test('a related release still wakes a deferred request while routine metadata leaves it asleep', t => {
   const f = setup(t), starts = [];
-  const source = f.append([{ type: 'report.ingested', run: 'R-1', report: { outcome: 'done' }, sha256: 'fixture' }]);
+  // Named ready requests still use the queue; current report closeouts live
+  // in the record and are scheduled by the line service instead.
+  const source = f.append([{ type: 'lane.ready', common: f.common, run: 'R-1', head: f.head }]);
   assert.equal(f.publish(source).length, 1);
   const [entry] = readCloseoutEntries(f.common);
   f.append([{ type: 'closeout.evaluated', identity: f.common, key: entry.key, run: entry.run, item: entry.item,

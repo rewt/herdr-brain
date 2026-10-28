@@ -1,6 +1,6 @@
 {
   "name": "herdr-brain",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Herdr Monitor: a durable record of work items, runs, reports and zero-inference status outside any LLM session.",
   "type": "module",
   "private": true,

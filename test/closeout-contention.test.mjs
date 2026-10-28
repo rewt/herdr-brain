@@ -65,6 +65,7 @@ test('native observation, exit and preservation preflight hold only consumer/ret
   const checkUnlocked = phase => {
     assert.ok(fs.existsSync(path.join(f.common, 'closeout/consumer.lock')));
     assert.ok(fs.existsSync(retirementOwnerLock(f.common)));
+    assert.equal(fs.existsSync(path.join(f.org, 'lock')), false, phase);
     assert.equal(fs.existsSync(path.join(f.common, 'lane-promote.lock')), false, phase);
     if (!phases.has(phase)) assert.equal(finish().replayed, true);
     phases.add(phase);
@@ -86,6 +87,15 @@ test('native observation, exit and preservation preflight hold only consumer/ret
 
 test('closer lock contention discards preparation; an unowned lock wait stays held after release and retry', t => {
   const f = setup(t, { occupied: false, terminal: true }), release = acquireLock(path.join(f.common, 'lane-promote.lock'));
+  const read = fs.readFileSync; let producerReads = 0;
+  fs.readFileSync = function(file, ...args) {
+    if (file === path.join(f.common, 'promote/queue.json')) {
+      producerReads++;
+      assert.equal(fs.existsSync(path.join(f.org, 'lock')), false, 'wait producer derivation is outside the append lock');
+    }
+    return read.call(this, file, ...args);
+  };
+  t.after(() => { fs.readFileSync = read; });
   try {
     f.drain();
     assert.ok(evaluations(f).some(e => /locked:/.test(e.reason) && e.waiting.defect && !e.waiting.producers.length));
@@ -94,6 +104,7 @@ test('closer lock contention discards preparation; an unowned lock wait stays he
   } finally { release(); }
   const old = evaluations(f).length, native = f.herdrCalls().length;
   f.drain(); assert.equal(evaluations(f).length, old, 'lock release is not a polling signal');
+  assert.ok(producerReads > 0, 'the locked wait producer path was observed');
   retryCloseout({ cwd: f.repo, org: f.org, topic: 'topic', why: 'lifecycle-lock-released', start: false });
   assert.deepEqual(f.drain().evaluated, []);
   assert.equal(fs.existsSync(f.lane), true); assert.equal(f.herdrCalls().length, native);

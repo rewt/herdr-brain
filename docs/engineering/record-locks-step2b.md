@@ -2,8 +2,10 @@
 
 `prepareRecordGuard` derives read-only authority from one parsed/folded record
 outside its lock. Its single-use execution checks the full record signature and
-observed files after acquiring the lock. A conflict runs no effect and never
-replays the native observation. Batch guards prepare all members first and check
+observed files after acquiring the lock. A prepared single-use conflict runs no
+effect. `withRecordGuard` now re-prepares read-only authority on pre-effect source
+conflicts, bounded to 32 attempts; see [conflict retry](record-conflict-retry.md).
+Batch guards prepare all members first and check
 all sources only after every distinct record lock is acquired. Unknown events
 remain full-record CAS inputs; no event schema or old-fold behavior changes.
 

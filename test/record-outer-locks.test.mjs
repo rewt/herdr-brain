@@ -88,7 +88,7 @@ test('claim planning and owner reservation preserve the exact generation at thei
   const expected={owner,generation:3};let effects=0;
   fenceOwner(f.org,'R-1',expected,()=>{effects++;assert.equal(fs.existsSync(f.lock),true);});
   atLock(t,f,()=>fs.appendFileSync(f.file,JSON.stringify({seq:4,type:'run.claimed',run:'R-1',record:f.org,project:null,owner})+'\n'));
-  assert.throws(()=>fenceOwner(f.org,'R-1',expected,()=>effects++),/guard conflict/);assert.equal(effects,1);
+  assert.throws(()=>fenceOwner(f.org,'R-1',expected,()=>effects++),/RUN_OWNER|generation/);assert.equal(effects,1);
 });
 test('native own promotion observes its worker outside the record lock and refuses a raced claim',t=>{
   const f=fixture(t,{git:true}),identity=path.join(f.root,'.git'),native={name:'worker',pane_id:'pane',workspace_id:'workspace',terminal_id:'term',cwd:f.root,agent_session:{value:'sid'}};
@@ -96,7 +96,7 @@ test('native own promotion observes its worker outside the record lock and refus
   let calls=0;const guard=ownWorktreeGuard({canonical:f.root,identity,workspace:f.root,topic:'topic',env:{...process.env,ORG_DIR:f.org,HERDR_ENV:'1',HERDR_PANE_ID:'pane',HERDR_WORKSPACE_ID:'workspace',CODEX_THREAD_ID:'sid'},call:()=>{calls++;assert.equal(fs.existsSync(f.lock),false);return JSON.stringify({result:{agent:native}});}});
   guard(()=>assert.equal(fs.existsSync(f.lock),true));assert.equal(calls,2);
   atLock(t,f,()=>fs.appendFileSync(f.file,JSON.stringify({seq:4,type:'item.updated',id:'ENG-1',fields:{meta:{hold:true}}})+'\n'));
-  assert.throws(()=>guard(()=>assert.fail('raced native effect')),/guard conflict/);assert.equal(calls,3);
+  assert.throws(()=>guard(()=>assert.fail('raced native effect')),/HOLD/);assert.equal(calls,4);
 });
 
 test('native own promotion and landing receipts retain the newest non-abandoned owner only',t=>{
@@ -113,8 +113,11 @@ test('native own promotion and landing receipts retain the newest non-abandoned 
     {type:'run.abandoned',id:'R-2',why:'Duplicate abandoned without replacing the actual worker'}]}));
   const guard=ownWorktreeGuard({canonical:f.root,identity,workspace:f.root,topic:'topic',env,call});
   guard(()=>assert.equal(fs.existsSync(f.lock),true));
+  let raced=false;
+  atLock(t,f,()=>{if(!raced){raced=true;fs.appendFileSync(f.file,JSON.stringify({seq:6,type:'future.concurrent-receipt'})+'\n');}});
   const receipt=recordOwnLanding({canonical:f.root,workspace:f.root,base,head,landedAt:new Date().toISOString(),env,call});
   assert.equal(receipt.recorded,true);assert.equal(receipt.changes.length,1);assert.equal(receipt.changes[0].run,'R-1');
+  assert.match(fs.readFileSync(path.join(f.org,'record-conflicts.jsonl'),'utf8'),/"retry":true/);
   transact(f.org,()=>({add:[{type:'run.started',id:'R-3',item:'ENG-1',workspace:f.root}]}));
   assert.throws(()=>guard(()=>assert.fail('superseded owner')),/one active owning native worker/);
   assert.throws(()=>recordOwnLanding({canonical:f.root,workspace:f.root,base,head,landedAt:new Date().toISOString(),env,call}),/ownership is missing\/ambiguous/);

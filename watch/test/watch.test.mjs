@@ -513,6 +513,37 @@ esac`);
   }
 });
 
+test('final watcher reservations and completion retry record races and deliver once across restart', async t => {
+  const f = watcherFixture('R-941'), inbox = path.join(f.root, '.org/supervisor/inbox.log');
+  cleanWatcherFixture(t, f.root);
+  fs.appendFileSync(path.join(f.root, '.org/events.jsonl'), JSON.stringify({
+    type:'report.ingested',seq:3,run:'R-941',report:{outcome:'done',headline:'Concurrent final report'},
+  }) + '\n');
+  executable(f.herdr, `printf '%s\\n' "$*" >> '${f.calls}'
+case "$1 $2" in
+  "agent prompt") printf '%s\\n' '{}' ;;
+  *) exit 2 ;;
+esac`);
+  const preload = path.join(f.root,'record-race.mjs');
+  fs.writeFileSync(preload, `import fs from 'node:fs'; const mkdir=fs.mkdirSync; let races=0;
+    fs.mkdirSync=function(file,...args){const result=mkdir.call(this,file,...args);
+      if(file===${JSON.stringify(path.join(f.root,'.org/lock'))}&&(races===0||races===1&&fs.existsSync(${JSON.stringify(path.join(f.root,'.org/watch/R-941.json'))}))){races++;
+        const log=${JSON.stringify(path.join(f.root,'.org/events.jsonl'))},lines=fs.readFileSync(log,'utf8').trim().split('\\n');
+        fs.appendFileSync(log,JSON.stringify({seq:JSON.parse(lines.at(-1)).seq+1,type:'future.concurrent'})+'\\n');
+      }return result;};`);
+  for (const prefix of [['--import',preload], []]) {
+    const result = await waitForExit(startWatcher(t, [...prefix,...f.args]));
+    assert.equal(result.code, 0, result.stdout+result.stderr);
+  }
+  const prompts = fs.readFileSync(f.calls,'utf8').split('\n').filter(line => line.startsWith('agent prompt '));
+  assert.equal(prompts.length, 1);
+  const entries = readInbox(inbox);
+  assert.equal(entries.length, 1); assert.equal(entries[0].id, 'watch:R-941:final'); assert.equal(entries[0].state, 'sent');
+  assert.equal(JSON.parse(fs.readFileSync(path.join(f.root,'.org/watch/R-941.json'),'utf8')).intent, undefined);
+  const conflicts = fs.readFileSync(path.join(f.root,'.org/record-conflicts.jsonl'),'utf8').trim().split('\n').map(JSON.parse);
+  assert.equal(conflicts.length, 2); assert.ok(conflicts.every(row => row.retry));
+});
+
 test('a watcher preserves active continuation recipients through ingested-report delivery and restart', async t => {
   for (const recipient of ['lane-nine', 'fake:worker-pane']) {
     await t.test(recipient, async t => {

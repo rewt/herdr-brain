@@ -305,9 +305,13 @@ test('line service routes classified reviews to the other family and refuses a m
       assert.equal(args[0],path.join(root,'dispatch/dispatch.mjs'));calls.push(args);
       return{status:0,stdout:'{"run":"R-2","item":"REV-1"}',stderr:''};
     };
-    createLineService({repo:f.cwd,org:f.org,to:'test-supervisor',env:f.env,capacity:()=>({cap:7,count:0}),command,
+    const result=createLineService({repo:f.cwd,org:f.org,to:'test-supervisor',env:f.env,capacity:()=>({cap:7,count:0}),command,
       recordNotice:data=>{notices.push(data.reason);return{id:data.id,state:'record-only'};}}).pass();
-    if(unavailable){assert.equal(calls.length,0);assert.match(notices.join('\n'),/other-family review unavailable/);}
+    if(unavailable){
+      assert.equal(calls.length,0);
+      const effects=JSON.parse(fs.readFileSync(path.join(result.directory,'effects.json')));
+      assert.match(Object.values(effects.record_notices??{}).map(n=>n.reason).join('\n'),/other-family review unavailable/);
+    }
     else{assert.equal(calls.length,1,notices.join('\n'));const args=calls[0];assert.equal(args[args.indexOf('--route')+1],producerHarness==='claude'?'review-codex':'review');}
     const reviews=[...f.context().state.items.values()].filter(i=>i.role==='reviewer');
     assert.equal(reviews.length,1);assert.equal(reviews[0].meta.review_other_family,true);

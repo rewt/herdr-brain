@@ -482,8 +482,10 @@ esac`);
         assert.match(result.stdout, /final notice confirmed from its ingested report/);
       }
       const calls = fs.readFileSync(f.calls, 'utf8').trim().split('\n');
-      assert.equal(calls.length, 1);
-      assert.equal(calls[0], `agent prompt supervisor-test ${reportNotice({ run: 'R-941', item: 'ENG-9',
+      const prompts = calls.filter(call => call.startsWith('agent prompt '));
+      assert.equal(prompts.length, 1, calls.join('\n'));
+      assert.ok(calls.every(call => !call.startsWith('agent get lane-nine')), calls.join('\n'));
+      assert.equal(prompts[0], `agent prompt supervisor-test ${reportNotice({ run: 'R-941', item: 'ENG-9',
         outcome: 'done', headline: report.headline, report: f.report, check: 'pass' })} notice-id=watch:R-941:final`);
       const entries = readInbox(inbox);
       assert.equal(entries.length, 1);
@@ -640,6 +642,10 @@ esac`);
 
 test('a valid report also waits while the worker state is unknown', async (t) => {
   const fixture = watcherFixture('R-17');
+  t.after(async () => {
+    await waitForInboxIdle(path.join(fixture.root, '.org/supervisor/inbox.log'));
+    fs.rmSync(fixture.root, { recursive: true, force: true });
+  });
   const state = path.join(fixture.root, 'worker-state');
   const waits = path.join(fixture.root, 'waits');
   fs.writeFileSync(fixture.report, reportText('R-17'));
@@ -647,7 +653,7 @@ test('a valid report also waits while the worker state is unknown', async (t) =>
   executable(fixture.herdr, `case "$1 $2" in
   "agent get") printf '{"result":{"agent":{"agent_status":"%s"}}}\\n' "$(cat '${state}')" ;;
   "agent wait") printf yes >> '${waits}'; while [ "$(cat '${state}')" = unknown ]; do sleep 0.02; done ;;
-  "agent prompt") printf '%s\\n' "$*" >> "${fixture.calls}" ;;
+  "agent prompt") printf '%s\\n' "$*" >> "${fixture.calls}"; printf '%s\\n' '{"result":{}}' ;;
   *) exit 2 ;;
 esac`);
   const child = startWatcher(t, fixture.args);
@@ -661,11 +667,15 @@ esac`);
 
 test('a mismatched report is invalid even when org check passes', async (t) => {
   const fixture = watcherFixture('R-9');
+  t.after(async () => {
+    await waitForInboxIdle(path.join(fixture.root, '.org/supervisor/inbox.log'));
+    fs.rmSync(fixture.root, { recursive: true, force: true });
+  });
   fs.writeFileSync(fixture.report, reportText('R-99', 'Stale report'));
   executable(fixture.herdr, `case "$1 $2" in
   "agent get") printf '%s\\n' '{"result":{"agent":{"agent_status":"done"}}}' ;;
   "agent wait") exec sleep 10 ;;
-  "agent prompt") printf '%s\\n' "$*" >> "${fixture.calls}"; case "$4" in *watch-invalid-report*) "${fixture.writer}" ;; esac ;;
+  "agent prompt") printf '%s\\n' "$*" >> "${fixture.calls}"; case "$4" in *watch-invalid-report*) "${fixture.writer}" ;; esac; printf '%s\\n' '{"result":{}}' ;;
   *) exit 2 ;;
 esac`);
   const result = await waitForExit(startWatcher(t, [...fixture.args, '--start-grace', '0']));
@@ -820,13 +830,17 @@ esac`);
 
 test('a valid report stays intermediate while blocked and is final only after idle', async (t) => {
   const fixture = watcherFixture('R-18');
+  t.after(async () => {
+    await waitForInboxIdle(path.join(fixture.root, '.org/supervisor/inbox.log'));
+    fs.rmSync(fixture.root, { recursive: true, force: true });
+  });
   const state = path.join(fixture.root, 'worker-state');
   fs.writeFileSync(fixture.report, reportText('R-18', 'Finished after unblocking'));
   fs.writeFileSync(state, 'blocked');
   executable(fixture.herdr, `case "$1 $2" in
   "agent get") printf '{"result":{"agent":{"agent_status":"%s"}}}\\n' "$(cat '${state}')" ;;
   "agent wait") while [ "$(cat '${state}')" = blocked ]; do sleep 0.02; done ;;
-  "agent prompt") printf '%s\\n' "$*" >> "${fixture.calls}" ;;
+  "agent prompt") printf '%s\\n' "$*" >> "${fixture.calls}"; printf '%s\\n' '{"result":{}}' ;;
   *) exit 2 ;;
 esac`);
   const child = startWatcher(t, [...fixture.args, '--start-grace', '0']);
@@ -842,13 +856,17 @@ esac`);
 
 test('a refused intermediate delivery stays first in the inbox and recovers before the final report', async (t) => {
   const fixture = watcherFixture('R-16');
+  t.after(async () => {
+    await waitForInboxIdle(path.join(fixture.root, '.org/supervisor/inbox.log'));
+    fs.rmSync(fixture.root, { recursive: true, force: true });
+  });
   const state = path.join(fixture.root, 'worker-state');
   fs.writeFileSync(state, 'blocked');
   executable(fixture.herdr, `case "$1 $2" in
   "agent get") printf '{"result":{"agent":{"agent_status":"%s"}}}\\n' "$(cat '${state}')" ;;
   "agent wait") exec sleep 10 ;;
   "agent prompt") printf '%s\\n' "$*" >> "${fixture.calls}"; case "$4" in *watch-blocked*)
-    if [ ! -f '${fixture.root}/refused' ]; then printf yes > '${fixture.root}/refused'; printf '%s\\n' '{"error":{"code":"agent_blocked"}}' >&2; exit 1; fi ;; esac ;;
+    if [ ! -f '${fixture.root}/refused' ]; then printf yes > '${fixture.root}/refused'; printf '%s\\n' '{"error":{"code":"agent_blocked"}}' >&2; exit 1; fi ;; esac; printf '%s\\n' '{"result":{}}' ;;
   "notification show") printf '%s\\n' "$*" >> "${fixture.calls}"; "${fixture.writer}"; printf '%s' idle > '${state}' ;;
   *) exit 2 ;;
 esac`);

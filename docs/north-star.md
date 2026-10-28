@@ -59,7 +59,7 @@ settling, review, promotion, housekeeping and the supervisor) becomes a standalo
 product that requires Herdr, with an optional thin Herdr plugin front door, that
 any project on any machine can adopt. Herdr is the runtime; Brain is the control
 plane. The roadmap is goal G-3 in herdr-brain's own record;
-`docs/roadmap.md` gives its shape.
+`docs/roadmap.md` gives its shape. The [work lifecycle](workflow-lifecycle.md) describes the adopted land, report, close and review flow and its current proof limits.
 
 ## The problem
 

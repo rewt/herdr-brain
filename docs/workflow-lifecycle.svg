@@ -1,0 +1,89 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 560" role="img" aria-label="Adopted Herdr Brain lifecycle, with guarded and incomplete live proof as of 27 October 2026. Worker lands own finished commits, then runs selected checks and files a report. Ingested reports feed guarded combined cleanup and one asynchronous record queue review in a fresh reviewer worktree, with zero suites. Safety holds keep affected allocations. One formal correction uses a fresh worktree, may resume a saved session by ID, lands, checks and reports. Later findings fix forward. Final release still requires corrected Majors, full coverage and live acceptance; current release proof is incomplete.">
+  <style>
+    .bg { fill: #ffffff; }
+    .box { fill: #f4f7f5; stroke: #5b6762; stroke-width: 1.2; }
+    .key { fill: #e0f1ea; stroke: #0a7660; stroke-width: 1.6; }
+    .warn { fill: #f8e5db; stroke: #ae431c; stroke-width: 1.4; }
+    .gate { fill: #ffffff; stroke: #1f2a26; stroke-width: 1.6; stroke-dasharray: 6 4; }
+    .t { fill: #1f2a26; font: 600 14px -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; }
+    .s { fill: #5b6762; font: 12px ui-monospace, Menlo, Consolas, monospace; }
+    .h { fill: #1f2a26; font: 700 16px -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; }
+    .ln { stroke: #1f2a26; stroke-width: 1.4; fill: none; }
+    .lna { stroke: #0a7660; stroke-width: 1.8; fill: none; }
+    .lnw { stroke: #ae431c; stroke-width: 1.5; fill: none; stroke-dasharray: 5 4; }
+    .m { fill: #1f2a26; } .ma { fill: #0a7660; } .mw { fill: #ae431c; }
+    .lbl { fill: #0a7660; font: 12px ui-monospace, Menlo, Consolas, monospace; }
+    .lblw { fill: #ae431c; font: 12px ui-monospace, Menlo, Consolas, monospace; }
+    @media (prefers-color-scheme: dark) {
+      .bg { fill: #101513; } .box { fill: #17201c; stroke: #9aa7a1; } .key { fill: #15302a; stroke: #4bc4a3; }
+      .warn { fill: #3a2218; stroke: #e98a60; } .gate { fill: #101513; stroke: #e2e9e5; }
+      .t, .h { fill: #e2e9e5; } .s { fill: #9aa7a1; } .ln { stroke: #e2e9e5; } .lna { stroke: #4bc4a3; } .lnw { stroke: #e98a60; }
+      .m { fill: #e2e9e5; } .ma { fill: #4bc4a3; } .mw { fill: #e98a60; } .lbl { fill: #4bc4a3; } .lblw { fill: #e98a60; }
+    }
+  </style>
+  <defs>
+    <marker id="a" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L8,4 L0,8 z" class="m"/></marker>
+    <marker id="aa" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L8,4 L0,8 z" class="ma"/></marker>
+    <marker id="aw" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L8,4 L0,8 z" class="mw"/></marker>
+  </defs>
+  <rect class="bg" x="0" y="0" width="1000" height="560"/>
+  <text class="h" x="20" y="32">Herdr Brain: land, report, close, review</text>
+
+  <rect class="box" x="20" y="60" width="200" height="64" rx="8"/>
+  <text class="t" x="120" y="86" text-anchor="middle">Line starts a worker</text>
+  <text class="s" x="120" y="106" text-anchor="middle">own lane: worktree + pane</text>
+
+  <rect class="box" x="260" y="60" width="220" height="64" rx="8"/>
+  <text class="t" x="370" y="86" text-anchor="middle">Land own source first</text>
+  <text class="s" x="370" y="106" text-anchor="middle" style="font-size:10px">fast-forward; then selected checks</text>
+
+  <rect class="box" x="520" y="60" width="200" height="64" rx="8"/>
+  <text class="t" x="620" y="86" text-anchor="middle">Worker files report</text>
+  <text class="s" x="620" y="106" text-anchor="middle">then the record ingests it</text>
+
+  <rect class="key" x="760" y="52" width="220" height="104" rx="8"/>
+  <text class="t" x="870" y="76" text-anchor="middle">Guarded combined cleanup</text>
+  <text class="s" x="870" y="96" text-anchor="middle">close finished session;</text>
+  <text class="s" x="870" y="112" text-anchor="middle">clean folder removed; keep</text>
+  <text class="s" x="870" y="126" text-anchor="middle" style="font-size:10px">unlanded branch / unsaved folder</text>
+
+  <text class="s" x="870" y="144" text-anchor="middle" style="font-size:10px">delete branch only if on main</text>
+
+  <path class="ln" d="M220,92 L258,92" marker-end="url(#a)"/>
+  <path class="ln" d="M480,92 L518,92" marker-end="url(#a)"/>
+  <path class="lna" d="M720,92 L758,92" marker-end="url(#aa)"/>
+
+  <rect class="key" x="260" y="200" width="300" height="72" rx="8"/>
+  <text class="t" x="410" y="226" text-anchor="middle">One review of the landed range</text>
+  <text class="s" x="410" y="246" text-anchor="middle">fresh reviewer worktree; zero suites</text>
+  <text class="s" x="410" y="262" text-anchor="middle">other-family routing wired in source</text>
+  <path class="ln" d="M620,124 L620,182 L410,182 L410,198" marker-end="url(#a)"/>
+  <text class="s" x="435" y="156">record queues it after capture</text>
+
+  <rect class="key" x="620" y="200" width="160" height="72" rx="8"/>
+  <text class="t" x="700" y="230" text-anchor="middle">PASS</text>
+  <text class="s" x="700" y="250" text-anchor="middle">review complete</text>
+  <path class="lna" d="M560,224 L618,224" marker-end="url(#aa)"/>
+
+  <rect class="warn" x="260" y="330" width="420" height="88" rx="8"/>
+  <text class="t" x="470" y="356" text-anchor="middle">FAIL or Major: one fresh fixer</text>
+  <text class="s" x="470" y="376" text-anchor="middle">new worktree from main or the kept branch</text>
+  <text class="s" x="470" y="392" text-anchor="middle">brief: report, review, diff, findings, checks</text>
+  <text class="s" x="470" y="408" text-anchor="middle">may resume a saved session by its ID</text>
+  <path class="lnw" d="M410,272 L410,328" marker-end="url(#aw)"/>
+  <text class="lblw" x="418" y="304">FAIL / Major</text>
+
+  <path class="ln" d="M680,374 L870,374 L870,158" marker-end="url(#a)"/>
+  <text class="s" x="700" y="366">lands, checks, reports;</text>
+  <text class="s" x="700" y="392">same guarded cleanup</text>
+
+  <text class="s" x="20" y="300">No re-review. Later findings</text>
+  <text class="s" x="20" y="316">are fixed forward.</text>
+
+  <text class="s" x="20" y="440">27 Oct 2026: cleanup source landed; live keeps and open Majors remain; speed work pending.</text>
+
+  <rect class="gate" x="20" y="460" width="960" height="76" rx="8"/>
+  <text class="t" x="500" y="488" text-anchor="middle">Final release requirements — proof still incomplete</text>
+  <text class="s" x="500" y="510" text-anchor="middle">Majors corrected · full coverage · live acceptance · seal · then each project adopts the release</text>
+  <text class="s" x="500" y="526" text-anchor="middle">Safety holds stay: Native / claim / STOP / HOLD / dirty / unknown. Targets are not achieved guarantees.</text>
+</svg>

@@ -243,15 +243,17 @@ function historicalTail(t,{kind='eligible'}={}){
   return f;
 }
 
-test('cleanup tail creates a separate verified historical binding under the paired current policy',async t=>{
-  const f=historicalTail(t),{refreshCloseouts}=await import('../lib/closeout-consumer.mjs');assert.equal(typeof refreshCloseouts,'function');
+test('cleanup tail creates a direct verified historical report binding under the paired current policy',async t=>{
+  const f=historicalTail(t),{refreshCloseouts}=await import('../lib/closeout-consumer.mjs');
   selectCurrentCleanup(f);const before=fs.readFileSync(f.eventFile),result=refreshCloseouts({cwd:f.repo,org:f.org,env:f.env,retirementOptions:f.options});
-  assert.equal(result.created.length,1,JSON.stringify(result));const entry=readCloseoutEntries(f.common)[0];
-  assert.equal(entry.source.type,'cleanup.bound');assert.equal(entry.signal,'landed');assert.equal(entry.panes[0].session,'session');
+  assert.equal(result.created.length,1,JSON.stringify(result));const entry=currentCloseoutEntries(f.common,f.org,events(f)).find(e=>e.key===result.created[0]);
+  assert.equal(entry.source.type,'cleanup.bound');assert.equal(entry.signal,'ready');assert.equal(entry.reportCloseout,true);assert.equal(entry.panes[0].session,'session');
+  assert.deepEqual(readCloseoutEntries(f.common),[],'historical reports use record targets, with no new queue file');
   assert.deepEqual(fs.readFileSync(f.eventFile).subarray(0,before.length),before,'original launch and report history stay immutable');
   assert.equal(refreshCloseouts({cwd:f.repo,org:f.org,env:f.env,retirementOptions:f.options}).created.length,0,'binding is resource-deduplicated');
-  const next=f.drain({keys:[entry.key],sessionsOnly:true});assert.equal(next.evaluated[0]?.sessions_retired,true,JSON.stringify(next));
-  assert.equal(f.drain({keys:[entry.key],retrySafe:true}).evaluated[0]?.completed,true);
+  const next=f.drain({keys:[entry.key],sessionsOnly:true});assert.equal(next.evaluated[0]?.completed,true,JSON.stringify(next));
+  assert.equal(next.evaluated[0].disposition,'closed');assert.equal(fs.existsSync(f.lane),false);assert.equal(f.read().tabs.length,0);
+  assert.deepEqual(f.drain({keys:[entry.key],retrySafe:true}).evaluated,[],'same-pass completion is not replayed');
 });
 
 test('cleanup tail explicit abandonment permits only a guarded content-released allocation',t=>{
@@ -261,11 +263,28 @@ test('cleanup tail explicit abandonment permits only a guarded content-released 
   assert.equal(fold(events(f)).items.get('ENG-1').closed,null);
 });
 
-test('cleanup tail historical discovery retains working reused foreign unknown dirty and unlanded allocations',async t=>{
-  const {refreshCloseouts}=await import('../lib/closeout-consumer.mjs');assert.equal(typeof refreshCloseouts,'function');
-  for(const kind of ['working','reused','foreign','unknown','dirty','unlanded','refused','uncertain']){
+test('cleanup tail historical discovery keeps unsafe scopes and binds reported dirty and unlanded allocations',async t=>{
+  const {refreshCloseouts}=await import('../lib/closeout-consumer.mjs');
+  for(const kind of ['working','reused','foreign','unknown','refused','uncertain']){
     const f=historicalTail(t,{kind}),bytes=fs.readFileSync(f.eventFile),result=refreshCloseouts({cwd:f.repo,org:f.org,env:f.env,retirementOptions:f.options});
-    assert.deepEqual(result.created,[],`${kind}: ${JSON.stringify(result)}`);assert.deepEqual(fs.readFileSync(f.eventFile),bytes);assert.deepEqual(f.read().actions,[]);
+    assert.deepEqual(result.created,[],`${kind}: ${JSON.stringify(result)}`);
+    assert.deepEqual(fs.readFileSync(f.eventFile).subarray(0,bytes.length),bytes,'original evidence stays immutable');
+    const kept=events(f).filter(e=>e.type==='closeout.kept');assert.equal(kept.length,1,kind);assert.equal(kept[0].run,'R-1');assert.equal(kept[0].cwd,f.lane);
+    const recorded=fs.readFileSync(f.eventFile);refreshCloseouts({cwd:f.repo,org:f.org,env:f.env,retirementOptions:f.options});
+    assert.deepEqual(fs.readFileSync(f.eventFile),recorded,'the kept outcome is deduplicated');assert.deepEqual(f.read().actions,[]);
+  }
+  for(const kind of ['dirty','unlanded']){
+    const f=historicalTail(t,{kind}),result=refreshCloseouts({cwd:f.repo,org:f.org,env:f.env,retirementOptions:f.options});
+    assert.equal(result.created.length,1,`${kind}: ${JSON.stringify(result)}`);
+    const entry=currentCloseoutEntries(f.common,f.org,events(f)).find(e=>e.key===result.created[0]);assert.equal(entry.reportCloseout,true);
+    const drained=f.drain({keys:[entry.key]});assert.equal(f.read().tabs.length,0,'finished sessions close in the same pass');
+    if(kind==='dirty'){
+      assert.equal(drained.evaluated[0].disposition,'kept');assert.match(drained.evaluated[0].reason,/not clean/);
+      assert.equal(fs.readFileSync(path.join(f.lane,'unique-uncommitted'),'utf8'),'retain');
+    }else{
+      assert.equal(drained.evaluated[0].completed,true,JSON.stringify(drained));assert.equal(fs.existsSync(f.lane),false);
+      assert.equal(f.git(['rev-parse','refs/heads/lane/topic']),f.head,'clean unlanded source stays on its exact branch');
+    }
   }
 });
 
@@ -292,14 +311,15 @@ test('cleanup refresh binds an abandoned kept lane once',t=>{
   assert.equal(currentCloseoutEntries(g.common,g.org,events(g)).filter(e=>e.reportCloseout&&e.run==='R-1').length,1);
 });
 
-test('cleanup tail fresh binding preserves an exact active settle reference as an executor fence',async t=>{
+test('cleanup tail direct binding preserves an exact active settle reference as an executor fence',async t=>{
   const f=historicalTail(t),{refreshCloseouts}=await import('../lib/closeout-consumer.mjs');
   const directory=path.join(f.org,'settle');fs.mkdirSync(directory,{recursive:true});
   fs.writeFileSync(path.join(directory,'R-1.json'),JSON.stringify({common:f.common,run:'R-1',workspace:f.lane,stage:'reviewing'}));
   const created=refreshCloseouts({cwd:f.repo,org:f.org,env:f.env,retirementOptions:f.options});assert.equal(created.created.length,1,JSON.stringify(created));
-  const entry=readCloseoutEntries(f.common).find(e=>e.key===created.created[0]),bytes=fs.readFileSync(path.join(f.common,'closeout/entries',entry.key+'.json'));
+  const entry=currentCloseoutEntries(f.common,f.org,events(f)).find(e=>e.key===created.created[0]),source=events(f).find(e=>e.seq===entry.source.seq);
+  const original=JSON.stringify(source);assert.equal(entry.reportCloseout,true);assert.deepEqual(readCloseoutEntries(f.common),[]);
   const result=f.drain({keys:[entry.key],sessionsOnly:true});assert.match(result.evaluated[0]?.reason??'',/settle callback reference/);
-  assert.equal(fs.existsSync(f.lane),true);assert.deepEqual(fs.readFileSync(path.join(f.common,'closeout/entries',entry.key+'.json')),bytes);
+  assert.equal(fs.existsSync(f.lane),true);assert.equal(JSON.stringify(events(f).find(e=>e.seq===entry.source.seq)),original,'the bound record target is immutable');
   assert.equal(f.read().actions.length,0);
 });
 
@@ -583,7 +603,11 @@ test('future telemetry diagnostics cannot override a durable native refusal or m
   transact(f.org,()=>({add:[row]}));
   appendCloseoutObservation(f.common,f.org,{...row,reason:'retirement deadline reached; request remains pending'},events(f));
   assert.equal(closeoutEvaluations(f.common,f.org,events(f)).find(e=>e.key===entry.key).reason,row.reason);
-  const bytes=fs.readFileSync(f.eventFile);assert.deepEqual(f.drain({keys:[entry.key],retrySafe:true}).evaluated,[]);assert.deepEqual(f.read().actions,[]);assert.deepEqual(fs.readFileSync(f.eventFile),bytes);
+  const bytes=fs.readFileSync(f.eventFile);assert.deepEqual(f.drain({keys:[entry.key],retrySafe:true}).evaluated,[]);assert.deepEqual(f.read().actions,[]);
+  assert.deepEqual(fs.readFileSync(f.eventFile).subarray(0,bytes.length),bytes,'original refusal is never rewritten');
+  const wait=events(f).find(e=>e.type==='closeout.waiting'&&e.key===entry.key);assert.ok(wait);assert.equal(closeoutWaitState(wait,events(f)),'defect');
+  assert.match(wait.waiting.defect,/native refusal/);assert.equal(closeoutEvaluations(f.common,f.org,events(f)).find(e=>e.key===entry.key).reason,row.reason);
+  const recorded=fs.readFileSync(f.eventFile);assert.deepEqual(f.drain({keys:[entry.key],retrySafe:true}).evaluated,[]);assert.deepEqual(fs.readFileSync(f.eventFile),recorded);
   const log=path.join(f.common,'closeout/worker.log');fs.appendFileSync(log,JSON.stringify({schema:'closeout-diagnostic/v1',org:f.org,observed_seq:events(f).at(-1).seq,evaluation:{...row,completed:true}})+'\n');
   assert.throws(()=>f.drain({keys:[entry.key],retrySafe:true}),/invalid closeout diagnostic/);assert.deepEqual(f.read().actions,[]);
 });
@@ -657,17 +681,21 @@ test('cleanup retention priority preserves HOLD dirty source and original unknow
 });
 
 test('retirement phase retains original unknown exits and a fresh service STOP before any native effect',t=>{
-  for(const kind of ['unknown','stop','absent']){
+  for(const kind of ['unknown','stop']){
     const f=setup(t,{merged:true});f.report();const rows=f.append([{type:'item.closed',id:'ENG-1',as:'done',completed_run:'R-1'}]),entry=rows[0].closeout_targets.find(t=>t.signal==='landed');
     if(kind==='unknown'){
       const candidate=f.retirement(f.options).plan(f.lane).close[0];f.append([{type:'closeout.effect',key:entry.key,identity:f.common,run:'R-1',item:'ENG-1',source:{seq:rows[0].seq,type:'item.closed'},effect:'preserved-original-intent',outcome:{action:'agent-exit-requested',run:candidate.run,pane:candidate.pane,tab_id:candidate.tab_id,occupant:candidate.occupant,shell:candidate.shell}}]);
-    }else if(kind==='absent'){
-      f.state.agents=[];f.state.tabs=[];f.state.panes=[];f.save();
     }else{
       const base=f.options.command;let stopped=false;f.options.command=(exe,args,opt)=>{const result=base(exe,args,opt);if(!stopped&&exe===f.job.herdr){stopped=true;const directory=path.join(f.org,'line-service',createHash('sha256').update(JSON.stringify(f.common)).digest('hex').slice(0,20));fs.mkdirSync(directory,{recursive:true});fs.writeFileSync(path.join(directory,'STOP'),'actual STOP after selection');}return result;};
     }
     const result=f.drain({keys:[entry.key],sessionsOnly:true,retrySafe:true});assert.equal(result.evaluated[0]?.completed,false);assert.notEqual(result.evaluated[0]?.sessions_retired,true);assert.match(result.evaluated[0].reason,/unresolved native|STOP|UNKNOWN/);assert.deepEqual(f.read().actions,[]);
   }
+  const f=setup(t,{merged:true});f.report();const rows=f.append([{type:'item.closed',id:'ENG-1',as:'done',completed_run:'R-1'}]),entry=rows[0].closeout_targets.find(t=>t.signal==='landed');
+  f.state.agents=[];f.state.tabs=[];f.state.panes=[];f.save();
+  const result=f.drain({keys:[entry.key],sessionsOnly:true,retrySafe:true});assert.equal(result.evaluated[0].completed,false);assert.equal(result.evaluated[0].sessions_retired,true);
+  assert.ok(effects(f).some(e=>e.action==='allocation-absent'&&e.pane==='w:p'&&e.terminal==='term'&&e.session==='session'));
+  assert.equal(effects(f).some(e=>['exit-observed','session-released','lane-removed'].includes(e.action)),false,'absence invents no exit, release or removal');
+  assert.equal(fs.existsSync(f.lane),true);assert.deepEqual(f.read().actions,[]);
 });
 
 test('phase1 deadline retry preserves an unresolved original native exit intent without another prompt',t=>{
@@ -983,7 +1011,10 @@ test('source binding uses the supplied fleet environment through publication', t
   assert.equal(committed.added[0].closeout_targets.length, 1);
   const published = publishCloseoutEvents({ cwd: f.repo, org: f.org, added: committed.added, env, start: false });
   assert.equal(published.length, 1);
-  assert.equal(readCloseoutEntries(f.common)[0].org, fs.realpathSync(f.org));
+  assert.deepEqual(readCloseoutEntries(f.common), [], 'direct reports have no persisted queue entry');
+  const [entry] = currentCloseoutEntries(f.common, f.org, events(f));
+  assert.equal(entry.org, fs.realpathSync(f.org)); assert.equal(entry.reportCloseout, true);
+  assert.deepEqual(entry.source, {seq: committed.added[0].seq, type: 'report.ingested'});
 });
 
 test('concurrent foreign-record CLI writers neither consume nor prune the project record queue', async t => {
@@ -1097,17 +1128,30 @@ test('promotion retries only its exact deferred lock target; empty drains never 
       { type: 'promotion.reconciled', identity: f.common, heads: [{ run: `R-${i}`, head: f.head }], runs: [`R-${i}`], items: [`ENG-${i}`] }]);
   }
   const entries = readCloseoutEntries(f.common).filter(e => e.signal === 'landed');
-  f.append(entries.map(entry => ({ type: 'closeout.evaluated', key: entry.key, identity: f.common, run: entry.run, item: entry.item,
-    source: entry.source, revision: closeoutRevision(entry, events(f)), completed: entry.run === 'R-3',
-    waiting: { event: entry.run === 'R-4' ? 'target-record-changed' : 'lifecycle-lock-released' } })));
+  f.append(entries.flatMap(entry => {
+    const prior={ type: 'closeout.evaluated', key: entry.key, identity: f.common, run: entry.run, item: entry.item,
+      source: entry.source, revision: closeoutRevision(entry, events(f)), completed: entry.run === 'R-3',
+      reason: entry.run === 'R-4' ? 'record source requires owner repair' : 'locked: promotion lifecycle' };
+    if(prior.completed)return [prior];
+    const waiting=entry.run==='R-4'?{owner:'line-service',defect:'record source requires owner repair',producers:[]}:
+      {owner:'promotion-closeout',producers:[{kind:'lifecycle-release',job:entry.key,run:entry.run,head:entry.head,branch:entry.branch}]};
+    return [prior,{type:'closeout.waiting',identity:f.common,key:entry.key,run:entry.run,item:entry.item,source:entry.source,
+      revision:prior.revision,wait_id:closeoutWaitId(entry,prior),waiting}];
+  }));
   const jobs = entries.filter(e => e.run !== 'R-2').map(e => ({ id: e.key, org: f.org, run: e.run, topic: e.branch.slice(5), tip: e.run === 'R-5' ? '0'.repeat(40) : e.head }));
   const queue = queueFor(f.repo);
   const before = events(f).length;
   await drainPromotions(queue);
   assert.equal(events(f).length, before, 'empty promotion drain does not retry historical entries');
   const added = retryPromotionCloseout({ cwd: f.repo, org: f.org, jobs, start: false });
-  assert.equal(added.length, 1); assert.deepEqual(added[0].keys, [entries.find(e => e.run === 'R-1').key]);
-  assert.deepEqual(retryPromotionCloseout({ cwd: f.repo, org: f.org, jobs, start: false }), [], 'an already requested retry adds no churn');
+  assert.equal(added[0].type,'closeout.lifecycle-released');assert.deepEqual(added[0].jobs,jobs.map(({id,org,run,topic,tip})=>({id,run,topic,tip})));
+  const statuses=()=>events(f).filter(e=>e.type==='closeout.producer-status');
+  assert.deepEqual(statuses().map(e=>e.key),[entries.find(e=>e.run==='R-1').key],'only the exact owning callback resolves its wait');
+  for(const entry of entries.filter(e=>!['R-1','R-3'].includes(e.run))){
+    const wait=events(f).find(e=>e.type==='closeout.waiting'&&e.key===entry.key);assert.notEqual(closeoutWaitState(wait,events(f)),'complete',entry.run);
+  }
+  const completedStatuses=statuses();retryPromotionCloseout({ cwd: f.repo, org: f.org, jobs, start: false });
+  assert.deepEqual(statuses(),completedStatuses,'repeated callback facts cannot duplicate linked completion');
   assert.equal(readCloseoutEntries(f.common).some(e => e.run === 'R-3'), false, 'completed request file is pruned after its durable receipt');
   const completed = entries.find(e => e.run === 'R-3'), source = events(f).find(e => e.seq === completed.source.seq);
   assert.deepEqual(publishCloseoutEvents({ cwd: f.repo, org: f.org, added: [source], start: false }), [], 'replay cannot resurrect a completed key');
@@ -1170,8 +1214,15 @@ for (const project of ['bch-cloak', 'herdr-brain']) test(`${project}: a landed e
     : nativeCommand(exe, args, options);
   const landed = readCloseoutEntries(f.common).find(e => e.signal === 'landed');
   assert.equal(landed.source.type, 'promotion.reconciled');
+  const ready = readCloseoutEntries(f.common).find(e => e.signal === 'ready');
+  const readyBytes = fs.readFileSync(path.join(f.common,'closeout/entries',ready.key+'.json'));
   f.drain(); assertRemoved(f);
-  assert.deepEqual(readCloseoutEntries(f.common), [], 'only durable record evidence remains after completion');
+  assert.deepEqual(readCloseoutEntries(f.common).map(e=>e.key),[ready.key],'a landed completion cannot prune its unevaluated ready source');
+  assert.deepEqual(fs.readFileSync(path.join(f.common,'closeout/entries',ready.key+'.json')),readyBytes);
+  const twin=f.drain({keys:[ready.key],retrySafe:true});
+  assert.equal(twin.evaluated[0]?.completed,true,JSON.stringify(twin));assert.deepEqual(twin.evaluated[0].source,ready.source);
+  assert.match(twin.evaluated[0].reason,/same worktree retired by a later bound request/);
+  assert.deepEqual(readCloseoutEntries(f.common), [], 'only durable record evidence remains after exact-source completion');
   const evaluated = evaluations(f).findLast(event => event.completed && event.source.type === 'promotion.reconciled');
   const codeRoot = fs.realpathSync(path.resolve(import.meta.dirname, '..')), marker = path.join(codeRoot, '.release-commit');
   assert.ok(evaluated, 'real consumer completed its bound source');

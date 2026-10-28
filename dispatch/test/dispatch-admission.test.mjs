@@ -9,6 +9,7 @@ import { publishProvingReservation, RESERVATION_WAIT_EXPIRED_CODE } from '../../
 import { readTiming, readAdmissionTiming } from '../../lib/run-timing.mjs';
 import { policyLocation } from '../../lib/config-home.mjs';
 import { transact } from '../../lib/store.mjs';
+import { ownerIdentity } from '../../lib/process-owner.mjs';
 import { fixture, promptCalls, unlandedSetting, pendingItem, until, pauseHook, admissionHook, admissionAttempts } from './dispatch-fixture.mjs';
 
 const DISPATCH = fileURLToPath(new URL('../dispatch.mjs', import.meta.url));
@@ -41,6 +42,39 @@ async function homeCapFixture(t, cap) {
   project.git('add', '.lane.json'); project.git('commit', '-qm', 'Configure unlanded fixture cap');
   await project.adopt();
   return { ...fixture(t, { project }), project };
+}
+
+async function provingWait(f, stage) {
+  const lock = path.join(f.root, 'proving-slot');
+  // Pause the saved worker stage before its proving check. The open check
+  // remains real and unheld; only the intended stage gets a reservation.
+  const hook = stage === 'worker' ? pauseHook(f, `const rename=fs.renameSync;let once=true;
+fs.renameSync=function(from,to) {
+ const result=rename.call(this,from,to);
+ if(once && String(to).startsWith(${JSON.stringify(path.join(f.org, 'dispatch') + path.sep)}) && String(to).endsWith('.json') && JSON.parse(read(to)).stage==='worker') {
+  once=false;pause();
+ }
+ return result;
+};`) : {};
+  const reserve = () => publishProvingReservation({ lockPath: lock, label: 'proof', reason: `dispatch ${stage} barrier`,
+    expiresAt: new Date(Date.now() + 60000).toISOString() });
+  let held = stage === 'open' ? reserve() : undefined, stderr = '';
+  const pending = f.concurrent([f.item, '--lane', 'topic', '--route', 'engineer', '--brief', f.brief],
+    { ...hook, MONITOR_TEST_SLOT_PATH: lock, MONITOR_TEST_SLOT_COMPAT_PATH: lock });
+  pending.child.stderr.on('data', data => { stderr += data; });
+  try {
+    if (stage === 'worker') {
+      await until(() => fs.existsSync(hook.PAUSE_MARKER));
+      held = reserve(); fs.writeFileSync(hook.PAUSE_RELEASE, 'go');
+    }
+    await until(() => stderr.includes('waiting; proving'));
+    return { pending, held };
+  } catch (error) {
+    held?.release();
+    if (hook.PAUSE_RELEASE) fs.writeFileSync(hook.PAUSE_RELEASE, 'go');
+    await pending.done;
+    throw error;
+  }
 }
 
 test('running admission reaches lane preparation despite many unfinished unlanded records', t => {
@@ -83,7 +117,8 @@ test('session cap refuses before lane/run creation, lists occupants and admits a
   const refused = f.start();
   assert.equal(refused.status, 1, refused.stderr);
   assert.match(JSON.parse(refused.stdout).reason, new RegExp(`session cap 2 reached: ${first}, ${second}`));
-  assert.match(refused.stderr, /2 workers, 0 settle reviewers/);
+  assert.match(refused.stderr, /counted 2 workers, 0 reviewers/);
+  assert.match(refused.stderr, new RegExp(`unknown liveness: ${first}, ${second}`));
   assert.equal(f.calls().some(c => c.type === 'lane'), false);
   assert.deepEqual(f.show(f.item).runs, [first, second]);
   fs.mkdirSync(path.join(f.org, 'dispatch'), { recursive: true });
@@ -91,6 +126,20 @@ test('session cap refuses before lane/run creation, lists occupants and admits a
     common: f.git(['rev-parse', '--path-format=absolute', '--git-common-dir']), launchProcess: { pid: dead, identity: 'old' } }));
   const admitted = f.start(); assert.equal(admitted.status, 0, admitted.stderr);
   assert.equal(promptCalls(f).length, 1);
+  assert.equal(f.show(second).abandoned, null, 'an exit frees capacity without finishing its record');
+});
+
+test('session cap retains a matching live birth but frees a reused PID without finishing its run', t => {
+  const f = fixture(t); capSetting(f, 1);
+  const run = occupiedRun(f, { process: { pid: process.pid, identity: ownerIdentity(process.pid) } });
+  const refused = f.start(); assert.equal(refused.status, 1, refused.stderr);
+  assert.match(refused.stderr, new RegExp(`observed live: ${run}`));
+  assert.equal(f.calls().some(c => c.type === 'lane'), false);
+  const file = path.join(f.org, 'dispatch', `${run}.json`), job = JSON.parse(fs.readFileSync(file));
+  job.launchProcess.identity = 'previous-native-birth'; fs.writeFileSync(file, JSON.stringify(job));
+  const admitted = f.start(); assert.equal(admitted.status, 0, admitted.stderr);
+  assert.equal(promptCalls(f).length, 1);
+  const previous = f.show(run); assert.equal(previous.abandoned, null); assert.equal(previous.report, null);
 });
 
 test('another project in the same record does not occupy this project session cap', t => {
@@ -100,17 +149,17 @@ test('another project in the same record does not occupy this project session ca
   assert.equal(promptCalls(f).length, 1);
 });
 
-test('live reuse and setup-only retries remain admitted at the cap', t => {
+test('setup-only retries remain admitted at the cap and removed reuse cannot launch', t => {
   const f = fixture(t); capSetting(f, 1); f.fail('watch');
   assert.equal(f.start().status, 1);
   const job = JSON.parse(fs.readFileSync(f.jobs()[0])); f.fail('');
   const setup = f.dispatch(['--retry', job.run]); assert.equal(setup.status, 0, setup.stderr);
-  f.rec(['abandon', job.run]);
-  const file = path.join(f.root, 'workers'), workers = JSON.parse(fs.readFileSync(file));
-  workers[job.worker.agentName].agent_status = 'idle'; fs.writeFileSync(file, JSON.stringify(workers));
-  occupiedRun(f);
-  const reused = f.start(['--reuse', job.run]); assert.equal(reused.status, 0, reused.stderr);
-  assert.equal(JSON.parse(reused.stdout).agent, job.worker.agentName);
+  assert.equal(JSON.parse(setup.stdout).run, job.run);
+  const reused = f.start(['--reuse', job.run]); assert.equal(reused.status, 1, reused.stderr);
+  assert.equal(JSON.parse(reused.stdout).result, 'failed');
+  assert.match(reused.stderr, /new work starts fresh/);
+  assert.deepEqual(f.show(f.item).runs, [job.run]);
+  assert.equal(promptCalls(f).length, 1);
   assert.equal(f.calls().filter(c => c.type === 'lane' && c.a[0] === 'dispatch').length, 1);
 });
 
@@ -125,6 +174,7 @@ test('a saved request rechecks the current cap before creating a worker', t => {
 
 for (const cap of [1, 2]) test(`overlapping final launches wait for admission, then respect cap ${cap}`, async t => {
   const f = fixture(t); capSetting(f, cap);
+  const other = f.rec(['add', 'Independent concurrent work', '--role', 'engineer']);
   const hook = admissionHook(f, `const rename=fs.renameSync;let once=true;fs.renameSync=function(from,to) {
  const result=rename.call(this,from,to);
  if(once && String(to).endsWith('/dispatch-session-cap')) {once=false;pause();}
@@ -134,7 +184,7 @@ for (const cap of [1, 2]) test(`overlapping final launches wait for admission, t
   const first = f.concurrent(args, hook); let second;
   try {
     await until(() => fs.existsSync(hook.PAUSE_MARKER));
-    second = f.concurrent(args, hook);
+    second = f.concurrent([other, ...args.slice(1)], hook);
     await until(() => admissionAttempts(hook) === 2);
     assert.equal(second.child.exitCode, null, 'the overlapping launch waits instead of refusing');
     assert.equal(f.calls().some(c => c.type === 'lane' && c.a[0] === 'dispatch'), false);
@@ -143,12 +193,12 @@ for (const cap of [1, 2]) test(`overlapping final launches wait for admission, t
     await Promise.all([first.done, second?.done]);
   }
   const a = await first.done, b = await second.done;
-  assert.equal(a.status, 0, a.stderr);
-  assert.equal(b.status, cap === 1 ? 1 : 0, b.stderr);
-  if (cap === 1) assert.match(b.stderr, /session cap 1 reached/);
+  assert.equal([a, b].filter(result => result.status === 0).length, cap, `${a.stderr}\n${b.stderr}`);
+  if (cap === 1) assert.match([a, b].find(result => result.status !== 0).stderr, /session cap 1 reached/);
   else assert.notEqual(JSON.parse(a.stdout).agent, JSON.parse(b.stdout).agent);
   const full = f.start(); assert.equal(full.status, 1); assert.match(full.stderr, new RegExp(`session cap ${cap} reached`));
-  assert.equal(f.show(f.item).runs.length, 2);
+  assert.equal(f.show(f.item).runs.length, 1);
+  assert.equal(f.show(other).runs.length, 1);
   assert.equal(f.calls().filter(c => c.type === 'lane' && c.a[0] === 'dispatch').length, cap);
   assert.equal(promptCalls(f).length, cap);
 });
@@ -168,6 +218,7 @@ test('a dead project admission owner and contender are reclaimed before launchin
 
 test('concurrent dead-owner reclaim cannot remove the new project admission lock', async t => {
   const f = fixture(t), dead = spawnSync(process.execPath, ['-e', '']).pid;
+  const other = f.rec(['add', 'Independent reclaim contender', '--role', 'engineer']);
   const directory = path.join(f.git(['rev-parse', '--path-format=absolute', '--git-common-dir']), 'dispatch-session-cap');
   fs.mkdirSync(directory);
   fs.writeFileSync(path.join(directory, 'owner.json'), JSON.stringify({ pid: dead }));
@@ -179,7 +230,7 @@ test('concurrent dead-owner reclaim cannot remove the new project admission lock
   const first = f.concurrent(args, hook); let second;
   try {
     await until(() => fs.existsSync(hook.PAUSE_MARKER));
-    second = f.concurrent(args, hook);
+    second = f.concurrent([other, ...args.slice(1)], hook);
     await until(() => admissionAttempts(hook) === 2);
     assert.equal(second.child.exitCode, null);
     assert.equal(JSON.parse(fs.readFileSync(path.join(directory, 'owner.json'))).pid, dead);
@@ -193,26 +244,24 @@ test('concurrent dead-owner reclaim cannot remove the new project admission lock
   assert.deepEqual(fs.readdirSync(`${directory}.contenders`), []);
 });
 for (const [stage, cap] of [['open', 2], ['worker', 2], ['worker', 1]]) {
-  test(`a ${stage} memory wait allows another dispatch below cap ${cap} and recounts before launch`, async t => {
-    const f = fixture(t), memory = path.join(f.root, 'memory.json'); capSetting(f, cap);
-    fs.writeFileSync(memory, JSON.stringify({ available: (stage === 'open' ? 128 * 1024 ** 2 : 8 * 1024 ** 3), swap_used: 0 }));
-    const pending = f.concurrent([f.item, '--lane', 'topic', '--route', 'engineer', '--brief', f.brief],
-      { TEST_MEMORY_FILE: memory, ...(stage === 'worker' ? { TEST_MEMORY_WORKER_PRESSURE: '1' } : {}) });
-    let stderr = '';
-    pending.child.stderr.on('data', data => { stderr += data; });
+  test(`a ${stage} proving wait allows another dispatch below cap ${cap} and recounts before launch`, async t => {
+    const f = fixture(t); capSetting(f, cap);
+    const other = f.rec(['add', 'Independent work outside proving hold', '--role', 'engineer']);
+    const { pending, held } = await provingWait(f, stage);
     try {
-      await until(() => stderr.includes('waiting; memory pressure'));
       assert.equal(JSON.parse(fs.readFileSync(f.jobs()[0])).stage, stage);
       const directory = path.join(f.git(['rev-parse', '--path-format=absolute', '--git-common-dir']), 'dispatch-session-cap');
-      assert.equal(fs.existsSync(directory), false, 'memory waits must not hold admission');
-      const concurrent = f.start(); assert.equal(concurrent.status, 0, concurrent.stderr);
+      assert.equal(fs.existsSync(directory), false, 'proving waits must not hold admission');
+      const concurrent = f.dispatch([other, '--lane', 'topic', '--route', 'engineer', '--brief', f.brief]);
+      assert.equal(concurrent.status, 0, concurrent.stderr);
       assert.equal(promptCalls(f).length, 1);
     } finally {
-      fs.writeFileSync(memory, JSON.stringify({ available: 8 * 1024 ** 3, swap_used: 0 }));
+      held.release();
       await pending.done;
     }
-    assert.equal((await pending.done).status, cap === 1 ? 1 : 0, stderr);
-    if (cap === 1) assert.match(stderr, /session cap 1 reached/);
+    const result = await pending.done;
+    assert.equal(result.status, cap === 1 ? 1 : 0, result.stderr);
+    if (cap === 1) assert.match(result.stderr, /session cap 1 reached/);
     assert.equal(f.calls().filter(c => c.type === 'lane' && c.a[0] === 'dispatch').length, cap);
     assert.equal(promptCalls(f).length, cap);
   });
@@ -261,45 +310,33 @@ for (const stage of ['open', 'worker']) test(`dispatch ${stage} proving wait def
   } finally { held.release(); }
 });
 
-test('dispatch waits under simulated swap pressure before opening a lane and resumes the same request', async t => {
+test('dispatch treats simulated low memory and swap pressure as advisory at both launch stages', async t => {
   const f = fixture(t), memory = path.join(f.root, 'memory.json');
   fs.writeFileSync(memory, JSON.stringify({ available: 2 * 1024 ** 3, swap_used: 1024 ** 3 }));
-  const pending = f.concurrent([f.item, '--lane', 'topic', '--route', 'engineer', '--brief', f.brief], { TEST_MEMORY_FILE: memory });
-  let stderr = '';
-  pending.child.stderr.on('data', data => { stderr += data; });
-  const end = Date.now() + 10000;
-  while (!stderr.includes('waiting; memory pressure') && Date.now() < end) await new Promise(resolve => setTimeout(resolve, 20));
-  assert.match(stderr, /swap in use 1024 MiB/);
-  assert.equal(f.calls().some(c => c.type === 'lane' && c.a[0] === 'open'), false);
-  const journal = f.jobs()[0]; assert.equal(JSON.parse(fs.readFileSync(journal)).stage, 'open');
-  fs.writeFileSync(memory, JSON.stringify({ available: 8 * 1024 ** 3, swap_used: 1024 ** 2 }));
-  await pending.done;
-  assert.equal(pending.child.exitCode, 0, stderr);
-  assert.match(stderr, /cleared; proceeding/);
+  const pending = f.concurrent([f.item, '--lane', 'topic', '--route', 'engineer', '--brief', f.brief],
+    { TEST_MEMORY_FILE: memory, TEST_MEMORY_WORKER_PRESSURE: '1' });
+  const result = await pending.done; assert.equal(result.status, 0, result.stderr);
+  assert.doesNotMatch(result.stderr, /waiting; memory pressure/);
+  assert.equal(JSON.parse(fs.readFileSync(memory)).available, 128 * 1024 ** 2);
+  for (const stage of ['open', 'worker']) assert.deepEqual(readTiming(f.jobs()[0])
+    .filter(row => row.kind === `memory_${stage}`).map(row => row.outcome), ['entry', 'granted']);
   assert.equal(f.jobs().length, 1); assert.equal(promptCalls(f).length, 1);
 });
 for (const stage of ['open', 'worker']) {
-  test(`STOP during dispatch ${stage} memory wait retains the request without a worker launch`, async t => {
-    const f = fixture(t), memory = path.join(f.root, 'memory.json');
-    fs.writeFileSync(memory, JSON.stringify({ available: (stage === 'open' ? 128 * 1024 ** 2 : 8 * 1024 ** 3), swap_used: 0 }));
-    const pending = f.concurrent([f.item, '--lane', 'topic', '--route', 'engineer', '--brief', f.brief],
-      { TEST_MEMORY_FILE: memory, ...(stage === 'worker' ? { TEST_MEMORY_WORKER_PRESSURE: '1' } : {}) });
-    let stderr = '', stdout = '';
-    pending.child.stderr.on('data', data => { stderr += data; });
-    pending.child.stdout.on('data', data => { stdout += data; });
+  test(`STOP during dispatch ${stage} proving wait retains the request without a worker launch`, async t => {
+    const f = fixture(t), { pending, held } = await provingWait(f, stage);
     const stop = path.join(f.repo, '.lane/supervisor/STOP');
+    let result;
     try {
-      const end = Date.now() + 10000;
-      while (!stderr.includes('waiting; memory pressure') && Date.now() < end) await new Promise(resolve => setTimeout(resolve, 20));
-      assert.match(stderr, /waiting; memory pressure/);
       assert.equal(JSON.parse(fs.readFileSync(f.jobs()[0])).stage, stage);
       fs.mkdirSync(path.dirname(stop), { recursive: true }); fs.writeFileSync(stop, 'Operator stop');
+      result = await pending.done;
     } finally {
-      fs.writeFileSync(memory, JSON.stringify({ available: 8 * 1024 ** 3, swap_used: 0 }));
+      held.release();
       await pending.done;
     }
-    assert.equal(pending.child.exitCode, 0, stderr);
-    const receipt = JSON.parse(stdout);
+    assert.equal(result.status, 0, result.stderr);
+    const receipt = JSON.parse(result.stdout);
     assert.equal(receipt.result, 'stopped'); assert.equal(receipt.stage, stage);
     assert.match(receipt.reason, /Supervisor STOP/);
     assert.equal(f.calls().filter(c => c.type === 'lane' && c.a[0] === 'open').length, stage === 'open' ? 0 : 1);
@@ -317,3 +354,21 @@ for (const stage of ['open', 'worker']) {
     assert.equal(f.calls().filter(c => c.type === 'lane' && c.a[0] === 'open').length, 1);
   });
 }
+
+for (const change of ['superseded', 'abandoned']) test(`a ${change} run cannot launch after its proving wait`, async t => {
+  const f = fixture(t), { pending, held } = await provingWait(f, 'worker');
+  const journal = f.jobs()[0], job = JSON.parse(fs.readFileSync(journal));
+  const generation = f.show(job.run).owner_generation;
+  try {
+    if (change === 'superseded') f.rec(['start', f.item, '--workspace', job.workspace]);
+    else f.rec(['abandon', job.run]);
+  } finally { held.release(); await pending.done; }
+  const result = await pending.done;
+  assert.equal(result.status, 1, result.stderr);
+  assert.equal(JSON.parse(result.stdout).code, 'DISPATCH_INPUT_CHANGED');
+  assert.match(result.stderr, /current run was superseded or finished/);
+  assert.equal(f.calls().some(c => c.type === 'lane' && c.a[0] === 'dispatch'), false);
+  assert.equal(promptCalls(f).length, 0);
+  assert.equal(f.show(job.run).owner_generation, generation);
+  assert.deepEqual(JSON.parse(fs.readFileSync(journal)).ownership, job.ownership);
+});

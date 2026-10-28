@@ -1366,6 +1366,81 @@ test('an explicit same-session reviewer follow-up keeps until its recorded end',
   f.drain(); assert.equal(f.read().actions.filter(a => a[0] === 'tab').length, 1);
 });
 
+test('reviewer completion rejects another review run or source before accepting the exact end', t => {
+  const f = reviewFixture(t, true);
+  f.drain();
+  const review = events(f).find(e => e.type === 'review.verdict');
+  const end = { type: 'review.followup-ended', review_id: review.review.id, run: review.run,
+    item: review.item, source_seq: review.seq, why: 'follow-up completed' };
+  const wait = events(f).findLast(e => e.type === 'closeout.waiting');
+  assert.equal(wait.waiting.owner, 'review-followup');
+  const calls = f.herdrCalls();
+  for (const patch of [{ review_id: 'another-review' }, { run: 'R-999' }, { item: 'ENG-999' }, { source_seq: review.seq - 1 }]) {
+    f.append([{ ...end, ...patch }]);
+    assert.equal(closeoutWaitState(wait, events(f)), 'pending');
+    assert.deepEqual(f.drain().evaluated, []);
+    assert.deepEqual(f.herdrCalls(), calls);
+    assert.deepEqual(f.read().actions, []);
+  }
+  f.append([end]);
+  assert.equal(closeoutWaitState(wait, events(f)), 'complete');
+  f.drain();
+  assert.equal(f.read().actions.filter(a => a[0] === 'tab').length, 1);
+  assert.ok(fs.existsSync(f.lane), 'review completion preserves the worker lane for fixes');
+});
+
+test('Git removal completion stays bound to its original result and preservation proof', t => {
+  const f = setup(t, { terminal: true }), command = f.options.command;
+  f.options.command = (exe, args, opt) => exe === 'git' && args.includes('worktree') && args.includes('remove') ?
+    { status: 1, stdout: '', stderr: 'injected known Git failure' } : command(exe, args, opt);
+  f.drain();
+  const all = events(f), wait = all.findLast(e => e.type === 'closeout.waiting' && e.waiting.producers.some(p => p.kind === 'git-removal'));
+  assert.ok(wait);
+  assert.equal(closeoutWaitState(wait, all), 'complete', 'the original synchronous result is the completion');
+  const finished = all.findLast(e => e.outcome?.action === 'git-removal-finished');
+  const started = all.findLast(e => e.outcome?.action === 'git-removal-started');
+  assert.equal(all.filter(e => e.outcome?.action === 'git-removal-started').length, 1, 'no in-drain replay');
+  for (const patch of [{ attempt: 'replacement' }, { operation: 'branch' }, { cwd: f.repo }, { tip: 'a'.repeat(40) },
+    { evidence: null }, { branchGeneration: null }, { exit_status: 0 }, { exit_status: null }, { code: 'EPERM' }, { reason: 'native refusal' }]) {
+    const changed = all.map(e => e === finished ? { ...e, outcome: { ...e.outcome, ...patch } } : e);
+    assert.equal(closeoutWaitState(wait, changed), 'pending', JSON.stringify(patch));
+  }
+  for (const target of [started, finished]) for (const patch of [{ identity: '/foreign' }, { key: 'foreign' }, { source: { seq: 0, type: 'other' } }]) {
+    const changed = all.map(e => e === target ? { ...e, ...patch } : e);
+    assert.equal(closeoutWaitState(wait, changed), 'pending', JSON.stringify(patch));
+  }
+  assert.ok(fs.existsSync(f.lane));
+  f.options.command = (exe, args, opt) => exe === 'git' && args.includes('worktree') && args.includes('remove') ?
+    { status: null, signal: 'SIGTERM', stdout: '', stderr: 'interrupted successor' } : command(exe, args, opt);
+  f.drain();
+  const interrupted = events(f), calls = f.herdrCalls();
+  assert.equal(interrupted.filter(e => e.outcome?.action === 'git-removal-started').length, 2);
+  assert.equal(interrupted.filter(e => e.outcome?.action === 'git-removal-finished').length, 1);
+  retryCloseout({ cwd: f.repo, org: f.org, topic: 'topic', why: 'later retry cannot reuse the older result', start: false });
+  assert.deepEqual(f.drain({ keys: readCloseoutEntries(f.common).map(e => e.key), retrySafe: true }).evaluated, []);
+  assert.deepEqual(f.herdrCalls(), calls);
+  assert.deepEqual(events(f).slice(0, interrupted.length), interrupted);
+});
+
+test('Git removal without a known original completion retains timeout signal and permission failures', t => {
+  for (const result of [{ status: null, signal: 'SIGTERM', stdout: '', stderr: 'interrupted' },
+    { status: null, error: { code: 'ETIMEDOUT', message: 'timeout' }, stdout: '', stderr: '' },
+    { status: 1, error: { code: 'EPERM', message: 'permission denied' }, stdout: '', stderr: '' }]) {
+    const f = setup(t, { terminal: true }), command = f.options.command;
+    f.options.command = (exe, args, opt) => exe === 'git' && args.includes('worktree') && args.includes('remove') ? result : command(exe, args, opt);
+    f.drain();
+    const original = events(f), calls = f.herdrCalls();
+    assert.ok(original.some(e => e.outcome?.action === 'git-removal-started'));
+    assert.equal(original.some(e => e.outcome?.action === 'git-removal-finished'), false);
+    f.options.command = command;
+    retryCloseout({ cwd: f.repo, org: f.org, topic: 'topic', why: 'transport available again', start: false });
+    assert.deepEqual(f.drain({ keys: readCloseoutEntries(f.common).map(e => e.key), retrySafe: true }).evaluated, []);
+    assert.deepEqual(f.herdrCalls(), calls);
+    assert.deepEqual(events(f).slice(0, original.length), original);
+    assert.ok(fs.existsSync(f.lane));
+  }
+});
+
 test('HOLD without a completion producer stays deferred after removal and a manual retry', t => {
   const f = setup(t, { terminal: true }), releaseHold = hold(f);
   f.drain();

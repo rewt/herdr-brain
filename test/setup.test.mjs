@@ -17,6 +17,7 @@ import { specDigest } from '../sessions/lifecycle-evidence.mjs';
 import { createHerdrObserver } from '../sessions/observe.mjs';
 import { copyProduct, productFiles } from '../lib/product-files.mjs';
 import { acceptanceRecord } from '../lib/releases.mjs';
+import { loadEvents } from '../lib/store.mjs';
 
 const source = fileURLToPath(new URL('../', import.meta.url));
 const document = m => `## Manifest\n\`\`\`json\n${JSON.stringify(m)}\n\`\`\`\n`;
@@ -48,6 +49,9 @@ function fixture(t, names = ['chat', 'supervisor', 'logs-viewer', 'logs-triage']
   for (const name of names) fs.copyFileSync(path.join(source, `sessions/templates/${name}.md`), path.join(cwd, `.sessions/${name}.md`));
   git('add', '.'); git('commit', '-qm', 'Synthetic project');
   const org = path.join(scratch, 'record'); fs.mkdirSync(org); fs.writeFileSync(path.join(org, 'events.jsonl'), '');
+  // Record reads may create a derived cache. Seed it before byte snapshots so
+  // those assertions still catch every change to the initialized fixture.
+  loadEvents(org);
   const home = path.join(scratch, 'installed'); const current = bundle(home, 'green'); fs.symlinkSync(current, path.join(home, 'current'));
   const project = canonicalProject(cwd), env = { ...process.env, ORG_DIR: org, LANE_CONFIG: undefined,
     HERDR_SOCKET_PATH: path.join(scratch, 'fixture.sock'),

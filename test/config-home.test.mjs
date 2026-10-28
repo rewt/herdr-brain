@@ -205,9 +205,11 @@ test(`non-Git ${location} record discovery isolates foreign damage and holds sha
   }
   assert.deepEqual(fs.readFileSync(path.join(binding.record, 'events.jsonl')), history);
   assert.deepEqual(fs.readFileSync(path.join(saved, 'events.jsonl')), ownHistory);
-  if (registry !== 'no fleet') assert.equal(findOrgDir({ cwd: nested, env }), null, 'fleet discovery must not select an ancestor record outside Git');
+  if (registry === 'legacy fleet') assert.equal(findOrgDir({ cwd: nested, env }), null, 'fleet discovery must not select an ancestor record outside Git');
+  else assert.throws(() => findOrgDir({ cwd: nested, env }), { message: error }, 'an unrelated home binding does not bypass ancestor record ownership');
   fs.unlinkSync(record); fs.renameSync(saved, record);
   own('non-Git discovery writes again after removing the shared alias');
+  assert.equal(findOrgDir({ cwd: nested, env }), registry === 'legacy fleet' ? null : record);
   assert.deepEqual(fs.readFileSync(path.join(binding.record, 'events.jsonl')), history);
   assert.throws(() => readFleet(env), { message: error }, 'fleet-wide validation still exposes foreign damage');
 });

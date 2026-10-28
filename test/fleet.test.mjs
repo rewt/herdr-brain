@@ -12,18 +12,19 @@ import { gitProject } from '../lib/project.mjs';
 import { discoverArchive } from '../lib/archive.mjs';
 import { configFixture } from './helpers/config-home-fixture.mjs';
 import { fixtureEnvironment, PROMOTION_REQUEST_KEYS } from './helpers/fixture-environment.mjs';
+import { isolateSessionEnvironment, setSessionEnvironment } from './helpers/session-environment.mjs';
+import { checkSessionIsolation } from './helpers/session-isolation-check.mjs';
 
 const root = new URL('../', import.meta.url).pathname;
 const client = path.join(root, 'discovery/client.mjs');
 function fixture(t) {
   const scratch = fs.mkdtempSync(path.join(fs.realpathSync('/tmp'), 'ft-'));
+  const isolated = isolateSessionEnvironment(t, scratch);
   const fleetHome = path.join(scratch, 'fleet'), consoleFile = path.join(scratch, 'console.json');
-  const env = { ...fixtureEnvironment(), HERDR_MONITOR_FLEET: fleetHome, HERDR_ORG_CONSOLE_CONFIG: consoleFile, ORG_DIR: '' };
-  const before = { ...process.env };
+  const env = { ...fixtureEnvironment(), ...isolated, HERDR_ORG_CONSOLE_CONFIG: consoleFile, ORG_DIR: '' };
   const entries = [];
-  for (const key of PROMOTION_REQUEST_KEYS) delete process.env[key];
-  Object.assign(process.env, env);
-  t.after(() => { for (const entry of entries) entry.close(); for (const k of Object.keys(process.env)) if (!(k in before)) delete process.env[k]; Object.assign(process.env, before); fs.rmSync(scratch, { recursive: true, force: true }); });
+  setSessionEnvironment(t, { ...Object.fromEntries(PROMOTION_REQUEST_KEYS.map(key => [key, undefined])), ...env });
+  t.after(() => { for (const entry of entries) entry.close(); fs.rmSync(scratch, { recursive: true, force: true }); });
   const git = (cwd, args) => execFileSync('git', ['-C', cwd, ...args], { encoding: 'utf8', stdio: 'pipe' }).trim();
   function repo(name) {
     const cwd = path.join(scratch, name); fs.mkdirSync(cwd, { recursive: true });
@@ -36,6 +37,12 @@ function fixture(t) {
   const read = () => JSON.parse(fs.readFileSync(path.join(fleetHome, 'fleet.json'), 'utf8'));
   return { scratch, fleetHome, consoleFile, env, git, repo, run, join, read, keep: entry => entries.push(entry) };
 }
+
+test('fleet fixture isolates inherited home bindings and restores its caller', t =>
+  checkSessionIsolation(t, child => {
+    const f = fixture(child);
+    return { ...f, cwd: f.repo('app') };
+  }));
 
 test('a generated home key cannot replace an unrelated legacy fleet mapping', async t => {
   const f = configFixture(t); await f.adopt();
@@ -123,8 +130,7 @@ test('record discovery uses its explicit Git environment with and without a flee
   const f = fixture(t), cwd = f.repo('explicit-env'); f.join(cwd);
   const lane = path.join(f.scratch, 'lane'); f.git(cwd, ['worktree', 'add', '-qb', 'lane/env', lane]);
   const safe = Object.fromEntries(Object.entries(f.env).filter(([key]) => !key.startsWith('GIT_')));
-  process.env.GIT_DIR = path.join(f.scratch, 'foreign.git');
-  process.env.GIT_CONFIG_COUNT = 'invalid';
+  setSessionEnvironment(t, { GIT_DIR: path.join(f.scratch, 'foreign.git'), GIT_CONFIG_COUNT: 'invalid' });
   const expected = f.read().projects['explicit-env'].record;
   assert.equal(projectFleet(lane, safe).project.record, expected);
   assert.equal(findOrgDir({ cwd: lane, env: safe }), expected);

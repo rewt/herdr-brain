@@ -87,15 +87,25 @@ async function coordinator() {
   const module = new SourceTextModule(source, {
     context, identifier: runner.href, initializeImportMeta: meta => { meta.url = runner.href; },
   });
+  // Node 20 clears its linker cache before evaluation. Keep the JS wrappers
+  // alive too: V8's graph alone does not retain SyntheticModule callbacks.
+  const linked = [];
   await module.link(specifier => {
-    if (Object.hasOwn(actual, specifier)) return new SourceTextModule(actual[specifier], { context, identifier: new URL(specifier, runner).href });
-    assert.ok(Object.hasOwn(dependencies, specifier), `unreconciled import: ${specifier}`);
-    const values = dependencies[specifier];
-    return new SyntheticModule(Object.keys(values), function () {
-      for (const [name, value] of Object.entries(values)) this.setExport(name, value);
-    }, { context });
+    let dependency;
+    if (Object.hasOwn(actual, specifier)) dependency = new SourceTextModule(actual[specifier], { context, identifier: new URL(specifier, runner).href });
+    else {
+      assert.ok(Object.hasOwn(dependencies, specifier), `unreconciled import: ${specifier}`);
+      const values = dependencies[specifier];
+      dependency = new SyntheticModule(Object.keys(values), function () {
+        for (const [name, value] of Object.entries(values)) this.setExport(name, value);
+      }, { context });
+    }
+    linked.push(dependency);
+    return dependency;
   });
+  global.gc?.();
   await module.evaluate();
+  assert.ok(linked.every(dependency => dependency.status === 'evaluated'));
   const ready = () => { child.emit('message', { ready: true }); assert.deepEqual(trace.slice(-2), ['lookup', 'send:start']); };
   const complete = (code = 0) => child.emit('message', { complete: true, code });
   const pending = () => {
@@ -129,7 +139,7 @@ if (typeof SourceTextModule !== 'function') {
     const env = { ...process.env };
     delete env.NODE_TEST_CONTEXT;
     const child = spawnChild(t, process.execPath,
-      ['--experimental-vm-modules', '--test', fileURLToPath(import.meta.url)], { env });
+      ['--experimental-vm-modules', '--expose-gc', '--test', fileURLToPath(import.meta.url)], { env });
     const result = await waitForExit(child);
     assert.equal(result.signal, null, result.stderr);
     assert.equal(result.code, 0, result.stdout + result.stderr);

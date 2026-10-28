@@ -161,6 +161,7 @@ test('ingested scripted work keeps its watcher reference until the recorded proc
 for (const mode of ['missing', 'invalid', 'blocked']) test(`${mode} work stays open and actual lane close keeps its unreported worker after abandonment`, async t => {
   const f = configuredFixture(t), log = path.join(f.scratch, 'watch.log');
   if (mode === 'invalid') fs.writeFileSync(path.join(f.scratch, 'report.md'), '---\nrun: R-1\noutcome: banana\n---\n');
+  assertWorkerKept(f.job, { lane: f.runLane, reason: /^R-1 report is not ingested$/ });
   f.state.agents[0].agent_status = mode === 'blocked' ? 'blocked' : 'idle'; f.save();
   const watcher = spawnChild(t, process.execPath, ['--input-type=module', '-e',
     `import fs from 'node:fs';setInterval(()=>{if(fs.readFileSync(${JSON.stringify(f.eventFile)},'utf8').includes('run.abandoned')){fs.writeFileSync(${JSON.stringify(log)},'R-1 was abandoned; stopping');process.exit(0)}},25);`]);
@@ -177,7 +178,8 @@ for (const mode of ['missing', 'invalid', 'blocked']) test(`${mode} work stays o
   const run = JSON.parse(f.record(['show', 'R-1', '--json']));
   assert.ok(run.abandoned); assert.equal(run.report, null);
   assert.equal(JSON.parse(f.record(['show', 'ENG-1', '--json'])).closed, null);
-  assertWorkerKept(f.job, { lane: f.runLane, reason: /R-1 report is not ingested/ });
+  // Abandonment ends the run, not its open work; no report released this allocation.
+  assertWorkerKept(f.job, { lane: f.runLane, reason: /^review, correction or integration chain is still open$/ });
   assert.deepEqual(f.read().actions, []);
 });
 

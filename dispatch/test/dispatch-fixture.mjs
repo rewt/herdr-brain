@@ -212,5 +212,55 @@ function admissionHook(f, body) {
 }; ${body}`);
 }
 const admissionAttempts = hook => new Set(fs.readFileSync(`${hook.PAUSE_MARKER}.attempts`, 'utf8').trim().split('\n')).size;
+function sessionCapSetting(f, cap) {
+  const file = path.join(f.repo, '.lane.json'), config = JSON.parse(fs.readFileSync(file));
+  config.dispatch = { ...config.dispatch, max_sessions: cap };
+  fs.writeFileSync(file, JSON.stringify(config));
+}
+// New --reuse requests are refused. Model a request an older dispatcher saved
+// before lane preparation, with its reuse run as that dispatcher persisted it;
+// --retry then exercises the retained saved-request reuse contract.
+function savedReuse(f, reuse, args = [f.item, '--lane', 'topic', '--route', 'engineer', '--brief', f.brief]) {
+  const before = new Set(fs.existsSync(path.join(f.org, 'dispatch')) ? f.jobs() : []);
+  f.fail('prepare'); const r = f.dispatch(args); f.fail('');
+  assert.equal(r.status, 1, r.stderr);
+  const journal = f.jobs().find(file => !before.has(file)), job = JSON.parse(fs.readFileSync(journal));
+  assert.equal(job.stage, 'open'); assert.equal(job.run, null); assert.equal(job.reuse, null);
+  fs.writeFileSync(journal, JSON.stringify({ ...job, reuse }));
+  return journal;
+}
+// Memory is advisory; a genuine live proving reservation is the remaining wait.
+async function provingWait(f, stage, { dispatch = [f.item, '--lane', 'topic', '--route', 'engineer', '--brief', f.brief] } = {}) {
+  const { publishProvingReservation } = await import('../../test-slot/reservations.mjs');
+  const lock = path.join(f.root, 'proving-slot');
+  // Pause the saved worker stage before its proving check. The open check
+  // remains real and unheld; only the intended stage gets a reservation.
+  const hook = stage === 'worker' ? pauseHook(f, `const rename=fs.renameSync;let once=true;
+fs.renameSync=function(from,to) {
+ const result=rename.call(this,from,to);
+ if(once && String(to).startsWith(${JSON.stringify(path.join(f.org, 'dispatch') + path.sep)}) && String(to).endsWith('.json') && JSON.parse(read(to)).stage==='worker') {
+  once=false;pause();
+ }
+ return result;
+};`) : {};
+  const reserve = () => publishProvingReservation({ lockPath: lock, label: 'proof', reason: `dispatch ${stage} barrier`,
+    expiresAt: new Date(Date.now() + 60000).toISOString() });
+  let held = stage === 'open' ? reserve() : undefined, stderr = '';
+  const pending = f.concurrent(dispatch, { ...hook, MONITOR_TEST_SLOT_PATH: lock, MONITOR_TEST_SLOT_COMPAT_PATH: lock });
+  pending.child.stderr.on('data', data => { stderr += data; });
+  try {
+    if (stage === 'worker') {
+      await until(() => fs.existsSync(hook.PAUSE_MARKER));
+      held = reserve(); fs.writeFileSync(hook.PAUSE_RELEASE, 'go');
+    }
+    await until(() => stderr.includes('waiting; proving'));
+    return { pending, held };
+  } catch (error) {
+    held?.release();
+    if (hook.PAUSE_RELEASE) fs.writeFileSync(hook.PAUSE_RELEASE, 'go');
+    await pending.done;
+    throw error;
+  }
+}
 
-export { DISPATCH, RECORD, WATCH, fixture, rememberProcesses, promptCalls, unlandedSetting, pendingItem, until, pauseHook, admissionHook, admissionAttempts, hooksTableScreen, startupHookReviewScreen };
+export { DISPATCH, RECORD, WATCH, fixture, rememberProcesses, promptCalls, unlandedSetting, sessionCapSetting, savedReuse, provingWait, pendingItem, until, pauseHook, admissionHook, admissionAttempts, hooksTableScreen, startupHookReviewScreen };

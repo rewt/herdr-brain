@@ -11,7 +11,7 @@ import { ownerAlive } from '../../lib/process-owner.mjs';
 import { loadTimeout } from '../../lib/deadline.mjs';
 import { lookupProcess } from '../../lib/processes.mjs';
 import { effectiveWorkerIdentity } from '../../lib/worker-identity.mjs';
-import { fixture, promptCalls, until, pauseHook, hooksTableScreen, startupHookReviewScreen } from './dispatch-fixture.mjs';
+import { fixture, promptCalls, until, pauseHook, savedReuse, hooksTableScreen, startupHookReviewScreen } from './dispatch-fixture.mjs';
 
 const DISPATCH = fileURLToPath(new URL('../dispatch.mjs', import.meta.url));
 const RECORD = fileURLToPath(new URL('../../bin/org.mjs', import.meta.url));
@@ -65,7 +65,7 @@ const write=fs.writeFileSync;fs.writeFileSync=function(file,data,...args){
   const result = await done; assert.equal(result.code, 0, result.stderr);
   assert.equal(JSON.parse(fs.readFileSync(state))[agent].agent_status, 'working');
 });
-test('delayed native session binds separately before same-session continuation reuses it', t => {
+test('delayed native session binds separately before a saved same-session continuation reuses it', t => {
   const f = fixture(t, { lateSession: 'delayed', timingRecord: true });
   const first = f.start(); assert.equal(first.status, 0, first.stderr);
   const job = JSON.parse(fs.readFileSync(f.jobs()[0])), run = f.show(job.run);
@@ -79,7 +79,7 @@ test('delayed native session binds separately before same-session continuation r
   f.rec(['abandon', job.run]);
   const file = path.join(f.root, 'workers'), workers = JSON.parse(fs.readFileSync(file));
   workers['worker-1'].agent_status = 'idle'; fs.writeFileSync(file, JSON.stringify(workers));
-  const next = f.start(['--reuse', job.run]); assert.equal(next.status, 0, next.stderr);
+  const next = f.dispatch(['--retry', savedReuse(f, job.run)]); assert.equal(next.status, 0, next.stderr);
   const nextRun = f.show(JSON.parse(next.stdout).run);
   assert.equal(nextRun.meta.agent_session_id, 's-worker-1');
   assert.equal(f.calls().filter(c => c.type === 'lane' && c.a[0] === 'dispatch').length, 1);
@@ -312,7 +312,8 @@ for (const configured of [false, true]) test(`worker prompt preserves the final 
   const job = JSON.parse(fs.readFileSync(f.jobs()[0]));
   assert.equal(Object.hasOwn(JSON.parse(fs.readFileSync(job.routeConfig)), 'archive'), false, 'route snapshots stay routing-only');
   const calls=f.calls(),watch=calls.findIndex(x=>x.type==='watch'),prompt=calls.findIndex(x=>x.a[1]==='prompt');assert.ok(watch<prompt);
-  assert.deepEqual(calls.find(x=>x.type==='lane'&&x.a[0]==='open').a, ['open','topic','--git-only']);
+  assert.equal(job.base, f.git(['rev-parse','HEAD']), 'new requests freeze their resolved source base');
+  assert.deepEqual(calls.find(x=>x.type==='lane'&&x.a[0]==='open').a, ['open','topic',job.base,'--git-only']);
   assert.match(promptCalls(f)[0].a[3],new RegExp(result.run));assert.ok(promptCalls(f)[0].a[3].includes(run.brief_path));
   assert.ok(promptCalls(f)[0].a[3].includes(run.report_path));assert.match(promptCalls(f)[0].a[3],/Fix round/);
   assert.match(promptCalls(f)[0].a[3], /Run only the ask's or explicit --extra scope's focused check selection once through.*check --cmd 'COMMAND' on the clean committed candidate/);
@@ -323,19 +324,25 @@ for (const configured of [false, true]) test(`worker prompt preserves the final 
   assert.equal(fs.readFileSync(f.brief,'utf8'),before);
   assert.equal(f.dispatch(['--retry',result.run]).status,0);assert.equal(promptCalls(f).length,1);
 });
-test('a fix round can reuse a stopped worker or start fresh; changed route is refused',t=>{
+test('new reuse is refused; a saved fix round can reuse a stopped worker, fresh starts stay fresh and a changed route is refused',t=>{
   const f=fixture(t);let r=f.start();assert.equal(r.status,0,r.stderr);const first=JSON.parse(r.stdout);
   const report=path.join(f.root,'first-report.md');
   fs.writeFileSync(report,`---\nrun: ${first.run}\noutcome: done\nsummary: First round complete\n---\n`);f.rec(['ingest',report]);
   const workerFile=path.join(f.root,'workers'),workers=JSON.parse(fs.readFileSync(workerFile));workers[first.agent].agent_status='idle';fs.writeFileSync(workerFile,JSON.stringify(workers));
-  r=f.start(['--reuse',first.run]);assert.equal(r.status,0,r.stderr);const second=JSON.parse(r.stdout);assert.notEqual(second.run,first.run);assert.equal(second.agent,first.agent);
+  const removedRuns=f.show(f.item).runs,removedCalls=f.calls().length,removedJobs=f.jobs().length,removedEvents=fs.readFileSync(path.join(f.org,'events.jsonl'));
+  r=f.start(['--reuse',first.run]);assert.equal(r.status,1);assert.match(r.stderr,/new work starts fresh; use --resume-session UUID/);
+  assert.equal(JSON.parse(r.stdout).result,'failed');assert.equal(JSON.parse(r.stdout).journal,undefined,'no request is saved');
+  assert.deepEqual(f.show(f.item).runs,removedRuns);assert.equal(f.jobs().length,removedJobs);assert.equal(f.calls().length,removedCalls);
+  assert.deepEqual(fs.readFileSync(path.join(f.org,'events.jsonl')),removedEvents);
+  r=f.dispatch(['--retry',savedReuse(f,first.run)]);assert.equal(r.status,0,r.stderr);const second=JSON.parse(r.stdout);assert.notEqual(second.run,first.run);assert.equal(second.agent,first.agent);
   assert.equal(second.pane,first.pane);
   const continued=f.show(second.run),previous=f.show(first.run);
   assert.equal(continued.meta.continuation_of,first.run);assert.equal(continued.meta.same_session,true);
   assert.equal(continued.meta.agent_session_id,previous.meta.agent_session_id);
   r=f.start();assert.equal(r.status,0,r.stderr);assert.notEqual(JSON.parse(r.stdout).agent,first.agent);
-  const runs=f.show(f.item).runs,calls=f.calls().length,jobs=f.jobs().length;
-  fs.writeFileSync(path.join(f.repo,'.lane.json'),JSON.stringify({routes:{engineer:{kind:'codex',model:'changed',effort:'high'}}}));r=f.start(['--reuse',first.run]);assert.equal(r.status,1);assert.match(r.stderr,/declared harness/);
+  fs.writeFileSync(path.join(f.repo,'.lane.json'),JSON.stringify({routes:{engineer:{kind:'codex',model:'changed',effort:'high'}}}));
+  const changed=savedReuse(f,first.run),runs=f.show(f.item).runs,calls=f.calls().length,jobs=f.jobs().length;
+  r=f.dispatch(['--retry',changed]);assert.equal(r.status,1);assert.match(r.stderr,/declared harness/);
   assert.equal(JSON.parse(r.stdout).code,'REUSE_MISMATCH');assert.deepEqual(f.show(f.item).runs,runs);
   assert.equal(f.jobs().length,jobs);assert.equal(f.calls().slice(calls).filter(c=>c.type==='lane').length,0);
 });
@@ -357,25 +364,25 @@ test('a run ID supplied as ITEM is refused before creating a lane or journal',t=
   assert.equal(fs.existsSync(path.join(f.org,'dispatch')),false);
   assert.deepEqual(f.show(f.item).runs,[run]);
 });
-test('reuse refuses an idle worker whose previous run is still open',t=>{
+test('saved reuse refuses an idle worker whose previous run is still open',t=>{
   const f=fixture(t),first=JSON.parse(f.start().stdout);
   const file=path.join(f.root,'workers'),workers=JSON.parse(fs.readFileSync(file));
   workers[first.agent].agent_status='idle';fs.writeFileSync(file,JSON.stringify(workers));
-  const r=f.start(['--reuse',first.run]);assert.equal(r.status,1);assert.match(r.stderr,/reported or abandoned/);
+  const r=f.dispatch(['--retry',savedReuse(f,first.run)]);assert.equal(r.status,1);assert.match(r.stderr,/reported or abandoned/);
   assert.equal(JSON.parse(r.stdout).code,'REUSE_RUN_OPEN');
   assert.equal(promptCalls(f).length,1);
   assert.equal(f.calls().filter(x=>x.type==='lane'&&x.a[0]==='dispatch').length,1);
   assert.deepEqual(f.show(f.item).runs,[first.run]);
 });
-test('reuse accepts an abandoned run with the same stopped occupant',t=>{
+test('saved reuse accepts an abandoned run with the same stopped occupant',t=>{
   const f=fixture(t),first=JSON.parse(f.start().stdout);f.rec(['abandon',first.run]);
   const file=path.join(f.root,'workers'),workers=JSON.parse(fs.readFileSync(file));
   workers[first.agent].agent_status='done';fs.writeFileSync(file,JSON.stringify(workers));
-  const r=f.start(['--reuse',first.run]);assert.equal(r.status,0,r.stderr);
+  const r=f.dispatch(['--retry',savedReuse(f,first.run)]);assert.equal(r.status,0,r.stderr);
   assert.equal(JSON.parse(r.stdout).agent,first.agent);
 });
 
-test('reuse lane, route and declared-field mismatches refuse before any lane or run side effect',t=>{
+test('saved reuse lane, route and declared-field mismatches refuse before any lane or run side effect',t=>{
   const f=fixture(t),first=JSON.parse(f.start().stdout);f.rec(['abandon',first.run]);
   const config=JSON.parse(fs.readFileSync(path.join(f.repo,'.lane.json')));
   config.routes.other={...config.routes.engineer};
@@ -385,9 +392,9 @@ test('reuse lane, route and declared-field mismatches refuse before any lane or 
     if(field==='harness') changed.routes.engineer.kind='claude';
     if(['model','effort'].includes(field)) changed.routes.engineer[field]='changed';
     fs.writeFileSync(path.join(f.repo,'.lane.json'),JSON.stringify(changed));
+    const saved=savedReuse(f,first.run,[f.item,'--lane',field==='lane'?'other-lane':'topic','--route',field==='route'?'other':'engineer','--brief',f.brief]);
     const events=fs.readFileSync(path.join(f.org,'events.jsonl')),calls=f.calls().length,jobs=f.jobs().length;
-    const r=f.dispatch([f.item,'--lane',field==='lane'?'other-lane':'topic','--route',field==='route'?'other':'engineer',
-      '--brief',f.brief,'--reuse',first.run,'--awaited']);
+    const r=f.dispatch(['--retry',saved]);
     assert.equal(r.status,1,field);assert.equal(JSON.parse(r.stdout).code,'REUSE_MISMATCH',r.stderr);
     assert.deepEqual(fs.readFileSync(path.join(f.org,'events.jsonl')),events);
     assert.equal(f.jobs().length,jobs);assert.equal(f.calls().slice(calls).filter(c=>c.type==='lane').length,0);
@@ -410,12 +417,12 @@ test('from-run refuses another item and superseded origins before opening a lane
   }
 });
 
-test('cross-item reuse accepts the same lane and identity without adding an origin precondition',t=>{
+test('saved cross-item reuse accepts the same lane and identity without adding an origin precondition',t=>{
   const f=fixture(t),first=JSON.parse(f.start().stdout);f.rec(['abandon',first.run]);
   const file=path.join(f.root,'workers'),workers=JSON.parse(fs.readFileSync(file));
   workers[first.agent].agent_status='done';fs.writeFileSync(file,JSON.stringify(workers));
   const other=f.rec(['add','Sibling slice','--role','engineer']).split(' ')[0];
-  const r=f.dispatch([other,'--lane','topic','--route','engineer','--brief',f.brief,'--reuse',first.run]);
+  const r=f.dispatch(['--retry',savedReuse(f,first.run,[other,'--lane','topic','--route','engineer','--brief',f.brief])]);
   assert.equal(r.status,0,r.stderr);const next=JSON.parse(r.stdout),run=f.show(next.run);
   assert.equal(next.agent,first.agent);assert.equal(next.pane,first.pane);
   assert.equal(run.meta.agent_session_id,f.show(first.run).meta.agent_session_id);
@@ -425,15 +432,15 @@ test('cross-item reuse accepts the same lane and identity without adding an orig
   assert.equal(f.calls().filter(c=>c.type==='lane'&&c.a[0]==='dispatch').length,1);
 });
 
-test('an older reported run cannot lend a worker held by a newer open correction, even when idle or done',t=>{
+test('an older reported run cannot lend a saved reuse worker held by a newer open correction, even when idle or done',t=>{
   const f=fixture(t),first=JSON.parse(f.start().stdout),report=f.show(first.run).report_path;
   fs.writeFileSync(report,`---\nrun: ${first.run}\noutcome: done\nsummary: First run complete\n---\n`);f.rec(['ingest',report]);
   const file=path.join(f.root,'workers'),workers=JSON.parse(fs.readFileSync(file));
   workers[first.agent].agent_status='idle';fs.writeFileSync(file,JSON.stringify(workers));
-  const second=f.start(['--reuse',first.run]);assert.equal(second.status,0,second.stderr);
+  const second=f.dispatch(['--retry',savedReuse(f,first.run)]);assert.equal(second.status,0,second.stderr);
   const correction=JSON.parse(second.stdout);
   const other=f.rec(['add','Sibling work','--role','engineer']).split(' ')[0];
-  const reuse=()=>f.dispatch([other,'--lane','topic','--route','engineer','--brief',f.brief,'--reuse',first.run,'--awaited']);
+  const saved=savedReuse(f,first.run,[other,'--lane','topic','--route','engineer','--brief',f.brief]),reuse=()=>f.dispatch(['--retry',saved]);
   for(const status of ['idle','done']) {
     workers[first.agent].agent_status=status;fs.writeFileSync(file,JSON.stringify(workers));
     const events=fs.readFileSync(path.join(f.org,'events.jsonl')),jobs=f.jobs().length,calls=f.calls().length;
@@ -448,7 +455,7 @@ test('an older reported run cannot lend a worker held by a newer open correction
   assert.equal(JSON.parse(released.stdout).agent,first.agent);
 });
 
-test('reuse rechecks newer open occupant holders immediately before prompting',async t=>{
+test('saved reuse rechecks newer open occupant holders immediately before prompting',async t=>{
   const f=fixture(t),first=JSON.parse(f.start().stdout);f.rec(['abandon',first.run]);
   const file=path.join(f.root,'workers'),workers=JSON.parse(fs.readFileSync(file));
   workers[first.agent].agent_status='done';fs.writeFileSync(file,JSON.stringify(workers));
@@ -467,7 +474,7 @@ fs.rmSync=function(target,...args) {
  if(once && promptSaved && String(target)===${JSON.stringify(path.join(f.org,'lock'))}) {once=false;pause();}
  return result;
 };`);
-  const pending=f.concurrent([f.item,'--lane','topic','--route','engineer','--brief',f.brief,'--reuse',first.run],hook);
+  const pending=f.concurrent(['--retry',savedReuse(f,first.run)],hook);
   let holder;
   try {
     await until(()=>fs.existsSync(hook.PAUSE_MARKER));
@@ -482,7 +489,7 @@ fs.rmSync=function(target,...args) {
   assert.equal(promptCalls(f).length,1,'the new dispatch never prompts its worker');
 });
 
-test('terminal-only reuse refused before prompting retries with a fresh session binding window',async t=>{
+test('terminal-only saved reuse refused before prompting retries with a fresh session binding window',async t=>{
   const root=fs.mkdtempSync(path.join(os.tmpdir(),'dispatch-reuse-window-'));
   t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
   const preload=path.join(root,'clock.cjs');
@@ -517,7 +524,7 @@ fs.rmSync=function(target,...args) {
  return result;
 };`);
   hook.NODE_OPTIONS+=` --require=${preload}`;
-  const pending=f.concurrent([f.item,'--lane','topic','--route','engineer','--brief',f.brief,'--reuse',prior.id],hook);
+  const pending=f.concurrent(['--retry',savedReuse(f,prior.id)],hook);
   try {
     await until(()=>fs.existsSync(hook.PAUSE_MARKER));
     f.rec(['worker',holder,'--agent','temporary-holder','--pane','holder:pane',
@@ -543,7 +550,7 @@ fs.rmSync=function(target,...args) {
   assert.equal(promptCalls(f).length,1,'only the successful retry delivers work');
 });
 
-test('reuse identity classification is local to the worker stage and preserves existing codes',t=>{
+test('saved reuse identity classification is local to the worker stage and preserves existing codes',t=>{
   const root=fs.mkdtempSync(path.join(os.tmpdir(),'dispatch-reuse-codes-'));
   t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
   const preload=path.join(root,'fault.cjs');
@@ -570,7 +577,7 @@ test('reuse identity classification is local to the worker stage and preserves e
     const file=path.join(f.root,'workers'),workers=JSON.parse(fs.readFileSync(file));
     workers[first.agent].agent_status='done';fs.writeFileSync(file,JSON.stringify(workers));
     fs.writeFileSync(path.join(f.root,'reuse-fault.json'),JSON.stringify({stage,code}));
-    const r=f.start(['--reuse',first.run]);assert.equal(r.status,1,`${stage}: ${r.stderr}`);
+    const r=f.dispatch(['--retry',savedReuse(f,first.run)]);assert.equal(r.status,1,`${stage}: ${r.stderr}`);
     assert.equal(JSON.parse(r.stdout).code,expected,`${stage} ${code}: ${r.stderr}`);
     assert.match(JSON.parse(r.stdout).reason,/injected reuse identity transport failure/);
     const job=JSON.parse(fs.readFileSync(JSON.parse(r.stdout).journal));
@@ -588,7 +595,7 @@ test('native filesystem error codes are normalized without changing failure reas
   assert.equal(fs.existsSync(path.join(f.org,'dispatch')),false);
 });
 
-test('late reuse identity and busy refusals retain their messages and supply stable codes',t=>{
+test('late saved reuse identity and busy refusals retain their messages and supply stable codes',t=>{
   for(const kind of ['missing','replaced','busy']) {
     const f=fixture(t),first=JSON.parse(f.start().stdout);f.rec(['abandon',first.run]);
     const file=path.join(f.root,'workers'),workers=JSON.parse(fs.readFileSync(file));
@@ -596,7 +603,7 @@ test('late reuse identity and busy refusals retain their messages and supply sta
     if(kind==='missing') f.rec(['set',first.run,'terminal_id=','agent_session_id=']);
     if(kind==='replaced') workers[first.agent].terminal_id='replacement';
     fs.writeFileSync(file,JSON.stringify(workers));
-    const r=f.start(['--reuse',first.run]);assert.equal(r.status,1);
+    const r=f.dispatch(['--retry',savedReuse(f,first.run)]);assert.equal(r.status,1);
     assert.equal(JSON.parse(r.stdout).code,kind==='busy'?'REUSE_WORKER_BUSY':'REUSE_IDENTITY_UNKNOWN',r.stderr);
     assert.match(r.stderr,kind==='busy'?/idle or done/:kind==='missing'?/consistent recorded occupant/:/occupant identity changed/);
     assert.equal(promptCalls(f).length,1);

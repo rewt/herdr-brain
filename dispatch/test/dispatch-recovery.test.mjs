@@ -10,7 +10,7 @@ import { runMetrics } from '../metrics.mjs';
 import { readTiming, readAdmissionTiming } from '../../lib/run-timing.mjs';
 import { configFixture } from '../../test/helpers/config-home-fixture.mjs';
 import { policyLocation } from '../../lib/config-home.mjs';
-import { fixture, promptCalls, unlandedSetting, pendingItem, until, pauseHook, admissionHook, admissionAttempts } from './dispatch-fixture.mjs';
+import { fixture, promptCalls, unlandedSetting, sessionCapSetting, provingWait, pendingItem, until, pauseHook, admissionHook, admissionAttempts } from './dispatch-fixture.mjs';
 
 const DISPATCH = fileURLToPath(new URL('../dispatch.mjs', import.meta.url));
 const RECORD = fileURLToPath(new URL('../../bin/org.mjs', import.meta.url));
@@ -27,13 +27,11 @@ test('awaited dispatch records the notification and plan step before launching a
   assert.equal(retry.status, 0, retry.stderr);
   assert.equal(f.show(f.item).meta.notify, 'none', 'retry must not re-arm an operator-cleared notification');
 });
-for (const exceptional of [false, true]) for (const displayOnly of [false, true]) test(`a killed coordinator cannot release the last unlanded ${exceptional ? 'exception' : 'item'} slot while its record start child survives${displayOnly ? ', even after retry with a display-only journal match' : ''}`, async t => {
-  const f = fixture(t); unlandedSetting(f, 1);
-  let target;
-  if (exceptional) {
-    target = pendingItem(f).item;
-    for (let n = 0; n < 2; n++) pendingItem(f, { meta: ['dispatch_unlanded_exception=unblocks'] });
-  }
+// Current admission counts running native workers and uncertain starts, not
+// landed histories. A surviving record start child holds the session slot.
+for (const exceptional of [false, true]) for (const displayOnly of [false, true]) test(`a killed coordinator cannot release the last session slot while its ${exceptional ? 'unblocks follow-up' : 'item'} record start child survives${displayOnly ? ', even after retry with a display-only journal match' : ''}`, async t => {
+  const f = fixture(t); sessionCapSetting(f, 1);
+  const target = exceptional ? pendingItem(f).item : undefined;
   const other = f.rec(['add', 'Contending item', '--role', 'engineer']);
   const ready = path.join(f.root, 'writer-ready'), release = path.join(f.root, 'writer-release'), finished = path.join(f.root, 'writer-finished');
   const adapter = path.join(f.root, 'record-adapter');
@@ -62,6 +60,10 @@ process.exit(result.status??1);
   const args = item => [item, '--lane', 'topic', '--route', 'engineer', '--brief', f.brief, ...(target ? ['--unblocks', target] : [])];
   const first = f.concurrent([...args(f.item), '--org-cli', adapter], hook);
   let second, journal, decoy;
+  const held = stderr => {
+    assert.match(stderr, /session cap 1 reached/);
+    assert.ok(stderr.includes(`uncertain launch: pending start ${journal}`), stderr);
+  };
   try {
     await until(() => fs.existsSync(hook.PAUSE_MARKER));
     second = f.concurrent(args(other), hook);
@@ -73,28 +75,28 @@ process.exit(result.status??1);
     journal = f.jobs().find(file => JSON.parse(fs.readFileSync(file)).item === f.item);
     const pending = JSON.parse(fs.readFileSync(journal));
     assert.equal(pending.stage, 'starting'); assert.equal(pending.run, null);
-    assert.equal(pending.unlandedCap.admission.kind, exceptional ? 'unblocks' : 'regular');
-    assert.equal(pending.unlandedCap.admission.admitted, true);
+    assert.deepEqual([pending.unlandedCap.admission.kind, pending.unlandedCap.admission.admitted], ['regular', false],
+      'landed-history accounting is diagnostic; running occupancy admits');
+    assert.equal(pending.unblocks, target ?? null);
+    if (exceptional) assert.ok(f.state().links.some(l => l.blocker === f.item && l.blocked === target), 'the follow-up relation stays validated and recorded');
     assert.equal(first.child.kill('SIGKILL'), true);
     assert.equal((await first.done).signal, 'SIGKILL');
     assert.equal(lookupProcess(writer.pid).value?.pid, writer.pid, 'the orphan writer must remain able to append');
     const refused = await second.done;
     assert.equal(refused.status, 1, refused.stderr);
-    assert.equal(JSON.parse(refused.stdout).code, 'DISPATCH_UNLANDED_CAP');
-    assert.match(refused.stderr, /Pending record starts/);
-    if (exceptional) assert.match(refused.stderr, /All 3 active fix\/follow-up slots/);
-    else assert.match(refused.stderr, /unlanded count 1, cap 1/);
-    assert.deepEqual(f.show(f.item).runs, []); assert.deepEqual(f.show(other).runs, []);
+    held(refused.stderr);
+    assert.equal(JSON.parse(fs.readFileSync(JSON.parse(refused.stdout).journal)).stage, 'worker', 'refused before any native launch');
+    assert.deepEqual(f.show(f.item).runs, []);
+    assert.equal(f.calls().some(c => c.type === 'lane' && c.a[0] === 'dispatch'), false);
     assert.equal(promptCalls(f).length, 0);
     if (displayOnly) {
       // A reported ordinary run can acquire every matching display field later.
-      // Landing it makes the item reservation the only remaining item capacity.
       decoy = pendingItem(f, { item: f.item, admitted: false }).run;
       const report = path.join(f.root, 'decoy-report.md');
       fs.writeFileSync(report, `---\nrun: ${decoy}\noutcome: done\nsummary: Ordinary run finished\n---\n`);
       f.rec(['ingest', report]);
-      f.rec(['set', decoy, `dispatch_journal=${journal}`, `dispatch_attempt=${pending.token}`, 'dispatch_unlanded_admitted=true',
-        ...(exceptional ? ['dispatch_unlanded_exception=unblocks'] : [])]);
+      f.rec(['set', decoy, `dispatch_journal=${journal}`, `dispatch_attempt=${pending.token}`,
+        `dispatch_unlanded_admitted=${pending.unlandedCap.admission.admitted}`]);
       const state = f.state();
       fs.appendFileSync(path.join(f.org, 'events.jsonl'), JSON.stringify({ type: 'promotion.reconciled', seq: state.eventCount + 1,
         at: new Date().toISOString(), by: 'dispatch-test-agent', identity: pending.common,
@@ -103,17 +105,14 @@ process.exit(result.status??1);
         const retry = f.dispatch(['--retry', journal, ...recovery]);
         assert.equal(retry.status, 1, retry.stderr);
         assert.match(retry.stderr, recovery.length ? /recovery run does not belong/ : /record start outcome is unknown/);
-        const held = JSON.parse(fs.readFileSync(journal));
-        assert.equal(held.stage, 'starting'); assert.equal(held.run, null);
+        const saved = JSON.parse(fs.readFileSync(journal));
+        assert.equal(saved.stage, 'starting'); assert.equal(saved.run, null);
       }
       const contender = f.jobs().find(file => JSON.parse(fs.readFileSync(file)).item === other);
       const stillRefused = f.dispatch(['--retry', contender]);
       assert.equal(stillRefused.status, 1, stillRefused.stderr);
-      assert.equal(JSON.parse(stillRefused.stdout).code, 'DISPATCH_UNLANDED_CAP');
-      assert.match(stillRefused.stderr, /Pending record starts/);
-      if (exceptional) assert.match(stillRefused.stderr, /All 3 active fix\/follow-up slots/);
-      else assert.match(stillRefused.stderr, /unlanded count 1, cap 1/);
-      assert.deepEqual(f.show(other).runs, []); assert.equal(promptCalls(f).length, 0);
+      held(stillRefused.stderr);
+      assert.equal(f.calls().some(c => c.type === 'lane' && c.a[0] === 'dispatch'), false); assert.equal(promptCalls(f).length, 0);
       assert.equal(lookupProcess(writer.pid).value?.pid, writer.pid, 'retry cannot free capacity while the original writer can append');
     }
   } finally {
@@ -127,12 +126,15 @@ process.exit(result.status??1);
   assert.equal(f.show(f.item).runs.length, displayOnly ? 2 : 1, 'recovery adopts the matching original start without another run');
   const run = JSON.parse(recovered.stdout).run;
   assert.notEqual(run, decoy, 'the display-only match cannot replace the original dispatch start');
-  assert.equal(f.show(run).meta.dispatch_unlanded_admitted, true);
-  if (exceptional) f.rec(['abandon', run]);
-  else f.rec(['close', f.item, '--dropped']);
+  assert.equal(f.show(run).meta.dispatch_unlanded_admitted, false);
+  // The recovered worker now holds the only slot until its run finishes.
   const contender = f.jobs().find(file => JSON.parse(fs.readFileSync(file)).item === other);
+  const full = f.dispatch(['--retry', contender]); assert.equal(full.status, 1, full.stderr);
+  assert.match(full.stderr, new RegExp(`session cap 1 reached: ${run}`));
+  f.rec(['abandon', run]);
   const admitted = f.dispatch(['--retry', contender]); assert.equal(admitted.status, 0, admitted.stderr);
-  assert.equal(f.show(other).runs.length, 1, 'resolved starts do not leave a second reservation behind');
+  assert.equal(f.show(other).runs.length, 1, 'the refused contender keeps its one started run and launches once');
+  assert.equal(promptCalls(f).length, 2);
 });
 test('dispatch journals memory and final admission gates and mirrors allowlisted events into run metadata', t => {
   const f = fixture(t);
@@ -181,27 +183,20 @@ test('recovery skips timing record sets when metadata already equals the journal
   assert.equal(result.status, 0, result.stderr); assert.equal(sets(), before);
 });
 
-test('failed timing record sets preserve STOP during the worker wait and its stopped receipt', async t => {
+test('failed timing record sets preserve STOP during the worker proving wait and its stopped receipt', async t => {
   for (const timingFailure of [false, true]) {
-    const f = fixture(t, { timingFailure }), memory = path.join(f.root, 'memory.json');
-    fs.writeFileSync(memory, JSON.stringify({ available: 8 * 1024 ** 3, swap_used: 0 }));
-    const pending = f.concurrent([f.item, '--lane', 'topic', '--route', 'engineer', '--brief', f.brief],
-      { TEST_MEMORY_FILE: memory, TEST_MEMORY_WORKER_PRESSURE: '1' });
-    let stderr = '', stdout = '';
-    pending.child.stderr.on('data', data => { stderr += data; });
-    pending.child.stdout.on('data', data => { stdout += data; });
+    const f = fixture(t, { timingFailure }), { pending, held } = await provingWait(f, 'worker');
+    let result;
     try {
-      const until = Date.now() + 10000;
-      while (!stderr.includes('waiting; memory pressure') && Date.now() < until) await new Promise(resolve => setTimeout(resolve, 20));
-      assert.match(stderr, /waiting; memory pressure/);
       const stop = path.join(f.repo, '.lane/supervisor/STOP');
       fs.mkdirSync(path.dirname(stop), { recursive: true }); fs.writeFileSync(stop, 'Operator stop');
+      result = await pending.done;
     } finally {
-      fs.writeFileSync(memory, JSON.stringify({ available: 8 * 1024 ** 3, swap_used: 0 }));
+      held.release();
       await pending.done;
     }
-    assert.equal(pending.child.exitCode, 0, stderr);
-    const receipt = JSON.parse(stdout);
+    assert.equal(result.status, 0, result.stderr);
+    const receipt = JSON.parse(result.stdout);
     assert.equal(receipt.result, 'stopped'); assert.equal(receipt.stage, 'worker');
     assert.equal(receipt.reason, 'Supervisor STOP appeared before dispatch; no new worker launched');
     assert.equal(f.calls().some(c => c.type === 'lane' && c.a[0] === 'dispatch'), false);
@@ -224,9 +219,10 @@ test('dispatch defaults to its recorded worker while explicit and saved recipien
   assert.equal(watchers()[0].a[watchers()[0].a.indexOf('--to') + 1], job.to);
   const prompt = promptCalls(f)[0].a[3];
   assert.ok(prompt.includes(`--to ${job.to}`));
-  assert.match(prompt, /exceptions to ops-project/);
+  assert.ok(prompt.includes('exceptions to your PROJECT SUPERVISOR at "ops-project"'), prompt);
   assert.match(prompt, /Self-land your own finished committed source/);
-  assert.match(prompt, /ONE independent async post-code review/);
+  assert.match(prompt, /single record queue-review path; the line service creates\/dispatches the one review item/);
+  assert.match(prompt, /Never start a parallel settle\/lane review/);
   f.env.MONITOR_SUPERVISOR_AGENT = 'ops-explicit';
   const repeated = f.dispatch(['--retry', job.run]); assert.equal(repeated.status, 0, repeated.stderr);
   assert.equal(JSON.parse(fs.readFileSync(journal)).to, job.to);
@@ -437,7 +433,7 @@ process.stdout.write(r.stdout);process.stderr.write(r.stderr);process.exit(r.sta
   for(let i=0;i<2;i++)f.rec(['start',f.item,'--route',job.route,'--route-config',job.routeConfig,
     '--workspace',job.workspace,'--meta',`lane=${job.lane}`,'--meta',`dispatch_journal=${journal}`,
     '--meta',`dispatch_project=${job.common}`,'--meta',`dispatch_attempt=${job.token}`,
-    '--meta','dispatch_unlanded_admitted=true']);
+    '--meta',`dispatch_unlanded_admitted=${job.unlandedCap.admission.admitted}`]);
   r=f.dispatch(['--retry',journal]);assert.equal(r.status,1);assert.match(r.stderr,/multiple matches/);
   assert.equal(promptCalls(f).length,0);assert.equal(f.show(f.item).runs.length,2);
   // Also cover a committed run whose brief was never materialized.

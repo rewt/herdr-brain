@@ -86,10 +86,20 @@ test('producer review creation and dispatch require actual post-cutoff landing w
 
 test('producer old reported source skips cheaply while an unresolved manual review stays diagnostic',t=>{
   const f=fixture(t,{before:[{type:'item.added',id:'REV-90',role:'reviewer',title:'Old manual review',meta:{}}]});f.build({historical:true});
-  const before=f.events().length;f.service().pass();f.service().pass();
+  const before=f.events(),report=before.findLast(e=>e.type==='report.ingested');f.service().pass();
+  // Historical review intake stays idle, while independent cleanup records
+  // the missing original session binding once without granting native effects.
+  const after=f.events(),added=after.slice(before.length);
+  assert.equal(added.length,1);const kept=added[0];
+  assert.equal(kept.type,'closeout.binding-kept');assert.equal(kept.identity,f.identity);
+  assert.equal(kept.run,'R-1');assert.equal(kept.item,'ENG-1');assert.equal(kept.signal,'ready');assert.equal(kept.completed,false);
+  assert.deepEqual(kept.source,{seq:report.seq,type:report.type});
+  assert.equal(kept.condition.kind,'missing-identity');assert.equal(kept.condition.owner,'R-1');assert.equal(kept.condition.continuation.kind,'owner-evidence');
+  for(const resource of ['session','folder','branch'])assert.equal(kept.resources[resource].status,'kept');
+  f.service().pass();assert.deepEqual(f.events(),after,'unchanged cleanup binding and review holds append no repeat events');
   assert.equal(f.refreshes.length,2,'cleanup refresh is independent of historical source and retained review');
   assert.equal(f.calls.length,0);assert.equal(f.messages().length,0);assert.match(f.diagnostics().find(r=>r.notice_record).reason,/legacy\/manual.*UNKNOWN/);
-  assert.deepEqual(f.events().slice(before),[]);assert.ok(f.diagnostics().filter(e=>e.action==='review-health').every(e=>e.health.owed===0));assert.equal(morningDigest({events:f.events(),diagnostics:f.diagnostics()}).review_errors.occurrences,2);
+  assert.ok(f.diagnostics().filter(e=>e.action==='review-health').every(e=>e.health.owed===0));assert.equal(morningDigest({events:f.events(),diagnostics:f.diagnostics()}).review_errors.occurrences,2);
   assert.equal(fs.existsSync(inboxPath({org:f.org})),false);
 });
 

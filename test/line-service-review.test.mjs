@@ -67,7 +67,19 @@ for (const directory of ['current', 'foreign']) for (const root of [null, false,
     const after = fs.readFileSync(path.join(f.org, 'events.jsonl'));
     assert.deepEqual(after.subarray(0, events.length), events, 'existing record history stays immutable');
     const added = after.subarray(events.length).toString().trim().split('\n').filter(Boolean).map(JSON.parse);
-    assert.deepEqual(added, []);
+    // The finite closeout role runs before review journal validation. This
+    // fixture has no native binding, so it records one keep, never an effect.
+    assert.equal(added.length, 1);
+    const [kept] = added;
+    assert.equal(kept.type, 'closeout.binding-kept');
+    assert.equal(kept.identity, f.context().identity);
+    assert.equal(kept.run, 'R-1'); assert.equal(kept.item, 'ENG-1');
+    assert.deepEqual(kept.source, { seq: f.context().run.report.seq, type: 'report.ingested' });
+    assert.equal(kept.completed, false); assert.equal(kept.condition.kind, 'missing-identity');
+    for (const resource of ['session', 'folder', 'branch']) {
+      assert.equal(kept.resources[resource].status, 'kept');
+      assert.equal(kept.resources[resource].owner, 'R-1');
+    }
     if (directory === 'foreign') {
       assert.equal(f.calls[0].args[1],'queue-review');
     }
@@ -160,7 +172,7 @@ test('settled history sweep has constant identity work and bounded log rows whil
   const exists = fs.existsSync; fs.existsSync = file => { if (String(file).startsWith('/gone-history/')) historicalReads++; return exists(file); };
   let s;
   try { s = f.service({ identify: cwd => { identities.push(cwd); return gitProject(cwd); } }); s.pass(); } finally { fs.existsSync = exists; }
-  assert.deepEqual(identities,[f.repo,f.repo,f.repo,f.repo],'construction, initial scan, post-refresh scan and halt scan stay constant');
+  assert.deepEqual(identities,Array(8).fill(f.repo),'construction, five finite closeout guards, general scan and halt scan stay constant');
   assert.equal(historicalReads, 0); assert.equal(f.calls.length, 0);assert.equal(f.refreshes.length,1);
   const rows = fs.readFileSync(path.join(s.directory, 'passes.jsonl'), 'utf8').trim().split('\n').map(JSON.parse);
   assert.deepEqual(rows.map(r=>r.action),['pass-start','review-retained','review-health','queue-order','engineering-idle-observation','engineering-idle','pass-complete']);
@@ -169,7 +181,9 @@ test('settled history sweep has constant identity work and bounded log rows whil
   assert.equal(retained.notice_record.entry.scope.head, f.head);
   assert.equal(rows.find(r => r.action === 'review-health').health.errors.occurrences, 1);
   const timing = rows.find(r => r.action === 'pass-complete').timing;
-  assert.equal(timing.snapshots, 3); assert.equal(timing.historical_intake_skipped, 2035); assert.ok(timing.effect_command_ms>0,'the one independent cleanup refresh is timed');
+  assert.equal(timing.snapshots, 2);
+  assert.equal(timing.historical_intake_skipped, 0, 'report intake belongs to the separate closeout turn');
+  assert.equal(timing.effect_command_ms, 0, 'the separate closeout refresh is outside general-pass timing');
 });
 
 test('producer linked review references require readable typed evidence and preserve exact pending native scope',t=>{

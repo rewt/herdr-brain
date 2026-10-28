@@ -62,7 +62,23 @@ for (const directory of ['current', 'foreign']) {
           command: () => assert.fail('malformed current journal must stop before effects') });
         assert.throws(() => service.pass(), /absence UNKNOWN/);
       }
-      assert.deepEqual(fs.readFileSync(path.join(f.org, 'events.jsonl')), events);
+      const after = fs.readFileSync(path.join(f.org, 'events.jsonl'));
+      assert.deepEqual(after.subarray(0, events.length), events, 'existing record history stays immutable');
+      const added = after.subarray(events.length).toString().trim().split('\n').filter(Boolean).map(JSON.parse);
+      assert.equal(added.length, directory === 'current' ? 1 : 0);
+      if (directory === 'current') {
+        // Independent closeout retains the original unbound allocation before
+        // the malformed review journal refuses all review effects.
+        const [kept] = added;
+        assert.equal(kept.type, 'closeout.binding-kept'); assert.equal(kept.identity, f.identity);
+        assert.equal(kept.run, 'R-1'); assert.equal(kept.item, 'ENG-1');
+        assert.deepEqual(kept.source, { seq: c.state.runs.get('R-1').report.seq, type: 'report.ingested' });
+        assert.equal(kept.completed, false); assert.equal(kept.condition.kind, 'missing-identity');
+        for (const resource of ['session', 'folder', 'branch']) {
+          assert.equal(kept.resources[resource].status, 'kept');
+          assert.equal(kept.resources[resource].owner, 'R-1');
+        }
+      }
       assert.equal(fs.readFileSync(file, 'utf8'), bytes);
       // The inventory scan needs positive typed evidence of an attempt; an
       // opaque locator never substitutes for it or authorizes a native effect.

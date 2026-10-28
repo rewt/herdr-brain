@@ -2,6 +2,7 @@ import test from './helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import {createHash} from 'node:crypto';
 import {spawnSync} from 'node:child_process';
 import {runCloseoutTurn} from '../line-service/closeout-turn.mjs';
 import {gitProject} from '../lib/project.mjs';
@@ -39,8 +40,10 @@ test('lost publication and lost acknowledgement recover a committed report witho
 
 test('two wakeups share one owner and checkpoint a kept target before serving an independent target',t=>{
   const f=fixture(t),[source]=f.report(),target=source.closeout_targets[0];
-  const second={...target,key:'b'.repeat(64),run:'R-2',cwd:target.cwd+'-second'};
-  f.append([{type:'cleanup.bound',run:'R-2',closeout_targets:[second]}]);
+  const secondLane=f.lane+'-second';f.git(['worktree','add','-qb','lane/second',secondLane,f.head]);
+  f.append([{type:'item.added',id:'ENG-2',role:'engineer',title:'Independent target'},
+    {type:'run.started',id:'R-2',item:'ENG-2',workspace:secondLane,meta:{lane:'second'}}]);
+  const [finished]=f.append([{type:'report.ingested',run:'R-2',sha256:'second',report:{outcome:'done'}}]),second=finished.closeout_targets[0];
   let nested,seen=[];
   const cli=(file,args)=>{
     if(args[0]==='refresh')return '{}';
@@ -56,13 +59,15 @@ test('two wakeups share one owner and checkpoint a kept target before serving an
   assert.equal(checkpoint.pending,undefined);assert.equal(checkpoint.continuation.reconcile_committed_sources,true);
 });
 
-test('crash before ingest is repaired without an availability hint and before any slow work',t=>{
+test('crash before ingest and a dropped availability wake reconcile the original report',t=>{
   const f=fixture(t),all=events(f),run=all.find(e=>e.type==='run.started'&&e.id==='R-1');
   const report=path.join(f.org,'runs/R-1/report.md');fs.mkdirSync(path.dirname(report),{recursive:true});
   fs.writeFileSync(report,'---\nrun: R-1\noutcome: blocked\nsummary: Finished with preserved source\nheadline: Source needs follow-up\nblockers: [Specific remaining work]\n---\n');
   // Fixture launch events carry an original project/record and current claim.
   run.report_path=report;run.meta={...run.meta,dispatch_project:f.common,dispatch_record:f.org};
   fs.writeFileSync(f.eventFile,all.map(e=>JSON.stringify(e)+'\n').join(''));
+  f.append([{type:'run.claimed',run:'R-1',record:f.org,project:f.common,owner:{controller:'brain',legacy:false,
+    release:{id:'source',root:process.cwd(),commit:null,identity:gitProject(process.cwd()).identity}}}]);
   let calls=0;
   const cli=(file,args)=>{
     if(args[0]==='refresh')return '{}';
@@ -75,7 +80,12 @@ test('crash before ingest is repaired without an availability hint and before an
   const args={...f.args,cli};
   assert.throws(()=>runCloseoutTurn({...args,fault:stage=>{if(stage==='before-ingest')throw Error('before ingest crash');}}),/before ingest crash/);
   assert.equal(calls,0);
-  const result=runCloseoutTurn(args);assert.equal(result.ingested,1);assert.equal(calls,1);
+  const hash=createHash('sha256').update(fs.readFileSync(report)).digest('hex');
+  const hint=spawnSync(process.execPath,[path.resolve('bin/org.mjs'),'report-available','--run','R-1','--sha256',hash],
+    {cwd:f.repo,env:{...f.env,ORG_ACTOR:'watcher-fixture'},encoding:'utf8'});
+  assert.equal(hint.status,0,hint.stderr+hint.stdout);
+  assert.equal(events(f).find(e=>e.type==='report.available').sha256,hash,'hint publication precedes acknowledgement');
+  const result=runCloseoutTurn(args);assert.deepEqual(result.errors,[]);assert.equal(result.ingested,1);assert.equal(calls,1);
   assert.equal(events(f).filter(e=>e.type==='report.ingested').length,1);
   assert.equal(runCloseoutTurn(args).ingested,0);
 });

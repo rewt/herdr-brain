@@ -62,7 +62,7 @@ const recordCLI = cli('org', '../bin/org.mjs');
 const laneCLI = cli('lane', '../lanes/lane.mjs');
 const watchCLI = cli('watch', '../watch/watch.mjs');
 let job, journal, lock, contender, ownsLock = false, observationDeadline;
-let releaseAdmission, releaseRetirement;
+let releaseAdmission;
 let controllerDeadline=Infinity;
 let preflight;
 let reviewContinuation;
@@ -136,9 +136,13 @@ function command(argv, args, cwd = job?.repo ?? path.resolve(opt.repo)) {
   }
   return result.stdout.trim();
 }
-const record = (args) => command(recordCLI, args);
+const allocationEffect=operation=>{
+  const release=claimRetirementOwner(job.common,{waitMs:60000,deadline:controllerDeadline});
+  try{return operation();}finally{release();}
+};
+const record = args => ['start','worker'].includes(args[0]) ? allocationEffect(()=>command(recordCLI,args)) : command(recordCLI,args);
 const identityState = () => fold(loadEvents(job?.org ?? opt.org).events);
-const lane = (args) => command(laneCLI, args);
+const lane = args => ['open','prepare','dispatch'].includes(args[0]) ? allocationEffect(()=>command(laneCLI,args)) : command(laneCLI,args);
 const git = (args, cwd) => command(['git'], args, cwd);
 const json = (text) => { const value = JSON.parse(text); if (value.error) throw new Error(JSON.stringify(value.error)); return value.result ?? value; };
 const refusal = (code, message) => Object.assign(new Error(message), { code });
@@ -497,7 +501,6 @@ async function main() {
     save();
     lockJob();
   }
-  releaseRetirement = claimRetirementOwner(job.common,{waitMs:60000,deadline:controllerDeadline});
   const common = fs.realpathSync(git(['rev-parse', '--path-format=absolute', '--git-common-dir']));
   if (common !== job.common) throw new Error('repository common-directory identity changed');
   if (!job.reuse && (['open', 'start', 'starting', 'worker'].includes(job.stage) ||
@@ -579,7 +582,7 @@ async function main() {
     lane(['prepare', job.lane]);
     if (job.base) {
       if (git(['status', '--porcelain=v1'], job.workspace)) throw new Error('base fast-forward requires a clean lane');
-      git(['merge', '--ff-only', '--no-edit', '--', job.base], job.workspace);
+      allocationEffect(()=>git(['merge', '--ff-only', '--no-edit', '--', job.base], job.workspace));
     }
     job.stage = 'start'; save();
   }
@@ -865,7 +868,6 @@ catch (error) {
   }
 } finally {
   releaseAdmission?.();
-  releaseRetirement?.();
   if((opt.retry&&job?.detached||opt.detach&&process.exitCode)&&journal&&ownsLock){
     fs.mkdirSync(`${journal}.driver`,{recursive:true});const fd=fs.openSync(`${journal}.driver/results.jsonl`,'a',0o600);
     try{fs.writeFileSync(fd,JSON.stringify({at:new Date().toISOString(),journal,stage:job.stage,run:job.run,exit_code:process.exitCode??0,error:job.error??null,code:job.failure?.code??null,native_launch_attempted:job.native_launch_attempted??null})+'\n');fs.fsyncSync(fd);}finally{fs.closeSync(fd);}

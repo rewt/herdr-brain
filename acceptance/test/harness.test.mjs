@@ -195,14 +195,14 @@ for (const phase of ['cwd', 'registration']) test(`the real adapter accepts a pr
   fs.writeFileSync(path.join(root, 'ownership.json'), JSON.stringify({ binary, workspaces: ['owned'], panes: ['owned:pane'], tabs: [] }));
   fs.writeFileSync(binary, `#!${process.execPath}
     import fs from 'node:fs';const a=process.argv.slice(2);fs.appendFileSync(${JSON.stringify(path.join(root, 'calls'))},JSON.stringify(a)+'\\n');
-    if((a[0]==='pane'&&a[1]==='get'&&${JSON.stringify(phase)}==='cwd')||(a[0]==='agent'&&a[1]==='get'&&${JSON.stringify(phase)}==='registration'))await new Promise(r=>setTimeout(r,4000));
-    console.log(JSON.stringify({result:a[0]==='pane'&&a[1]==='get'?{pane:{foreground_cwd:${JSON.stringify(root)}}}:a[0]==='agent'?{agent:{agent_status:'idle',pane_id:'owned:pane'}}:{}}));`, { mode: 0o755 });
+    if((a[0]==='pane'&&a[1]==='get'&&${JSON.stringify(phase)}==='cwd')||(a[0]==='agent'&&a[1]==='list'&&${JSON.stringify(phase)}==='registration'))await new Promise(r=>setTimeout(r,4000));
+    console.log(JSON.stringify({result:a[0]==='pane'&&a[1]==='get'?{pane:{foreground_cwd:${JSON.stringify(root)}}}:a[0]==='agent'?(a[1]==='list'?{agents:[{agent_status:'idle',pane_id:'owned:pane'}]}:{agent:{agent_status:'idle',pane_id:'owned:pane'}}):{}}));`, { mode: 0o755 });
   const result = spawnSync(process.execPath, [path.join(root, 'herdr.mjs'), 'agent', 'start', 'offline', '--pane', 'owned:pane'],
     { env: { ...process.env, ACCEPTANCE_ROOT: root }, encoding: 'utf8', timeout: 12000 });
   assert.equal(result.status, 0, result.stderr);
   const calls = fs.readFileSync(path.join(root, 'calls'), 'utf8').trim().split('\n').map(JSON.parse);
   assert.ok(calls.some(a => a[0]==='agent'&&a[1]==='rename'));
-  assert.equal(calls.filter(a => a[0]===(phase==='cwd'?'pane':'agent')&&a[1]==='get').length, 1);
+  assert.equal(calls.filter(a => a[0]===(phase==='cwd'?'pane':'agent')&&a[1]===(phase==='cwd'?'get':'list')).length, 1);
 });
 
 

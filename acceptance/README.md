@@ -23,6 +23,14 @@ Herdr transport refuses foreign paths, panes and workspaces, journals creation
 intent before calls, and reconciles lost replies before cleanup. Stop producers
 before reading journals so late replies cannot escape ownership accounting.
 
+An explicitly assigned live harness repair can run just its affected cases with
+`--cases configured-cycle,missing-worker,invalid-worker,blocked-worker,fix-round,watch-grace,housekeeping,default-cycle`.
+Selection uses stable case keys and automatically includes prerequisites, the
+candidate snapshot, cleanup and focus controls. Other cases are recorded as
+unrun/SKIP. A focused summary always has `ready: false`; `selectionPassed` reports
+only that selection's outcome. It cannot qualify a release or reuse prior live
+coverage with `--continue`.
+
 `--skip-live` is retained as a compatibility option. The former real-model cases,
 entry installation probes, generated permission-profile verification and copied
 bch-cloak cutover rehearsals have been removed. The release lane supplies the

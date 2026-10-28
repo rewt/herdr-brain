@@ -95,7 +95,7 @@ test('the scripted agent launch has a real Codex executable identity without sta
       const r=spawnSync('/bin/sh',['-c',a[3]],{encoding:'utf8'});
       if(r.status!==0){console.error(r.stderr);process.exit(1);}
     }
-    if(a[0]==='agent')result={agent:{pane_id:'owned:pane',agent_status:'idle'}};
+    if(a[0]==='agent')result=a[1]==='list'?{agents:[{pane_id:'owned:pane',agent_status:'idle'}]}:{agent:{pane_id:'owned:pane',agent_status:'idle'}};
     console.log(JSON.stringify({result}));`, { mode: 0o755 });
   const reply = spawnSync(process.execPath, [path.join(root, 'herdr.mjs'), 'agent', 'start', 'offline-worker', '--kind', 'codex', '--pane', 'owned:pane'],
     { env: { ...process.env, ACCEPTANCE_ROOT: root }, encoding: 'utf8', timeout: 15000 });

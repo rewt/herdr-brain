@@ -25,6 +25,25 @@ export const cases = Object.freeze({
   cleanup: spec('scope-cleanup', 'Cleanup and scope audit', [], { cleanup: true }),
   focus: spec('operator-focus', 'Background work preserves operator focus'),
 });
+// Focused repair witnesses retain prerequisite and scope controls, but never
+// qualify as a complete release gate. Unknown/empty selections are errors.
+export function selectCases(value) {
+  if (value === undefined) return undefined;
+  const requested = value.split(',');
+  const definitions = new Map(Object.values(cases).map(definition => [definition.key, definition]));
+  const selected = new Set();
+  const include = key => {
+    const definition = definitions.get(key);
+    if (!definition) throw Error(`unknown acceptance case: ${key || '(empty)'}`);
+    if (selected.has(key)) return;
+    selected.add(key);
+    for (const dependency of definition.prerequisites) include(dependency);
+  };
+  for (const key of [...requested, cases.tools.key, cases.snapshot.key, cases.cleanup.key, cases.focus.key]) include(key);
+  return { kind: 'focused', requested, selected: [...selected],
+    unrun: [...definitions.keys()].filter(key => !selected.has(key)) };
+}
+
 export async function runCase(results, definition, fn, { scratchRoot, scratchRoots, load } = {}) {
   assert.ok(definition?.key && definition?.name, 'case requires a stable key and name');
   assert.ok(!results.some((result) => result.key === definition.key), `duplicate case key: ${definition.key}`);

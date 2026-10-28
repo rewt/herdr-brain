@@ -200,10 +200,18 @@ try {
     const command = [executable, path.join(root, 'worker.mjs'), root, 'worker', target].map(quote).join(' ');
     body(await real(['pane', 'run', pane, command]));
     try {
+      // pane.run acknowledges PTY input before the script can report its
+      // lifecycle. An empty successful inventory is startup evidence, whereas
+      // agent.get on that same not-yet-registered pane is a native refusal.
+      // Wait for registration without issuing or retrying that refusal.
       await pollNative(async deadline => {
-        const observed = body(await real(['agent', 'get', pane], { deadline })).agent;
+        const agents = body(await real(['agent', 'list'], { deadline })).agents;
+        if (!Array.isArray(agents)) throw new Error('native agent inventory unavailable');
+        const observed = agents.find(agent => agent.pane_id === pane);
         return observed?.agent_status === 'idle';
       }, 'stand-in did not register', 6000);
+      const observed = body(await real(['agent', 'get', pane])).agent;
+      if (observed?.pane_id !== pane || observed.agent_status !== 'idle') throw new Error('registered stand-in identity/readiness changed');
     } catch (error) { throw new ReceiptLimit(`stand-in did not register: ${error.message}`); }
     const r = await real(['agent', 'rename', pane, target]);
     body(r); process.stdout.write(r.stdout); process.exit(0);

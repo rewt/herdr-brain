@@ -1,8 +1,19 @@
 import test from '../../test/helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
-import { cases, runCase } from '../cases.mjs';
+import { cases, runCase, selectCases } from '../cases.mjs';
 import { HarnessLimit, Pending, ProductBoundary, classifyFailure, requireSuccessfulChecks } from '../limits.mjs';
 import { gateOutcome, resultLine } from '../results.mjs';
+
+test('focused acceptance selects only requested cases plus prerequisites and mandatory controls', () => {
+  assert.equal(selectCases(undefined), undefined);
+  const scope = selectCases('configured-cycle,default-cycle');
+  assert.deepEqual(scope.requested, ['configured-cycle', 'default-cycle']);
+  assert.deepEqual(new Set(scope.selected), new Set(['configured-cycle', 'default-cycle', 'herdr-fixture',
+    'required-tools', 'candidate-snapshot', 'scope-cleanup', 'operator-focus']));
+  assert.ok(scope.unrun.includes('scratch-release'));
+  assert.ok(scope.unrun.includes('promotion-queue'));
+  for (const value of ['', 'typo', 'configured-cycle,']) assert.throws(() => selectCases(value), /unknown acceptance case/);
+});
 
 test('retained dependencies propagate a failed fixture without running dependent bodies', async () => {
   const results = [];

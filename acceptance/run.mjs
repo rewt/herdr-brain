@@ -13,7 +13,7 @@ import { installSignalCleanup, removeCredentials, credentialResidue } from './si
 import { stopProducers, awaitProducers } from './producers.mjs';
 import { retainedRoots, resultLine, gateOutcome, writeSummary } from './results.mjs';
 import { liveSocket } from './probe.mjs';
-import { cases, runCase } from './cases.mjs';
+import { cases, runCase, selectCases } from './cases.mjs';
 import { verifyLiveContinuation, retainedLiveEvidence } from '../lib/live-coverage.mjs';
 import { makeSnapshotWritable } from './snapshot.mjs';
 import { createOwnedTempRoot, createLiveSessionTemp } from './temp.mjs';
@@ -122,11 +122,14 @@ const { values: opt } = parseArgs({ options: {
   candidate: { type: 'string' }, source: { type: 'string', default: SOURCE },
   'summary-file': { type: 'string' },
   'continue': { type: 'string' },
+  cases: { type: 'string' },
   keep: { type: 'boolean', default: false },
   'skip-live': { type: 'boolean', default: false },
 } });
 if (!opt.candidate) { console.error('usage: node acceptance/run.mjs --candidate TAG|REF|DIRECTORY [--source REPO] [--keep] [--summary-file FILE]'); process.exit(2); }
 if (opt.continue && opt['skip-live']) throw Error('live continuation requires actual live scope checks');
+if (opt.continue && opt.cases !== undefined) throw Error('focused acceptance cannot reuse live release coverage');
+const scope = selectCases(opt.cases);
 const scratchRoots = [];
 const realHome = os.homedir();
 const root = createOwnedTempRoot(path.join(process.env.ACCEPTANCE_TMPDIR ?? '/tmp', 'herdr-acceptance-'), scratchRoots);
@@ -178,6 +181,11 @@ const present = (file) => fs.existsSync(path.join(candidate, file));
 const requireCandidate = (file) => { if (!present(file)) pending(`candidate lacks ${file}`); return path.join(candidate, file); };
 async function test(definition, fn) {
   if (stopping && ![cases.cleanup.key, cases.focus.key].includes(definition.key)) throw new Pending('run interrupted');
+  if (scope && !scope.selected.includes(definition.key)) {
+    const result = { id: String(results.length + 1).padStart(2, '0'), key: definition.key, name: definition.name,
+      status: 'SKIP', origin: 'harness', detail: 'Unrun: outside the explicit focused case selection' };
+    results.push(result); return result;
+  }
   const retained = liveContinuation?.retained.find(r => r.key === definition.key);
   if (retained) {
     const result = { ...retained, evidence: retainedLiveEvidence(liveContinuation.prior, retained),
@@ -325,18 +333,20 @@ async function closeScope() {
 function emitSummary(interruption = {}) {
   const measuredLoad = load.snapshot(); load.stop();
   const elapsedSeconds = Math.round((Date.now() - started) / 1000);
-  const { counts, ready } = gateOutcome(results);
+  const { counts, ready: passed } = gateOutcome(results);
+  const ready = !scope && passed;
   const summary = { candidate: opt.candidate, candidateCommit, elapsedSeconds, counts, ready, evidence, results, load: measuredLoad,
+    ...(scope ? { scope, selectionPassed: passed } : {}),
     ...(liveContinuation ? { liveCoverage: { kind: 'supervisor-reconciled-live-coverage',
       sha256: liveContinuation.sha256, inputBase64: liveContinuation.inputBase64 },
       freshCases: results.filter(r => !r.retained).map(r => r.key), retainedCases: results.filter(r => r.retained).map(r => r.key) } : {}),
     credentialResidue: credentialResidue(root), retainedDiscoveryRoots: retainedRoots(discoveryRoots), ...interruption };
   // The build requests an exact copy before sealing the immutable bundle.
   writeSummary(summary, opt['summary-file']);
-  const screen = [`Release acceptance: ${opt.candidate} (${elapsedSeconds}s) — ${counts.PASS} pass / ${counts.FAIL} fail / ${counts.PENDING} pending / ${counts.SKIP} skipped — ${ready ? 'READY' : 'NOT READY'}`,
+  const screen = [`${scope ? 'Focused' : 'Release'} acceptance: ${opt.candidate} (${elapsedSeconds}s) — ${counts.PASS} pass / ${counts.FAIL} fail / ${counts.PENDING} pending / ${counts.SKIP} skipped — ${scope ? (passed ? 'SELECTION PASSED; RELEASE UNQUALIFIED' : 'SELECTION FAILED') : (ready ? 'READY' : 'NOT READY')}`,
     ...results.map((v) => resultLine(v, summary.retainedDiscoveryRoots)), `Evidence: ${evidence} (NN.jsonl; summary.json has reasons)`].join('\n');
   write(path.join(evidence, 'screen.txt'), screen + '\n'); console.log(screen);
-  process.exitCode = ready ? 0 : 1;
+  process.exitCode = passed ? 0 : 1;
 }
 
 function finishFocus() {

@@ -32,6 +32,23 @@ const transferArgs = (run, current, controller = 'other') => ['claim', run, '--c
 const claim = (f, run, args = []) => node(f, 'bin/org.mjs', ['claim', run, '--controller', 'brain', ...args]);
 const events = f => loadEvents(f.org).events;
 const binding = (f, run) => ownerBinding(readOwnedRun(f.org, run));
+// Commit another real record command after this claim has planned, before it
+// acquires the lock. The race is deterministic and needs no production hook.
+function beforeClaimLock(f, change, attempt) {
+  const mkdir = fs.mkdirSync;
+  let raced = false;
+  fs.mkdirSync = function(file, ...args) {
+    if (file === path.join(f.org, 'lock') && !raced) {
+      raced = true;
+      fs.mkdirSync = mkdir;
+      change();
+    }
+    return mkdir.call(this, file, ...args);
+  };
+  try { return attempt(); }
+  finally { fs.mkdirSync = mkdir; }
+}
+const claimConflicts = f => fs.readFileSync(path.join(f.org, 'record-conflicts.jsonl'), 'utf8').trim().split('\n').map(JSON.parse);
 // Bookkeeping/synthetic-queue cases create no native worker or watcher. They
 // need no system process census after each short record command.
 const bookkeeping = (f, args, extra = {}) => spawnSync(process.execPath, [path.join(source, 'bin/org.mjs'), ...args], { cwd: f.repo, env: { ...f.env, ORG_DIR: f.org, ...extra }, encoding: 'utf8' });
@@ -193,6 +210,44 @@ test('concurrent controllers claim exactly once and the loser names the winner',
   assert.match(results.find(r => r.code === 1).stderr, new RegExp(`RUN_OWNED_ELSEWHERE.*${owner}`));
   assert.equal(events(f).filter(e => e.type === 'run.claimed').length, 1);
   assert.equal(JSON.parse(f.record(['claim', run, '--controller', owner, '--legacy'])).already, true);
+});
+
+test('claim replans an unrelated append and commits one fresh generation', t => {
+  const f = fixture(t), run = f.start({ owned: false });
+  const owner = { controller: 'a', legacy: true, release: null };
+  const result = beforeClaimLock(f, () => f.record(['note', run, 'Concurrent record change']),
+    () => claimRun({ org: f.org, run, owner }));
+  const claims = events(f).filter(e => e.type === 'run.claimed');
+  assert.equal(claims.length, 1);
+  assert.equal(result.already, false);
+  assert.deepEqual(result, { already: false, owner, generation: claims[0].seq });
+  assert.equal(events(f).at(-2).type, 'note.added');
+  assert.deepEqual(claimConflicts(f).map(r => [r.code, r.retry, r.effects_started]),
+    [['RECORD_PLANNING_CONFLICT', true, false]]);
+});
+
+test('a claim source conflict rechecks the winning owner instead of retrying its refusal', t => {
+  const f = fixture(t), run = f.start({ owned: false });
+  const owner = { controller: 'b', legacy: true, release: null };
+  assert.throws(() => beforeClaimLock(f, () => f.record(['claim', run, '--controller', 'a', '--legacy']),
+    () => claimRun({ org: f.org, run, owner })),
+  { code: 'RUN_OWNED_ELSEWHERE', message: /RUN_OWNED_ELSEWHERE.*"controller":"a"/ });
+  assert.equal(binding(f, run).owner.controller, 'a');
+  assert.equal(events(f).filter(e => e.type === 'run.claimed').length, 1);
+  assert.equal(claimConflicts(f).length, 1, 'the ownership refusal is not retried');
+});
+
+test('a transfer source conflict rechecks the exact winning incarnation', t => {
+  const f = fixture(t), run = f.start(), current = binding(f, run);
+  assert.throws(() => beforeClaimLock(f, () => f.record(transferArgs(run, current, 'a')),
+    () => claimRun({ org: f.org, run, owner: { controller: 'b', legacy: true, release: null },
+      expected: current, from: current.owner.controller, why: 'Drained inventory handoff' })),
+  { code: 'RUN_CLAIM_TRANSFER_REFUSED' });
+  const claims = events(f).filter(e => e.type === 'run.claimed');
+  assert.equal(claims.length, 2);
+  assert.deepEqual(claims[1].previous, current);
+  assert.equal(binding(f, run).owner.controller, 'a');
+  assert.equal(claimConflicts(f).length, 1, 'the stale-transfer refusal is not retried');
 });
 
 test('transfer compares the complete owner and generation, including a later incarnation with the same name', t => {

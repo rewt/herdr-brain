@@ -22,8 +22,10 @@ export const source = fileURLToPath(new URL('../../', import.meta.url));
 export function fixture(t, { inputWaitMs = 10000, inputAllowance = loadTimeout, recipientDelayMs = 0, noticeWaitMs = 30000 } = {}) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'batch-complete-'))), repo = path.join(root, 'repo');
   fixtureFleet(t, root); fs.mkdirSync(repo);
-  // These lifecycle cases inspect synchronous delivery; opt into a bounded wait.
-  const env = { ...healthyMemoryEnvironment(fixtureEnvironment()), GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1', SUPERVISOR_INPUT_WAIT_SECONDS: String(inputWaitMs / 1000), SUPERVISOR_INPUT_CONFIRM_SECONDS: '0.001', SUPERVISOR_INPUT_POLL_SECONDS: '0.001' };
+  // A quiet confirmation needs multiple native reads in one drain window.
+  // Match their load-adjusted allowances; a fixed window can expire on every
+  // pass, discard confirmation and leave the inbox owner retrying forever.
+  const env = { ...healthyMemoryEnvironment(fixtureEnvironment()), GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1', SUPERVISOR_INPUT_WAIT_SECONDS: String(inputAllowance(inputWaitMs) / 1000), SUPERVISOR_INPUT_CONFIRM_SECONDS: '0.001', SUPERVISOR_INPUT_POLL_SECONDS: '0.001' };
   for (const k of Object.keys(env)) if (/^(LANE_|ORG_|HERDR_|GIT_(DIR|WORK_TREE|INDEX_FILE|COMMON_DIR|CONFIG_COUNT))/.test(k)) delete env[k];
   env.HERDR_MONITOR_FLEET = process.env.HERDR_MONITOR_FLEET;
   const exec = (command, args, cwd = repo, extraEnv = {}) => spawnSync(command, args, { cwd, env: { ...env, ...extraEnv }, encoding: 'utf8', [commandAllowance]: 60000 });
@@ -97,8 +99,13 @@ else console.log(JSON.stringify({result:{workspaces:[],agents:[]}}));`, { mode: 
     while (fs.existsSync(`${inbox}.owner.lock`)) {
       if (Date.now() >= deadline) {
         const pending = readInbox(inbox).filter(entry => !['sent', 'handled'].includes(entry.state));
-        noticeFailure = Error(`Completion fixture inbox did not finish: ${JSON.stringify({ root, pending,
-          owner: fs.readFileSync(path.join(`${inbox}.owner.lock`, 'owner.json'), 'utf8') })}`);
+        let owner;
+        try { owner = fs.readFileSync(path.join(`${inbox}.owner.lock`, 'owner.json'), 'utf8'); }
+        catch (error) {
+          if (error.code === 'ENOENT' && !fs.existsSync(`${inbox}.owner.lock`)) break;
+          owner = { unavailable: error.message };
+        }
+        noticeFailure = Error(`Completion fixture inbox did not finish: ${JSON.stringify({ root, pending, owner })}`);
         throw noticeFailure;
       }
       await new Promise(resolve => setTimeout(resolve, 20));
@@ -106,10 +113,11 @@ else console.log(JSON.stringify({result:{workspaces:[],agents:[]}}));`, { mode: 
     assert.deepEqual(readInbox(inbox).filter(entry => !['sent', 'handled'].includes(entry.state)), [], 'all completion notices delivered before teardown');
   };
   t.after(async () => {
-    try { await workers.wait(); await waitForNotices(); }
+    let producersFinished = false;
+    try { await workers.wait(); producersFinished = true; await waitForNotices(); }
     catch (error) {
       t.diagnostic(`Completion fixture retained for inspection: ${root}`);
-      await stopOwnedInbox(inbox, { script: path.join(source, 'supervisor/prompt-supervisor.mjs') });
+      if (producersFinished) await stopOwnedInbox(inbox, { script: path.join(source, 'supervisor/prompt-supervisor.mjs') });
       throw error;
     }
     fs.rmSync(root, { recursive: true, force: true });

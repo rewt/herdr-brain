@@ -170,11 +170,15 @@ for (const fallback of [false, true]) {
 import fs from 'node:fs';
 const a=process.argv.slice(2);
 fs.appendFileSync(${JSON.stringify(f.calls)},JSON.stringify(a)+'\\n');
-if(a[0]==='agent'&&a[1]==='get') console.log('{"result":{"agent":{"agent_status":"working"}}}');
+if(a[0]==='agent'&&a[1]==='get') console.log(JSON.stringify({result:{agent:a[2]==='supervisor-test'
+  ? {agent:'claude',agent_status:'idle',pane_id:'fake:supervisor',terminal_id:'fake:supervisor-terminal'}
+  : {agent_status:'working'}}}));
 else if(a[0]==='agent'&&a[1]==='wait') {
   process.once('SIGTERM',()=>{fs.writeFileSync(${JSON.stringify(ended)},'terminated');process.exit(0);});
   fs.writeFileSync(${JSON.stringify(waiting)},'waiting');setInterval(()=>{},1000);
-} else process.exit(2);
+} else if(a[0]==='pane'&&a[1]==='read') { console.log('────────────────────'); console.log('❯ '); console.log('────────────────────'); }
+else if(a[0]==='agent'&&a[1]==='prompt') console.log('{}');
+else process.exit(2);
 `, { mode: 0o755 });
       const preloads = [], tailRead = path.join(f.root, 'tail-read');
       if (fallback) {
@@ -223,7 +227,9 @@ fs.readSync=(fd,buffer,start,length,position)=>{
           assert.equal(fs.existsSync(path.join(f.root, '.org/watch/R-940.json')), false);
         }
       }
-      if (change === 'reported') append({ type: 'report.ingested', run: 'R-940', report: { outcome: 'done' } });
+      if (change === 'reported') append({ type: 'report.ingested', run: 'R-940', report: {
+        outcome: 'done', summary: 'Report arrived.', headline: 'The report arrived',
+      } });
       if (change === 'abandoned') append({ type: 'run.abandoned', id: 'R-940' });
       if (change === 'claim moved') append({ ...events[1], owner: { ...events[1].owner, controller: 'successor' } });
       if (change === 'record removed') fs.unlinkSync(record);
@@ -231,14 +237,25 @@ fs.readSync=(fd,buffer,start,length,position)=>{
       if (change === 'STOP') fs.writeFileSync(stop, 'Operator stop\n');
       const result = await waitForExit(child);
       assert.equal(result.code, 0, result.stdout + result.stderr);
-      assert.match(result.stdout, change === 'reported' ? /was reported; stopping/ : change === 'abandoned'
+      assert.match(result.stdout, change === 'reported' ? /final notice confirmed from its ingested report/ : change === 'abandoned'
         ? /was abandoned; stopping/ : change === 'STOP' ? /Supervisor STOP; stopping without delivery/
           : /stopping without delivery/);
       await untilText(ended, /terminated/);
       const calls = fs.readFileSync(f.calls, 'utf8').trim().split('\n').map(JSON.parse);
-      assert.deepEqual(calls.map(a => a.slice(0, 2)), [['agent', 'get'], ['agent', 'wait'],
-        ...(change === 'reported' ? [['agent', 'get']] : [])]);
-      assert.equal(fs.existsSync(path.join(f.root, '.org/watch/R-940.json')), false);
+      if (change === 'reported') {
+        assert.deepEqual(calls.slice(0, 2).map(a => a.slice(0, 2)), [['agent', 'get'], ['agent', 'wait']]);
+        const prompts = calls.filter(a => a[1] === 'prompt');
+        assert.equal(prompts.length, 1);
+        assert.equal(prompts[0][2], 'supervisor-test');
+        assert.match(prompts[0][3], /notice-id=watch:R-940:final$/);
+        const receipt = JSON.parse(fs.readFileSync(path.join(f.root, '.org/watch/R-940.json')));
+        assert.deepEqual(receipt.deliveries, ['watch:R-940:final']);
+        assert.equal(receipt.intent, undefined);
+        await waitForInboxIdle(path.join(f.root, '.org/supervisor/inbox.log'));
+      } else {
+        assert.deepEqual(calls.map(a => a.slice(0, 2)), [['agent', 'get'], ['agent', 'wait']]);
+        assert.equal(fs.existsSync(path.join(f.root, '.org/watch/R-940.json')), false);
+      }
     });
   }
 }
@@ -434,6 +451,91 @@ esac`);
   fs.rmSync(root, { recursive: true, force: true });
 });
 
+test('an ingested report delivers once to the recorded recipient without consulting the worker or mutable file', async t => {
+  for (const fileState of ['missing', 'invalid', 'rewritten']) {
+    await t.test(fileState, async t => {
+      const f = watcherFixture('R-941'), inbox = path.join(f.root, '.org/supervisor/inbox.log');
+      t.after(async () => {
+        await waitForInboxIdle(inbox);
+        fs.rmSync(f.root, { recursive: true, force: true });
+      });
+      const report = { outcome: 'done', summary: 'Recorded completion.', headline: 'Recorded final headline',
+        extra: { verdict: 'NEEDS-WORK' } };
+      fs.appendFileSync(path.join(f.root, '.org/events.jsonl'), JSON.stringify({
+        type: 'report.ingested', seq: 3, run: 'R-941', report,
+      }) + '\n');
+      if (fileState !== 'missing') fs.writeFileSync(f.report, fileState === 'invalid'
+        ? 'Incomplete report' : reportText('R-941', 'Unrecorded rewrite'));
+      // Worker reads and report checks must be unnecessary after ingestion.
+      executable(f.org, `case "$1" in
+  show) printf '%s\\n' '${JSON.stringify({ id: 'R-941', item: 'ENG-9', meta: { agent: 'lane-nine' }, report_path: f.report })}' ;;
+  *) exit 2 ;;
+esac`);
+      executable(f.herdr, `printf '%s\\n' "$*" >> '${f.calls}'
+case "$1 $2" in
+  "agent prompt") printf '%s\\n' '{}' ;;
+  *) exit 2 ;;
+esac`);
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const result = await waitForExit(startWatcher(t, f.args));
+        assert.equal(result.code, 0, result.stdout + result.stderr);
+        assert.match(result.stdout, /final notice confirmed from its ingested report/);
+      }
+      const calls = fs.readFileSync(f.calls, 'utf8').trim().split('\n');
+      const prompts = calls.filter(call => call.startsWith('agent prompt '));
+      assert.equal(prompts.length, 1, calls.join('\n'));
+      assert.ok(calls.every(call => !call.startsWith('agent get lane-nine')), calls.join('\n'));
+      assert.equal(prompts[0], `agent prompt supervisor-test ${reportNotice({ run: 'R-941', item: 'ENG-9',
+        outcome: 'done', headline: report.headline, report: f.report, check: 'pass' })} notice-id=watch:R-941:final`);
+      const entries = readInbox(inbox);
+      assert.equal(entries.length, 1);
+      assert.equal(entries[0].to, 'supervisor-test');
+      assert.equal(entries[0].state, 'sent');
+    });
+  }
+});
+
+test('a watcher preserves worker recipients through ingested-report delivery and restart', async t => {
+  for (const recipient of ['lane-nine', 'fake:worker-pane']) {
+    await t.test(recipient, async t => {
+      const f = watcherFixture('R-942'), inbox = path.join(f.root, '.org/supervisor/inbox.log');
+      t.after(async () => {
+        await waitForInboxIdle(inbox);
+        fs.rmSync(f.root, { recursive: true, force: true });
+      });
+      const report = { outcome: 'done', summary: 'Done.', headline: 'Worker completion' };
+      fs.appendFileSync(path.join(f.root, '.org/events.jsonl'), JSON.stringify({
+        type: 'report.ingested', seq: 3, run: 'R-942', report,
+      }) + '\n');
+      executable(f.org, `case "$1" in
+  show) printf '%s\\n' '${JSON.stringify({ id: 'R-942', item: 'ENG-9',
+    meta: { agent: 'lane-nine', pane: 'fake:worker-pane' }, report_path: f.report })}' ;;
+  *) exit 2 ;;
+esac`);
+      executable(f.herdr, `printf '%s\\n' "$*" >> '${f.calls}'
+case "$1 $2" in
+  "agent get") test "$3" = '${recipient}' || exit 2
+    printf '%s\\n' '{"result":{"agent":{"name":"lane-nine","agent":"claude","agent_status":"idle","pane_id":"fake:worker-pane","terminal_id":"fake:worker-terminal"}}}' ;;
+  "agent prompt") printf '%s\\n' '{}' ;;
+  *) exit 2 ;;
+esac`);
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const result = await waitForExit(startWatcher(t, [...f.args, '--to', recipient]));
+        assert.equal(result.code, 0, result.stdout + result.stderr);
+        assert.match(result.stdout, /final notice confirmed from its ingested report/);
+      }
+      const prompts = fs.readFileSync(f.calls, 'utf8').trim().split('\n')
+        .filter(call => call.startsWith('agent prompt '));
+      assert.deepEqual(prompts, [`agent prompt ${recipient} ${reportNotice({ run: 'R-942', item: 'ENG-9',
+        outcome: report.outcome, headline: report.headline, report: f.report, check: 'pass' })} notice-id=watch:R-942:final`]);
+      const entries = readInbox(inbox);
+      assert.equal(entries.length, 1);
+      assert.equal(entries[0].to, recipient);
+      assert.equal(entries[0].state, 'sent');
+    });
+  }
+});
+
 test('watch shadow uses the checked review verdict and scope while preserving the final tag', async t => {
   for (const [suffix, extra, route] of [['1', 'verdict: PASS', 'triage'], ['2', 'verdict: NEEDS-WORK', 'supervisor'], ['3', 'review_scope: deferred', 'supervisor'], ['4', 'verdict:\n  toString: inert-data', 'unknown']]) {
     const run = `R-99${suffix}`, f = watcherFixture(run);
@@ -488,6 +590,11 @@ else console.log('{}');\n`, { mode: 0o755 });
   assert.doesNotMatch(fs.readFileSync(f.calls, 'utf8'), /"prompt"/);
   fs.writeFileSync(screen, fs.readFileSync(new URL('../../supervisor/test/fixtures/claude-empty.ansi', import.meta.url)));
   assert.equal((await waitForExit(child)).code, 0);
+  fs.appendFileSync(path.join(f.root, '.org/events.jsonl'), JSON.stringify({
+    type: 'report.ingested', seq: 3, run: 'R-125', report: {
+      outcome: 'done', summary: 'Report arrived.', headline: 'The report arrived',
+    },
+  }) + '\n');
   assert.equal((await waitForExit(startWatcher(t, f.args))).code, 0);
   const prompts = fs.readFileSync(f.calls, 'utf8').trim().split('\n').map(JSON.parse).filter((args) => args[1] === 'prompt');
   assert.equal(prompts.length, 1); assert.match(prompts[0][3], /^\[org-report\] run=R-125 /);
@@ -564,6 +671,10 @@ esac`);
 
 test('a valid report also waits while the worker state is unknown', async (t) => {
   const fixture = watcherFixture('R-17');
+  t.after(async () => {
+    await waitForInboxIdle(path.join(fixture.root, '.org/supervisor/inbox.log'));
+    fs.rmSync(fixture.root, { recursive: true, force: true });
+  });
   const state = path.join(fixture.root, 'worker-state');
   const waits = path.join(fixture.root, 'waits');
   fs.writeFileSync(fixture.report, reportText('R-17'));
@@ -571,7 +682,7 @@ test('a valid report also waits while the worker state is unknown', async (t) =>
   executable(fixture.herdr, `case "$1 $2" in
   "agent get") printf '{"result":{"agent":{"agent_status":"%s"}}}\\n' "$(cat '${state}')" ;;
   "agent wait") printf yes >> '${waits}'; while [ "$(cat '${state}')" = unknown ]; do sleep 0.02; done ;;
-  "agent prompt") printf '%s\\n' "$*" >> "${fixture.calls}" ;;
+  "agent prompt") printf '%s\\n' "$*" >> "${fixture.calls}"; printf '%s\\n' '{"result":{}}' ;;
   *) exit 2 ;;
 esac`);
   const child = startWatcher(t, fixture.args);
@@ -585,11 +696,15 @@ esac`);
 
 test('a mismatched report is invalid even when org check passes', async (t) => {
   const fixture = watcherFixture('R-9');
+  t.after(async () => {
+    await waitForInboxIdle(path.join(fixture.root, '.org/supervisor/inbox.log'));
+    fs.rmSync(fixture.root, { recursive: true, force: true });
+  });
   fs.writeFileSync(fixture.report, reportText('R-99', 'Stale report'));
   executable(fixture.herdr, `case "$1 $2" in
   "agent get") printf '%s\\n' '{"result":{"agent":{"agent_status":"done"}}}' ;;
   "agent wait") exec sleep 10 ;;
-  "agent prompt") printf '%s\\n' "$*" >> "${fixture.calls}"; case "$4" in *watch-invalid-report*) "${fixture.writer}" ;; esac ;;
+  "agent prompt") printf '%s\\n' "$*" >> "${fixture.calls}"; case "$4" in *watch-invalid-report*) "${fixture.writer}" ;; esac; printf '%s\\n' '{"result":{}}' ;;
   *) exit 2 ;;
 esac`);
   const result = await waitForExit(startWatcher(t, [...fixture.args, '--start-grace', '0']));
@@ -744,13 +859,17 @@ esac`);
 
 test('a valid report stays intermediate while blocked and is final only after idle', async (t) => {
   const fixture = watcherFixture('R-18');
+  t.after(async () => {
+    await waitForInboxIdle(path.join(fixture.root, '.org/supervisor/inbox.log'));
+    fs.rmSync(fixture.root, { recursive: true, force: true });
+  });
   const state = path.join(fixture.root, 'worker-state');
   fs.writeFileSync(fixture.report, reportText('R-18', 'Finished after unblocking'));
   fs.writeFileSync(state, 'blocked');
   executable(fixture.herdr, `case "$1 $2" in
   "agent get") printf '{"result":{"agent":{"agent_status":"%s"}}}\\n' "$(cat '${state}')" ;;
   "agent wait") while [ "$(cat '${state}')" = blocked ]; do sleep 0.02; done ;;
-  "agent prompt") printf '%s\\n' "$*" >> "${fixture.calls}" ;;
+  "agent prompt") printf '%s\\n' "$*" >> "${fixture.calls}"; printf '%s\\n' '{"result":{}}' ;;
   *) exit 2 ;;
 esac`);
   const child = startWatcher(t, [...fixture.args, '--start-grace', '0']);
@@ -766,13 +885,17 @@ esac`);
 
 test('a refused intermediate delivery stays first in the inbox and recovers before the final report', async (t) => {
   const fixture = watcherFixture('R-16');
+  t.after(async () => {
+    await waitForInboxIdle(path.join(fixture.root, '.org/supervisor/inbox.log'));
+    fs.rmSync(fixture.root, { recursive: true, force: true });
+  });
   const state = path.join(fixture.root, 'worker-state');
   fs.writeFileSync(state, 'blocked');
   executable(fixture.herdr, `case "$1 $2" in
   "agent get") printf '{"result":{"agent":{"agent_status":"%s"}}}\\n' "$(cat '${state}')" ;;
   "agent wait") exec sleep 10 ;;
   "agent prompt") printf '%s\\n' "$*" >> "${fixture.calls}"; case "$4" in *watch-blocked*)
-    if [ ! -f '${fixture.root}/refused' ]; then printf yes > '${fixture.root}/refused'; printf '%s\\n' '{"error":{"code":"agent_blocked"}}' >&2; exit 1; fi ;; esac ;;
+    if [ ! -f '${fixture.root}/refused' ]; then printf yes > '${fixture.root}/refused'; printf '%s\\n' '{"error":{"code":"agent_blocked"}}' >&2; exit 1; fi ;; esac; printf '%s\\n' '{"result":{}}' ;;
   "notification show") printf '%s\\n' "$*" >> "${fixture.calls}"; "${fixture.writer}"; printf '%s' idle > '${state}' ;;
   *) exit 2 ;;
 esac`);

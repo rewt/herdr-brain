@@ -465,6 +465,14 @@ async function watch() {
       return false;
     }
   };
+  const deliverFinal = (report) => deliver(reportNotice({
+    run: runId, item, outcome: report.outcome, headline: report.headline ?? report.summary,
+    report: reportPath, check: 'pass',
+  }), 'done', `watch:${runId}:final`, { shadowEvidence: {
+    channel: 'org-report', validated: true, outcome: report.outcome,
+    ...(report.extra?.verdict !== undefined ? { verdict: report.extra.verdict } : {}),
+    ...(report.extra?.review_scope === 'deferred' ? { reviewScope: 'deferred' } : {}),
+  } });
 
   if (dry) {
     const status = agentStatus(agent);
@@ -484,6 +492,16 @@ async function watch() {
     current = readRun();
     if (owned.abandoned || current.abandoned) {
       log(`${runId} was abandoned; stopping`);
+      return;
+    }
+    // Ingestion already validated and froze the final report. The worker can
+    // still appear active, or its mutable report file can be gone by this pass.
+    // Adopt the same final notice ID through the existing recipient/input gate.
+    // Keep opt.to: dispatch may intentionally record the worker as recipient.
+    const ingested = owned.report ?? current.report;
+    if (ingested) {
+      await deliverFinal(ingested);
+      log(`${runId} final notice confirmed from its ingested report`);
       return;
     }
     const beforeStamp = fileStamp(reportPath);
@@ -515,22 +533,8 @@ async function watch() {
     };
     if (report.kind === 'valid' && workerFinished) {
       saveProcessEnd();
-      const headline = report.report.headline ?? report.report.summary;
-      await deliver(reportNotice({
-        run: runId, item, outcome: report.report.outcome, headline,
-        report: reportPath, check: 'pass',
-      }), 'done', `watch:${runId}:final`, { shadowEvidence: {
-        channel: 'org-report', validated: true, outcome: report.report.outcome,
-        ...(report.report.extra?.verdict !== undefined ? { verdict: report.report.extra.verdict } : {}),
-        ...(report.report.extra?.review_scope === 'deferred' ? { reviewScope: 'deferred' } : {}),
-      } });
+      await deliverFinal(report.report);
       log(`validated by ${report.check}`);
-      return;
-    }
-    // Re-arming an already ingested final report still adopts/delivers its
-    // notice above. Otherwise record completion must release a blocked wait.
-    if (owned.report || current.report) {
-      log(`${runId} was reported; stopping`);
       return;
     }
     if (state === 'unavailable') {

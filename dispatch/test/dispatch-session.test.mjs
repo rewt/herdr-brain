@@ -354,16 +354,16 @@ test('new reuse is refused; a saved fix round can reuse a stopped worker, fresh 
   assert.equal(f.jobs().length,jobs);assert.equal(f.calls().slice(calls).filter(c=>c.type==='lane').length,0);
 });
 test('a real detached watcher acknowledges initialization and sheds supervisor pane identity',async t=>{
-  // This control watches a supervisor callback; dispatch's omitted --to
-  // defaults to the worker, which the watcher refuses as a self-target.
-  const f=fixture(t,{realWatch:true});const r=f.start(['--to','supervisor-herdr']);assert.equal(r.status,0,r.stderr);const result=JSON.parse(r.stdout);
+  // Omitted --to deliberately exercises the supported worker callback.
+  // The loaded-start control below covers an explicit supervisor recipient.
+  const f=fixture(t,{realWatch:true});const r=f.start();assert.equal(r.status,0,r.stderr);const result=JSON.parse(r.stdout);
   assert.ok(result.watcher.pid);process.kill(result.watcher.pid,0);
   const job=JSON.parse(fs.readFileSync(result.journal));
-  assert.equal(job.to,'supervisor-herdr');assert.notEqual(job.to,result.agent);
+  assert.equal(job.to,result.agent);
   const until=Date.now()+3000;
   while(!f.calls().some(x=>x.type==='herdr'&&x.a[2]===result.agent&&x.pane===null)&&Date.now()<until) await new Promise(resolve=>setTimeout(resolve,20));
   assert.ok(f.calls().some(x=>x.type==='herdr'&&x.a[2]===result.agent&&x.pane===null));
-  assert.match(fs.readFileSync(result.watcher.log,'utf8'),/watching R-.*supervisor supervisor-herdr/);
+  assert.ok(fs.readFileSync(result.watcher.log,'utf8').includes(`supervisor ${result.agent}`));
   const duplicate=spawnSync(process.execPath,[WATCH,result.run,'--org',f.org,'--detach','--log',path.join(f.root,'duplicate.log')],{cwd:f.repo,env:{...process.env,ORG_ACTOR:'dispatch-test-agent',PATH:`${path.join(f.root,'bin')}:${process.env.PATH}`,FAKE_ROOT:f.root},encoding:'utf8'});
   assert.equal(duplicate.status,1);assert.match(fs.readFileSync(path.join(f.root,'duplicate.log'),'utf8'),/another watcher/);
 });

@@ -1,5 +1,10 @@
 # Closeout measurement producer (R-1204)
 
+This page preserves the original producer contract. The formal correction's
+installed assets, declared window, allocation joins and v2 immutable audit
+format are documented in [ENG-873](../ENG-873/README.md). The original review
+FAIL and producer evidence are retained; use that correction with current code.
+
 This slice implements read-only observation for the existing finite project line
 service. It performs no cleanup, native retry, source migration, release,
 watcher change, service restart or operator push.

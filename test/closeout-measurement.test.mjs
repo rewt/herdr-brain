@@ -107,13 +107,14 @@ test('service hook appends immutable census, latest view and existing diagnostic
   assert.ok(fs.readFileSync(audit,'utf8').endsWith('torn'));
 });
 
-test('installed product without docs records live measurements and separately fails each missing historical cohort',async t=>{
+test('installed product without docs/evidence records live measurements and separately fails each missing historical cohort',async t=>{
   const f=fixture(),directory=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'closeout-installed-')));t.after(()=>fs.rmSync(directory,{recursive:true,force:true}));
   const bundle=path.join(directory,'product'),org=path.join(directory,'org');
   copyProduct(path.resolve(import.meta.dirname,'..'),bundle);
-  fs.rmSync(path.join(bundle,'docs'),{recursive:true,force:true});
+  fs.rmSync(path.join(bundle,'docs/evidence'),{recursive:true,force:true});
   fs.writeFileSync(path.join(bundle,'.release-commit'),f.source.commit+'\n');
-  assert.equal(fs.existsSync(path.join(bundle,'.git')),false);assert.equal(fs.existsSync(path.join(bundle,'docs')),false);
+  assert.equal(fs.existsSync(path.join(bundle,'.git')),false);assert.equal(fs.existsSync(path.join(bundle,'docs/evidence')),false);
+  assert.ok(fs.statSync(path.join(bundle,'docs/contracts/formats.json')).isFile());
   const installed=await import(pathToFileURL(path.join(bundle,'line-service/closeout-measurement.mjs')));
   fs.mkdirSync(org);const eventsFile=path.join(org,'events.jsonl'),before=f.events.map(e=>JSON.stringify(e)+'\n').join('');fs.writeFileSync(eventsFile,before);
   const args={project:f.project,org,collect:()=>f.inventory,command:()=>{throw Error('installed measurement must not need Git');}};

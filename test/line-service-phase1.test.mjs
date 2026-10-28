@@ -1035,6 +1035,30 @@ test('useful admission proceeds after unrelated productive cleanup exceeds its w
   }
 });
 
+test('cleanup receives an independent allowance after slow review work and a fresh STOP still prevents cleanup',t=>{
+  for(const stopped of [false,true]){
+    const f=fixture(t),env=installedService(f),policy=JSON.parse(fs.readFileSync(path.join(f.cwd,'.lane.json')));
+    policy.retirement={closeout_queue:true};fs.writeFileSync(path.join(f.cwd,'.lane.json'),JSON.stringify(policy));
+    const added=transact(f.org,events=>bindCloseoutSources({cwd:f.cwd,org:f.org,events,env:f.env,mutation:{add:[{type:'item.closed',id:'ENG-1',as:'done',completed_run:'R-1'}]}})).added;
+    publishCloseoutEvents({cwd:f.cwd,org:f.org,added,start:false,env:f.env});
+    const key=added[0].closeout_targets.find(t=>t.signal==='landed').key,calls=[];let clock=0;
+    const service=createLineService({repo:f.cwd,org:f.org,to:'brain-chat',env,passBudgetMs:100,workClock:()=>clock,maxStarts:0,
+      capacity:()=>({cap:1,count:0}),recordNotice:d=>({id:d.id,state:'record-only'}),command:(_exe,args)=>{
+        calls.push(args);
+        if(args[1]==='queue-review'){
+          clock+=1000;
+          if(stopped)fs.writeFileSync(path.join(f.directory,'STOP'),'fresh stop after slow review');
+        }
+        return{status:0,stdout:args[0].endsWith('closeout.mjs')?JSON.stringify(args[1]==='refresh'?{created:[]}:{evaluated:[{key,completed:true}]}):'{}',stderr:''};
+      }});
+    if(stopped)assert.throws(()=>service.pass(),/STOP/);else service.pass();
+    assert.ok(calls.some(a=>a[1]==='queue-review'),'the slow preceding effect actually ran');
+    assert.equal(calls.filter(a=>a[1]==='refresh').length,stopped?0:1);
+    assert.equal(calls.filter(a=>a[1]==='drain'&&JSON.parse(a[a.indexOf('--keys')+1]).includes(key)).length,stopped?0:1);
+    if(!stopped)assert.equal(diagnostics(f).find(r=>r.action==='cleanup-stage').preceding_budget_exhausted,true);
+  }
+});
+
 test('phase1 service retains an unknown exit intent and files one missing-producer decision without native replay',t=>{
   const f=fixture(t),policy=JSON.parse(fs.readFileSync(path.join(f.cwd,'.lane.json'),'utf8'));policy.retirement={closeout_queue:true};fs.writeFileSync(path.join(f.cwd,'.lane.json'),JSON.stringify(policy));
   const env=installedService(f);

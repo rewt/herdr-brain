@@ -165,7 +165,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
     heartbeat('starting');
     try {
       const passStarted = performance.now();
-      let workStarted=workClock();const expired=()=>workClock()-workStarted>=passBudgetMs;
+      let workStarted=workClock();const maintenanceStarted=workStarted,expired=()=>workClock()-workStarted>=passBudgetMs;
       timings = { snapshots: 0, record_snapshot_ms: 0, effect_command_ms: 0, historical_intake_skipped: 0, historical_review_skipped: 0, closeout_retained: 0,outcome_decisions_deferred:0,effects_journal_writes:0,notice_record_attempts:0 };
       effects = readServiceJournal(journal) ?? { identity: project.identity, org, actions: {}, notices: {} };
       if (effects.identity !== project.identity || effects.org !== org) throw Error('effect journal project binding changed');
@@ -394,6 +394,10 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       }
       // Cleanup owns its own checked publication/selection scope. A REVIEW
       // history boundary never excludes a valid original cleanup binding.
+      // Slow intake/review work must not spend cleanup's scheduling allowance.
+      // This resets selection only; each effect still rechecks all live fences.
+      const beforeCleanup=workClock()-workStarted;workStarted=workClock();
+      log({action:'cleanup-stage',preceding_work_ms:beforeCleanup,preceding_budget_exhausted:beforeCleanup>=passBudgetMs,work_budget_ms:passBudgetMs});
       try{
         if(!expired()&&lineServiceOwnsCleanup(project,org)){
           cli('supervisor/closeout.mjs',['refresh','--repo',repo,'--org',org]);stale=true;
@@ -475,7 +479,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       // Productive cleanup is allowed to finish. It cannot consume READY work's
       // independent admission allowance. All actual effects still recount and
       // re-read native/record/source/STOP/HOLD; no worker is stopped by a clock.
-      const precedingWork=workClock()-workStarted;workStarted=workClock();
+      const precedingWork=workClock()-maintenanceStarted;workStarted=workClock();
       let starts=0,admissionLogged=false,latestOccupancy;
       const countCapacity = kind => (capacity??(()=>checkSessionCap({config,org,kind,common:project.identity,
         agent:name=>native(['agent','get',name]).agent,processInfo:pane=>native(['pane','process-info','--pane',pane]).process_info})))(kind);

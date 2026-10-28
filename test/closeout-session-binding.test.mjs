@@ -29,7 +29,7 @@ test('pending report and abandonment keep a valid delivery-time session binding 
       assert.equal(result.evaluated[0].completed, true, JSON.stringify(result));
       assert.equal(fs.existsSync(f.lane), false);
       assert.equal(f.read().tabs.length, 0);
-      assert.equal(effects(f).filter(e => e.action === 'closed').length, 1);
+      assert.equal(effects(f).filter(e => e.action === 'closed' && e.tab_id).length, 1);
       assert.equal(f.git(['rev-parse', 'refs/heads/lane/topic']), f.head, 'unlanded source remains recoverable');
     } else assert.equal(result.evaluated[0].sessions_retired, true, JSON.stringify(result));
   }

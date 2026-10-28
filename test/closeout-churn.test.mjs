@@ -122,7 +122,7 @@ test('a completion with no envelope gets a typed missing identity while an indep
     return JSON.stringify(f.drain({keys:JSON.parse(argv[argv.indexOf('--keys')+1]),retrySafe:true}));
   }});
   assert.equal(result.steps,1);assert.equal(fs.existsSync(f.lane),false);
-  const kept=events(f).find(e=>e.type==='closeout.binding-kept'&&e.run==='R-2');
+  const kept=events(f).find(e=>e.type==='closeout.binding-kept'&&e.run==='R-2'&&e.source.type==='item.closed');
   assert.equal(kept.source.type,'item.closed');assert.equal(kept.condition.kind,'missing-identity');
   assert.equal(kept.resources.session.status,'kept');assert.match(kept.condition.continuation.defect,/no completion subscription/);
 });

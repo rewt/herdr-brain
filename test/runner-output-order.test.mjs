@@ -139,6 +139,7 @@ test('a capped first file frees admission while a concurrent peer and every queu
   const beforeYield = Buffer.from(owned.partial.beforeYield, 'base64');
   t.diagnostic(JSON.stringify({ partial: { original_boundary_stdout_bytes: beforeYield.length,
     original_boundary_pass_serialized: beforeYield.includes(Buffer.from('test:pass')), retained_prefix: owned.partial.tap } }));
+  t.diagnostic(JSON.stringify({ file_terminal_evidence: result.references }));
   const evidence = [];
   for (const file of files) {
     const reference = result.references.find(row => row.file === file);

@@ -187,6 +187,7 @@ if (worker) {
             const receipt = JSON.parse(fs.readFileSync(capture.signalReceipt, 'utf8'));
             if (receipt.pid !== capture.pid || !['SIGINT', 'SIGTERM'].includes(receipt.signal)) throw Error('Invalid file signal receipt');
             capture.nativeExit.received_signal = receipt.signal;
+            capture.nativeExit.signal_handlers = receipt.handlers;
           }
           const signal = capture.nativeExit.signal ?? capture.nativeExit.received_signal;
           if (capture.nativeExit.exit_code !== 0 || signal) {

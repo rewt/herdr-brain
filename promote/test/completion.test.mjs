@@ -71,6 +71,19 @@ test('worker receipt and session bind preserve main run bytes and completion fin
   assert.notEqual(completionFingerprint(regressed, 'ENG-1'), completionFingerprint(baseline, 'ENG-1'));
 });
 
+test('completion fixture delivers through a loaded quiet-confirmation window', async t => {
+  // Model slow native reads against a small base window without adding host
+  // load or waiting ten seconds for every unsuccessful drain pass.
+  const f = fixture(t, { inputWaitMs: 10, inputAllowance: ms => loadTimeout(ms * 500),
+    recipientDelayMs: 300, noticeWaitMs: 3000 });
+  const member = f.lane('loaded');
+  f.drain();
+  await f.waitForNotices();
+  assert.equal(f.gates(), 1);
+  assert.equal(f.show(member.item).closed.as, 'done');
+  assert.equal(fs.existsSync(member.workspace), false);
+});
+
 
 for (const size of [1, 3]) test(`native ${size}-member batch reconciles atomically before cleanup and duplicate recovery`, t => {
   const f = fixture(t); for (let i = 0; i < size; i++) f.lane(`lane-${i}`);
@@ -377,7 +390,6 @@ for (const mode of ['complete', 'missing-member', 'wrong-head', 'reopened', 'new
   f.recover(first, ['note', first.item, 'Inspected change requires a newly prepared receipt']);
   f.drain(); assert.equal((f.queue.load().interrupted ?? []).length, 1);
   manualRecovery(f, rows, mode);
-  process.stderr.write(`completion manual reconciled ${mode} ${f.root}\n`);
   if (mode === 'missing-member' || mode === 'wrong-head') {
     f.drain(); assert.equal(f.gates(), 1); assert.equal((f.queue.load().interrupted ?? []).length, 1);
     assert.equal(fs.readFileSync(receipt + '.record.json', 'utf8'), original);
@@ -397,14 +409,11 @@ for (const mode of ['complete', 'missing-member', 'wrong-head', 'reopened', 'new
     const reply = JSON.parse(retry.stdout);
     assert.equal(reply.result, 'resuming_completion');
     f.workers.remember(reply);
-    process.stderr.write(`completion manual worker wait ${JSON.stringify(reply)}\n`);
     await f.workers.wait();
-    process.stderr.write(`completion manual worker finished ${f.root}\n`);
     assert.equal(f.queue.load().current, null, 'normal resume worker completes bookkeeping');
   } else f.drain();
   assert.ok(fs.existsSync(second.workspace), 'native bookkeeping cannot tail the separate manual completion');
   finishManualCloseout(f);
-  process.stderr.write(`completion manual closeout finished ${f.root}\n`);
   assert.equal(f.gates(), 1); assert.equal((f.queue.load().interrupted ?? []).length, 0);
   assert.equal(fs.readFileSync(receipt + '.record.json', 'utf8'), original);
   assert.deepEqual(JSON.parse(fs.readFileSync(receipt)).attempts, attempts);

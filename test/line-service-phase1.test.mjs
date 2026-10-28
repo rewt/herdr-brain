@@ -982,13 +982,14 @@ test('useful admission proceeds after unrelated productive cleanup exceeds its w
 
 test('phase1 service retains an unknown exit intent and files one missing-producer decision without native replay',t=>{
   const f=fixture(t),policy=JSON.parse(fs.readFileSync(path.join(f.cwd,'.lane.json'),'utf8'));policy.retirement={closeout_queue:true};fs.writeFileSync(path.join(f.cwd,'.lane.json'),JSON.stringify(policy));
+  const env=installedService(f);
   const a=f.observation.agents[0];f.add([{type:'run.updated',id:'R-1',meta:{agent:a.name,pane:a.pane_id,worker_workspace:a.workspace_id,terminal_id:a.terminal_id,agent_session_id:a.agent_session.value}}]);
   const added=transact(f.org,events=>bindCloseoutSources({cwd:f.cwd,org:f.org,events,env:f.env,mutation:{add:[{type:'item.closed',id:'ENG-1',as:'done',completed_run:'R-1'}]}})).added;
   publishCloseoutEvents({cwd:f.cwd,org:f.org,added,start:false,env:f.env});const target=added[0].closeout_targets.find(t=>t.signal==='landed'),source={seq:added[0].seq,type:'item.closed'};
   f.add([{type:'closeout.effect',key:target.key,identity:f.identity,source,outcome:{action:'agent-exit-requested',run:'R-1',pane:a.pane_id,tab_id:a.tab_id,occupant:[a.name,a.agent,a.pane_id,a.workspace_id,f.workspace,a.terminal_id,a.agent_session.value],shell:{pid:1,identity:'original-shell',command:'[zsh]'}}},
-    {type:'closeout.evaluated',key:target.key,completed:false,revision:source.seq,reason:CLOSEOUT_EXIT_PENDING}]);
+    {type:'closeout.evaluated',key:target.key,identity:f.identity,run:'R-1',source,completed:false,revision:source.seq,reason:CLOSEOUT_EXIT_PENDING}]);
   const original=f.context().events.filter(e=>e.type==='closeout.effect'||e.type==='closeout.evaluated');
-  const calls=[],refreshes=[],service=createLineService({repo:f.cwd,org:f.org,to:'brain-chat',env:f.env,capacity:()=>({count:0,cap:4}),recordNotice:data=>({id:data.id,state:'record-only'}),command:(_exe,args)=>{
+  const calls=[],refreshes=[],service=createLineService({repo:f.cwd,org:f.org,to:'brain-chat',env,capacity:()=>({count:0,cap:4}),recordNotice:data=>({id:data.id,state:'record-only'}),command:(_exe,args)=>{
     if(args[0]===path.join(sourceRoot,'supervisor/closeout.mjs')){assert.deepEqual(args,[path.join(sourceRoot,'supervisor/closeout.mjs'),'refresh','--repo',f.cwd,'--org',f.org]);refreshes.push(args);return{status:0,stdout:'{"created":[]}',stderr:''};}
     calls.push(args);
     return{status:0,stdout:'{}',stderr:''};

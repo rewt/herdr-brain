@@ -17,6 +17,13 @@ The native resolver still traverses ancestor symlinks. Retargeting an ancestor
 between two names for one hard-linked inode must refuse even when file identity
 and bytes are identical. Every validation resolves the current path again.
 
+Git's empty `/dev/null` configuration source needs a device-specific fence.
+Audit/stderr writes change its timestamps without changing its empty reads.
+For this resolved character device only, retain canonical path, link/target
+identity, birth time, mode and device number; omit size and target timestamps.
+A symlink's own change time remains fenced. Regular files and other devices
+keep their complete version fences. No queue, claim or source race is waived.
+
 The remaining configuration-audit, immutable archive, closeout, recovery,
 retirement, native decision and runtime migration callbacks retain their prior
 effect boundaries. No blanket migration, native replay or adoption is implied.

@@ -118,6 +118,24 @@ test('exact path fences resolve unicode and chained symlinks without caching lat
   assert.throws(observation.validate, /observation conflict/);
 });
 
+test('null-device config observations tolerate timestamp churn from an unrelated audit write', () => {
+  const observation = captureReads(() => observed.readFileSync('/dev/null', 'utf8'));
+  fs.writeFileSync('/dev/null', 'ordinary stderr/audit output');
+  assert.equal(observation.value, ''); observation.validate();
+});
+
+for (const field of ['ino', 'rdev', 'mode']) test(`null-device config observations still fence ${field}`, t => {
+  const observation = captureReads(() => observed.readFileSync('/dev/null', 'utf8')), stat = fs.statSync;
+  fs.statSync = function(file, ...args) {
+    const value = stat.call(this, file, ...args);
+    if (file === '/dev/null' && typeof value[field] === 'bigint')
+      return Object.assign(Object.create(Object.getPrototypeOf(value)), value, { [field]: value[field] + 1n });
+    return value;
+  };
+  t.after(() => { fs.statSync = stat; });
+  assert.throws(observation.validate, /observation conflict/);
+});
+
 test('Git inputs fence a moved HEAD and a newly created reference before append', t => {
   const f = fixture(t); f.git(['init', '-qb', 'main']);
   const observation = captureReads(() => observeGit(f.root));

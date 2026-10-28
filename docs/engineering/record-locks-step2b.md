@@ -19,12 +19,13 @@ This is preparation, not a lease that authorizes a later unguarded action.
 | `line-service/phase1.mjs` results / completion | Service binding, immutable bytes, verdict/corrections, queue and closeout derivation | Prepared append/fsync; initial boundary retains fresh Git status |
 | `lib/landing-receipt.mjs` | Native binding, claim, commit list/parents, Git and queue preparation | Fresh worktree status and append; no invented landing time |
 | `lib/closeout-unsent.mjs` | Loaded-code verification, reflog proof and source/queue ownership checks | Proof append; no native action or UNKNOWN outcome replay |
+| `dispatch/completion.mjs`, `dispatch/session-bind-command.mjs` | Owning command/journal, claim/namespace and saved session proposal derivation | Exact journal/record/file CAS and append; pure plans may rederive, no launch or native observation replay |
 | `lib/store.mjs` initOrg | None (small local initialization) | Initial config write |
 
 Legacy `transact` remains an effectful single-shot API. Other consumers include
 configuration-audit publications, closeout-executor intent/result callbacks,
 closeout handoffs/recovery and retirement, decision applications, review recovery,
-cutover/runtime migration, and dispatch completion/binding. They are not blanket
+cutover/runtime migration. They are not blanket
 converted: immutable archive/configuration/native actions need their own audited
 preparation and commit boundary. In particular, native decision applications and
 closeout intents retain their current authority. These paths and the serialized

@@ -124,3 +124,30 @@ test('residual timing attributes the exact callback without changing legacy acqu
   assert.equal(row.label,'transact');assert.match(row.caller,/^test\/record-outer-locks.test.mjs:\d+$/);assert.equal(row.schema,'record-lock/v1');
   assert.equal(loadEvents(f.org).events.length,1);
 });
+
+test('measured dispatch completion prepares outside the lock and refuses changed original command bytes',async t=>{
+  const {recordDispatchCompletion}=await import('../dispatch/completion.mjs'),f=fixture(t,{git:true});
+  transact(f.org,()=>({add:[{type:'item.added',id:'ENG-1',role:'engineer',title:'Fixture'}]}));
+  const dir=path.join(f.org,'dispatch');fs.mkdirSync(dir);const journal=path.join(dir,'original.json'),job={token:'original',repo:f.root,org:f.org,common:path.join(f.root,'.git'),item:'ENG-1',stage:'complete',completion_protocol:1};
+  fs.writeFileSync(journal,JSON.stringify(job));fs.writeFileSync(journal+'.lock',String(process.pid));
+  const read=fs.readFileSync;let prepared=false;
+  fs.readFileSync=function(file,...args){if(file===journal){assert.equal(fs.existsSync(f.lock),false);prepared=true;}return read.call(this,file,...args);};t.after(()=>{fs.readFileSync=read;});
+  assert.equal(recordDispatchCompletion({job,journal,exitCode:0}).added[0].type,'dispatch.completed');assert.equal(prepared,true);
+  atLock(t,f,()=>{job.stage='failed';fs.writeFileSync(journal,JSON.stringify(job));});
+  assert.throws(()=>recordDispatchCompletion({job,journal,exitCode:1}),/original command\/source changed/);
+  assert.equal(loadEvents(f.org).events.filter(e=>e.type==='dispatch.completed').length,1);
+});
+
+test('measured saved session binding plans outside the lock and refuses a raced worker occupant',async t=>{
+  const {sessionBindCommand}=await import('../dispatch/session-bind-command.mjs'),{sessionBindFact}=await import('./helpers/session-bind.mjs'),{fold}=await import('../lib/state.mjs'),f=fixture(t,{git:true});
+  const prior=process.env.ORG_DIR;process.env.ORG_DIR=f.org;t.after(()=>{if(prior===undefined)delete process.env.ORG_DIR;else process.env.ORG_DIR=prior;});
+  const dir=path.join(f.org,'dispatch');fs.mkdirSync(dir);const journal=path.join(dir,'attempt.json'),common=path.join(f.root,'.git');
+  transact(f.org,()=>({add:[{type:'item.added',id:'ENG-1',role:'engineer',title:'Fixture'},{type:'run.started',id:'R-1',item:'ENG-1',workspace:f.root,meta:{lane:'topic',dispatch_journal:journal,dispatch_attempt:'attempt',dispatch_project:common,dispatch_record:f.org}},{type:'run.updated',id:'R-1',meta:{agent:'worker',pane:'w:p',worker_workspace:'w',terminal_id:'terminal'}}]}));
+  const state=fold(loadEvents(f.org).events),proposed=sessionBindFact(state.runs.get('R-1'),state),job={run:'R-1',repo:f.root,org:f.org,common,workspace:f.root,token:'attempt',stage:'complete',sessionBinding:{status:'observing',process:proposed.process,receipt:proposed.receipt,prompted_at:proposed.prompted_at,deadline:proposed.deadline,proposed}};
+  fs.writeFileSync(journal,JSON.stringify(job));const read=fs.readFileSync;let prepared=false;
+  fs.readFileSync=function(file,...args){if(file===journal){assert.equal(fs.existsSync(f.lock),false);prepared=true;}return read.call(this,file,...args);};t.after(()=>{fs.readFileSync=read;});
+  assert.equal(sessionBindCommand(['--journal',journal]),0);assert.equal(prepared,true);
+  // Preserve the first exact receipt; a changed occupant cannot gain another.
+  transact(f.org,()=>({add:[{type:'run.updated',id:'R-1',meta:{terminal_id:'replacement'}}]}));
+  assert.throws(()=>sessionBindCommand(['--journal',journal]),/does not match|conflicting/);assert.equal(loadEvents(f.org).events.filter(e=>e.type==='run.session_bound').length,1);
+});

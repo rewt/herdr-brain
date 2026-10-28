@@ -1,8 +1,7 @@
-import fs from 'node:fs';
+import fs from '../lib/record-observation.mjs';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
-import { findOrgDir, transact, UserError, writer } from '../lib/store.mjs';
-import { fold } from '../lib/state.mjs';
+import { findOrgDir, planTransaction, UserError, writer } from '../lib/store.mjs';
 import { gitProject } from '../lib/project.mjs';
 import { effectiveWorkerIdentity, validSessionBind, sharesWorker, sameReceipt } from '../lib/worker-identity.mjs';
 import { validResumeDelivery } from './resume-delivery.mjs';
@@ -10,15 +9,16 @@ import { protectRecordMutation } from '../lib/record-guard.mjs';
 const fields = ['type', 'run', 'dispatch', 'receipt', 'process', 'prompted_at', 'deadline', 'observed_at', 'session'];
 
 // Dispatch is the sole caller/writer. This command consumes its saved proposal,
-// never discovers a session or backfills an old run. All races resolve in transact.
+// never discovers a session or backfills an old run. Saved input and the entire
+// record are fenced before append; replay only rederives this read-only plan.
 export function sessionBindCommand(argv) {
   const { values: opt, positionals } = parseArgs({ args: argv, allowPositionals: true,
     options: { journal: { type: 'string' } } });
   if (positionals.length || !opt.journal) throw new UserError('usage: record session-bind --journal DISPATCH-JOURNAL');
   const org = fs.realpathSync(findOrgDir()), journal = fs.realpathSync(opt.journal), who = writer();
-  const result = transact(org, events => {
+  const result = planTransaction(org, (events, state) => {
     const job = JSON.parse(fs.readFileSync(journal, 'utf8')), binding = job.sessionBinding, proposed = binding?.proposed;
-    const state = fold(events), run = state.runs.get(job.run);
+    const run = state.runs.get(job.run);
     if (!run || job.org !== org || job.common !== gitProject(job.repo).identity ||
         fs.realpathSync(job.repo) !== job.repo || fs.realpathSync(job.workspace) !== run.workspace ||
         path.dirname(journal) !== path.join(org, 'dispatch') || job.stage !== 'complete' ||
@@ -44,7 +44,7 @@ export function sessionBindCommand(argv) {
         (sharesWorker(run, other, state) || effectiveWorkerIdentity(other, state).agent_session_id === proposed.session)))
       throw new UserError('a newer run holds the worker occupant');
     return protectRecordMutation({ org, events, state, command: 'session-bind', mutation: { add: [proposed] } });
-  }, { actor: who.actor, unattributed: who.unattributed });
+  }, { actor: who.actor, unattributed: who.unattributed, replaySafe: true });
   process.stdout.write(JSON.stringify({ recorded: result.added.length > 0 }) + '\n');
   return 0;
 }

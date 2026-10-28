@@ -6,6 +6,14 @@ import {fixture} from './dispatch-fixture.mjs';
 import {preflightContinuation,initialCapacityRefusal,implementationChangeOutcome} from '../preflight.mjs';
 import {createHash} from 'node:crypto';
 
+function phase1Fixture(t,options={}){
+  const f=fixture(t,{noticeRecipient:'supervisor-herdr',...options}),file=path.join(f.repo,'.lane.json'),config=JSON.parse(fs.readFileSync(file));
+  // Detached worker briefs need an explicit review route and project exception address.
+  config.routes.review={kind:'codex',model:'model-review',effort:'high'};
+  fs.writeFileSync(file,JSON.stringify(config));
+  return f;
+}
+
 async function driverResult(journal){
   const file=`${journal}.driver/results.jsonl`,until=Date.now()+60000;
   while(!fs.existsSync(file)&&Date.now()<until)await new Promise(resolve=>setTimeout(resolve,25));
@@ -49,7 +57,7 @@ test('typed initial capacity refusal accepts only a completed no-journal guard r
 });
 
 test('permanent preflight continuation resumes one original detached request without replacing launch evidence or repeating native input',async t=>{
-  const f=fixture(t);f.fail('prepare');const first=f.start(['--detach']);assert.equal(first.status,0,first.stderr);const {journal}=JSON.parse(first.stdout),terminal=await driverResult(journal);assert.equal(terminal.native_launch_attempted,false);
+  const f=phase1Fixture(t);f.fail('prepare');const first=f.start(['--detach']);assert.equal(first.status,0,first.stderr);const {journal}=JSON.parse(first.stdout),terminal=await driverResult(journal);assert.equal(terminal.native_launch_attempted,false);
   const launch=fs.readFileSync(journal+'.driver/launch.json'),original=JSON.parse(fs.readFileSync(journal));fs.unlinkSync(path.join(f.root,'fail'));
   const resumed=f.dispatch(['--retry',journal,'--continue-preflight']);assert.equal(resumed.status,0,resumed.stderr);assert.equal(JSON.parse(resumed.stdout).journal,journal);
   const results=journal+'.driver/results.jsonl',until=Date.now()+60000;let rows=[];
@@ -64,7 +72,7 @@ test('permanent preflight continuation resumes one original detached request wit
 
 test('phase1 detached native start keeps one original prompt and its record-only watcher while a fresh STOP prevents input',async t=>{
   for(const stopped of [false,true]){
-    const f=fixture(t);
+    const f=phase1Fixture(t);
     if(stopped){const file=path.join(f.root,'bin/watch');fs.writeFileSync(file,fs.readFileSync(file,'utf8').replace("} else if(type==='watch') {", "} else if(type==='watch') {\n fs.mkdirSync(path.join(process.cwd(),'.lane/supervisor'),{recursive:true});fs.writeFileSync(path.join(process.cwd(),'.lane/supervisor/STOP'),'fixture STOP after launch, before prompt');"));}
     const started=f.start(['--detach']);assert.equal(started.status,0,started.stderr);const receipt=JSON.parse(started.stdout),result=await driverResult(receipt.journal);
     const prompts=f.calls().filter(c=>c.type==='herdr'&&c.a[0]==='agent'&&c.a[1]==='prompt');
@@ -76,7 +84,7 @@ test('phase1 detached native start keeps one original prompt and its record-only
 
 test('saved-phase frozen request ignores routine predecessor phase evidence but holds a genuinely changed task after native start without retrying its unknown session',async t=>{
   for(const changed of [false,true]){
-    const f=fixture(t,{lateSession:changed?'late':''}),prior=f.rec(['start',f.item,'--workspace',f.repo]).match(/^(R-\d+) started/m)[1],file=path.join(f.root,'original-blocked.md'),text=`---\nrun: ${prior}\noutcome: blocked\nsummary: Original immutable blocked report.\nblockers: []\n---\n`;
+    const f=phase1Fixture(t,{lateSession:changed?'late':''}),prior=f.rec(['start',f.item,'--workspace',f.repo]).match(/^(R-\d+) started/m)[1],file=path.join(f.root,'original-blocked.md'),text=`---\nrun: ${prior}\noutcome: blocked\nsummary: Original immutable blocked report.\nblockers: []\n---\n`;
     fs.writeFileSync(file,text);f.rec(['ingest',file,'--run',prior]);f.rec(['set',f.item,'title=Genuinely changed input']);const owner=f.show(prior).owner;
     const watch=path.join(f.root,'bin/watch'),record=new URL('../../bin/org.mjs',import.meta.url).pathname;
     const injection=changed?`const phase=spawnSync(process.execPath,[${JSON.stringify(record)},'set',${JSON.stringify(f.item)},'title=Another actual task change'],{stdio:['ignore','pipe','pipe']});if(phase.status)process.exit(phase.status);`:`for(const a of [['note',${JSON.stringify(prior)},'Bounded source phase42 PASS; full F2/live gaps remain.'],['set',${JSON.stringify(f.item)},'meta.phase_receipt=owned/phase-receipt.json']]){const phase=spawnSync(process.execPath,[${JSON.stringify(record)},...a],{stdio:['ignore','pipe','pipe']});if(phase.status)process.exit(phase.status);}`;
@@ -96,7 +104,7 @@ test('phase1 dispatch memory admission pauses only for proving and does not wait
 });
 
 test('phase1 detached start saves the original journal receipt before returning and does not replay on retry',async t=>{
-  const f=fixture(t);f.fail('prepare');
+  const f=phase1Fixture(t);f.fail('prepare');
   const result=f.start(['--detach']);assert.equal(result.status,0,result.stderr);const receipt=JSON.parse(result.stdout);
   assert.equal(receipt.result,'detached');assert.ok(receipt.journal);const saved=JSON.parse(fs.readFileSync(receipt.journal));assert.equal(saved.item,f.item);assert.equal(saved.detached,true);
   // The saved job owns recovery. The request is not submitted again by the line.

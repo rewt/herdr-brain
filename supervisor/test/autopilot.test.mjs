@@ -13,7 +13,7 @@ import { loadEvents } from '../../lib/store.mjs';
 import { fastPathTiming } from '../fast-path-timing.mjs';
 import { queueFor, enqueue } from '../../promote/promote.mjs';
 import { autopilotNotice, autopilotSettings } from '../autopilot.mjs';
-import { promptSupervisor, readInbox } from '../prompt-supervisor.mjs';
+import { promptSupervisor, enqueueSupervisor, drainInbox, readInbox } from '../prompt-supervisor.mjs';
 import { noticeLock } from '../notice-lock.mjs';
 import { loadTimeout } from '../../lib/deadline.mjs';
 import { RECORD_CHECK_CLAIM, LEGACY_RECORD_CHECK_CLAIM } from '../../settle/report-evidence.mjs';
@@ -84,6 +84,26 @@ async function existingWorker(t, f, { refuse = false } = {}) {
 }
 const pass = { result: 'promotable', review: { verdict: 'PASS' } };
 const minor = '- [Minor] supervisor/x.mjs:1 - Improve text; Fix: clarify it';
+
+function noticeTransport(f) {
+  const herdr = path.join(f.root, 'delivery-herdr.mjs');
+  fs.writeFileSync(herdr, `#!${process.execPath}\nimport fs from 'node:fs';
+const args=process.argv.slice(2);fs.appendFileSync(${JSON.stringify(path.join(f.root, 'calls'))},JSON.stringify(args)+'\\n');
+if(args[0]==='agent'&&args[1]==='get') {
+ const name=args[2];console.log(JSON.stringify({result:{agent:{name,agent:'claude',pane_id:name+':p',terminal_id:name+':t',
+  agent_session:{value:name+':s'},workspace_id:'w-parent',cwd:${JSON.stringify(f.repo)},agent_status:name==='busy-supervisor'?'working':'idle'}}}));
+} else if(args[0]==='pane'&&args[1]==='read') console.log('────────────────────\\n❯ \\n────────────────────');
+else console.log('{}');\n`, { mode: 0o755 });
+  return herdr;
+}
+// Function adapters belong to the foreground owner; a zero-wait sender hands
+// off to a separate process that cannot inherit JavaScript functions.
+async function foregroundNotice(f, message, options) {
+  const settings = { org: f.org, cwd: f.repo, herdr: noticeTransport(f),
+    waitSeconds: 2, confirmSeconds: 0, pollSeconds: 0.01, owner: true, ...options };
+  const { id, inbox } = enqueueSupervisor(f.entry.to, message, settings);
+  return drainInbox(inbox, { ...settings, id });
+}
 
 test('done handles, PASS promotes with named policy, and duplicate notices do no work', t => {
   const f = setup(t, [pass, { phase: 'acknowledged' }]);
@@ -468,8 +488,9 @@ test('a delayed report can notify an awaited landing without a plan step and ded
 test('abandoned watcher inbox entry is handled without Herdr delivery', async t => {
   const f = setup(t, [], { ingest: false }); f.record(['abandon', f.run]);
   f.entry.message = `[watch-no-report] run=${f.run} item=${f.item} worker=old`;
-  const result = await promptSupervisor(f.entry.to, f.entry.message, { org: f.org, cwd: f.repo, id: `watch:${f.run}:no-report`, waitSeconds: 0 });
-  assert.equal(result.handled, true); assert.deepEqual(f.herdrCalls(), []);
+  const result = await foregroundNotice(f, f.entry.message, { id: `watch:${f.run}:no-report` });
+  assert.equal(result.handled, true); assert.equal(f.calls.length, 0);
+  assert.deepEqual(f.herdrCalls().filter(a => a[0] === 'agent' && a[1] === 'prompt'), []);
   const entry = readInbox(result.inbox)[0]; assert.equal(entry.state, 'handled');
   assert.equal(entry.message, f.entry.message); assert.match(entry.autopilot.summary, /watch-no-report/);
 });
@@ -490,10 +511,11 @@ test('legacy uncertain promotion receipts still forbid command replay after the 
 });
 test('inbox consumes routine results before any Herdr delivery and retains original notice', async t => {
   const f = setup(t, [pass, { phase: 'acknowledged' }]);
-  const result = await promptSupervisor(f.entry.to, f.entry.message, { org: f.org, cwd: f.repo, id: 'routine',
-    executeAutopilot: f.execute, nativeAutopilotWorker: f.nativeWorker, waitSeconds: 0 });
+  const result = await foregroundNotice(f, f.entry.message, { id: 'routine',
+    executeAutopilot: f.execute, nativeAutopilotWorker: f.nativeWorker });
   assert.equal(result.delivered, true); assert.equal(result.handled, true);
-  assert.equal(f.calls.length, 2); assert.deepEqual(f.herdrCalls(), []);
+  assert.equal(f.calls.length, 2);
+  assert.deepEqual(f.herdrCalls().filter(a => a[0] === 'agent' && a[1] === 'prompt'), []);
   const entry = readInbox(result.inbox)[0];
   assert.equal(entry.message, f.entry.message); assert.equal(entry.state, 'handled');
   assert.ok(entry.autopilot.receipt.startsWith(receiptDirectory(f.org, f.entry.project.identity)));
@@ -508,15 +530,9 @@ test(`${notice} exception delivery preserves the exact original notice through t
     f.entry.message = `[watch-long-running] run=${f.run} item=${f.item} worker=lane-nine still-running=2m`;
     fs.unlinkSync(path.join(f.org, 'events.jsonl'));
   }
-  const herdr = path.join(f.root, 'delivery-herdr.mjs');
-  fs.writeFileSync(herdr, `#!${process.execPath}\nimport fs from 'node:fs';
-const args=process.argv.slice(2);fs.appendFileSync(${JSON.stringify(path.join(f.root, 'calls'))},JSON.stringify(args)+'\\n');
-if(args[0]==='agent'&&args[1]==='get') console.log(JSON.stringify({result:{agent:{agent:'claude',pane_id:'fake:p1',agent_status:'idle'}}}));
-else if(args[0]==='pane'&&args[1]==='read') console.log('────────────────────\\n❯ \\n────────────────────');
-else console.log('{}');\n`, { mode: 0o755 });
   const id = notice === 'missing-record-intermediate' ? `watch:${f.run}:long-running` : 'exception';
-  const result = await promptSupervisor(f.entry.to, f.entry.message, { org: f.org, cwd: f.repo, id,
-    herdr, executeAutopilot: f.execute, nativeAutopilotWorker: f.nativeWorker, waitSeconds: 2, confirmSeconds: 0, pollSeconds: 0.01 });
+  const result = await foregroundNotice(f, f.entry.message, { id,
+    executeAutopilot: f.execute, nativeAutopilotWorker: f.nativeWorker });
   assert.equal(result.delivered, true);
   const entry = readInbox(result.inbox)[0], prompts = f.herdrCalls().filter(a => a[0] === 'agent' && a[1] === 'prompt');
   assert.ok(prompts.length >= 1);
@@ -532,11 +548,21 @@ else console.log('{}');\n`, { mode: 0o755 });
 });
 test('a busy chat drain cannot prevent a routine policy action', async t => {
   const f = setup(t, [pass, { phase: 'acknowledged' }]);
-  const inbox = path.join(f.org, 'supervisor/inbox.log'), release = noticeLock(`${inbox}.drain.lock`);
+  const settings = { org: f.org, cwd: f.repo, herdr: noticeTransport(f), owner: true,
+    waitSeconds: 2, confirmSeconds: 0, pollSeconds: 0.01,
+    executeAutopilot: f.execute, nativeAutopilotWorker: f.nativeWorker };
+  enqueueSupervisor('busy-supervisor', '[busy-notice] waiting for its recipient', { ...settings, id: 'busy' });
+  const { id, inbox } = enqueueSupervisor(f.entry.to, f.entry.message, { ...settings, id: 'routine-while-busy' });
+  const release = noticeLock(`${inbox}.drain.lock`);
   try {
-    const result = await promptSupervisor(f.entry.to, f.entry.message, { org: f.org, cwd: f.repo, id: 'routine-while-busy', executeAutopilot: f.execute, nativeAutopilotWorker: f.nativeWorker, waitSeconds: 0 });
-    assert.equal(result.handled, true); assert.equal(f.calls.length, 2); assert.deepEqual(f.herdrCalls(), []);
+    const held = await drainInbox(inbox, { ...settings, id, waitSeconds: 0 });
+    assert.equal(held.queued, true); assert.equal(f.calls.length, 0);
+    assert.ok(readInbox(inbox).every(entry => !entry.autopilot), 'a held drain cannot apply policy out of order');
   } finally { release(); }
+  const result = await drainInbox(inbox, { ...settings, id });
+  assert.equal(result.handled, true); assert.equal(f.calls.length, 2);
+  assert.equal(readInbox(inbox).find(entry => entry.id === 'busy').state, 'pending');
+  assert.deepEqual(f.herdrCalls().filter(a => a[0] === 'agent' && a[1] === 'prompt'), []);
 });
 for (const withFindings of [false, true]) test(`actual handle and promotion commands ${withFindings ? 'return findings to the supervisor' : 'settle PASS and enqueue'} offline`, t => {
   const f = setup(t, [], { ingest: false }); f.commit('correct\n');
@@ -605,12 +631,21 @@ for (const [awaited, scopedTests, recordClaim, withProposal] of [[false, false],
   try {
   assert.equal(state().runs.get(f.run).report, null, 'first notice has no immutable report');
   const runner = path.join(f.root, 'first-notice.mjs');
-  fs.writeFileSync(runner, `import {promptSupervisor} from ${JSON.stringify(path.join(f.source, 'supervisor/prompt-supervisor.mjs'))};\nconsole.log(JSON.stringify(await promptSupervisor(${JSON.stringify(f.entry.to)},${JSON.stringify(f.entry.message)},${JSON.stringify({ org: f.org, cwd: f.repo, id: 'automatic-cycle', waitSeconds: 0 })})));\n`);
+  fs.writeFileSync(runner, `import {promptSupervisor} from ${JSON.stringify(path.join(f.source, 'supervisor/prompt-supervisor.mjs'))};\nconsole.log(JSON.stringify(await promptSupervisor(${JSON.stringify(f.entry.to)},${JSON.stringify(f.entry.message)},${JSON.stringify({ org: f.org, cwd: f.repo, herdr: path.join(f.root, 'bin/herdr'), id: 'automatic-cycle', waitSeconds: loadTimeout(60000) / 1000 })})));\n`);
   const r = f.exec(process.execPath, [runner]); assert.equal(r.status, 0, r.stderr);
   const result = JSON.parse(r.stdout);
   releaseWorker();
   assert.equal(result.handled, true, JSON.stringify(result));
   await releaseWorker.done;
+  // Queue completion can precede the inbox owner's final delivery receipt.
+  // Drain the saved notice through its guard; never resend or resolve UNKNOWN.
+  const completion = f.exec(process.execPath, ['--input-type=module', '-e', `
+import {drainInbox,readInbox} from ${JSON.stringify(path.join(f.source, 'supervisor/prompt-supervisor.mjs'))};
+const inbox=${JSON.stringify(result.inbox)},last=readInbox(inbox).filter(n=>!n.message.includes('lane=anchor')).at(-1);
+console.log(JSON.stringify(await drainInbox(inbox,{id:last.id,owner:true,waitSeconds:${loadTimeout(60000) / 1000},confirmSeconds:0,pollSeconds:0.01})));
+`]);
+  assert.equal(completion.status, 0, completion.stderr);
+  assert.equal(JSON.parse(completion.stdout).delivered, true, completion.stdout);
   const directory = path.join(f.entry.project.identity, 'promote');
   const closed = state().items.get(f.item).closed?.as === 'done';
   assert.ok(closed, `promotion notice closes the record without supervisor chat: ${JSON.stringify(queueFor(f.repo).load())}`);

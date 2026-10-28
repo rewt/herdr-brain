@@ -406,9 +406,33 @@ assert.equal(recovered.status,0,recovered.stderr); assert.match(recovered.stderr
       const recovered = f.exec(process.execPath, [cli, ...args], f.repo, { ORG_DIR: f.org, ORG_GUARD_OVERRIDE: queued.id });
       assert.equal(recovered.status, 0, recovered.stderr); assert.match(recovered.stderr, /promotion write guard OVERRIDE/);
     }
-    const refused = h.drain(); assert.equal(refused.outcome, 'refused');
-    // A question under the item now refuses with its own reason before the general readiness check.
-    assert.match(refused.reason, mode.endsWith('run') ? /superseded/ : /open operator question HUM-\d+/);
+    const refused = h.drain();
+    try {
+      assert.equal(refused.outcome, 'refused');
+      // A question under the item now refuses with its own reason before the general readiness check.
+      assert.match(refused.reason, mode.endsWith('run') ? /superseded/ : /open operator question HUM-\d+/);
+    } catch (error) {
+      // Read disposable fixture logs now; the runner retains these diagnostic
+      // bytes in TAP even after the fixture's after hook removes their files.
+      t.diagnostic(`Unexpected ${mode} queue result:\n${JSON.stringify(refused, null, 2)}`);
+      const read = (label, file) => {
+        try {
+          const bytes = fs.readFileSync(file, 'utf8');
+          t.diagnostic(`${label} (${file}):\n${bytes}`);
+          return bytes;
+        } catch (readError) { t.diagnostic(`${label} (${file ?? 'no path'}): ${readError.message}`); }
+      };
+      read('Train log', refused.log);
+      const receipt = read('Train receipt', refused.receipt), gates = [refused.gate];
+      if (receipt) {
+        try { gates.push(...(JSON.parse(receipt).attempts ?? []).map(attempt => attempt.gate)); }
+        catch (parseError) { t.diagnostic(`Train receipt parse error: ${parseError.message}`); }
+      }
+      for (const file of new Set(gates.flatMap(gate => [gate?.log, gate?.execution?.log]).filter(Boolean))) {
+        read('Nested gate log', file);
+      }
+      throw error;
+    }
     assert.equal(f.git(['rev-parse', 'main']), base); assert.ok(fs.existsSync(f.workspace));
     const log = fs.readFileSync(refused.log, 'utf8');
     if (mode === 'queued-run') assert.doesNotMatch(log, /validating in/);

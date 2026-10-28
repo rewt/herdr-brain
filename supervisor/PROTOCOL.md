@@ -14,6 +14,10 @@ native identity, claim generation, source/head, clean Git, main CAS/FF, STOP/HOL
 and ownership guards remain at mutations. Native refusal stops that effect;
 preserve it, never retry unchanged, relay to another executor or borrow identity.
 Uncertain starts/reviews and saved consumers keep their original runtime.
+Existing saved jobs and watchers keep their original recipients: a bootstrap
+watcher already targeting the supervisor stays intact, and the supervisor
+forwards ordinary follow-up to the recorded owner without another watcher or
+review. New cold dispatches without --to send routine notices to their own worker.
 
 Queue order: finish open work; stable Brain release; BCH on it; rehearsal
 publication; Chipnet withdrawal. Rehearsal/withdrawal engineering continues under

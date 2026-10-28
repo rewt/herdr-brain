@@ -156,7 +156,9 @@ test(`worktree expected head refuses late ${kind} at the fast-forward boundary`,
   f.gate(changes[kind]);
   const result = f.promote();
   assert.equal(result.status, 1, result.stderr || result.stdout);
-  assert.match(result.stderr, /changed|differs from expected head|not clean|STOP|HOLD|OWNED_ELSEWHERE/);
+  assert.match(result.stderr, kind === 'main' ? /main moved during validation; re-run promote/
+    : kind === 'native' ? /self-promotion requires one active owning native worker\/run; nothing merged/
+    : /changed|differs from expected head|not clean|STOP|HOLD|OWNED_ELSEWHERE/);
   assert.equal(result.stdout.match(/captured expected head:/g)?.length, 1);
   assert.equal(loadEvents(f.org).events.some(event => event.type === 'change.landed'), false);
   assert.equal(fs.existsSync(path.join(f.org, 'lock')), false, 'refusal releases the record lock');

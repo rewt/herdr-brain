@@ -479,7 +479,7 @@ test('final watch notice waits for fake operator typing, then sends once across 
   // This fake bypasses executable()'s default empty supervisor fixture.
   fs.writeFileSync(f.herdr, `#!${process.execPath}\nimport fs from 'node:fs'; const a=process.argv.slice(2);
 fs.appendFileSync(${JSON.stringify(f.calls)},JSON.stringify(a)+'\\n');
-if(a[0]==='agent'&&a[1]==='get') console.log(JSON.stringify({result:{agent:{agent:'claude',agent_status:'idle',pane_id:'fake:supervisor'}}}));
+if(a[0]==='agent'&&a[1]==='get') console.log(JSON.stringify({result:{agent:{agent:'claude',agent_status:'idle',pane_id:'fake:supervisor',terminal_id:'fake:supervisor-terminal'}}}));
 else if(a[0]==='pane'&&a[1]==='read') process.stdout.write(fs.readFileSync(${JSON.stringify(screen)},'utf8'));
 else console.log('{}');\n`, { mode: 0o755 });
   const child = startWatcher(t, f.args);
@@ -505,7 +505,7 @@ test('a capped final watcher exits while its owned notice later delivers without
   fs.writeFileSync(screen, fs.readFileSync(new URL('../../supervisor/test/fixtures/claude-typed.ansi', import.meta.url)));
   fs.writeFileSync(f.herdr, `#!${process.execPath}\nimport fs from 'node:fs';const a=process.argv.slice(2);
 fs.appendFileSync(${JSON.stringify(f.calls)},JSON.stringify(a)+'\\n');
-if(a[0]==='agent'&&a[1]==='get') console.log(JSON.stringify({result:{agent:{agent:'claude',agent_status:'idle',pane_id:'fake:supervisor'}}}));
+if(a[0]==='agent'&&a[1]==='get') console.log(JSON.stringify({result:{agent:{agent:'claude',agent_status:'idle',pane_id:'fake:supervisor',terminal_id:'fake:supervisor-terminal'}}}));
 else if(a[0]==='pane'&&a[1]==='read') process.stdout.write(fs.readFileSync(${JSON.stringify(screen)},'utf8'));
 else console.log('{}');\n`, { mode: 0o755 });
   const child = spawnChild(t, process.execPath, f.args, { env: { ...TEST_ENV, SUPERVISOR_INPUT_WAIT_SECONDS: '0' } });
@@ -842,7 +842,7 @@ if(a[0]==='agent'&&a[1]==='wait') {
 }
 fs.appendFileSync(${JSON.stringify(f.calls)},JSON.stringify(a)+'\\n');
 if(a[0]==='agent'&&a[1]==='get') console.log(JSON.stringify({result:{agent:a[2]==='supervisor-test'
-  ? {agent:'claude',agent_status:'idle',pane_id:'fake:supervisor'} : {agent_status:fs.readFileSync(state,'utf8')}}}));
+  ? {agent:'claude',agent_status:'idle',pane_id:'fake:supervisor',terminal_id:'fake:supervisor-terminal'} : {agent_status:fs.readFileSync(state,'utf8')}}}));
 else if(a[0]==='pane'&&a[1]==='read') process.stdout.write(fs.readFileSync(${JSON.stringify(screen)},'utf8'));
 else if(a[0]==='agent'&&a[1]==='wait') {
   while(fs.readFileSync(state,'utf8')==='working'&&!fs.existsSync(wake)) await new Promise(r=>setTimeout(r,20));

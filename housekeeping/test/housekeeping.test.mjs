@@ -509,7 +509,7 @@ test('an existing housekeeping tick recovers pending notice intent while dry-run
   // is never replayed and waits for explicit --resolve.
   fs.writeFileSync(inbox, JSON.stringify(notice) + '\n');
   fs.writeFileSync(f.fake, `#!${process.execPath}\nimport fs from 'node:fs';const a=process.argv.slice(2);
-if(a[0]==='agent'&&a[1]==='get') console.log(JSON.stringify({result:{agent:{agent:'claude',agent_status:'idle',pane_id:'fake:supervisor'}}}));
+if(a[0]==='agent'&&a[1]==='get') console.log(JSON.stringify({result:{agent:{agent:'claude',agent_status:'idle',pane_id:'fake:supervisor',terminal_id:'fake:supervisor-terminal'}}}));
 else if(a[0]==='pane'&&a[1]==='read') console.log('────────────────────\\n❯ \\n────────────────────');
 else { if(a[0]==='agent'&&a[1]==='prompt') fs.writeFileSync(${JSON.stringify(path.join(f.root, 'notice.txt'))},a[3]);
 console.log(JSON.stringify({result:a[0]==='status'?{runs:[],items:[]}:a[0]==='workspace'?{workspaces:[]}:{agents:[]}})); }\n`);

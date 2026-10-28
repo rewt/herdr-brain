@@ -237,7 +237,7 @@ for (const delayed of ['stop', 'shutdown']) test(`owned inbox teardown awaits ob
   const argv = [process.execPath, script, '--inbox', inbox, '--owner-worker'];
   fs.mkdirSync(lock);
   fs.writeFileSync(path.join(lock, 'owner.json'), JSON.stringify({ pid: 101, argv }));
-  let phase = 'initial', reads = 0;
+  let phase = 'initial', reads = 0, childStopped = false;
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const signals = [], observations = [];
   const tracker = {
@@ -248,13 +248,14 @@ for (const delayed of ['stop', 'shutdown']) test(`owned inbox teardown awaits ob
       if (phase !== 'shutdown' || (delayed === 'shutdown' && reads < 2)) {
         rows.set(101, { pid: 101, pgid: 7, identity: 'owner-birth', command: argv.join(' '),
           state: phase === 'initial' || (phase === 'stop' && delayed === 'stop' && reads < 2) ? 'S' : 'T' });
-        rows.set(102, { pid: 102, ppid: 101, pgid: 7, identity: 'child-birth', command: 'fixture transport', state: 'S' });
+        rows.set(102, { pid: 102, ppid: 101, pgid: 7, identity: 'child-birth', command: 'fixture transport', state: childStopped ? 'T' : 'S' });
       }
       return { ok: true, value: rows };
     },
     killProcess(target, signal) {
       signals.push([target.pid, target.identity, target.command, target.group, signal]);
-      if (signal === 'SIGSTOP') { phase = 'stop'; reads = 0; }
+      if (target.pid === 101 && signal === 'SIGSTOP') { phase = 'stop'; reads = 0; }
+      if (target.pid === 102 && signal === 'SIGSTOP') childStopped = true;
       if (target.pid === 101 && signal === 'SIGKILL') { phase = 'shutdown'; reads = 0; }
       return { ok: true, signaled: true };
     },
@@ -263,6 +264,7 @@ for (const delayed of ['stop', 'shutdown']) test(`owned inbox teardown awaits ob
   assert.ok(observations.some(row => row.phase === delayed && row.reads === 2), 'await the actual confirmation sample');
   assert.deepEqual(signals, [
     [101, 'owner-birth', argv.join(' '), false, 'SIGSTOP'],
+    [102, 'child-birth', 'fixture transport', false, 'SIGSTOP'],
     [102, 'child-birth', 'fixture transport', false, 'SIGKILL'],
     [101, 'owner-birth', argv.join(' '), false, 'SIGKILL'],
   ]);

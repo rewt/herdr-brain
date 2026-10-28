@@ -156,7 +156,7 @@ test('Darwin bundles refuse missing, damaged, stale, redirected and setuid sourc
   const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'eng122-bundle-'));
   t.after(() => fs.rmSync(scratch, { recursive: true, force: true }));
   const library = fileURLToPath(new URL('../lib/', import.meta.url));
-  for (const file of ['processes.mjs', 'deadline.mjs', 'files.mjs', 'process-source.c']) fs.copyFileSync(path.join(library, file), path.join(scratch, file));
+  for (const file of ['processes.mjs', 'deadline.mjs', 'files.mjs', 'record-observation.mjs', 'process-source.c']) fs.copyFileSync(path.join(library, file), path.join(scratch, file));
   fs.cpSync(path.join(library, 'native'), path.join(scratch, 'native'), { recursive: true });
   const { lookupProcess: isolated } = await import(new URL(`file://${scratch}/processes.mjs`));
   const binary = path.join(scratch, 'native', `process-source-darwin-${process.arch}`);

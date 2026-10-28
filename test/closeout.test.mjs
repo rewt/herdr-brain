@@ -87,6 +87,8 @@ test('direct report backlog derives already-ingested unlanded allocations and do
   const refresh=refreshCloseouts({cwd:f.repo,org:f.org,env:f.env,retirementOptions:f.options});
   const entry=currentCloseoutEntries(f.common,f.org,events(f)).find(e=>e.reportCloseout);
   assert.ok(entry,JSON.stringify(refresh));assert.equal(entry.run,'R-2');assert.equal(readCloseoutEntries(f.common).length,0);
+  assert.equal(entry.allocation.run,'R-2');assert.equal(entry.allocation.report_sha256,'new');
+  assert.deepEqual(entry.panes.map(p=>p.run),['R-2'],'the newest run owns the shared native session');
   const result=f.drain({keys:[entry.key]});assert.equal(result.evaluated[0].completed,true,JSON.stringify(result));
   assert.equal(fs.existsSync(f.lane),false);assert.equal(f.git(['rev-parse','refs/heads/lane/topic']),f.head);
 });
@@ -128,8 +130,11 @@ function historicalTail(t,{kind='eligible'}={}){
   fs.writeFileSync(f.eventFile,raw.map(e=>JSON.stringify(e)+'\n').join(''));
   transact(f.org,()=>({add:[{type:'report.ingested',run:'R-1',report:{outcome:'blocked',summary:'old final allocation'},sha256:'old'}]}));
   if(kind==='refused'){
-    const all=events(f);all.find(e=>e.type==='report.ingested').report.summary='EPERM original native refusal remains held';
-    fs.writeFileSync(f.eventFile,all.map(e=>JSON.stringify(e)+'\n').join(''));
+    // Historical refusal is an effect fact; report prose grants no authority.
+    const report=events(f).find(e=>e.type==='report.ingested');
+    f.append([{type:'closeout.command-failed',identity:f.common,run:'R-1',key:'original-refused-exit',
+      source:{seq:report.seq,type:report.type},effect:'original-refused-exit',reason:'operation not permitted',
+      failure:{kind:'fence',code:'EPERM'}}]);
   }
   if(kind==='working'){f.state.agents[0].agent_status='working';f.save();}
   if(kind==='dirty')fs.writeFileSync(path.join(f.lane,'unique-uncommitted'),'retain');

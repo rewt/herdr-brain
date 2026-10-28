@@ -39,7 +39,8 @@ function context(t, { structured = true } = {}) {
       review_key: `ENG-1:${f.head}`, review_target: target, review_source_item: 'ENG-1', review_source_run: 'R-1', review_round_cap: 1 } },
     { type: 'run.started', id: 'R-7', item: 'REV-1', report_path: '/mutable/wrong-review.md' },
   ]);
-  const report = { outcome: 'done', summary: 'FAIL with scoped controls', artifacts: ['/proof/reviewer-failed.tap', '/proof/reviewer-unrun.md'],
+  const report = { outcome: 'done', summary: 'FAIL with scoped controls', learnings: [], blockers: [],
+    artifacts: ['/proof/reviewer-failed.tap', '/proof/reviewer-unrun.md'],
     proposals: [{ role: 'engineer', title: 'Repair all findings', accept: ['Repair all three findings'],
       ...(!structured ? { extra: { review_correction_checks: { [major]: controls[0], [second]: controls[1] } } } : {}) }],
     extra: { verdict: 'FAIL', ...(structured ? { findings: [major, second].map((text, i) => ({ severity: 'major', text, correction_check: controls[i] })) } : {}) } };

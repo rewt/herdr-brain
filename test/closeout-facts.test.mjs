@@ -129,13 +129,14 @@ test('removal ignores unrelated canonical index lock and config while retaining 
 });
 
 test('original tab-close completion recovers partial effects without a duplicate exit or close',t=>{
-  const f=setup(t,{direct:true,bound:true,merged:true});f.report();const command=f.options.command;let lost=true;
+  const f=setup(t,{direct:true,bound:true,merged:true});f.report();const command=f.options.command;let lost=true,atSend;
   f.options.command=(exe,args,options)=>{
     const result=command(exe,args,options);
-    if(lost&&exe===f.job.herdr&&args[0]==='tab'&&args[1]==='close'){lost=false;return{status:null,error:{code:'ETIMEDOUT'},stdout:'',stderr:'lost tab completion'};}
+    if(lost&&exe===f.job.herdr&&args[0]==='tab'&&args[1]==='close'){lost=false;atSend=f.herdrCalls().length;return{status:null,error:{code:'ETIMEDOUT'},stdout:'',stderr:'lost tab completion'};}
     return result;
   };
   drain(f);const e=entry(f),start=events(f).findLast(e=>e.type==='closeout.effect'&&e.outcome.action==='shell-close-requested');
+  assert.equal(f.herdrCalls().length,atSend,'no same-turn readback after the producer lost its reply');
   assert.ok(unresolvedCloseoutEffect(e,events(f)));const before=f.read().actions,calls=f.herdrCalls();
   // Reconciliation does not reobserve an already-bound original UNKNOWN.
   selectCurrentCleanup(f);refreshCloseouts({cwd:f.repo,org:f.org,env:f.env,retirementOptions:f.options});
@@ -146,6 +147,16 @@ test('original tab-close completion recovers partial effects without a duplicate
   assert.equal(drain(f).evaluated[0].completed,true);
   assert.deepEqual(f.read().actions.filter(a=>a[0]!=='workspace'),before);
   assert.equal(fs.existsSync(f.lane),false);
+});
+
+test('actual structured tab refusal remains scoped and held after its producer returns',t=>{
+  const f=setup(t,{direct:true,bound:true});f.report();const command=f.options.command;
+  f.options.command=(exe,args,options)=>exe===f.job.herdr&&args[0]==='tab'&&args[1]==='close'?
+    {status:1,stdout:'',stderr:JSON.stringify({error:{code:'NATIVE_REFUSAL',message:'original native permission required'}})}:command(exe,args,options);
+  const row=drain(f).evaluated[0];assert.equal(row.condition.kind,'native-refusal');assert.equal(row.failure.code,'NATIVE_REFUSAL');
+  const calls=f.herdrCalls(),actions=f.read().actions,before=events(f);
+  assert.deepEqual(drain(f).evaluated,[]);assert.deepEqual(f.herdrCalls(),calls);assert.deepEqual(f.read().actions,actions);
+  assert.deepEqual(events(f).slice(0,before.length),before);assert.equal(fs.existsSync(f.lane),true);
 });
 
 test('unchanged keeps yield one grouped supervisor alarm without per-pass decisions or effect retry',t=>{

@@ -103,7 +103,7 @@ export function routeFor(item, config) {
 
 export function createLineService({ repo, org, to, herdr = 'herdr', env = process.env, command = foregroundCommand,
   recordNotice = recordLineNotice, wakeDecision = enqueueNamedDecision, capacity, identify = gitProject, now = () => new Date().toISOString(),
-  childTimeoutMs=120000,maxStarts,maxStepsPerStage=8,passBudgetMs=480000,alertAfter=3,haltAfter=Number(env.HERDR_LINE_HALT_PASSES??3),workClock=()=>performance.now(),runtimeHome }) {
+  childTimeoutMs=120000,maxStarts,maxStepsPerStage=8,passBudgetMs=480000,alertAfter=3,haltAfter=Number(env.HERDR_LINE_HALT_PASSES??3),workClock=()=>performance.now(),runtimeHome,closeoutMeasure }) {
   if(!Number.isSafeInteger(haltAfter)||haltAfter<1)throw Error('halt repair threshold must be a positive completed-pass count');
   const project = identify(repo);
   if (project.checkout !== project.canonical) throw Error('line service requires the canonical project checkout');
@@ -159,7 +159,8 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
     if (reported && !run.report) throw Error('report not ingested');
     return { ...snapshot, run, item };
   };
-  const closeout=()=>runCloseoutTurn({project,org,env:childEnv,cli,guard:observe,maxSteps:maxStepsPerStage,budgetMs:Math.min(45000,passBudgetMs),clock:workClock});
+  const closeout=()=>runCloseoutTurn({project,org,env:childEnv,cli,guard:observe,maxSteps:maxStepsPerStage,budgetMs:Math.min(45000,passBudgetMs),clock:workClock,
+    ...(closeoutMeasure?{measure:closeoutMeasure}:{})});
   function pass() {
     try { closeout(); } catch(error) { log({action:'closeout-held',reason:error.message}); }
     const release = noticeLock(path.join(directory, 'pass.lock'));

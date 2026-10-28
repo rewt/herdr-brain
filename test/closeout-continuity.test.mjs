@@ -9,7 +9,10 @@ import { fold } from '../lib/state.mjs';
 import { digest } from '../lib/completion.mjs';
 import { readCloseoutEntries, closeoutRevision, closeoutKey, closeoutOutcomeObservation, safeCloseoutRetry, scheduleLineCloseouts } from '../lib/closeout.mjs';
 import { reconcile } from '../supervisor/reconcile.mjs';
-import { createLineService, sourceRoot } from '../line-service/line-service.mjs';
+import { createLineService as createMeasuredLineService, sourceRoot } from '../line-service/line-service.mjs';
+// These controls count the effect executor's reads. The independent census has
+// its own oracle/lock controls and cannot resolve an original native intent.
+const createLineService=options=>createMeasuredLineService({...options,closeoutMeasure:()=>{}});
 import { closeoutEvaluations } from '../lib/closeout.mjs';
 import { readCloseoutObservations, appendCloseoutObservation } from '../lib/closeout-diagnostics.mjs';
 import { closeoutWaitId, closeoutWaitState, registerCloseoutWait } from '../lib/closeout-status.mjs';

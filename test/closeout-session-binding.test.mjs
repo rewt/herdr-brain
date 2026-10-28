@@ -31,7 +31,12 @@ test('pending report and abandonment keep a valid delivery-time session binding 
       assert.equal(f.read().tabs.length, 0);
       assert.equal(effects(f).filter(e => e.action === 'closed' && e.tab_id).length, 1);
       assert.equal(f.git(['rev-parse', 'refs/heads/lane/topic']), f.head, 'unlanded source remains recoverable');
-    } else assert.equal(result.evaluated[0].sessions_retired, true, JSON.stringify(result));
+    } else {
+      assert.equal(result.evaluated[0].completed, false, JSON.stringify(result));
+      assert.match(result.evaluated[0].reason, /integration chain is still open/);
+      assert.deepEqual(f.read().actions, [], 'abandonment alone cannot release unlanded content');
+      assert.ok(fs.existsSync(f.lane));
+    }
   }
 });
 

@@ -25,7 +25,10 @@ import { stateDirectory, readJournal } from '../../messages/journal.mjs';
 import { gitProject } from '../../lib/project.mjs';
 import { createRunEventTail } from '../record-tail.mjs';
 
-const TEST_ENV = { ...process.env, BRAIN_SHADOW_ROOT: process.env.BRAIN_SHADOW_ROOT || path.join(process.env.HERDR_TEST_OFFLINE_ROOT, 'shadow'), ORG_ACTOR: 'watch-test-agent', SUPERVISOR_INPUT_CONFIRM_SECONDS: '0.02', SUPERVISOR_INPUT_POLL_SECONDS: '0.02', SUPERVISOR_INPUT_WAIT_SECONDS: '2' };
+// Delivery assertions need an acknowledgement, including when the detached
+// inbox owner wins the drain lock. Keep short caller caps explicit in the
+// controls that exercise handoff; all other fixtures share this load allowance.
+const TEST_ENV = { ...process.env, BRAIN_SHADOW_ROOT: process.env.BRAIN_SHADOW_ROOT || path.join(process.env.HERDR_TEST_OFFLINE_ROOT, 'shadow'), ORG_ACTOR: 'watch-test-agent', SUPERVISOR_INPUT_CONFIRM_SECONDS: '0.02', SUPERVISOR_INPUT_POLL_SECONDS: '0.02', SUPERVISOR_INPUT_WAIT_SECONDS: String(loadTimeout(10_000) / 1000) };
 const WATCH = fileURLToPath(new URL('../watch.mjs', import.meta.url));
 const checkout = path.resolve(import.meta.dirname, '../..');
 const hasGitCheckout = !!fs.lstatSync(path.join(checkout, '.git'), { throwIfNoEntry: false });
@@ -427,8 +430,9 @@ esac`);
   assert.match(result.stdout, /would create tab "watch R-6" in w-canonical/);
 });
 
-test('a valid report is checked and delivered without Herdr being present', async () => {
+test('a valid report is checked and delivered without Herdr being present', async t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'watch-module-'));
+  cleanWatcherFixture(t, root);
   seedOwnedRun(path.join(root, '.org'), 'R-7');
   const report = path.join(root, 'report.md');
   const calls = path.join(root, 'herdr-calls');
@@ -453,10 +457,11 @@ esac`);
   const sent = fs.readFileSync(calls, 'utf8');
   assert.match(sent, /agent prompt supervisor-test \[org-report\] run=R-7 item=ENG-3 outcome=done/);
   assert.match(sent, /headline="The work landed" check=pass/);
-  // The transport owner may finish just after the foreground delivery receipt.
-  // Let that owner release its own locks before removing this isolated fixture.
-  await waitForInboxIdle(path.join(root, '.org/supervisor/inbox.log'));
-  fs.rmSync(root, { recursive: true, force: true });
+  assert.equal(sent.split('\n').filter(call => call.startsWith('agent prompt ')).length, 1);
+  const entries = readInbox(path.join(root, '.org/supervisor/inbox.log'));
+  assert.equal(entries.length, 1);
+  assert.equal(entries[0].id, 'watch:R-7:final');
+  assert.equal(entries[0].state, 'sent');
 });
 
 test('an ingested report delivers once to the recorded recipient without consulting the worker or mutable file', async t => {
@@ -557,10 +562,7 @@ case "$1 $2" in
   *) exit 2 ;;
 esac`);
     const root = path.join(fs.realpathSync(f.root), 'shadow');
-    // This case verifies the shadow and acknowledged delivery, not the caller's
-    // cap. Its detached owner may hold the drain lock through slow native reads.
     const child = spawnChild(t, process.execPath, f.args, { env: { ...TEST_ENV,
-      SUPERVISOR_INPUT_WAIT_SECONDS: String(loadTimeout(10_000) / 1000),
       BRAIN_SHADOW_ROOT: root, BRAIN_IDENTITY: 'example' } });
     const done = await waitForExit(child); assert.equal(done.code, 0, done.stderr);
     const text = reportNotice({ run, item: 'ENG-9', outcome: 'done', headline: 'The report arrived', report: f.report });
@@ -578,6 +580,52 @@ esac`);
     });
     assert.ok(fs.readFileSync(f.calls, 'utf8').includes(`agent prompt supervisor-test ${text} notice-id=watch:${run}:final`));
   }
+});
+
+test('a final watch notice waits through a transient drain lock and delivers once across restart', async t => {
+  for (const owner of ['live', 'unidentified']) await t.test(owner, async t => {
+    const run = owner === 'live' ? 'R-9933' : 'R-9934', f = watcherFixture(run);
+    const inbox = path.join(f.root, '.org/supervisor/inbox.log'), lock = `${inbox}.drain.lock`;
+    cleanWatcherFixture(t, f.root);
+    fs.mkdirSync(path.dirname(inbox), { recursive: true });
+    let release;
+    if (owner === 'live') release = noticeLock(lock);
+    else { fs.mkdirSync(lock); release = () => fs.rmdirSync(lock); }
+    const ownerFile = path.join(lock, 'owner.json');
+    const ownerText = fs.existsSync(ownerFile) ? fs.readFileSync(ownerFile, 'utf8') : null;
+    fs.writeFileSync(f.report, reportText(run));
+    executable(f.herdr, `printf '%s\\n' "$*" >> '${f.calls}'
+case "$1 $2" in
+  "agent get") printf '%s\\n' '{"result":{"agent":{"agent_status":"done"}}}' ;;
+  "agent prompt"|"notification show") printf '%s\\n' '{}' ;;
+  *) exit 2 ;;
+esac`);
+    const child = startWatcher(t, f.args);
+    try {
+      // Wait for actual contention, not an assumed scheduling delay. Both the
+      // watcher and its acknowledged inbox owner are running against this lock.
+      await waitForText(inbox, /"type":"notified".*"error":"locked:.*drain\.lock/);
+      assert.ok(fs.existsSync(lock));
+      assert.equal(fs.existsSync(ownerFile) ? fs.readFileSync(ownerFile, 'utf8') : null, ownerText);
+      const entries = readInbox(inbox);
+      assert.equal(entries.length, 1);
+      assert.equal(entries[0].state, 'pending');
+      assert.ok(Number.isInteger(entries[0].owner_pid) && entries[0].owner_pid > 0);
+      assert.doesNotMatch(fs.readFileSync(f.calls, 'utf8'), /agent prompt /);
+    } finally { release(); }
+    const done = await waitForExit(child);
+    assert.equal(done.code, 0, done.stdout + done.stderr);
+    await waitForInboxIdle(inbox);
+    const restarted = await waitForExit(startWatcher(t, f.args));
+    assert.equal(restarted.code, 0, restarted.stdout + restarted.stderr);
+    const entries = readInbox(inbox);
+    assert.equal(entries.length, 1);
+    assert.equal(entries[0].id, `watch:${run}:final`);
+    assert.equal(entries[0].state, 'sent');
+    const prompts = fs.readFileSync(f.calls, 'utf8').trim().split('\n').filter(call => call.startsWith('agent prompt '));
+    const text = reportNotice({ run, item: 'ENG-9', outcome: 'done', headline: 'The report arrived', report: f.report });
+    assert.deepEqual(prompts, [`agent prompt supervisor-test ${text} notice-id=watch:${run}:final`]);
+  });
 });
 
 test('a final watch notice survives a contended drain past its caller cap and delivers once after restart', async t => {

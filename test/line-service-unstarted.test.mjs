@@ -2,6 +2,7 @@ import test from './helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import {tmpdir} from 'node:os';
 import {fileURLToPath} from 'node:url';
 import {spawnSync} from 'node:child_process';
 import {configFixture} from './helpers/config-home-fixture.mjs';
@@ -15,6 +16,7 @@ import {reviewDigest as hash,resolvedReviewJournal} from '../line-service/review
 import {dispatchInput} from '../line-service/phase1.mjs';
 import {fixture as dispatchFixture,promptCalls} from '../dispatch/test/dispatch-fixture.mjs';
 import {spawnChild,waitForExit} from './helpers/child.mjs';
+import {lockRequest} from '../dispatch/request-lock.mjs';
 
 const root=fs.realpathSync(fileURLToPath(new URL('../',import.meta.url))),entry=path.join(root,'bin/org.mjs');
 function fixture(t,{canonical=true,abandoned=true}={}){
@@ -130,6 +132,61 @@ test('never-started preparation recovery requires and archives an actual current
   assert.equal(recoverUnstartedReview(f.args()).result,'unstarted_review_ready');
   const grant=f.context().events.find(e=>e.type==='review.unstarted-authorized'),manifest=JSON.parse(fs.readFileSync(grant.archive.file)),fixed=manifest.files.find(e=>e.original===path.join(root,'line-service/review-unstarted.mjs'));
   assert.ok(fixed);assert.equal(hash(fs.readFileSync(fixed.archive)),hash(fs.readFileSync(fixed.original)));assert.equal(grant.fix.previous,previous);
+});
+
+for(const stale of [false,true])test(`request lock elects one owner from synchronized ${stale?'stale':'fresh'} contenders`,async t=>{
+  const scratch=fs.mkdtempSync(path.join(tmpdir(),'request-lock-'));t.after(()=>fs.rmSync(scratch,{recursive:true,force:true}));
+  const journal=path.join(scratch,'original.json'),ready=path.join(scratch,'ready'),outcomes=path.join(scratch,'outcomes'),dead=2147483647;
+  fs.writeFileSync(journal,'original request bytes');fs.mkdirSync(ready);fs.mkdirSync(outcomes);
+  if(stale){fs.writeFileSync(journal+'.lock',String(dead));fs.mkdirSync(journal+'.locks');fs.writeFileSync(path.join(journal+'.locks',`${dead}-stale`),'');}
+  const source=`
+    import fs from 'node:fs';
+    import assert from 'node:assert/strict';
+    import {lockRequest} from ${JSON.stringify(new URL('../dispatch/request-lock.mjs',import.meta.url).href)};
+    import {loadTimeout} from ${JSON.stringify(new URL('../lib/deadline.mjs',import.meta.url).href)};
+    const [journal,ready,outcomes]=process.argv.slice(1),scan=fs.readdirSync.bind(fs);
+    const wait=predicate=>{const until=Date.now()+loadTimeout(10000);while(!predicate()){assert.ok(Date.now()<until,'fixture barrier did not complete');Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,10);}};
+    let first=true;
+    fs.readdirSync=(directory,...options)=>{
+      if(directory===journal+'.locks'&&first){first=false;fs.writeFileSync(ready+'/'+process.pid,'');wait(()=>scan(ready).length===2);}
+      return scan(directory,...options);
+    };
+    let held,result;
+    try{held=lockRequest(journal,{kill:(pid,signal)=>{if(pid===${dead})throw Object.assign(Error('absent fixture owner'),{code:'ESRCH'});return process.kill(pid,signal);}});result={acquired:true};}
+    catch(e){result={acquired:false,error:e.message};}
+    fs.writeFileSync(outcomes+'/'+process.pid,JSON.stringify(result));
+    if(held){wait(()=>scan(outcomes).length===2);assert.equal(fs.readFileSync(held.lock,'utf8'),String(process.pid));held.release();}
+    console.log(JSON.stringify(result));
+  `;
+  const children=Array.from({length:2},()=>spawnChild(t,process.execPath,['--input-type=module','-e',source,journal,ready,outcomes]));
+  const replies=await Promise.all(children.map(waitForExit));for(const r of replies)assert.equal(r.status,0,r.stderr);
+  const results=replies.map(r=>JSON.parse(r.stdout));assert.equal(results.filter(r=>r.acquired).length,1,JSON.stringify(results));
+  assert.match(results.find(r=>!r.acquired).error,/already running/);assert.equal(fs.readFileSync(journal,'utf8'),'original request bytes');
+  assert.equal(fs.existsSync(journal+'.lock'),false);assert.deepEqual(fs.readdirSync(journal+'.locks'),[]);
+});
+
+test('request lock retains live denied unknown and invalid owners and recovers only ESRCH',t=>{
+  const scratch=fs.mkdtempSync(path.join(tmpdir(),'request-lock-'));t.after(()=>fs.rmSync(scratch,{recursive:true,force:true}));
+  const journal=path.join(scratch,'original.json'),lock=journal+'.lock',directory=lock+'s';fs.writeFileSync(journal,'unchanged request');fs.mkdirSync(directory);
+  for(const location of ['lock','contender'])for(const code of ['live','EPERM','EACCES','unknown','invalid']){
+    const peer=location==='lock'?lock:path.join(directory,'1-retained'),bytes=code==='invalid'?'invalid':'1';fs.writeFileSync(peer,location==='lock'?bytes:'');
+    const file=location==='contender'&&code==='invalid'?path.join(directory,'invalid-retained'):peer;if(file!==peer)fs.renameSync(peer,file);
+    assert.throws(()=>lockRequest(journal,{kill:()=>{if(code!=='live')throw Object.assign(Error(code),{code});}}),/running|EPERM|EACCES|unknown|invalid/);
+    assert.equal(fs.readFileSync(file,'utf8'),location==='lock'?bytes:'');fs.unlinkSync(file);assert.deepEqual(fs.readdirSync(directory),[]);
+  }
+  fs.writeFileSync(lock,'1');fs.writeFileSync(path.join(directory,'1-stale'),'');
+  const held=lockRequest(journal,{kill:()=>{throw Object.assign(Error('absent'),{code:'ESRCH'});}});assert.equal(fs.readFileSync(lock,'utf8'),String(process.pid));held.release();
+  assert.equal(fs.readFileSync(journal,'utf8'),'unchanged request');assert.deepEqual(fs.readdirSync(directory),[]);
+});
+
+test('request lock retains a live higher contender when its arbitration wait expires',t=>{
+  const scratch=fs.mkdtempSync(path.join(tmpdir(),'request-lock-'));t.after(()=>fs.rmSync(scratch,{recursive:true,force:true}));
+  const journal=path.join(scratch,'original.json'),directory=journal+'.locks',peer=path.join(directory,`${process.pid}9-retained`);
+  fs.writeFileSync(journal,'original request');fs.mkdirSync(directory);fs.writeFileSync(peer,'retained contender');
+  let time=0;const clock=t.mock.method(Date,'now',()=>time+=1e12);
+  try{assert.throws(()=>lockRequest(journal,{kill:()=>{}}),/already running/);}finally{clock.mock.restore();}
+  assert.equal(fs.readFileSync(peer,'utf8'),'retained contender');assert.deepEqual(fs.readdirSync(directory),[path.basename(peer)]);
+  assert.equal(fs.existsSync(journal+'.lock'),false);assert.equal(fs.readFileSync(journal,'utf8'),'original request');
 });
 
 test('never-started public owner command serializes competing authorizations without replacing history',async t=>{

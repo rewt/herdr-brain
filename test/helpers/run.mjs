@@ -1,4 +1,4 @@
-// One live group leader per suite; no registries, suspended producers or reapers.
+// One live group leader per suite, or per capped file; no fixture reapers.
 import { testLoadFactor } from '../../test-slot/load.mjs';
 import { spawn } from 'node:child_process';
 import { run } from 'node:test';
@@ -21,6 +21,7 @@ const policy = fileURLToPath(new URL('./fixture-policy.mjs', import.meta.url));
 const argv = process.argv.slice(2);
 const worker = argv[0] === '--worker';
 if (worker) argv.shift();
+const fileGroup = argv.includes('--file-group');
 // Bound output flushing only, never execution or the wait for a live leader.
 const outputDrainMs = 5_000;
 const selected = new Set(JSON.parse(process.env.MONITOR_PROMOTION_TEST_FILES ?? '[]'));
@@ -65,9 +66,8 @@ if (worker) {
       }
       return result;
     };
-    // A multi-file run() buffers later files behind the first unfinished file.
-    // Its owned-group cap can kill that buffer. Independent reporter streams
-    // retain each admitted file before copying completed TAP to the build log.
+    // Independent reporter streams retain each admitted file before copying
+    // completed TAP to the build log.
     // Keep artifacts beside the durable journal, outside disposable fixtures.
     const directory = fs.mkdtempSync(path.join(process.env[TIMINGS_ENV]
       ? path.dirname(path.resolve(process.env[TIMINGS_ENV])) : tmpdir(), 'test-file-tap-'));
@@ -85,9 +85,38 @@ if (worker) {
     // One output pipeline avoids accumulating stdio listeners per file.
     const output = pipeline(completedOutput(), process.stdout, { end: false })
       .catch(error => { console.error(error); code = 1; });
+    async function cappedFile(file, index) {
+      // fixture-policy hands Node's file cancellation to an owned group kill.
+      // Give each capped file the existing single-file coordinator/worker pair:
+      // its live leader, identity checks, crash recovery and drain then cover
+      // only that file and its descendants. The coordinator stays in this
+      // scheduler's group, so outer cancellation still disconnects every owner.
+      const artifact = path.join(directory, `${index + 1}.output`);
+      const fd = fs.openSync(artifact, 'wx', 0o600);
+      const env = { ...process.env, MONITOR_TEST_FILE_TIMEOUT_MS: String(fileTimeout) };
+      delete env.NODE_TEST_CONTEXT;
+      const child = spawn(process.execPath, [script, '--file-group', '--load-factor=1', ...(nameOption ? [nameOption] : []), file], {
+        detached: false, stdio: ['ignore', 'pipe', 'pipe', 'ipc'], env,
+      });
+      child.on('message', message => {
+        if (message.fileTap || message.fileTapComplete) process.send(message);
+      });
+      child.stdout.on('data', bytes => fs.writeFileSync(fd, bytes));
+      child.stderr.on('data', bytes => process.stderr.write(bytes));
+      child.on('error', error => { console.error(error); code = 1; });
+      // close includes both physical output pipes, not just leader exit.
+      const status = await new Promise(resolve => child.once('close', status => resolve(status)));
+      fs.closeSync(fd);
+      if (status !== 0) code = 1;
+      completed.push({ artifact }); wakeOutput?.(); wakeOutput = undefined;
+    }
     async function admit() {
       while (next < files.length) {
         const index = next++, file = files[index];
+        if (fileTimeout && files.length > 1) {
+          await cappedFile(file, index);
+          continue;
+        }
         const artifact = path.join(directory, `${index + 1}.tap`);
         const reference = { file: path.resolve(file), artifact, stderr_artifact: `${artifact}.stderr`, completion_artifact: `${artifact}.complete.json` };
         console.error(`FILE_TAP: ${JSON.stringify(reference)}`);
@@ -156,13 +185,17 @@ if (worker) {
   });
   process.send({ ready: true }, error => { if (error) cleanup(); });
 } else {
-  const finishTiming = startTiming('suite', process.env.MONITOR_TEST_SUITE_NAME ?? 'selected', { files, tier: process.env.MONITOR_TEST_TIER });
+  // Isolated file groups are execution details of the enclosing suite. Keep
+  // its file timing IDs/depth and one suite finish, rather than nesting suites.
+  const finishTiming = fileGroup
+    ? Object.assign(() => {}, { id: process.env.MONITOR_TEST_TIMING_SUITE })
+    : startTiming('suite', process.env.MONITOR_TEST_SUITE_NAME ?? 'selected', { files, tier: process.env.MONITOR_TEST_TIER });
   const env = { ...process.env };
   delete env.NODE_TEST_CONTEXT;
   env.NODE_OPTIONS = `${env.NODE_OPTIONS ?? ''} --import=${JSON.stringify(policy)} --import=${JSON.stringify(fileURLToPath(new URL('./file-timing.mjs', import.meta.url)))}`;
   env.MONITOR_TEST_TIMING_FILES = JSON.stringify(files.map(file => path.resolve(file)));
   env.MONITOR_TEST_TIMING_SUITE = finishTiming.id;
-  env.MONITOR_TEST_TIMING_DEPTH = String(Number(process.env.MONITOR_TEST_TIMING_DEPTH ?? 0) + 1);
+  env.MONITOR_TEST_TIMING_DEPTH = String(Number(process.env.MONITOR_TEST_TIMING_DEPTH ?? 0) + (fileGroup ? 0 : 1));
   env.MONITOR_TEST_WATCH_OWNER ??= String(process.pid);
   const child = spawn(process.execPath, [script, '--worker', ...argv.filter(arg => !arg.startsWith('--load-factor=')), `--load-factor=${factor}`], {
     detached: true, stdio: ['ignore', 'pipe', 'pipe', 'ipc'], env,
@@ -227,7 +260,8 @@ if (worker) {
             teardown.ok && teardown.signaled && child.signalCode === 'SIGKILL') {
           const rows = timingJournal.readTimings(process.env[TIMINGS_ENV]);
           const closed = new Set(rows.filter(row => row.event === 'finish').map(row => row.id));
-          for (const row of rows.filter(row => row.kind === 'file' && row.event === 'start' && row.suite === finishTiming.id && !closed.has(row.id))) {
+          for (const row of rows.filter(row => row.kind === 'file' && row.event === 'start' && row.suite === finishTiming.id &&
+              files.some(file => path.resolve(file) === path.resolve(row.name)) && !closed.has(row.id))) {
             timing({ ...row, event: 'finish', file_pid: row.pid,
               duration_s: Math.max(0, (Date.now() - Date.parse(row.at)) / 1000),
               exit_code: 1, signal: 'SIGKILL', observed_by: 'coordinator',
@@ -256,7 +290,8 @@ if (worker) {
           }
           // The worker may never have copied this file to the build log. Its
           // raw stderr and partial TAP remain separate durable artifacts too.
-          forwardOutput(`FILE_TAP_COMPLETE: ${JSON.stringify(completion)}\n`, process.stderr);
+          if (fileGroup && process.connected) process.send({ fileTapComplete: completion });
+          else forwardOutput(`FILE_TAP_COMPLETE: ${JSON.stringify(completion)}\n`, process.stderr);
           await pipeline(fs.createReadStream(reference.stderr_artifact), process.stderr, { end: false });
           await pipeline(fs.createReadStream(reference.artifact), process.stdout, { end: false });
         }
@@ -279,10 +314,17 @@ if (worker) {
     else child.once('exit', drain);
   }
   child.on('message', message => {
-    if (message.fileTap) { fileArtifacts.set(message.fileTap.file, message.fileTap); return; }
+    if (message.fileTap) {
+      fileArtifacts.set(message.fileTap.file, message.fileTap);
+      if (fileGroup && process.connected) process.send(message);
+      return;
+    }
     if (message.fileTapComplete) {
       const completion = message.fileTapComplete;
-      if (fileArtifacts.delete(completion.file)) forwardOutput(`FILE_TAP_COMPLETE: ${JSON.stringify(completion)}\n`, process.stderr);
+      if (fileArtifacts.delete(completion.file)) {
+        if (fileGroup && process.connected) process.send(message);
+        else forwardOutput(`FILE_TAP_COMPLETE: ${JSON.stringify(completion)}\n`, process.stderr);
+      }
       return;
     }
     if (finished) return;

@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnScenarioChild, waitForExit } from './helpers/child.mjs';
+import { lookupProcess } from './helpers/processes.mjs';
 
 const runner = fileURLToPath(new URL('./helpers/run.mjs', import.meta.url));
 
@@ -75,6 +76,90 @@ test('a capped first file retains complete failing and passing TAP from later ad
   t.diagnostic(JSON.stringify({ cap_ms: 5000, result: result.code, completed: result.references, timeout }));
 });
 
+test('a capped first file frees admission while a concurrent peer and every queued file finish', async t => {
+  const f = fixture(t);
+  const entered = path.join(f.root, 'entered.json'), released = path.join(f.root, 'released');
+  const peerActive = path.join(f.root, 'peer-active');
+  const blocked = f.file('first-cap', `import {spawn} from 'node:child_process';
+    test('partial result before cap',()=>{});
+    test('blocked first file',()=>{
+      const child=spawn(process.execPath,['-e','setInterval(()=>{},1000)']);
+      fs.writeFileSync(${JSON.stringify(entered)},JSON.stringify({file:process.pid,worker:process.ppid,fixture:child.pid}));
+      fs.writeSync(2,'FIRST-CAP-DIAGNOSTIC\\n');
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0);
+    });`);
+  // Admit the peer later so it can survive the first file's cap and still
+  // finish within its own unchanged cap once a queued file releases it.
+  const stagger = f.file('stagger', `test('stagger peer admission',async()=>{
+    while(!fs.existsSync(${JSON.stringify(entered)}))await new Promise(r=>setTimeout(r,10));
+    await new Promise(r=>setTimeout(r,1000));
+  });`);
+  const peer = f.file('peer', `test('concurrent peer survives first cap',async()=>{
+    fs.writeFileSync(${JSON.stringify(peerActive)},'');
+    while(!fs.existsSync(${JSON.stringify(released)}))await new Promise(r=>setTimeout(r,10));
+  });`);
+  const release = f.file('release', `test('queued file runs after cap',()=>{
+    if(!fs.existsSync(${JSON.stringify(peerActive)}))throw Error('concurrent peer did not start');
+    fs.writeFileSync(${JSON.stringify(released)},'');
+  });`);
+  const diagnostic = `AFTER-CAP-CRASH-${'é'.repeat(128 * 1024)}-END`;
+  const crash = f.file('crash', `await new Promise(resolve=>process.stderr.write(${JSON.stringify(diagnostic)},resolve));process.kill(process.pid,'SIGTERM');`);
+  const last = f.file('last', "test('last queued file completes',()=>{});");
+  const files = [blocked, stagger, peer, release, crash, last];
+  const result = await f.run(files, { MONITOR_TEST_FILE_TIMEOUT_MS: '5000' });
+  assert.equal(result.signal, null, result.stderr);
+  assert.equal(result.code, 1, result.stderr);
+  assert.equal(result.references.length, files.length, result.stderr);
+  assert.equal(new Set(result.references.map(row => row.file)).size, files.length);
+  assert.equal(result.rows.filter(row => row.reason === 'suite-cancelled').length, 0);
+  const suite = result.rows.find(row => row.kind === 'suite' && row.event === 'start');
+  assert.equal(result.rows.filter(row => row.kind === 'suite' && row.event === 'finish').length, 1);
+  const timeout = result.rows.find(row => row.kind === 'file' && row.reason === 'file-timeout');
+  assert.ok(timeout, JSON.stringify(result.rows));
+  const evidence = [];
+  for (const file of files) {
+    const reference = result.references.find(row => row.file === file);
+    assert.ok(reference, file);
+    assert.deepEqual(JSON.parse(fs.readFileSync(reference.completion_artifact, 'utf8')), reference);
+    const tap = fs.readFileSync(reference.artifact, 'utf8');
+    assert.ok(result.stdout.includes(tap), 'retained per-file TAP must reach the log');
+    const starts = result.rows.filter(row => row.kind === 'file' && row.event === 'start' && path.resolve(row.name) === file);
+    assert.equal(starts.length, 1, file);
+    const [start] = starts, finishes = result.rows.filter(row => row.id === start.id && row.event === 'finish');
+    assert.equal(start.suite, suite.id);
+    assert.equal(start.depth, suite.depth);
+    assert.equal(finishes.length, 1, file);
+    const failed = file === blocked || file === crash;
+    assert.equal(finishes[0].exit_code, failed ? 1 : 0, file);
+    assert.equal(reference.exit_code, failed ? 1 : 0, file);
+    if (!failed) assert.match(tap, /# pass 1\n# fail 0\n/);
+    if (file === blocked) {
+      assert.match(tap, /partial result before cap/);
+      assert.equal(reference.reason, 'file-timeout');
+      assert.equal(reference.tap_complete, false);
+      assert.match(fs.readFileSync(reference.stderr_artifact, 'utf8'), /FIRST-CAP-DIAGNOSTIC/);
+    }
+    if (file === crash) {
+      assert.equal(reference.failure.signal, 'SIGTERM');
+      assert.equal(fs.readFileSync(reference.stderr_artifact, 'utf8'), diagnostic);
+      assert.ok(result.stderr.includes(diagnostic), 'raw crash stderr must reach the log after the cap');
+    }
+    if (file === release || file === last) assert.ok(Date.parse(start.at) > Date.parse(timeout.at), 'queued files must start after the cap');
+    if (file === peer) {
+      assert.ok(Date.parse(start.at) < Date.parse(timeout.at), 'peer must already be running at the cap');
+      assert.ok(Date.parse(finishes[0].at) > Date.parse(timeout.at), 'peer must complete after the cap');
+    }
+    evidence.push({ file: path.basename(file), exit_code: reference.exit_code, tap_bytes: Buffer.byteLength(tap), start: start.at, finish: finishes[0].at });
+  }
+  const owned = JSON.parse(fs.readFileSync(entered, 'utf8'));
+  for (const pid of Object.values(owned)) {
+    const current = lookupProcess(pid);
+    assert.equal(current.ok, true, current.error);
+    assert.ok(!current.value || /^Z/.test(current.value.state), `capped file descendant ${pid} survived`);
+  }
+  t.diagnostic(JSON.stringify({ cap_ms: 5000, concurrency: 2, result: result.code, timeout, crash_stderr_bytes: Buffer.byteLength(diagnostic), reaped: owned, files: evidence }));
+});
+
 test('independent file reporters retain admission limits, name selection and successful output', async t => {
   const f = fixture(t);
   const files = Array.from({ length: 12 }, (_, i) => f.file(`selected-${i}`, `
@@ -85,7 +170,7 @@ test('independent file reporters retain admission limits, name selection and suc
       try{await new Promise(resolve=>setTimeout(resolve,30));}finally{fs.unlinkSync(active);}
     });
     test('excluded file ${i}',()=>{throw Error('name selection was lost');});`));
-  const result = await f.run(['--test-name-pattern=^selected', ...files]);
+  const result = await f.run(['--test-name-pattern=^selected', ...files], { MONITOR_TEST_FILE_TIMEOUT_MS: '15000' });
   assert.equal(result.signal, null, result.stderr);
   assert.equal(result.code, 0, result.stdout + result.stderr);
   assert.equal(result.references.length, files.length);

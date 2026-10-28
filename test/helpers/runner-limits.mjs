@@ -1,6 +1,7 @@
 // Load controls admission only. Zero consistently means no wall-clock cap.
 // A nonzero fileTimeout is enforced by Node's file cancellation, handed back
-// through fixture-policy to the coordinator's owned-group teardown and drain.
+// through fixture-policy to that file's owned-group teardown and drain. Capped
+// multi-file selections allocate separate groups, never a suite-wide deadline.
 export function runnerLimits({ factor, env = process.env }) {
   if (!Number.isFinite(factor) || factor < 1) throw Error('invalid test load factor');
   const cap = Number(env.MONITOR_TEST_CONCURRENCY ?? 4);

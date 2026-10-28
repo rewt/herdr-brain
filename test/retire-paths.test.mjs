@@ -1036,7 +1036,7 @@ test('retirement runner retains raw stderr and a terminal receipt when a file di
   t.diagnostic(JSON.stringify({ file_crash_signal: completion.failure.signal, raw_stderr_bytes: Buffer.byteLength(diagnostic), exit_code: completion.exit_code }));
 });
 
-test('retirement runner records partial TAP and stderr for a peer cancelled by another file timeout', async t => {
+test('retirement runner records partial TAP and stderr for independently capped files', async t => {
   const f = runnerEvidenceFixture(t);
   const blocked = f.file('first-timeout', "fs.writeSync(2,'FIRST-TIMEOUT-DIAGNOSTIC\\n'); test('blocked first file',()=>Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0));");
   const peer = f.file('cancelled-peer', "fs.writeSync(2,'CANCELLED-PEER-DIAGNOSTIC\\n'); test('blocked peer file',()=>Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0));");
@@ -1051,12 +1051,12 @@ test('retirement runner records partial TAP and stderr for a peer cancelled by a
     assert.equal(completion.exit_code, 1);
     assert.equal(completion.tap_complete, false);
     assert.equal(completion.signal, 'SIGKILL');
-    assert.ok(['file-timeout', 'suite-cancelled'].includes(completion.reason));
+    assert.equal(completion.reason, 'file-timeout');
     const diagnostic = fs.readFileSync(completion.stderr_artifact, 'utf8');
     assert.match(diagnostic, /(?:FIRST-TIMEOUT|CANCELLED-PEER)-DIAGNOSTIC/);
     assert.ok(result.stderr.includes(diagnostic), 'cancelled file stderr must reach the build log');
     assert.ok(result.stdout.includes(fs.readFileSync(completion.artifact, 'utf8')), 'partial TAP must reach the build log');
   }
-  assert.ok(result.completions.some(row => row.reason === 'suite-cancelled'), result.stderr);
+  assert.ok(result.completions.every(row => row.reason === 'file-timeout'), result.stderr);
   t.diagnostic(JSON.stringify({ cancelled: cancelled.map(row => ({ reason: row.reason, signal: row.signal, tap_complete: row.tap_complete })), completions: result.completions.length }));
 });

@@ -244,8 +244,22 @@ coverage. Ambiguous attribution and exact-head UNKNOWN attempts remain held.
 Verdicts and linked Major corrections use the existing record path and cap1;
 release still requires actual Major correction checks.
 Its bound immutable target/evidence is checked again before every native effect.
-New source dispatch uses the configured normal review selection (review-sol-max)
-and a registered `review-` worktree at that exact head. The review pool defaults
+New source dispatch uses a registered `review-` worktree at that exact head.
+Routine work uses the project's normal review selection (the portable default
+is `review`, Claude Opus high), without requiring an other-family policy or a
+declared producer family. Set source item `meta.judgment_heavy=true` or
+`meta.outward=true` for work requiring other-family review; an explicit
+`meta.review_other_family=true` also requires it. New queue items capture this
+requirement, and routing also checks the source flags before dispatch.
+The producer's recorded harness, or declared route when the harness is absent,
+selects `selection_policy.by_task_class["review-other-family"]`: Codex producers
+use `review` (Claude Opus high); Claude producers use `review-codex` (Sol xhigh).
+Missing producer family, missing independent policy/route or a same-family route
+refuses clearly, with no default fallback. Existing saved/native/UNKNOWN
+attempts and captured requirements remain retained. Measure the share as
+other-family review runs divided by review runs for explicitly classified
+judgment-heavy sources; missing classification/family is unknown, never success.
+The review pool defaults
 to three sessions, separately from the seven-build default. An explicit
 `dispatch.max_total_sessions` shared ceiling remains mandatory when configured;
 otherwise the combined ceiling is the sum of the two pool limits. Legacy

@@ -31,17 +31,21 @@ const git = (repo, args) => execFileSync('git', ['--no-optional-locks', '-C', re
 const journalFor = (org, identity) => path.join(org, 'line-service', createHash('sha256').update(JSON.stringify(identity)).digest('hex').slice(0, 20), 'effects.json');
 
 export const isQueueReview = item => roleIs(item, 'REV') && Boolean(item.meta.review_source_item);
+const needsOtherFamily = item => ['review_other_family', 'judgment_heavy', 'outward'].some(key => item?.meta?.[key] === true);
 export function reviewQueueRoute(config, item, state) {
   if (item) {
-    const producer = state?.runs.get(item.meta.review_source_run);
-    // Declared routing at production, never a native display/session label.
-    const family = producer?.meta?.harness ?? (producer?.meta?.route && resolveLaunchRoute(config, { route: producer.meta.route }).kind);
     const source = state?.items.get(item.meta.review_source_item);
-    const otherFamily = item.meta.review_other_family === true || source?.meta?.judgment_heavy === true || source?.meta?.outward === true;
-    if (otherFamily) {
+    if (needsOtherFamily(item) || needsOtherFamily(source)) {
+      const producer = state?.runs.get(item.meta.review_source_run);
+      // Declared routing at production, never a native display/session label.
+      let family;
+      try { family = producer?.meta?.harness ?? (producer?.meta?.route && resolveLaunchRoute(config, { route: producer.meta.route }).kind); }
+      catch (error) { throw Error(`other-family review needs a declared producer route/profile: ${error.message}`); }
       if (!family) throw Error('other-family review needs a declared producer route/profile');
-      const route = selectRoute(config, 'review-other-family', family);
-      if (resolveLaunchRoute(config, { route }).kind === family) throw Error('other-family review route matches producer family');
+      let route, reviewerFamily;
+      try { route = selectRoute(config, 'review-other-family', family); reviewerFamily = resolveLaunchRoute(config, { route }).kind; }
+      catch (error) { throw Error(`other-family review unavailable for producer family ${family}: ${error.message}`); }
+      if (reviewerFamily === family) throw Error('other-family review route matches producer family');
       return route;
     }
   }
@@ -136,7 +140,7 @@ export function queueReviewMutation({ state, events, org, repo, runId, head, bas
   }];
   return { ...(deferCommit ? { commit: validate => { verifyProducer(); validate(); publishLandedReviewEvidence(target); } } : {}), add: [...landing,{ type: 'item.added', id, kind: 'work', role: 'reviewer', capability: 'review', parent: item.parent, priority: item.priority,
     title: `Review ${item.title}`, budget: {}, accept: ['Independent immutable diff/evidence review; zero suites and no edits. Record PASS or FAIL verdict. Major findings become linked engineer follow-up proposals, never an automatic second review. '+uncertainOutcomeDoctrine],
-    meta: { review_key: key,review_group_key:group, review_source_item: item.id, review_source_run: run.id, review_target: target, review_round_cap: 1, review_other_family: true, review_cutover:bound.cutoff,...(bound.authorization?{review_recovery_id:bound.authorization.id}:{}) } }],
+    meta: { review_key: key,review_group_key:group, review_source_item: item.id, review_source_run: run.id, review_target: target, review_round_cap: 1, review_other_family: needsOtherFamily(item), review_cutover:bound.cutoff,...(bound.authorization?{review_recovery_id:bound.authorization.id}:{}) } }],
     result: { result: 'review_queued', review_item: id, source_item: item.id, head: target.head, existing: false } };
 }
 

@@ -25,6 +25,9 @@ function fixture(){
   const args={project,org,events,inventory,source,historical,now:120000};
   return{...args,args,add,report,resources,effects,measure:extra=>measureCloseouts({...args,...extra})};
 }
+// A scratch record owns its targets; the pure oracle's placeholder org is not
+// evidence that those targets belong to an unrelated on-disk record.
+const recordBytes=(events,org)=>events.map(e=>JSON.stringify({...e,...(e.closeout_targets?{closeout_targets:e.closeout_targets.map(t=>({...t,org}))}:{})})+'\n').join('');
 
 test('exact receipts produce sliced clocks and preserve an empty slice as no evidence',()=>{
   const f=fixture(),doc=f.measure();
@@ -95,7 +98,7 @@ test('collector retains independent source failures with no native mutation comm
 
 test('service hook appends immutable census, latest view and existing diagnostic without touching the record',t=>{
   const f=fixture(),directory=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'closeout-measurement-')));t.after(()=>fs.rmSync(directory,{recursive:true,force:true}));
-  const org=path.join(directory,'org');fs.mkdirSync(org);fs.writeFileSync(path.join(org,'events.jsonl'),f.events.map(e=>JSON.stringify(e)+'\n').join(''));
+  const org=path.join(directory,'org');fs.mkdirSync(org);fs.writeFileSync(path.join(org,'events.jsonl'),recordBytes(f.events,org));
   const before=fs.readFileSync(path.join(org,'events.jsonl'));
   const args={project:f.project,org,source:f.source,historical:f.historical,now:()=>120000,collect:()=>f.inventory};
   const result=recordCloseoutTurn(args);assert.equal(result.green,true);assert.deepEqual(fs.readFileSync(path.join(org,'events.jsonl')),before);
@@ -117,7 +120,7 @@ test('installed product without docs/evidence records live measurements and sepa
   assert.equal(fs.existsSync(path.join(bundle,'.git')),false);assert.equal(fs.existsSync(path.join(bundle,'docs/evidence')),false);
   assert.ok(fs.statSync(path.join(bundle,'docs/contracts/formats.json')).isFile());
   const installed=await import(pathToFileURL(path.join(bundle,'line-service/closeout-measurement.mjs')));
-  fs.mkdirSync(org);const eventsFile=path.join(org,'events.jsonl'),before=f.events.map(e=>JSON.stringify(e)+'\n').join('');fs.writeFileSync(eventsFile,before);
+  fs.mkdirSync(org);const eventsFile=path.join(org,'events.jsonl'),before=recordBytes(f.events,org);fs.writeFileSync(eventsFile,before);
   const args={project:f.project,org,collect:()=>f.inventory,command:()=>{throw Error('installed measurement must not need Git');}};
   const run=at=>installed.recordCloseoutTurn({...args,now:()=>at}),result=run(120000),read=()=>installed.readCloseoutMeasurement(result.file);
   const doc=read(),ids=['r1176','sol-research','claude-research'];
@@ -173,7 +176,7 @@ function manyAllocations(count){
       if(e.type==='report.available'){e.started_seq=offset+1;e.claim_generation=offset+2;e.observed_at=new Date(Date.parse(e.observed_at)+time).toISOString();}
       if(e.closeout_targets)for(const t of e.closeout_targets)Object.assign(t,{run,cwd,branch,key:`key-${i+1}`,allocation:{run,started_seq:offset+1,claim_generation:offset+2}});
       if(e.key)e.key=`key-${i+1}`;
-      if(e.source)e.source.seq+=offset-1;
+      if(e.source)e.source={...e.source,seq:e.source.seq+offset-1};
       if(e.outcome?.cwd)Object.assign(e.outcome,{cwd,branch});
       if(e.resources)for(const r of Object.values(e.resources))r.receipt.seq+=offset-1;
       events.push(e);
@@ -238,7 +241,7 @@ test('installed payload includes every default historical path and reads all thr
   copyProduct(root,bundle);assert.deepEqual(productFiles(bundle),files);
   fs.writeFileSync(path.join(bundle,'.release-commit'),f.source.commit+'\n');
   const installed=await import(pathToFileURL(path.join(bundle,'line-service/closeout-measurement.mjs')));
-  fs.mkdirSync(org);fs.writeFileSync(path.join(org,'events.jsonl'),f.events.map(e=>JSON.stringify(e)+'\n').join(''));
+  fs.mkdirSync(org);fs.writeFileSync(path.join(org,'events.jsonl'),recordBytes(f.events,org));
   const dir=measurementDirectory(org,f.project.identity);fs.mkdirSync(dir,{recursive:true});
   fs.writeFileSync(path.join(dir,'closeout-measurement-window.json'),JSON.stringify({id:'installed-window',after_seq:0,activated_at:new Date(100000).toISOString(),commit:f.source.commit}));
   const result=installed.recordCloseoutTurn({project:f.project,org,now:()=>120000,collect:()=>f.inventory,command:()=>{throw Error('installed source must not invoke Git');}});
@@ -251,7 +254,7 @@ test('installed payload includes every default historical path and reads all thr
 test('three thousand members over thirty thousand events reuse immutable evidence within bounded audit frames',t=>{
   const args=manyAllocations(3000),directory=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'closeout-bounded-')));t.after(()=>fs.rmSync(directory,{recursive:true,force:true}));
   const org=path.join(directory,'org');fs.mkdirSync(org);assert.equal(args.events.length,30000);
-  fs.writeFileSync(path.join(org,'events.jsonl'),args.events.map(e=>JSON.stringify(e)+'\n').join(''));
+  fs.writeFileSync(path.join(org,'events.jsonl'),recordBytes(args.events,org));
   const call={project:args.project,org,source:args.source,historical:args.historical,collect:()=>args.inventory,now:()=>args.now};
   const start=performance.now(),first=recordCloseoutTurn(call),elapsed=performance.now()-start;
   assert.ok(elapsed<10000,`30,000-event turn took ${elapsed} ms; bound is 10,000 ms`);t.diagnostic(`30,000-event turn: ${elapsed.toFixed(1)} ms; bound 10,000 ms`);

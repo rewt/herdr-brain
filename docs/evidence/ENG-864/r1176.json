@@ -1,0 +1,936 @@
+{
+  "schema": "closeout-historical-cohort/v1",
+  "id": "r1176",
+  "project": "/Users/rewt/development/rewt/herdr-brain/.git",
+  "owner": "supervisor-herdr",
+  "authority": "Inventory only. Original guards, attempts and named owners remain authoritative; no cleanup or refusal clearance authorized.",
+  "source": [
+    {
+      "file": "/Users/rewt/development/rewt/.org/evidence/ENG-837/R-1176/after-first-pass.json",
+      "sha256": "a1d23ae2eb61bb1eda3d5a545bea310bf9f49c8affcf30f622ba9ba2756aa825"
+    },
+    {
+      "file": "/Users/rewt/development/rewt/.org/evidence/ENG-837/R-1176/remaining-original-identities.json",
+      "sha256": "b6a13d643cfa8c23f0e015d8074d6ba98ece4b48a433b7f2effc8257ca46f926"
+    },
+    {
+      "file": "/Users/rewt/development/rewt/.org/runs/R-1176/report.md",
+      "sha256": "f9cdc1ad552b32c996a81ff6d8318f9f2ec20f0ad8cad181a585a07cb6f4284c"
+    }
+  ],
+  "cutoff": {
+    "seq": 30764,
+    "observed_at": "2026-10-28T19:24:45.293233+00:00"
+  },
+  "inventory_complete": true,
+  "scope": "26 clean finished worktrees at the R-1176 after snapshot; four old finished sessions measured separately. Original-identities file has 25 rows and is not substituted for this 26-folder denominator.",
+  "counts": {
+    "finished_native_sessions": 13,
+    "finished_native_sessions_over_2h": 4,
+    "lane_folders": 37,
+    "clean_finished_worktrees": 26,
+    "reports_since_noon": 38,
+    "closed_effects_since_noon": 4,
+    "lane_removed_effects_since_noon": 3
+  },
+  "members": [
+    {
+      "run": "R-1150",
+      "cwd": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-eng389-decision",
+      "branch": "refs/heads/lane/eng389-decision",
+      "clean_at_cutoff": true,
+      "original_evidence": {
+        "cwd": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-eng389-decision",
+        "run": "R-1150",
+        "item": "DEC-308",
+        "missing_or_changed_original_identity": [],
+        "identity_conflict": false,
+        "native_refusal_in_report": false,
+        "targets": [
+          {
+            "source": {
+              "seq": 30298,
+              "type": "report.ingested"
+            },
+            "panes": 0
+          }
+        ],
+        "latest": {
+          "seq": 30703,
+          "type": "closeout.evaluated",
+          "reason": "process cwd reference 56566"
+        }
+      },
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Inspect exact original source and effect receipts; preserve UNKNOWN/refusals and unsaved work."
+    },
+    {
+      "run": "R-744",
+      "cwd": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-gates-v2",
+      "branch": "refs/heads/lane/gates-v2",
+      "clean_at_cutoff": true,
+      "original_evidence": null,
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Inspect exact original source and effect receipts; preserve UNKNOWN/refusals and unsaved work."
+    },
+    {
+      "run": "R-749",
+      "cwd": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-gates-v2",
+      "branch": "refs/heads/lane/gates-v2",
+      "clean_at_cutoff": true,
+      "original_evidence": null,
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Inspect exact original source and effect receipts; preserve UNKNOWN/refusals and unsaved work."
+    },
+    {
+      "run": "R-752",
+      "cwd": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-gates-v2",
+      "branch": "refs/heads/lane/gates-v2",
+      "clean_at_cutoff": true,
+      "original_evidence": null,
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Inspect exact original source and effect receipts; preserve UNKNOWN/refusals and unsaved work."
+    },
+    {
+      "run": "R-758",
+      "cwd": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-gates-v2",
+      "branch": "refs/heads/lane/gates-v2",
+      "clean_at_cutoff": true,
+      "original_evidence": null,
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Inspect exact original source and effect receipts; preserve UNKNOWN/refusals and unsaved work."
+    },
+    {
+      "run": "R-759",
+      "cwd": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-gates-v2",
+      "branch": "refs/heads/lane/gates-v2",
+      "clean_at_cutoff": true,
+      "original_evidence": null,
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Inspect exact original source and effect receipts; preserve UNKNOWN/refusals and unsaved work."
+    },
+    {
+      "run": "R-761",
+      "cwd": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-gates-v2",
+      "branch": "refs/heads/lane/gates-v2",
+      "clean_at_cutoff": true,
+      "original_evidence": null,
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Inspect exact original source and effect receipts; preserve UNKNOWN/refusals and unsaved work."
+    },
+    {
+      "run": "R-764",
+      "cwd": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-gates-v2",
+      "branch": "refs/heads/lane/gates-v2",
+      "clean_at_cutoff": true,
+      "original_evidence": null,
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Inspect exact original source and effect receipts; preserve UNKNOWN/refusals and unsaved work."
+    },
+    {
+      "run": "R-768",
+      "cwd": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-gates-v2",
+      "branch": "refs/heads/lane/gates-v2",
+      "clean_at_cutoff": true,
+      "original_evidence": {
+        "cwd": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-gates-v2",
+        "run": "R-768",
+        "item": "ENG-537",
+        "missing_or_changed_original_identity": [],
+        "identity_conflict": false,
+        "native_refusal_in_report": false,
+        "targets": [
+          {
+            "source": {
+              "seq": 15742,
+              "type": "report.ingested"
+            },
+            "panes": 12
+          }
+        ],
+        "latest": {
+          "seq": 26522,
+          "type": "closeout.kept",
+          "reason": "original uncertain or refused cleanup scope remains held"
+        }
+      },
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Inspect exact original source and effect receipts; preserve UNKNOWN/refusals and unsaved work."
+    },
+    {
+      "run": "R-825",
+      "cwd": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-genuine-release-checkout",
+      "branch": "refs/heads/lane/genuine-release-checkout",
+      "clean_at_cutoff": true,
+      "original_evidence": null,
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Inspect exact original source and effect receipts; preserve UNKNOWN/refusals and unsaved work."
+    },
+    {
+      "run": "R-840",
+      "cwd": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-genuine-release-checkout",
+      "branch": "refs/heads/lane/genuine-release-checkout",
+      "clean_at_cutoff": true,
+      "original_evidence": null,
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Inspect exact original source and effect receipts; preserve UNKNOWN/refusals and unsaved work."
+    },
+    {
+      "run": "R-843",
+      "cwd": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-genuine-release-checkout",
+      "branch": "refs/heads/lane/genuine-release-checkout",
+      "clean_at_cutoff": true,
+      "original_evidence": null,
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Inspect exact original source and effect receipts; preserve UNKNOWN/refusals and unsaved work."
+    },
+    {
+      "run": "R-850",
+      "cwd": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-genuine-release-checkout",
+      "branch": "refs/heads/lane/genuine-release-checkout",
+      "clean_at_cutoff": true,
+      "original_evidence": {
+        "cwd": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-genuine-release-checkout",
+        "run": "R-850",
+        "item": "ENG-629",
+        "missing_or_changed_original_identity": [],
+        "identity_conflict": false,
+        "native_refusal_in_report": true,
+        "targets": [],
+        "latest": {
+          "seq": 26518,
+          "type": "closeout.kept",
+          "reason": "original native refusal remains held"
+        }
+      },
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Inspect exact original source and effect receipts; preserve UNKNOWN/refusals and unsaved work."
+    },
+    {
+      "run": "R-1158",
+      "cwd": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-line-arch-52-1",
+      "branch": "refs/heads/lane/line-arch-52-1",
+      "clean_at_cutoff": true,
+      "original_evidence": {
+        "cwd": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-line-arch-52-1",
+        "run": "R-1158",
+        "item": "ARCH-52",
+        "missing_or_changed_original_identity": [],
+        "identity_conflict": false,
+        "native_refusal_in_report": false,
+        "targets": [
+          {
+            "source": {
+              "seq": 30422,
+              "type": "report.ingested"
+            },
+            "panes": 0
+          }
+        ],
+        "latest": {
+          "seq": 30706,
+          "type": "closeout.evaluated",
+          "reason": "process cwd reference 27790"
+        }
+      },
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Inspect exact original source and effect receipts; preserve UNKNOWN/refusals and unsaved work."
+    },
+    {
+      "run": "R-1159",
+      "cwd": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-line-arch-53-1",
+      "branch": "refs/heads/lane/line-arch-53-1",
+      "clean_at_cutoff": true,
+      "original_evidence": {
+        "cwd": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-line-arch-53-1",
+        "run": "R-1159",
+        "item": "ARCH-53",
+        "missing_or_changed_original_identity": [],
+        "identity_conflict": false,
+        "native_refusal_in_report": false,
+        "targets": [
+          {
+            "source": {
+              "seq": 30425,
+              "type": "report.ingested"
+            },
+            "panes": 0
+          }
+        ],
+        "latest": {
+          "seq": 30709,
+          "type": "closeout.evaluated",
+          "reason": "process cwd reference 20392"
+        }
+      },
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Inspect exact original source and effect receipts; preserve UNKNOWN/refusals and unsaved work."
+    },
+    {
+      "run": "R-1161",
+      "cwd": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-line-arch-55-1",
+      "branch": "refs/heads/lane/line-arch-55-1",
+      "clean_at_cutoff": true,
+      "original_evidence": {
+        "cwd": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-line-arch-55-1",
+        "run": "R-1161",
+        "item": "ARCH-55",
+        "missing_or_changed_original_identity": [],
+        "identity_conflict": false,
+        "native_refusal_in_report": false,
+        "targets": [
+          {
+            "source": {
+              "seq": 30438,
+              "type": "report.ingested"
+            },
+            "panes": 0
+          }
+        ],
+        "latest": {
+          "seq": 30714,
+          "type": "closeout.evaluated",
+          "reason": "process cwd reference 17963"
+        }
+      },
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Inspect exact original source and effect receipts; preserve UNKNOWN/refusals and unsaved work."
+    },
+    {
+      "run": "R-1162",
+      "cwd": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-line-arch-56-1",
+      "branch": "refs/heads/lane/line-arch-56-1",
+      "clean_at_cutoff": true,
+      "original_evidence": {
+        "cwd": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-line-arch-56-1",
+        "run": "R-1162",
+        "item": "ARCH-56",
+        "missing_or_changed_original_identity": [],
+        "identity_conflict": false,
+        "native_refusal_in_report": false,
+        "targets": [
+          {
+            "source": {
+              "seq": 30519,
+              "type": "report.ingested"
+            },
+            "panes": 0
+          }
+        ],
+        "latest": {
+          "seq": 30717,
+          "type": "closeout.evaluated",
+          "reason": "process cwd reference 3713"
+        }
+      },
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Inspect exact original source and effect receipts; preserve UNKNOWN/refusals and unsaved work."
+    },
+    {
+      "run": "R-1133",
+      "cwd": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-line-dec-302-1",
+      "branch": "refs/heads/lane/line-dec-302-1",
+      "clean_at_cutoff": true,
+      "original_evidence": {
+        "cwd": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-line-dec-302-1",
+        "run": "R-1133",
+        "item": "DEC-302",
+        "missing_or_changed_original_identity": [],
+        "identity_conflict": false,
+        "native_refusal_in_report": false,
+        "targets": [
+          {
+            "source": {
+              "seq": 29633,
+              "type": "report.ingested"
+            },
+            "panes": 0
+          }
+        ],
+        "latest": {
+          "seq": 29636,
+          "type": "closeout.evaluated",
+          "reason": "process cwd reference 36923"
+        }
+      },
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Inspect exact original source and effect receipts; preserve UNKNOWN/refusals and unsaved work."
+    },
+    {
+      "run": "R-1135",
+      "cwd": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-line-dec-303-1",
+      "branch": "refs/heads/lane/line-dec-303-1",
+      "clean_at_cutoff": true,
+      "original_evidence": {
+        "cwd": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-line-dec-303-1",
+        "run": "R-1135",
+        "item": "DEC-303",
+        "missing_or_changed_original_identity": [],
+        "identity_conflict": false,
+        "native_refusal_in_report": false,
+        "targets": [
+          {
+            "source": {
+              "seq": 29680,
+              "type": "report.ingested"
+            },
+            "panes": 0
+          }
+        ],
+        "latest": {
+          "seq": 29687,
+          "type": "closeout.evaluated",
+          "reason": "process cwd reference 2249"
+        }
+      },
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Inspect exact original source and effect receipts; preserve UNKNOWN/refusals and unsaved work."
+    },
+    {
+      "run": "R-1166",
+      "cwd": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-line-dec-309-1",
+      "branch": "refs/heads/lane/line-dec-309-1",
+      "clean_at_cutoff": true,
+      "original_evidence": {
+        "cwd": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-line-dec-309-1",
+        "run": "R-1166",
+        "item": "DEC-309",
+        "missing_or_changed_original_identity": [],
+        "identity_conflict": false,
+        "native_refusal_in_report": true,
+        "targets": [
+          {
+            "source": {
+              "seq": 30549,
+              "type": "report.ingested"
+            },
+            "panes": 0
+          }
+        ]
+      },
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Inspect exact original source and effect receipts; preserve UNKNOWN/refusals and unsaved work."
+    },
+    {
+      "run": "R-862",
+      "cwd": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-line-eng-231-1",
+      "branch": "refs/heads/lane/line-eng-231-1",
+      "clean_at_cutoff": true,
+      "original_evidence": {
+        "cwd": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-line-eng-231-1",
+        "run": "R-862",
+        "item": "ENG-231",
+        "missing_or_changed_original_identity": [
+          "agent",
+          "pane",
+          "worker_workspace",
+          "terminal_id",
+          "agent_session_id"
+        ],
+        "identity_conflict": false,
+        "native_refusal_in_report": false,
+        "targets": []
+      },
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Inspect exact original source and effect receipts; preserve UNKNOWN/refusals and unsaved work."
+    },
+    {
+      "run": "R-884",
+      "cwd": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-line-eng-580-1",
+      "branch": "refs/heads/lane/line-eng-580-1",
+      "clean_at_cutoff": true,
+      "original_evidence": {
+        "cwd": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-line-eng-580-1",
+        "run": "R-884",
+        "item": "ENG-580",
+        "missing_or_changed_original_identity": [],
+        "identity_conflict": false,
+        "native_refusal_in_report": false,
+        "targets": [
+          {
+            "source": {
+              "seq": 19682,
+              "type": "report.ingested"
+            },
+            "panes": 0
+          },
+          {
+            "source": {
+              "seq": 19686,
+              "type": "item.closed"
+            },
+            "panes": 1
+          }
+        ],
+        "latest": {
+          "seq": 26511,
+          "type": "closeout.kept",
+          "reason": "original uncertain or refused cleanup scope remains held"
+        }
+      },
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Inspect exact original source and effect receipts; preserve UNKNOWN/refusals and unsaved work."
+    },
+    {
+      "run": "R-1136",
+      "cwd": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-line-eng-807-1",
+      "branch": "refs/heads/lane/line-eng-807-1",
+      "clean_at_cutoff": true,
+      "original_evidence": {
+        "cwd": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-line-eng-807-1",
+        "run": "R-1136",
+        "item": "ENG-807",
+        "missing_or_changed_original_identity": [],
+        "identity_conflict": false,
+        "native_refusal_in_report": false,
+        "targets": [
+          {
+            "source": {
+              "seq": 29682,
+              "type": "report.ingested"
+            },
+            "panes": 0
+          }
+        ],
+        "latest": {
+          "seq": 29690,
+          "type": "closeout.evaluated",
+          "reason": "process cwd reference 50792"
+        }
+      },
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Inspect exact original source and effect receipts; preserve UNKNOWN/refusals and unsaved work."
+    },
+    {
+      "run": "R-1169",
+      "cwd": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-line-eng-824-1",
+      "branch": "refs/heads/lane/line-eng-824-1",
+      "clean_at_cutoff": true,
+      "original_evidence": {
+        "cwd": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-line-eng-824-1",
+        "run": "R-1169",
+        "item": "ENG-824",
+        "missing_or_changed_original_identity": [],
+        "identity_conflict": false,
+        "native_refusal_in_report": false,
+        "targets": [
+          {
+            "source": {
+              "seq": 30568,
+              "type": "report.ingested"
+            },
+            "panes": 0
+          }
+        ]
+      },
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Inspect exact original source and effect receipts; preserve UNKNOWN/refusals and unsaved work."
+    },
+    {
+      "run": "R-1175",
+      "cwd": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-line-eng-827-1",
+      "branch": "refs/heads/lane/line-eng-827-1",
+      "clean_at_cutoff": true,
+      "original_evidence": {
+        "cwd": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-line-eng-827-1",
+        "run": "R-1175",
+        "item": "ENG-827",
+        "missing_or_changed_original_identity": [],
+        "identity_conflict": false,
+        "native_refusal_in_report": false,
+        "targets": [
+          {
+            "source": {
+              "seq": 30573,
+              "type": "report.ingested"
+            },
+            "panes": 0
+          }
+        ]
+      },
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Inspect exact original source and effect receipts; preserve UNKNOWN/refusals and unsaved work."
+    },
+    {
+      "run": "R-855",
+      "cwd": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-minimal-line-service",
+      "branch": "refs/heads/lane/minimal-line-service",
+      "clean_at_cutoff": true,
+      "original_evidence": null,
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Inspect exact original source and effect receipts; preserve UNKNOWN/refusals and unsaved work."
+    },
+    {
+      "run": "R-860",
+      "cwd": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-minimal-line-service",
+      "branch": "refs/heads/lane/minimal-line-service",
+      "clean_at_cutoff": true,
+      "original_evidence": null,
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Inspect exact original source and effect receipts; preserve UNKNOWN/refusals and unsaved work."
+    },
+    {
+      "run": "R-863",
+      "cwd": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-minimal-line-service",
+      "branch": "refs/heads/lane/minimal-line-service",
+      "clean_at_cutoff": true,
+      "original_evidence": null,
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Inspect exact original source and effect receipts; preserve UNKNOWN/refusals and unsaved work."
+    },
+    {
+      "run": "R-864",
+      "cwd": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-minimal-line-service",
+      "branch": "refs/heads/lane/minimal-line-service",
+      "clean_at_cutoff": true,
+      "original_evidence": null,
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Inspect exact original source and effect receipts; preserve UNKNOWN/refusals and unsaved work."
+    },
+    {
+      "run": "R-865",
+      "cwd": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-minimal-line-service",
+      "branch": "refs/heads/lane/minimal-line-service",
+      "clean_at_cutoff": true,
+      "original_evidence": null,
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Inspect exact original source and effect receipts; preserve UNKNOWN/refusals and unsaved work."
+    },
+    {
+      "run": "R-879",
+      "cwd": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-minimal-line-service",
+      "branch": "refs/heads/lane/minimal-line-service",
+      "clean_at_cutoff": true,
+      "original_evidence": {
+        "cwd": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-minimal-line-service",
+        "run": "R-879",
+        "item": "ENG-632",
+        "missing_or_changed_original_identity": [],
+        "identity_conflict": false,
+        "native_refusal_in_report": false,
+        "targets": [],
+        "latest": {
+          "seq": 26512,
+          "type": "closeout.kept",
+          "reason": "original uncertain or refused cleanup scope remains held"
+        }
+      },
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Inspect exact original source and effect receipts; preserve UNKNOWN/refusals and unsaved work."
+    },
+    {
+      "run": "R-856",
+      "cwd": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-operator-record-inbox",
+      "branch": "refs/heads/lane/operator-record-inbox",
+      "clean_at_cutoff": true,
+      "original_evidence": null,
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Inspect exact original source and effect receipts; preserve UNKNOWN/refusals and unsaved work."
+    },
+    {
+      "run": "R-859",
+      "cwd": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-operator-record-inbox",
+      "branch": "refs/heads/lane/operator-record-inbox",
+      "clean_at_cutoff": true,
+      "original_evidence": null,
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Inspect exact original source and effect receipts; preserve UNKNOWN/refusals and unsaved work."
+    },
+    {
+      "run": "R-861",
+      "cwd": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-operator-record-inbox",
+      "branch": "refs/heads/lane/operator-record-inbox",
+      "clean_at_cutoff": true,
+      "original_evidence": {
+        "cwd": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-operator-record-inbox",
+        "run": "R-861",
+        "item": "ENG-285",
+        "missing_or_changed_original_identity": [],
+        "identity_conflict": false,
+        "native_refusal_in_report": true,
+        "targets": [
+          {
+            "source": {
+              "seq": 18730,
+              "type": "report.ingested"
+            },
+            "panes": 1
+          }
+        ],
+        "latest": {
+          "seq": 26513,
+          "type": "closeout.kept",
+          "reason": "original uncertain or refused cleanup scope remains held"
+        }
+      },
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Inspect exact original source and effect receipts; preserve UNKNOWN/refusals and unsaved work."
+    },
+    {
+      "run": "R-853",
+      "cwd": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-purpose-only-labels",
+      "branch": "refs/heads/lane/purpose-only-labels",
+      "clean_at_cutoff": true,
+      "original_evidence": {
+        "cwd": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-purpose-only-labels",
+        "run": "R-853",
+        "item": "ENG-631",
+        "missing_or_changed_original_identity": [],
+        "identity_conflict": false,
+        "native_refusal_in_report": true,
+        "targets": [],
+        "latest": {
+          "seq": 26516,
+          "type": "closeout.kept",
+          "reason": "original native refusal remains held"
+        }
+      },
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Inspect exact original source and effect receipts; preserve UNKNOWN/refusals and unsaved work."
+    },
+    {
+      "run": "R-1026",
+      "cwd": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-release-housekeeping-boundary",
+      "branch": "refs/heads/lane/release-housekeeping-boundary",
+      "clean_at_cutoff": true,
+      "original_evidence": {
+        "cwd": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-release-housekeeping-boundary",
+        "run": "R-1026",
+        "item": "ENG-702",
+        "missing_or_changed_original_identity": [],
+        "identity_conflict": false,
+        "native_refusal_in_report": false,
+        "targets": [
+          {
+            "source": {
+              "seq": 27205,
+              "type": "report.ingested"
+            },
+            "panes": 1
+          }
+        ],
+        "latest": {
+          "seq": 27316,
+          "type": "closeout.evaluated",
+          "reason": "occupant lane-release-house-b379c6-f4f42b is blocked"
+        }
+      },
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Inspect exact original source and effect receipts; preserve UNKNOWN/refusals and unsaved work."
+    },
+    {
+      "run": "R-887",
+      "cwd": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-review-rev-13-1",
+      "branch": "refs/heads/lane/review-rev-13-1",
+      "clean_at_cutoff": true,
+      "original_evidence": {
+        "cwd": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-review-rev-13-1",
+        "run": "R-887",
+        "item": "REV-13",
+        "missing_or_changed_original_identity": [],
+        "identity_conflict": false,
+        "native_refusal_in_report": false,
+        "targets": [
+          {
+            "source": {
+              "seq": 19845,
+              "type": "report.ingested"
+            },
+            "panes": 0
+          },
+          {
+            "source": {
+              "seq": 19852,
+              "type": "item.closed"
+            },
+            "panes": 1
+          }
+        ],
+        "latest": {
+          "seq": 26510,
+          "type": "closeout.kept",
+          "reason": "original uncertain or refused cleanup scope remains held"
+        }
+      },
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Inspect exact original source and effect receipts; preserve UNKNOWN/refusals and unsaved work."
+    },
+    {
+      "run": "R-931",
+      "cwd": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-review-rev-30-1",
+      "branch": "refs/heads/lane/review-rev-30-1",
+      "clean_at_cutoff": true,
+      "original_evidence": {
+        "cwd": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-review-rev-30-1",
+        "run": "R-931",
+        "item": "REV-30",
+        "missing_or_changed_original_identity": [],
+        "identity_conflict": false,
+        "native_refusal_in_report": false,
+        "targets": [
+          {
+            "source": {
+              "seq": 22742,
+              "type": "report.ingested"
+            },
+            "panes": 0
+          },
+          {
+            "source": {
+              "seq": 22754,
+              "type": "item.closed"
+            },
+            "panes": 1
+          }
+        ],
+        "latest": {
+          "seq": 26503,
+          "type": "closeout.kept",
+          "reason": "original uncertain or refused cleanup scope remains held"
+        }
+      },
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Inspect exact original source and effect receipts; preserve UNKNOWN/refusals and unsaved work."
+    },
+    {
+      "run": "R-1126",
+      "cwd": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-review-rev-78-1",
+      "branch": "refs/heads/lane/review-rev-78-1",
+      "clean_at_cutoff": true,
+      "original_evidence": {
+        "cwd": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-review-rev-78-1",
+        "run": "R-1126",
+        "item": "REV-78",
+        "missing_or_changed_original_identity": [],
+        "identity_conflict": false,
+        "native_refusal_in_report": false,
+        "targets": [
+          {
+            "source": {
+              "seq": 30090,
+              "type": "report.ingested"
+            },
+            "panes": 0
+          }
+        ],
+        "latest": {
+          "seq": 30686,
+          "type": "closeout.evaluated",
+          "reason": "process cwd reference 2755"
+        }
+      },
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Inspect exact original source and effect receipts; preserve UNKNOWN/refusals and unsaved work."
+    },
+    {
+      "run": "R-786",
+      "cwd": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-tier-groups",
+      "branch": "refs/heads/lane/tier-groups",
+      "clean_at_cutoff": true,
+      "original_evidence": {
+        "cwd": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-tier-groups",
+        "run": "R-786",
+        "item": "ENG-594",
+        "missing_or_changed_original_identity": [],
+        "identity_conflict": false,
+        "native_refusal_in_report": false,
+        "targets": [
+          {
+            "source": {
+              "seq": 16551,
+              "type": "report.ingested"
+            },
+            "panes": 0
+          },
+          {
+            "source": {
+              "seq": 25310,
+              "type": "cleanup.bound"
+            },
+            "panes": 1
+          },
+          {
+            "source": {
+              "seq": 26521,
+              "type": "cleanup.bound"
+            },
+            "panes": 1
+          }
+        ],
+        "latest": {
+          "seq": 26724,
+          "type": "closeout.evaluated",
+          "reason": "settle callback reference R-786"
+        }
+      },
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Inspect exact original source and effect receipts; preserve UNKNOWN/refusals and unsaved work."
+    },
+    {
+      "run": "R-852",
+      "cwd": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-verify-once-hotfix",
+      "branch": "refs/heads/lane/verify-once-hotfix",
+      "clean_at_cutoff": true,
+      "original_evidence": {
+        "cwd": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-verify-once-hotfix",
+        "run": "R-852",
+        "item": "ENG-624",
+        "missing_or_changed_original_identity": [],
+        "identity_conflict": false,
+        "native_refusal_in_report": true,
+        "targets": [],
+        "latest": {
+          "seq": 26517,
+          "type": "closeout.kept",
+          "reason": "original native refusal remains held"
+        }
+      },
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Inspect exact original source and effect receipts; preserve UNKNOWN/refusals and unsaved work."
+    },
+    {
+      "run": "R-824",
+      "cwd": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-wrapper-policy-consumers",
+      "branch": "refs/heads/lane/wrapper-policy-consumers",
+      "clean_at_cutoff": true,
+      "original_evidence": {
+        "cwd": "/Users/rewt/development/rewt/.worktrees/herdr-brain/lane-wrapper-policy-consumers",
+        "run": "R-824",
+        "item": "ENG-627",
+        "missing_or_changed_original_identity": [],
+        "identity_conflict": false,
+        "native_refusal_in_report": false,
+        "targets": [
+          {
+            "source": {
+              "seq": 17751,
+              "type": "report.ingested"
+            },
+            "panes": 0
+          },
+          {
+            "source": {
+              "seq": 17761,
+              "type": "review.verdict"
+            },
+            "panes": 1
+          },
+          {
+            "source": {
+              "seq": 17824,
+              "type": "promotion.reconciled"
+            },
+            "panes": 2
+          }
+        ],
+        "latest": {
+          "seq": 26519,
+          "type": "closeout.kept",
+          "reason": "original uncertain or refused cleanup scope remains held"
+        }
+      },
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Inspect exact original source and effect receipts; preserve UNKNOWN/refusals and unsaved work."
+    }
+  ]
+}

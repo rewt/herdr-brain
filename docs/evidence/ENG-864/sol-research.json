@@ -1,0 +1,191 @@
+{
+  "schema": "closeout-historical-cohort/v1",
+  "id": "sol-research",
+  "project": "/Users/rewt/development/rewt/herdr-brain/.git",
+  "owner": "supervisor-herdr",
+  "authority": "Inventory only. Original guards, attempts and named owners remain authoritative; no cleanup or refusal clearance authorized.",
+  "source": [
+    {
+      "file": "/Users/rewt/development/rewt/.org/evidence/CLOSE-ON-REPORT-PERMANENT-20261028/sol.md",
+      "sha256": "4dd5184151fe53eb616ff1722baceff9d39668155f4ce945727dd465d2dd80d2"
+    }
+  ],
+  "cutoff": {
+    "seq": 30910,
+    "observed_at": "2026-10-28T19:42:00Z",
+    "observation_precision": "native about 19:40Z, folders about 19:42Z; sequential observations, not one atomic census"
+  },
+  "inventory_complete": true,
+  "scope": "30 finished/abandoned retained allocations explicitly enumerated by Sol. The 75 direct targets/61 empty/60 valid binds use a different denominator.",
+  "counts": {
+    "retained_allocations": 30,
+    "direct_targets": 75,
+    "empty_targets": 61,
+    "preceding_valid_bind": 60
+  },
+  "members": [
+    {
+      "run": "R-1126",
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Reuse cited original event scope; no inferred refusal clearance."
+    },
+    {
+      "run": "R-1133",
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Reuse cited original event scope; no inferred refusal clearance."
+    },
+    {
+      "run": "R-1135",
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Reuse cited original event scope; no inferred refusal clearance."
+    },
+    {
+      "run": "R-1136",
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Reuse cited original event scope; no inferred refusal clearance."
+    },
+    {
+      "run": "R-1150",
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Reuse cited original event scope; no inferred refusal clearance."
+    },
+    {
+      "run": "R-1158",
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Reuse cited original event scope; no inferred refusal clearance."
+    },
+    {
+      "run": "R-1159",
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Reuse cited original event scope; no inferred refusal clearance."
+    },
+    {
+      "run": "R-1161",
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Reuse cited original event scope; no inferred refusal clearance."
+    },
+    {
+      "run": "R-1162",
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Reuse cited original event scope; no inferred refusal clearance."
+    },
+    {
+      "run": "R-1169",
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Reuse cited original event scope; no inferred refusal clearance."
+    },
+    {
+      "run": "R-1175",
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Reuse cited original event scope; no inferred refusal clearance."
+    },
+    {
+      "run": "R-1166",
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Reuse cited original event scope; no inferred refusal clearance."
+    },
+    {
+      "run": "R-1184",
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Reuse cited original event scope; no inferred refusal clearance."
+    },
+    {
+      "run": "R-1185",
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Reuse cited original event scope; no inferred refusal clearance."
+    },
+    {
+      "run": "R-768",
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Reuse cited original event scope; no inferred refusal clearance."
+    },
+    {
+      "run": "R-824",
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Reuse cited original event scope; no inferred refusal clearance."
+    },
+    {
+      "run": "R-861",
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Reuse cited original event scope; no inferred refusal clearance."
+    },
+    {
+      "run": "R-879",
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Reuse cited original event scope; no inferred refusal clearance."
+    },
+    {
+      "run": "R-850",
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Reuse cited original event scope; no inferred refusal clearance."
+    },
+    {
+      "run": "R-852",
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Reuse cited original event scope; no inferred refusal clearance."
+    },
+    {
+      "run": "R-853",
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Reuse cited original event scope; no inferred refusal clearance."
+    },
+    {
+      "run": "R-887",
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Reuse cited original event scope; no inferred refusal clearance."
+    },
+    {
+      "run": "R-931",
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Reuse cited original event scope; no inferred refusal clearance."
+    },
+    {
+      "run": "R-884",
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Reuse cited original event scope; no inferred refusal clearance."
+    },
+    {
+      "run": "R-1026",
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Reuse cited original event scope; no inferred refusal clearance."
+    },
+    {
+      "run": "R-786",
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Reuse cited original event scope; no inferred refusal clearance."
+    },
+    {
+      "run": "R-818",
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Reuse cited original event scope; no inferred refusal clearance."
+    },
+    {
+      "run": "R-1180",
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Reuse cited original event scope; no inferred refusal clearance."
+    },
+    {
+      "run": "R-862",
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Reuse cited original event scope; no inferred refusal clearance."
+    },
+    {
+      "run": "R-1189",
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Reuse cited original event scope; no inferred refusal clearance."
+    }
+  ],
+  "separate_nonfinal": [
+    {
+      "run": "R-1163",
+      "reason": "prompt not sent; idle is not finished work"
+    }
+  ],
+  "separate_disappearance": [
+    {
+      "run": "R-1178",
+      "reason": "absence without preservation proof; not successful cleanup",
+      "event_seq": 30893
+    }
+  ]
+}

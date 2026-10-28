@@ -1,0 +1,124 @@
+{
+  "schema": "closeout-historical-cohort/v1",
+  "id": "claude-research",
+  "project": "/Users/rewt/development/rewt/herdr-brain/.git",
+  "owner": "supervisor-herdr",
+  "authority": "Inventory only. Original guards, attempts and named owners remain authoritative; no cleanup or refusal clearance authorized.",
+  "source": [
+    {
+      "file": "/Users/rewt/development/rewt/.org/evidence/CLOSE-ON-REPORT-PERMANENT-20261028/claude.md",
+      "sha256": "58c5cb10f935213f360948fa0a50f7ce471b6fc1d8716f068fa6eb130102bbfc"
+    }
+  ],
+  "cutoff": {
+    "seq": null,
+    "observed_at": null,
+    "observation_precision": "Research does not retain an exact record cutoff or full per-run list for its 163-report aggregate. UNKNOWN, not borrowed from Sol."
+  },
+  "inventory_complete": false,
+  "scope": "Claude research aggregate since 2026-10-28 00:14Z, with named retained examples separately. Claimed manual removals are research classifications, not exact automated/native completion receipts.",
+  "counts": {
+    "reports": 163,
+    "classified_manual_before_ingest": 89,
+    "line_closed": 9
+  },
+  "members": [
+    {
+      "run": "R-1180",
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Retain exact source; named example only, aggregate membership incomplete."
+    },
+    {
+      "run": "R-1126",
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Retain exact source; named example only, aggregate membership incomplete."
+    },
+    {
+      "run": "R-1133",
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Retain exact source; named example only, aggregate membership incomplete."
+    },
+    {
+      "run": "R-1135",
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Retain exact source; named example only, aggregate membership incomplete."
+    },
+    {
+      "run": "R-1136",
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Retain exact source; named example only, aggregate membership incomplete."
+    },
+    {
+      "run": "R-1150",
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Retain exact source; named example only, aggregate membership incomplete."
+    },
+    {
+      "run": "R-1158",
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Retain exact source; named example only, aggregate membership incomplete."
+    },
+    {
+      "run": "R-1169",
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Retain exact source; named example only, aggregate membership incomplete."
+    },
+    {
+      "run": "R-1175",
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Retain exact source; named example only, aggregate membership incomplete."
+    },
+    {
+      "run": "R-1166",
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Retain exact source; named example only, aggregate membership incomplete."
+    },
+    {
+      "run": "R-1184",
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Retain exact source; named example only, aggregate membership incomplete."
+    },
+    {
+      "run": "R-1185",
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Retain exact source; named example only, aggregate membership incomplete."
+    },
+    {
+      "run": "R-768",
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Retain exact source; named example only, aggregate membership incomplete."
+    },
+    {
+      "run": "R-1160",
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Retain exact source; named example only, aggregate membership incomplete."
+    },
+    {
+      "run": "R-1170",
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Retain exact source; named example only, aggregate membership incomplete."
+    },
+    {
+      "run": "R-1159",
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Retain exact source; named example only, aggregate membership incomplete."
+    },
+    {
+      "run": "R-1161",
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Retain exact source; named example only, aggregate membership incomplete."
+    },
+    {
+      "run": "R-1162",
+      "next_owner": "supervisor-herdr / original allocation producer",
+      "next_action": "Retain exact source; named example only, aggregate membership incomplete."
+    }
+  ],
+  "missing_inventory": "Exact original report-cohort membership and cutoff were not archived in this research; this gap prevents green historical proof.",
+  "separate_nonfinal": [
+    {
+      "run": "R-1163",
+      "reason": "Never prompted; not final merely by age."
+    }
+  ]
+}

@@ -7,6 +7,7 @@ import {gitProject} from '../lib/project.mjs';
 import {bindCloseoutSources,currentCloseoutEntries,unresolvedCloseoutEffect} from '../lib/closeout.mjs';
 import {closeoutNextStage} from '../lib/closeout-status.mjs';
 import {runCloseoutTurn} from '../line-service/closeout-turn.mjs';
+import {refreshCloseouts} from '../lib/closeout-consumer.mjs';
 import {acquireLock} from '../lanes/promotion-lock.mjs';
 import {setup,events,evaluations,effects,selectCurrentCleanup} from './helpers/closeout-fixture.mjs';
 
@@ -37,7 +38,8 @@ test('dirty report folder retains exact bytes after closing its verified session
   drain(f);assert.equal(events(f).filter(e=>e.type==='closeout.evaluated').length,count,'unchanged keep deduplicates');
   // Fixture owner preserves its draft outside the disposable lane before release.
   fs.renameSync(dirty,path.join(f.scratch,'saved-draft'));
-  assert.equal(drain(f).evaluated[0].completed,true);assert.deepEqual(f.read().actions,actions,'no duplicate exit/tab close');
+  assert.equal(drain(f).evaluated[0].completed,true);
+  assert.deepEqual(f.read().actions.filter(a=>a[0]!=='workspace'),actions,'no duplicate exit/tab close');
 });
 
 for(const obstruction of ['cwd','lock'])test(`pre-effect ${obstruction} release admits one guarded finite continuation`,t=>{
@@ -104,15 +106,52 @@ test('semantic binding observation ignores unrelated main index/config activity 
   const source={type:'report.ingested',run:'R-1',sha256:'fixture',report:{outcome:'done'}};
   const prepared=captureReads(()=>bindCloseoutSources({cwd:f.repo,org:f.org,events:events(f),mutation:{add:[source]}}));
   assert.equal(prepared.value.add[0].closeout_targets.length,1);
-  f.git(['update-index','--refresh']);f.git(['config','color.ui','false']);
+  f.git(['update-index','--index-version','4']);f.git(['config','color.ui','false']);
   assert.doesNotThrow(prepared.validate);
   f.git(['commit','--allow-empty','-m','replacement head'],f.lane);assert.throws(prepared.validate,/observation.*conflict/i);
+});
+
+test('removal ignores unrelated canonical index lock and config while retaining effective policy guards',t=>{
+  for(const relevant of [false,true]){
+    const f=setup(t,{direct:true,bound:true,merged:true});f.report();const log=f.options.log,command=f.options.command;let prepared=false,changed=false;
+    f.options.log=row=>{log(row);if(row.action==='lane-preflight')prepared=true;};
+    f.options.command=(exe,args,options)=>{
+      if(prepared&&!changed&&exe==='git'&&fs.existsSync(path.join(f.common,'lane-promote.lock'))){
+        changed=true;fs.writeFileSync(path.join(f.common,'index.lock'),'unrelated main index writer');
+        f.git(['config',relevant?'core.filemode':'color.ui',relevant?'false':'false']);
+      }
+      return command(exe,args,options);
+    };
+    const row=drain(f).evaluated[0];assert.equal(changed,true);
+    assert.equal(row.completed,!relevant,JSON.stringify(row));assert.equal(fs.existsSync(f.lane),relevant);
+    assert.equal(fs.readFileSync(path.join(f.common,'index.lock'),'utf8'),'unrelated main index writer');
+  }
+});
+
+test('original tab-close completion recovers partial effects without a duplicate exit or close',t=>{
+  const f=setup(t,{direct:true,bound:true,merged:true});f.report();const command=f.options.command;let lost=true;
+  f.options.command=(exe,args,options)=>{
+    const result=command(exe,args,options);
+    if(lost&&exe===f.job.herdr&&args[0]==='tab'&&args[1]==='close'){lost=false;return{status:null,error:{code:'ETIMEDOUT'},stdout:'',stderr:'lost tab completion'};}
+    return result;
+  };
+  drain(f);const e=entry(f),start=events(f).findLast(e=>e.type==='closeout.effect'&&e.outcome.action==='shell-close-requested');
+  assert.ok(unresolvedCloseoutEffect(e,events(f)));const before=f.read().actions,calls=f.herdrCalls();
+  // Reconciliation does not reobserve an already-bound original UNKNOWN.
+  selectCurrentCleanup(f);refreshCloseouts({cwd:f.repo,org:f.org,env:f.env,retirementOptions:f.options});
+  assert.deepEqual(f.herdrCalls(),calls);
+  assert.deepEqual(drain(f).evaluated,[]);assert.deepEqual(f.read().actions,before);
+  f.append([{type:'closeout.effect',identity:f.common,key:e.key,run:e.run,item:e.item,source:e.source,intent:start.effect,
+    effect:'original-tab-completion',outcome:{action:'closed',tab_id:start.outcome.tab_id}}]);
+  assert.equal(drain(f).evaluated[0].completed,true);
+  assert.deepEqual(f.read().actions.filter(a=>a[0]!=='workspace'),before);
+  assert.equal(fs.existsSync(f.lane),false);
 });
 
 test('unchanged keeps yield one grouped supervisor alarm without per-pass decisions or effect retry',t=>{
   const f=setup(t,{direct:true,bound:true}),binding=selectCurrentCleanup(f);f.report();
   f.state.agents[0].agent_status='working';f.save();
-  const args={project:gitProject(f.repo),org:f.org,env:f.env,guard:()=>{},maxSteps:1,cli:(_file,argv)=>argv[0]==='refresh'?'{}':JSON.stringify(drain(f))};
+  const args={project:gitProject(f.repo),org:f.org,env:f.env,guard:()=>{},measure:()=>{},maxSteps:1,cli:(_file,argv)=>argv[0]==='refresh'?'{}':JSON.stringify(drain(f))};
   for(let i=0;i<4;i++)runCloseoutTurn(args);
   const log=fs.readFileSync(path.join(binding.directory,'closeout.log'),'utf8').trim().split('\n').map(JSON.parse);
   assert.equal(log.filter(e=>e.action==='closeout-supervisor-alarm').length,1);

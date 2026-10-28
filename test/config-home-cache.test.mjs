@@ -6,6 +6,7 @@ import { execFileSync } from 'node:child_process';
 import { configFixture } from './helpers/config-home-fixture.mjs';
 import { homeBindings, homeProject, readConfigJSON } from '../lib/config-home.mjs';
 import { transact } from '../lib/store.mjs';
+import {captureReads} from '../lib/record-observation.mjs';
 
 function countRecordReads(record, action) {
   const open = fs.openSync, read = fs.readFileSync; let reads = 0;
@@ -30,6 +31,16 @@ test('config verification cache reuses stable physical evidence and never export
   });
   assert.equal(reads, 0, 'stable verification must not parse the selected project record again');
   assert.equal(f.binding().adoption.scope_sha256, binding.adoption.scope_sha256);
+});
+
+test('adopted binding projections ignore unrelated canonical index/config writes and retain the actual home link',async t=>{
+  const f=configFixture(t);await f.adopt();
+  const observed=captureReads(()=>homeProject(f.cwd,f.env));
+  const git=(...args)=>execFileSync('git',['-C',f.cwd,...args],{env:f.env,encoding:'utf8'});
+  git('config','color.ui','false');git('update-index','--index-version','4');
+  assert.doesNotThrow(observed.validate);
+  fs.unlinkSync(path.join(f.cwd,'.brain'));fs.symlinkSync(f.scratch,path.join(f.cwd,'.brain'));
+  assert.throws(observed.validate,/conflicting home link|observation conflict/);
 });
 
 test('config verification cache invalidates on record replacement, same-size writes, scope and link changes', async t => {

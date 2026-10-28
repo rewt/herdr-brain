@@ -15,7 +15,7 @@ import {events,setup,selectCurrentCleanup} from './helpers/closeout-fixture.mjs'
 function fixture(t){
   const f=setup(t,{direct:true,bound:true,merged:true}),binding=selectCurrentCleanup(f),project=gitProject(f.repo);
   const guard=()=>{for(const file of [path.join(binding.directory,'STOP'),...['STOP','HOLD'].map(n=>path.join(f.repo,'.lane/supervisor',n))])if(fs.existsSync(file))throw Error('STOP/HOLD');};
-  const args={project,org:f.org,env:f.env,guard,maxSteps:1,cli:(file,argv)=>{
+  const args={project,org:f.org,env:f.env,guard,measure:()=>{},maxSteps:1,cli:(file,argv)=>{
     assert.equal(fs.existsSync(path.join(f.org,'lock')),false,'no native command under a report transaction');
     if(argv[0]==='refresh')return '{"created":[]}';
     return JSON.stringify(f.drain({keys:JSON.parse(argv[argv.indexOf('--keys')+1]),retrySafe:true}));
@@ -36,6 +36,19 @@ test('lost publication and lost acknowledgement recover a committed report witho
   const actions=f.read().actions;
   assert.equal(runCloseoutTurn(f.args).steps,0);
   assert.deepEqual(f.read().actions,actions,'no native effect replay after lost acknowledgement');
+});
+
+test('measurement runs once after all closeout locks release and diagnostic failure preserves the turn result',t=>{
+  const f=fixture(t);f.report();let calls=0;
+  const measure=context=>{
+    calls++;assert.equal(context.project.identity,f.common);assert.equal(context.org,f.org);
+    for(const lock of [path.join(f.org,'lock'),path.join(f.common,'lane-promote.lock'),path.join(f.common,'retirement/owner.lock'),
+      path.join(f.directory,'closeout-turn.lock')])assert.equal(fs.existsSync(lock),false,lock);
+    assert.equal(fs.existsSync(f.lane),false,'effects precede measurement');
+    throw Error('injected diagnostic census failure');
+  };
+  const result=runCloseoutTurn({...f.args,measure});assert.equal(result.result,'closeout-turn-complete');assert.deepEqual(result.errors,[]);
+  assert.equal(calls,1);assert.match(fs.readFileSync(path.join(f.directory,'closeout.log'),'utf8'),/closeout-measurement-failed/);
 });
 
 test('two wakeups share one owner and checkpoint a kept target before serving an independent target',t=>{

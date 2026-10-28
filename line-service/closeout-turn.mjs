@@ -13,10 +13,11 @@ import {requireController,readOwnedRun} from '../lib/run-owner-guard.mjs';
 import {currentCloseoutEntries,closeoutEvaluations,closeoutEvaluation,closeoutRevision,
   scheduleLineCloseouts,directCloseoutObservation,publishCloseoutEvents,lineServiceOwnsCleanup} from '../lib/closeout.mjs';
 import {closeoutNextStage,closeoutWait,closeoutWaitState} from '../lib/closeout-status.mjs';
+import {recordCloseoutTurn} from './closeout-measurement.mjs';
 
 export const closeoutServiceDirectory=(org,common)=>path.join(org,'line-service',createHash('sha256').update(JSON.stringify(common)).digest('hex').slice(0,20));
 export function runCloseoutTurn({project,org,cli,guard,env=process.env,maxSteps=8,budgetMs=45000,
-  clock=()=>performance.now(),now=()=>Date.now(),fault=()=>{}}) {
+  clock=()=>performance.now(),now=()=>Date.now(),fault=()=>{},measure=recordCloseoutTurn}) {
   const directory=closeoutServiceDirectory(org,project.identity),file=path.join(directory,'closeout-turn.json');
   fs.mkdirSync(directory,{recursive:true});
   let release;
@@ -114,5 +115,12 @@ export function runCloseoutTurn({project,org,cli,guard,env=process.env,maxSteps=
       ingest:Math.max(0,pending.length-ingested),closeout:Math.max(0,scheduled.length-steps),reconcile_committed_sources:true};
     save();fault('before-ack');
     return{result:'closeout-turn-complete',ingested,steps,errors,continuation:state.continuation};
-  }finally{release();}
+  }finally{
+    release();
+    // Census is diagnostic, outside record/native/turn locks, and cannot alter
+    // an effect result or turn failure. The existing wake supplies its cadence.
+    try{measure({project,org,env,now});}
+    catch(error){try{fs.appendFileSync(path.join(directory,'closeout.log'),JSON.stringify({action:'closeout-measurement-failed',
+      at:new Date(now()).toISOString(),reason:error.message})+'\n',{mode:0o600});}catch{/* Preserve the original turn result even if diagnostics are unavailable. */}}
+  }
 }

@@ -287,8 +287,8 @@ test('cleanup refresh binds an abandoned kept lane once',t=>{
   assert.equal(fs.readFileSync(path.join(f.lane,'unique-uncommitted'),'utf8'),'retain','dirty abandoned content stays');
   const g=setup(t,{merged:true});selectCurrentCleanup(g);
   transact(g.org,()=>({add:[{type:'report.ingested',run:'R-1',report:{outcome:'blocked'},sha256:'reported'}]}));
-  for(let pass=0;pass<3;pass++)assert.deepEqual(refreshCloseouts({cwd:g.repo,org:g.org,env:g.env,retirementOptions:g.options}).created,[],`reported pass ${pass}`);
-  assert.equal(events(g).some(e=>e.type==='cleanup.bound'),false,'a reported lane takes the direct path');
+  for(let pass=0;pass<3;pass++)assert.equal(refreshCloseouts({cwd:g.repo,org:g.org,env:g.env,retirementOptions:g.options}).created.length,pass?0:1,`reported pass ${pass}`);
+  const direct=events(g).filter(e=>e.type==='cleanup.bound');assert.equal(direct.length,1);assert.equal(direct[0].closeout_targets[0].reportCloseout,true,'a reported lane takes the direct path once');
   assert.equal(currentCloseoutEntries(g.common,g.org,events(g)).filter(e=>e.reportCloseout&&e.run==='R-1').length,1);
 });
 

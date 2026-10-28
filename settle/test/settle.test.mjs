@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { waitForFile, waitForChange } from '../../test/helpers/file-wait.mjs';
+import { ADMISSION_WAIT_MS } from '../../lib/deadline.mjs';
 import { fixture } from './fixture.mjs';
 import { ROUTE_PRESET } from '../../lanes/preset.mjs';
 import { INHERITED_GATE_NON_CLAIM } from '../../lanes/review-evidence.mjs';
@@ -73,6 +74,18 @@ test('settle retains the review stage under simulated memory pressure and launch
 
 test('STOP arriving during correction dispatch memory wait returns a resumable stopped handoff', async t => {
   const f = fixture(t), run = f.start();
+  // Reaching dispatch crosses record/source checks and another CLI launch.
+  // Observe that lifecycle with its admission allowance, not a file-read wait.
+  const waitForDispatch = async (pending, output, phase) => {
+    try {
+      await waitForChange([], () => {
+        if (pending.child.exitCode !== null) throw Error(`child exited ${pending.child.exitCode}`);
+        return output().includes('dispatch: waiting');
+      }, { timeoutMs: ADMISSION_WAIT_MS });
+    } catch (error) {
+      throw Error(`${phase} dispatch memory observation: ${error.message}; settle stage ${journal(f, run).stage}; stderr: ${output() || '(empty)'}`, { cause: error });
+    }
+  };
   f.commit('correct\n'); f.report(run);
   fs.writeFileSync(path.join(f.root, 'review-result.json'), JSON.stringify({ verdict: 'NEEDS-WORK',
     findings: '- [Moderate] work.txt:1 - Follow-up remains; Fix: follow up' }));
@@ -87,7 +100,7 @@ test('STOP arriving during correction dispatch memory wait returns a resumable s
   pending.child.stdout.on('data', data => { stdout += data; });
   const stop = path.join(f.repo, '.lane/supervisor/STOP');
   try {
-    await waitForChange([], () => stderr.includes('dispatch: waiting'), { timeoutMs: 10000 });
+    await waitForDispatch(pending, () => stderr, 'initial');
     assert.match(stderr, /dispatch: waiting; memory pressure/);
     fs.mkdirSync(path.dirname(stop), { recursive: true }); fs.writeFileSync(stop, 'Stop during memory wait');
   } finally {
@@ -112,7 +125,7 @@ test('STOP arriving during correction dispatch memory wait returns a resumable s
   retry.child.stderr.on('data', data => { retryStderr += data; });
   retry.child.stdout.on('data', data => { retryStdout += data; });
   try {
-    await waitForChange([], () => retryStderr.includes('dispatch: waiting'), { timeoutMs: 10000 });
+    await waitForDispatch(retry, () => retryStderr, 'retry');
     assert.match(retryStderr, /dispatch: waiting; memory pressure/);
   } finally { fs.writeFileSync(memory, JSON.stringify({ available: 8 * 1024 ** 3, swap_used: 0 })); }
   await retry.done;

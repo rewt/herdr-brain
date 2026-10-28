@@ -733,7 +733,7 @@ test('retirement phase retains original unknown exits and a fresh service STOP b
 });
 
 test('phase1 deadline retry retains the original pending native exit without evaluation or readback',t=>{
-  const f=setup(t,{merged:true});f.report();const rows=f.append([{type:'item.closed',id:'ENG-1',as:'done',completed_run:'R-1'}]),entry=rows[0].closeout_targets.find(t=>t.signal==='landed');
+  const f=setup(t,{merged:true});f.report();const rows=f.append([{type:'item.closed',id:'ENG-1',as:'done',completed_run:'R-1'}]),entry={...rows[0].closeout_targets.find(t=>t.signal==='landed'),source:{seq:rows[0].seq,type:'item.closed'}};
   f.drain({keys:[entry.key],retirementOptions:{...f.options,deadline:Date.now()-1}});
   f.append([{type:'closeout.effect',key:entry.key,identity:f.common,run:'R-1',item:'ENG-1',source:{seq:rows[0].seq,type:'item.closed'},effect:'fixture-original-exit-intent',outcome:{action:'agent-exit-requested',run:'R-1',pane:'w:p',tab_id:'w:t',occupant:['worker','codex','w:p','w',f.lane,'term','session'],shell:{pid:1,identity:'shell',command:'[zsh]'}}}]);
   const retained=retainNativeOutcome(f,entry),prior=evaluations(f);

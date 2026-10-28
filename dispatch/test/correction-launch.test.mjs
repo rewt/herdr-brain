@@ -71,7 +71,10 @@ for(const change of ['head','dirty','rewind'])test(`fresh main-based fix refuses
   inject(f,'lane',"if(a[0]==='prepare' && !entry()) process.exit(1);",`if(a[0]==='prepare'){${mutation}}`);
   const result=f.start();assert.equal(result.status,1,result.stderr);
   const saved=job(f);
-  assert.equal(saved.failure.code,'DISPATCH_INPUT_CHANGED');
+  if(change==='dirty') {
+    assert.equal(saved.failure.code,'OUTCOME_UNKNOWN');
+    assert.match(saved.error,/base fast-forward requires a clean lane/);
+  } else assert.equal(saved.failure.code,'DISPATCH_INPUT_CHANGED');
   assert.equal(saved.native_launch_attempted,false);
   assert.equal(launches(f).length,0);assert.equal(promptCalls(f).length,0);
 });

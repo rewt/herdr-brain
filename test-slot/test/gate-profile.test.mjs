@@ -46,6 +46,42 @@ async function waitForSlotWait(worker) {
   assert.match(stderr, /TEST_SLOT_WAIT:/, 'the host adapter reaches the slot wait');
 }
 
+const frozenPreparation = `require('fs').writeFileSync(process.env.PROFILE_EVIDENCE+'.frozen-ready','ready');Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0);`;
+function freezeHost(f, seconds) {
+  const preload = path.join(f.root, 'frozen-host.mjs');
+  // These cases prove host timeout accounting/wording. Fixture lifetime guards
+  // poll every 5ms, so the real fixture tree does not promise inactivity. Keep
+  // native birth/group audits and cleanup, controlling only the CPU samples.
+  // Wait for preparation before sampling, so startup children cannot enter the
+  // watcher's retained family and disappear before the intended frozen phase.
+  fs.writeFileSync(preload, `import cp from 'node:child_process';import fs from 'node:fs';import {syncBuiltinESMExports} from 'node:module';
+const run=cp.spawnSync;
+cp.spawnSync=(cmd,args,opts)=>{
+  if(Array.isArray(args)&&args.includes('promotion-host'))opts={...opts,env:{...opts.env,MONITOR_TEST_SLOT_FROZEN_SECONDS:${JSON.stringify(String(seconds))}}};
+  if(process.argv.includes('promotion-host')&&cmd==='/bin/ps'&&args.includes('pid=,time=,stat=')){
+    if(!fs.existsSync(process.env.PROFILE_EVIDENCE+'.frozen-ready'))return {status:1,stdout:'',stderr:''};
+    const r=run(cmd,args,opts);
+    if(r.error||r.signal||r.status!==0||r.stderr?.trim())return r;
+    fs.appendFileSync(process.env.PROFILE_EVIDENCE+'.native-audits',JSON.stringify(r.stdout)+'\\n');
+    return {...r,stdout:r.stdout.replace(/^(\\s*\\d+)\\s+\\S+\\s+\\S+\\s*$/gm,'$1 00:00.00 S')};
+  }
+  return run(cmd,args,opts);
+};syncBuiltinESMExports();`);
+  f.env.NODE_OPTIONS = `${f.env.NODE_OPTIONS ?? ''} --import=${preload}`;
+}
+
+function assertFrozenHost(t, f, host, seconds) {
+  assert.equal(host.phase, 'timeout'); assert.equal(host.gate_timeout.kind, 'frozen');
+  assert.equal(host.gate_timeout.limit_seconds, seconds);
+  assert.ok(host.gate_timeout.inactivity_s >= seconds);
+  assert.equal(host.gate_timeout.descendant ?? false, false);
+  const execution = JSON.parse(fs.readFileSync(host.execution_receipt));
+  assert.ok(execution.activity_audits.samples >= 2);
+  assert.equal(execution.observations.filter(row => row.kind === 'frozen').length, 1);
+  const samples = fs.readFileSync(f.env.PROFILE_EVIDENCE + '.native-audits', 'utf8').trim().split('\n').map(JSON.parse);
+  t.diagnostic(`controlled host freeze after preparation; native CPU samples: ${JSON.stringify(samples)}`);
+}
+
 test('a default profile fixture promotes despite pressured memory in the outer environment', t => {
   const outer = healthyMemoryEnvironment().TEST_MEMORY_FILE;
   fs.writeFileSync(outer, JSON.stringify(pressuredMemory));
@@ -485,24 +521,23 @@ test('three-lane red bisection fits the host envelope and promotes both healthy 
 });
 
 test('two-lane frozen host returns batch re-enqueue wording', t => {
-  const f = fixture(t, { prepare: [{ run: 'node -e "setInterval(()=>{},1000)"' }] });
+  const f = fixture(t, { prepare: [{ run: `node -e ${JSON.stringify(frozenPreparation)}` }] });
   const other = path.join(f.root, 'other'); f.git(['worktree', 'add', '-qb', 'lane/other', other]);
   fs.writeFileSync(path.join(other, 'other'), 'other'); f.git(['add', '.'], other); f.git(['commit', '-qm', 'Other'], other);
-  const preload = path.join(f.root, 'short-host.mjs');
-  fs.writeFileSync(preload, `import cp from 'node:child_process';import {syncBuiltinESMExports} from 'node:module';const run=cp.spawnSync;cp.spawnSync=(cmd,args,opts)=>{if(Array.isArray(args)&&args.includes('promotion-host')){opts={...opts,env:{...opts.env,MONITOR_TEST_SLOT_FROZEN_SECONDS:'.8'}};}return run(cmd,args,opts);};syncBuiltinESMExports();`);
-  f.env.NODE_OPTIONS = `${f.env.NODE_OPTIONS ?? ''} --import=${preload}`;
+  freezeHost(f, .8);
   const fakeHerdr = path.join(f.root, 'herdr'); fs.writeFileSync(fakeHerdr, '#!/bin/sh\nexit 0\n', { mode: 0o755 });
   const queue = queueFor(f.repo);
   enqueue(queue, ['profile', 'other'], { laneCLI: path.join(source, 'lanes/lane.mjs'), org: null, to: 'offline', attempts: 1, retry: 0, herdr: fakeHerdr });
   f.env.SUPERVISOR_INPUT_WAIT_SECONDS = '0';
   const r = spawnSync(process.execPath, [path.join(source, 'promote/promote.mjs'), '--drain'], { cwd: f.repo, env: f.env, encoding: 'utf8', timeout: loadTimeout(15000) });
-  assert.equal(r.status, 0, r.stderr + r.stdout);
+  assert.equal(r.status, 0, JSON.stringify({ error: r.error?.message, signal: r.signal, stdout: r.stdout, stderr: r.stderr, queue: queue.load() }));
   const results = queue.load().results; assert.equal(results.length, 2);
   for (const result of results) {
     assert.equal(result.outcome, 'timeout', JSON.stringify({ outcome: result.outcome, code: result.code, reason: result.reason }));
     assert.equal(result.reason, 'gate frozen without output or process activity; batch timed out; re-enqueue lanes individually');
-    const host = JSON.parse(fs.readFileSync(result.host_receipt)); assert.equal(host.phase, 'timeout'); assert.equal(host.gate_timeout.descendant ?? false, false);
+    assert.equal(result.host_receipt, results[0].host_receipt);
   }
+  assertFrozenHost(t, f, JSON.parse(fs.readFileSync(results[0].host_receipt)), .8);
   assert.equal(f.git(['rev-parse', 'main']), f.before); assert.equal(fs.existsSync(f.slot), false);
 });
 
@@ -517,12 +552,11 @@ test('a signaled preparation without a host timeout remains a refusal', t => {
 });
 
 test('host timeout preserves an earlier preparation refusal while classifying its interrupted member', t => {
-  const f = fixture(t, { prepare: [{ run: `node -e 'const fs=require("fs"),p=process.env.PROFILE_EVIDENCE+".prepare";if(!fs.existsSync(p)){fs.writeFileSync(p,"first refused");process.exit(7);}setInterval(()=>{},1000)'` }] });
+  const prepare = `const fs=require('fs'),p=process.env.PROFILE_EVIDENCE+'.prepare';if(!fs.existsSync(p)){fs.writeFileSync(p,'first refused');process.exit(7);}${frozenPreparation}`;
+  const f = fixture(t, { prepare: [{ run: `node -e ${JSON.stringify(prepare)}` }] });
   const other = path.join(f.root, 'other'); f.git(['worktree', 'add', '-qb', 'lane/other', other]);
   fs.writeFileSync(path.join(other, 'other'), 'other'); f.git(['add', '.'], other); f.git(['commit', '-qm', 'Other'], other);
-  const preload = path.join(f.root, 'split-host.mjs');
-  fs.writeFileSync(preload, `import cp from 'node:child_process';import {syncBuiltinESMExports} from 'node:module';const run=cp.spawnSync;cp.spawnSync=(cmd,args,opts)=>{if(Array.isArray(args)&&args.includes('promotion-host')){opts={...opts,env:{...opts.env,MONITOR_TEST_SLOT_FROZEN_SECONDS:'.4'}};}return run(cmd,args,opts);};syncBuiltinESMExports();`);
-  f.env.NODE_OPTIONS = `${f.env.NODE_OPTIONS ?? ''} --import=${preload}`;
+  freezeHost(f, .4);
   const herdr = path.join(f.root, 'herdr'); fs.writeFileSync(herdr, '#!/bin/sh\nexit 0\n', { mode: 0o755 });
   const queue = queueFor(f.repo);
   enqueue(queue, ['profile', 'other'], { laneCLI: path.join(source, 'lanes/lane.mjs'), org: null,
@@ -540,5 +574,6 @@ test('host timeout preserves an earlier preparation refusal while classifying it
   assert.deepEqual(results.map(result => result.outcome), ['refused', 'timeout']);
   assert.match(results[0].reason, /train preparation failed/);
   assert.equal(results[1].reason, 'gate frozen without output or process activity; batch timed out; re-enqueue lanes individually');
+  assertFrozenHost(t, f, JSON.parse(fs.readFileSync(results[1].host_receipt)), .4);
   assert.equal(f.git(['rev-parse', 'main']), f.before); assert.equal(fs.existsSync(f.slot), false);
 });

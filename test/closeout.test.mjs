@@ -803,14 +803,13 @@ test('code handoff unsent then uncertain native retry',t=>{
     f.report();const rows=f.append([{type:'item.closed',id:'ENG-1',as:'done',completed_run:'R-1'}]),key=rows[0].closeout_targets.find(t=>t.signal==='landed').key;
     if(action==='shell-close-requested'){
       const candidate=f.retirement(f.options).plan(f.lane).close[0];
-      f.append([{type:'closeout.effect',key,identity:f.common,source:{seq:rows[0].seq,type:'item.closed'},effect:'fixture-observed-exit',
-        outcome:{action:'agent-exit-requested',run:candidate.run,pane:candidate.pane,tab_id:candidate.tab_id,occupant:candidate.occupant,shell:candidate.shell}}]);
       f.state.agents=[];f.state.info={shell_pid:1,foreground_processes:[{pid:1,name:'zsh'}],process_tree_complete:true,process_tree:[f.state.info.process_tree[0]]};f.save();
+      assert.equal(f.retirement(f.options).reconcileAgentExit(candidate),true,'fixture positively observes the prerequisite exit without sending');
     }
     let moved=false;const log=f.options.log;
     f.options.log=row=>{log(row);if(row.action===action&&!moved){moved=true;f.git(['checkout','-qb','moved-main']);}};
     let first;try{first=f.drain({keys:[key],sessionsOnly:!workspace});}finally{f.options.log=log;if(moved)f.git(['checkout','-q','main']);}
-    assert.equal(moved,true,action);assert.ok(first.restart?.keys.includes(key),JSON.stringify(first));assert.deepEqual(f.read().actions,[],action);
+    assert.equal(moved,true,`${action}: ${JSON.stringify(first)}`);assert.ok(first.restart?.keys.includes(key),JSON.stringify(first));assert.deepEqual(f.read().actions,[],action);
     const before=events(f),original=before.find(e=>e.type==='closeout.effect'&&e.key===key&&e.outcome.action===action),unsent=before.find(e=>e.type==='closeout.command-not-started'&&e.intent===original.effect);
     assert.equal(unsent.native_started,false);assert.equal(unsent.code,'CLOSEOUT_CODE_CHANGED');
     const entry=readCloseoutEntries(f.common).find(e=>e.key===key),waitFor=(all,id)=>all.find(e=>e.type==='closeout.waiting'&&e.waiting.producers?.[0]?.intent===id);

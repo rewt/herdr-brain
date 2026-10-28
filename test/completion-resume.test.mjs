@@ -167,3 +167,21 @@ test('a linked reviewer completion retains its own native conversation and famil
   assert.equal(closed.agent_session_id, reviewer); assert.equal(closed.harness, 'claude');
   assert.deepEqual(closed.resume, { workspace: '/saved/lane', lane: 'topic', branch: 'lane/topic' });
 });
+
+test('an integrated leftover resume branch advances only by fast-forward to main', t => {
+  const f = dispatchFixture(t), workspace = path.join(f.root, 'saved-lane');
+  f.git(['branch', 'lane/topic']);
+  f.git(['commit', '--allow-empty', '-m', 'later main landing']);
+  const main = f.git(['rev-parse', 'main']);
+  const completion = { type: 'report.ingested', run: 'R-1', item: f.item, agent_session_id: session, harness: 'codex',
+    resume: { workspace, lane: 'topic', branch: 'lane/topic' } };
+  const selected = resumeSource({ events: [completion], session, item: { id: f.item }, lane: 'topic', harness: 'codex', repo: f.repo });
+  assert.equal(selected.base, main);
+  const opened = spawnSync(process.execPath, [lanes, 'open', 'topic', main, '--git-only', '--reopen-at', workspace], {
+    cwd: f.repo, encoding: 'utf8', env: { ...f.env, LANE_WORKTREE_ROOT: f.root },
+  });
+  assert.equal(opened.status, 0, opened.stderr);
+  assert.equal(f.git(['rev-parse', 'HEAD'], workspace), main);
+  fs.writeFileSync(path.join(workspace, 'unsaved'), 'owner changes');
+  assert.throws(() => resumeSource({ events: [completion], session, item: { id: f.item }, lane: 'topic', harness: 'codex', repo: f.repo }), /unsaved author work/);
+});

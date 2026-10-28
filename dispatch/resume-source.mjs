@@ -28,5 +28,10 @@ export function resumeSource({ events, session, item, lane, harness, repo }) {
   const main = Object.assign({}, ...layers.map(layer => layer.config)).main ?? 'main';
   const integration = git(['rev-parse', '--verify', `refs/heads/${main}^{commit}`]);
   const kept = git(['for-each-ref', '--format=%(objectname)', `refs/heads/${branch}`]);
-  return { run: saved.run, workspace, branch, base: kept || integration };
+  let unlanded = Boolean(kept);
+  if (kept) {
+    try { git(['merge-base', '--is-ancestor', kept, integration]); unlanded = false; }
+    catch (error) { if (error.status !== 1) throw error; }
+  }
+  return { run: saved.run, workspace, branch, base: unlanded ? kept : integration };
 }

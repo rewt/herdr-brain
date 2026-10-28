@@ -1011,12 +1011,12 @@ function open(topic, base = MAIN, { gitOnly = false, reopenAt } = {}) {
   const kept = branchExists(branch);
   if (kept && !reopenAt) fail(`branch ${branch} already exists; use status/promote/close`);
   if (reopenAt && (!gitOnly || !isAbsolute(reopenAt))) fail('reopen-at requires --git-only and an absolute saved worktree path');
-  if (kept && git(['rev-parse', `${branch}^{commit}`]) !== git(['rev-parse', `${base}^{commit}`]))
-    fail('kept resume branch differs from expected base');
   if (tryGit(["rev-parse", "--verify", "--quiet", `${base}^{commit}`]) === undefined) {
     fail(`base ref does not resolve: ${base}`);
   }
   const baseTip = git(['rev-parse', `${base}^{commit}`]);
+  if (kept && tryGit(['merge-base', '--is-ancestor', branch, baseTip]) === undefined)
+    fail('kept resume branch differs from expected base');
   const path = reopenAt ?? join(WORKTREE_ROOT, `lane-${topic}`);
   assertSafeNewWorktreePath(path);
   let workspaces = gitOnly ? [] : herdrJson(["workspace", "list"])?.workspaces ?? [];
@@ -1040,6 +1040,7 @@ function open(topic, base = MAIN, { gitOnly = false, reopenAt } = {}) {
     workspaces = herdrJson(["workspace", "list"])?.workspaces ?? [];
   }
   assertCreatedWorktree(path, branch);
+  if (kept) git(['merge', '--ff-only', '--', baseTip], { cwd: path });
   recordLaneOpen(REPO_IDENTITY, path, baseTip);
   let created;
   if (herdr?.status === 0) try { const parsed = JSON.parse(herdr.stdout); if (!parsed.error) created = parsed.result; } catch {}

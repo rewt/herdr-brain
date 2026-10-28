@@ -2,7 +2,7 @@
   "fast": "npm run test:fast",
   "promotion_tests": "test/helpers/affected-tests.mjs",
   "promotion": "node test/helpers/affected-tests.mjs --promotion",
-  "release": "npm run test:release",
+  "release": "npm run test:slot && node test/helpers/full-pass.mjs",
   "timeout_seconds": 0,
   "idle_timeout_seconds": 900,
   "review": "parallel",

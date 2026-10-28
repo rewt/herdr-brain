@@ -26,15 +26,15 @@ const nameOption = argv.find(arg => arg.startsWith('--test-name-pattern='));
 const testNamePatterns = nameOption ? [new RegExp(nameOption.slice('--test-name-pattern='.length))] : undefined;
 const factorOption = argv.find(arg => arg.startsWith('--load-factor='));
 const factor = factorOption ? Number(factorOption.split('=')[1]) : testLoadFactor();
-// Legacy deadline options are accepted for old callers, but never arm a timer.
-const { concurrency } = runnerLimits({ factor });
+// Legacy deadline options stay inert; only the explicit environment opts in.
+const { concurrency, fileTimeout } = runnerLimits({ factor });
 if (!files.length && selected.size) { cleanupHerdr(); process.exit(0); }
 if (!files.length) throw Error('usage: node test/helpers/run.mjs [--test-name-pattern=REGEX] TEST_FILES...');
 
 if (worker) {
   // Selection above consumes the train's request; test files start with their
   // own project settings. Keep containment, slot ownership and retry state.
-  for (const key of ['LANE_VALIDATE', 'LANE_CONFIG', 'ORG_DIR', 'HERDR_RETIRE_HERDR', 'MONITOR_PROMOTION_TEST_FILES']) delete process.env[key];
+  for (const key of ['LANE_VALIDATE', 'LANE_CONFIG', 'ORG_DIR', 'HERDR_RETIRE_HERDR', 'MONITOR_PROMOTION_TEST_FILES', 'MONITOR_TEST_CONCURRENCY', 'MONITOR_TEST_FILE_TIMEOUT_MS']) delete process.env[key];
   // This leader never exits voluntarily with fixtures running in its group.
   const owner = registerProcess(process.pid, true);
   process.env.HERDR_TEST_SUITE_PID = String(process.pid);
@@ -44,7 +44,7 @@ if (worker) {
   };
   process.once('disconnect', cleanup);
   process.once('message', async () => {
-    const stream = run({ files, concurrency, testNamePatterns });
+    const stream = run({ files, concurrency, testNamePatterns, timeout: fileTimeout || undefined });
     let code = 0;
     stream.on('test:fail', () => { code = 1; });
     try { await pipeline(stream.compose(tap), process.stdout, { end: false }); }

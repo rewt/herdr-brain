@@ -51,3 +51,21 @@ test('invalid host measurements keep a safe factor and single-core fallback', ()
   for (const load of [-1, NaN, Infinity]) assert.equal(testLoadFactor(load, 18), 1);
   for (const parallelism of [0, -1, NaN, Infinity]) assert.equal(testLoadFactor(7, parallelism), 7);
 });
+
+test('explicit runner environment adjusts only file admission and optional file timeout', () => {
+  assert.deepEqual(runnerLimits({ factor: 1, env: {} }), { concurrency: 4, fileTimeout: 0, suiteTimeout: 0 });
+  assert.deepEqual(runnerLimits({ factor: 1, env: { MONITOR_TEST_CONCURRENCY: '12' } }),
+    { concurrency: 12, fileTimeout: 0, suiteTimeout: 0 });
+  assert.deepEqual(runnerLimits({ factor: 2, env: { MONITOR_TEST_CONCURRENCY: '12', MONITOR_TEST_FILE_TIMEOUT_MS: '1234' } }),
+    { concurrency: 6, fileTimeout: 1234, suiteTimeout: 0 });
+  assert.equal(runnerLimits({ factor: 100, env: { MONITOR_TEST_CONCURRENCY: '12' } }).concurrency, 1);
+});
+
+test('invalid runner environment refuses unsafe caps and timer overflow', () => {
+  for (const value of ['0', '-1', '1.5', '', 'NaN', 'Infinity', '9007199254740992']) {
+    assert.throws(() => runnerLimits({ factor: 1, env: { MONITOR_TEST_CONCURRENCY: value } }), /MONITOR_TEST_CONCURRENCY/);
+  }
+  for (const value of ['-1', '0.5', 'NaN', 'Infinity', '2147483648']) {
+    assert.throws(() => runnerLimits({ factor: 1, env: { MONITOR_TEST_FILE_TIMEOUT_MS: value } }), /MONITOR_TEST_FILE_TIMEOUT_MS/);
+  }
+});

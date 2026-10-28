@@ -59,13 +59,14 @@ STOP/HOLD checks remain fresh before effects.
 
 Step 2 adds an explicit `planTransaction` path for the CLI's read-only event
 derivation callbacks (add, block/unblock, note, ask/answer, set, close/reopen,
-start, worker, abandon and lesson). It prepares the entire proposed mutation,
+start, worker, abandon, lesson, report intake and queue-review). It prepares the entire proposed mutation,
 promotion queue protection and closeout bindings outside the record lock.
 By default the planner runs once. Its full record revision is a conservative CAS
 dependency: even an unrelated append invalidates the prepared plan. Only the
 explicitly audited, effect-free CLI derivations opt into bounded re-derivation
 on a source/read-set conflict (at most 32 attempts); guards refusing authority
-are never retried. Closeout binding and recovery overrides do not opt in.
+are never retried. Commit effects and recovery overrides never replay. A nested configuration
+audit revokes planner replay permission, preserving that original effect.
 Final IDs, event order and graph/claim/HOLD decisions are valid only if that
 exact revision still matches at append. The already encoded additions are
 appended and fsynced under the existing lock, with the same tail-repair rules.
@@ -79,9 +80,12 @@ parse configuration or scan queues under the lock. A changed observation refuses
 before tail repair or append. The facade does not modify the global filesystem
 API and has no effect outside an explicit planning scope.
 
-This migration intentionally excludes effectful report intake, native queue-review,
-claims, native integration and existing outer `withLock` consumers. Those retain
-their original one-time callbacks and fresh native checks. They can still dominate
+Report intake defers its immutable report write to a synchronous commit hook.
+Queue-review prepares its Git/queue/evidence checks outside, then rechecks its
+actual native producer, owner and STOP/HOLD boundary in that same final hook.
+Hooks run once after both CAS checks; a native refusal never replays the plan
+or its hook. Claims, native integration and existing outer `withLock` consumers
+retain their original one-time callbacks and fresh native checks. They can still dominate
 the all-acquisition p95. Non-replayable planning conflicts are explicit refusals, with no alternate
 executor or native retry. Source landing and fixture proof do not establish
 the live p95 target; report a matching-source passive cohort separately, and

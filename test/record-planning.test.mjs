@@ -139,3 +139,40 @@ test('only explicitly replay-safe derivations refresh IDs after a concurrent app
   }, { replaySafe: true });
   assert.equal(calls, 2); assert.equal(result.added[0].id, 'ENG-2'); assert.equal(result.added[0].seq, 2);
 });
+
+test('commit effects run once under the exact record lock after a retried pure plan', t => {
+  const f = fixture(t); let plans = 0, commits = 0, raced = false;
+  onAcquisition(f, t, () => {
+    if (raced) return;
+    raced = true; fs.appendFileSync(f.file, JSON.stringify({ seq: 1, type: 'future.unknown' }) + '\n');
+  });
+  const result = planTransaction(f.dir, () => {
+    plans++; assert.equal(fs.existsSync(f.lock), false);
+    return { add: [{ type: 'future.committed' }], commit: () => {
+      commits++; assert.equal(fs.existsSync(f.lock), true);
+      assert.equal(loadEvents(f.dir).events.length, 1);
+    } };
+  }, { replaySafe: true });
+  assert.equal(plans, 2); assert.equal(commits, 1); assert.equal(result.added[0].seq, 2);
+});
+
+test('native commit refusals never retry a plan or append, even with a conflict-shaped code', t => {
+  const f = fixture(t); let plans = 0, commits = 0;
+  assert.throws(() => planTransaction(f.dir, () => {
+    plans++; return { add: [{ type: 'future.forbidden' }], commit: () => {
+      commits++; throw Object.assign(Error('native refused'), { code: 'RECORD_PLANNING_CONFLICT' });
+    } };
+  }, { replaySafe: true }), /native refused/);
+  assert.equal(plans, 1); assert.equal(commits, 1); assert.equal(fs.readFileSync(f.file, 'utf8'), '');
+});
+
+test('a nested configuration audit revokes planner replay and preserves its original effect', t => {
+  const f = fixture(t); let plans = 0, commits = 0;
+  assert.throws(() => planTransaction(f.dir, () => {
+    plans++;
+    transact(f.dir, () => ({ add: [{ type: 'config.changed', operation: 'original-audit' }] }));
+    return { add: [{ type: 'future.forbidden' }], commit: () => { commits++; } };
+  }, { replaySafe: true }), /record planning conflict/);
+  assert.equal(plans, 1); assert.equal(commits, 0);
+  assert.deepEqual(loadEvents(f.dir).events.map(e => e.operation), ['original-audit']);
+});

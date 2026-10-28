@@ -1,5 +1,5 @@
 // An explicit exact-change resolution never erases the original attempt.
-import fs from 'node:fs';
+import fs from '../lib/record-observation.mjs';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
 import {readOwnedRun,assertOwner,requireController} from '../lib/run-owner.mjs';

@@ -1,5 +1,5 @@
 // Conservative automatic-review eligibility. Receipts are evidence, not launch authority.
-import fs from 'node:fs';
+import fs from '../lib/record-observation.mjs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';

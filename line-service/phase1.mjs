@@ -1,5 +1,5 @@
 // Landed-change facts and record-derived decisions. No native effects/models.
-import fs from 'node:fs';
+import fs from '../lib/record-observation.mjs';
 import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {createHash} from 'node:crypto';

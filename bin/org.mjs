@@ -193,12 +193,12 @@ function mutate(ctx, fn, authority) {
     warnedUnattributed = true;
     err('record: recorded as human but unattributed (no ORG_ACTOR, no terminal). An agent session sets ORG_ACTOR=<its session name>.\n');
   }
-  // These local callbacks only derive events from state. Effectful report
-  // intake and native queue-review retain transact's once-under-lock contract.
-  const planned = new Set(['add', 'block', 'unblock', 'note', 'ask', 'answer', 'set', 'close', 'reopen', 'start', 'worker', 'abandon', 'lesson']);
-  // These commands never bind closeout sources or write immutable files/audits.
-  // Re-derive only their pure events on a racing append/queue observation.
-  const replaySafe = !process.env.ORG_GUARD_OVERRIDE && new Set(['add', 'block', 'unblock', 'note', 'set', 'reopen', 'start', 'worker', 'lesson']).has(process.argv[2]);
+  // Event derivation and read-only guards precede the append lock. Intake and
+  // queue-review defer their immutable/native effects to the final commit hook.
+  const planned = new Set(['add', 'block', 'unblock', 'note', 'ask', 'answer', 'set', 'close', 'reopen', 'start', 'worker', 'abandon', 'lesson', 'ingest', 'sync', 'queue-review']);
+  // Only event derivation may refresh on a race. Commit hooks never replay;
+  // nested configuration audits also revoke replay permission in the store.
+  const replaySafe = !process.env.ORG_GUARD_OVERRIDE;
   const transaction = planned.has(process.argv[2]) ? planTransaction : transact;
   const res = transaction(ctx.dir, (events, state) => {
     return bindCloseoutSources({ org: ctx.dir, events, mutation: protectRecordMutation({ org: ctx.dir, events, state, mutation: fn(state, events), command: process.argv[2], ...authority }) });
@@ -391,7 +391,7 @@ async function queueReview(argv) {
   }
   if(values['predecessor-preparation'])throw new UserError('--predecessor-preparation requires the existing scoped supervisor recovery');
   if (loadEvents(ctx.dir).tornTail) throw new UserError('incomplete record tail prevents review queue creation');
-  const { result } = mutate(ctx, (state, events) => queueReviewMutation({ state, events, org: ctx.dir, repo, runId: positionals[0], head: values.head, base: values.base }));
+  const { result } = mutate(ctx, (state, events) => queueReviewMutation({ state, events, org: ctx.dir, repo, runId: positionals[0], head: values.head, base: values.base, deferCommit: true }));
   out(JSON.stringify(result) + '\n');
   return 0;
 }
@@ -834,7 +834,6 @@ async function ingestFile(ctx, file, runHint, currentRun) {
       return { add: [], result: { skipped: true, runId, item: run.item } };
     }
     const stored = path.join('reports', `${runId}.md`);
-    writeFileAtomic(path.join(ctx.dir, stored), text, 0o444);
     const report = { ...parsed.report, run: runId };
     const late = laterRuns(s, runId).some((r) => r.report);
     let brief_sha256;
@@ -863,6 +862,7 @@ async function ingestFile(ctx, file, runHint, currentRun) {
     events.push(...reviewFacts);
     return {
       add: events,
+      commit: () => writeFileAtomic(path.join(ctx.dir, stored), text, 0o444),
       actor: `run:${runId}`,
       result: { runId, item: run.item, created, categoryFlags, late, outcome: report.outcome, summary: report.summary },
     };

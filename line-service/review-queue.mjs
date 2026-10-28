@@ -1,5 +1,5 @@
 // Review work uses ordinary record items and normal dispatch, never a second queue.
-import fs from 'node:fs';
+import fs from '../lib/record-observation.mjs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
@@ -97,38 +97,44 @@ function ignoreIntent(org, identity, item, target) {
 }
 
 // Called inside the existing record transaction and promotion write guard.
-export function queueReviewMutation({ state, events, org, repo, runId, head, base, env = process.env,recoveryBinding }) {
+export function queueReviewMutation({ state, events, org, repo, runId, head, base, env = process.env,recoveryBinding,deferCommit = false }) {
   const project = gitProject(repo), identity = project.identity;
   if (project.checkout !== project.canonical) throw Error('queue-review uses the canonical project checkout');
   const record = findOrgDir({ cwd: repo, env: { ...env, ORG_DIR: '' } });
   if (!record || fs.realpathSync(record) !== fs.realpathSync(org)) throw Error('queue-review record differs from the actual project');
   openBoundary(org, repo, identity);
-  if(runId?.startsWith('canonical:'))return queueCanonicalReview({state,events,org,repo,identity,selector:runId,head,base,env});
+  if(runId?.startsWith('canonical:'))return queueCanonicalReview({state,events,org,repo,identity,selector:runId,head,base,env,deferCommit});
   const bound = source({ state, events, org, repo, identity, runId,head,base,env }), { item, run, target } = bound;
   if (head && head !== target.head || base && base !== target.base) throw Error('queue request differs from immutable landed tuple/evidence');
-  if (env.ORG_ACTOR === 'line-service') {
-    if (gitProject(process.cwd()).checkout !== repo || env.HERDR_ENV === '1' || env.HERDR_PANE_ID) throw Error('line-service queue producer requires its genuine canonical non-session context');
-  } else {
-    const binding = recoveryBinding??nativeSender(org, { cwd: process.cwd(), env }), worker = effectiveWorkerIdentity(run, state), native = binding.native;
-    const recovery=bound.authorization;
-    const supervisorRecovery=recovery&&recovery.native_caller?.name===native.name&&recovery.native_caller?.agent_session?.value===native.agent_session.value&&binding.project.checkout===repo;
-    if (!supervisorRecovery&&(worker.agent !== native.name || worker.terminal_id !== native.terminal_id || worker.agent_session_id !== native.agent_session.value)) throw Error('queue producer differs from actual source worker');
-  }
+  const verifyProducer = () => {
+    openBoundary(org, repo, identity);
+    const current = readOwnedRun(org, run.id);
+    requireController(current, 'brain'); assertOwner(current, { owner: run.owner, generation: run.owner_generation });
+    if (env.ORG_ACTOR === 'line-service') {
+      if (gitProject(process.cwd()).checkout !== repo || env.HERDR_ENV === '1' || env.HERDR_PANE_ID) throw Error('line-service queue producer requires its genuine canonical non-session context');
+    } else {
+      const binding = recoveryBinding??nativeSender(org, { cwd: process.cwd(), env }), worker = effectiveWorkerIdentity(run, state), native = binding.native;
+      const recovery=bound.authorization;
+      const supervisorRecovery=recovery&&recovery.native_caller?.name===native.name&&recovery.native_caller?.agent_session?.value===native.agent_session.value&&binding.project.checkout===repo;
+      if (!supervisorRecovery&&(worker.agent !== native.name || worker.terminal_id !== native.terminal_id || worker.agent_session_id !== native.agent_session.value)) throw Error('queue producer differs from actual source worker');
+    }
+  };
+  if (!deferCommit) verifyProducer();
   const archived=new Set(bound.authorization?.archived_review_items??[]),key = `${item.id}:${target.head}`,group=producerGroupKey(item.id,run.id,target.reportHash),existing = [...state.items.values()].filter(q => !archived.has(q.id)&&(sameProducerQueue(q,item.id,run.id)||q.meta.review_key===key)&&!disjointCapture({repo,target,peer:q.meta.review_target}));
   if (existing.length) {
     if (existing.length !== 1 || !isQueueReview(existing[0]) || queueProducerGroup(existing[0])!==group || !sameCapturedTarget(existing[0].meta.review_target,target)) throw Error('whole producer review already retained with different/partial/UNKNOWN capture; preserve attempts, verdicts and cap1');
-    return { add: [], result: { result: 'review_queued', review_item: existing[0].id, source_item: item.id, head: target.head, existing: true } };
+    return { add: [], ...(deferCommit ? { commit: verifyProducer } : {}), result: { result: 'review_queued', review_item: existing[0].id, source_item: item.id, head: target.head, existing: true } };
   }
   const prior = reviewAttempt(item, { state, events, org, repo, identity, target,capturedRun:run.id, ignoreService: ignoreIntent(org, identity, item, target) });
   if (prior) throw Error(`item review already retained: ${prior}`);
-  publishLandedReviewEvidence(target);
+  if (!deferCommit) publishLandedReviewEvidence(target);
   const id = nextItemId(state, { kind: 'work', role: 'reviewer' });
   // The source reference is metadata, not a blocking review-child edge: source
   // completion/build admission must not wait for this post-code review.
   const landing=events.some(e=>e.type==='change.landed'&&e.item===item.id&&e.head===target.head)?[]:[{
     type:'change.landed',item:item.id,run:run.id,head:target.head,base:target.base,project:identity,landed_at:null,observed_at:new Date().toISOString(),evidence:target.evidence,time_qualification:'Canonical containment observed; exact historical landing time UNKNOWN.'
   }];
-  return { add: [...landing,{ type: 'item.added', id, kind: 'work', role: 'reviewer', capability: 'review', parent: item.parent, priority: item.priority,
+  return { ...(deferCommit ? { commit: () => { verifyProducer(); publishLandedReviewEvidence(target); } } : {}), add: [...landing,{ type: 'item.added', id, kind: 'work', role: 'reviewer', capability: 'review', parent: item.parent, priority: item.priority,
     title: `Review ${item.title}`, budget: {}, accept: ['Independent immutable diff/evidence review; zero suites and no edits. Record PASS or FAIL verdict. Major findings become linked engineer follow-up proposals, never an automatic second review. '+uncertainOutcomeDoctrine],
     meta: { review_key: key,review_group_key:group, review_source_item: item.id, review_source_run: run.id, review_target: target, review_round_cap: 1, review_other_family: true, review_cutover:bound.cutoff,...(bound.authorization?{review_recovery_id:bound.authorization.id}:{}) } }],
     result: { result: 'review_queued', review_item: id, source_item: item.id, head: target.head, existing: false } };
@@ -139,7 +145,7 @@ function canonicalAttempt({selector,target,state,events,org,repo,identity,ignore
   // the real reviewer ID allocated by the ordinary record, never a fake run.
   return reviewAttempt({id:selector,runs:[]},{state,events,org,repo,identity,target,ignoreQueue,ignoreService});
 }
-function queueCanonicalReview({state,events,org,repo,identity,selector,head,base,env}){
+function queueCanonicalReview({state,events,org,repo,identity,selector,head,base,env,deferCommit = false}){
   if(env.ORG_ACTOR!=='line-service'||gitProject(process.cwd()).checkout!==repo||env.HERDR_ENV==='1'||env.HERDR_PANE_ID)throw Error('unattributed responsibility requires the genuine canonical line-service context');
   installedContext(repo,org);queueImplementation(env);
   const found=discoverChanges({state,events,org,repo,identity}),change=found.unattributed?.find(c=>c.selector===selector);
@@ -150,9 +156,9 @@ function queueCanonicalReview({state,events,org,repo,identity,selector,head,base
     return{add:[],result:{result:'review_queued',review_item:existing[0].id,source_item:existing[0].id,head:target.head,existing:true}};
   }
   const prior=canonicalAttempt({selector,target,state,events,org,repo,identity,ignoreService:{file:journalFor(org,identity),key:`review:${selector}`,target,operation:'record-queue'}});if(prior)throw Error(`canonical review already retained: ${prior}`);
-  publishLandedReviewEvidence(target);
+  if (!deferCommit) publishLandedReviewEvidence(target);
   const id=nextItemId(state,{kind:'work',role:'reviewer'});
-  return{add:[{type:'item.added',id,kind:'work',role:'reviewer',capability:'review',title:`Review unattributed canonical change ${target.head.slice(0,12)}`,budget:{},
+  return{...(deferCommit ? { commit: () => { openBoundary(org,repo,identity); installedContext(repo,org); publishLandedReviewEvidence(target); } } : {}),add:[{type:'item.added',id,kind:'work',role:'reviewer',capability:'review',title:`Review unattributed canonical change ${target.head.slice(0,12)}`,budget:{},
     accept:['Review this exact canonical diff/evidence with zero suites. Historical producer attribution remains UNKNOWN. Record PASS or FAIL; Major findings require a linked correction before release. '+uncertainOutcomeDoctrine],
     meta:{review_key:`${id}:${target.head}`,review_group_key:target.source_group.key,review_source_selector:selector,review_source_item:id,review_source_run:null,review_target:target,review_round_cap:1,review_cutover:reviewCutoff(found.index.boundary)}}],
     result:{result:'review_queued',review_item:id,source_item:id,head:target.head,existing:false}};

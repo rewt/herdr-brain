@@ -1,5 +1,5 @@
 // Canonical non-session service producer into the EXISTING record inbox.
-import fs from 'node:fs';
+import fs from '../lib/record-observation.mjs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { transact } from '../lib/store.mjs';

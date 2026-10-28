@@ -1,5 +1,5 @@
 // A recorded canonical-main boundary, never a timestamp or admission HEAD.
-import fs from 'node:fs';
+import fs from '../lib/record-observation.mjs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';

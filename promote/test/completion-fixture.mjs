@@ -24,7 +24,13 @@ export function fixture(t) {
   const env = { ...healthyMemoryEnvironment(fixtureEnvironment()), GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1', SUPERVISOR_INPUT_WAIT_SECONDS: '10', SUPERVISOR_INPUT_CONFIRM_SECONDS: '0.001', SUPERVISOR_INPUT_POLL_SECONDS: '0.001' };
   for (const k of Object.keys(env)) if (/^(LANE_|ORG_|HERDR_|GIT_(DIR|WORK_TREE|INDEX_FILE|COMMON_DIR|CONFIG_COUNT))/.test(k)) delete env[k];
   env.HERDR_MONITOR_FLEET = process.env.HERDR_MONITOR_FLEET;
-  const exec = (command, args, cwd = repo, extraEnv = {}) => spawnSync(command, args, { cwd, env: { ...env, ...extraEnv }, encoding: 'utf8', [commandAllowance]: 60000 });
+  const exec = (command, args, cwd = repo, extraEnv = {}) => {
+    const started = Date.now();
+    process.stderr.write(`completion command start ${JSON.stringify({ command, args, cwd })}\n`);
+    const reply = spawnSync(command, args, { cwd, env: { ...env, ...extraEnv }, encoding: 'utf8', [commandAllowance]: 60000 });
+    process.stderr.write(`completion command end ${JSON.stringify({ args, status: reply.status, elapsed_ms: Date.now() - started })}\n`);
+    return reply;
+  };
   const ok = r => { assert.equal(r.status, 0, r.stderr || r.stdout); return r.stdout.trim(); };
   const git = (args, cwd = repo) => ok(exec('git', args, cwd));
   git(['init', '-qb', 'main']); git(['config', 'user.name', 'Completion']); git(['config', 'user.email', 'completion@example.invalid']);
@@ -39,7 +45,7 @@ export function fixture(t) {
   fs.writeFileSync(path.join(repo, 'base'), 'base'); git(['add', '.']); git(['commit', '-qm', 'Base']);
   const herdr = path.join(root, 'herdr');
   fs.writeFileSync(herdr, `#!${process.execPath}
-const a=process.argv.slice(2);if(a[0]==='agent'&&a[1]==='get')console.log(JSON.stringify({result:{agent:{agent:'claude',agent_status:'idle',pane_id:'fake',terminal_id:${JSON.stringify(path.join(root, 'recipient-terminal'))}}}}));
+const a=process.argv.slice(2);require('fs').appendFileSync(${JSON.stringify(path.join(root, 'herdr-calls.jsonl'))},JSON.stringify({at:new Date().toISOString(),args:a})+'\\n');if(a[0]==='agent'&&a[1]==='get')console.log(JSON.stringify({result:{agent:{agent:'claude',agent_status:'idle',pane_id:'fake',terminal_id:${JSON.stringify(path.join(root, 'recipient-terminal'))}}}}));
 else if(a[0]==='pane'&&a[1]==='read')console.log('────────────────────\\n❯ \\n────────────────────');
 else console.log(JSON.stringify({result:{workspaces:[],agents:[]}}));`, { mode: 0o755 });
   const fault = path.join(root, 'refuse-record'), preload = path.join(root, 'fault.cjs');
@@ -87,7 +93,14 @@ else console.log(JSON.stringify({result:{workspaces:[],agents:[]}}));`, { mode: 
   const gates = () => fs.existsSync(count) ? fs.readFileSync(count, 'utf8').trim().split('\n').length : 0;
   const events = () => fs.readFileSync(path.join(org, 'events.jsonl'), 'utf8').trim().split('\n').map(JSON.parse);
   const workers = promotionWorkers(repo);
-  t.after(async () => { await workers.wait(); await waitForInboxIdle(path.join(org, 'supervisor/inbox.log')); fs.rmSync(root, { recursive: true, force: true }); });
+  t.after(async () => {
+    process.stderr.write(`completion teardown workers ${root}\n`);
+    await workers.wait();
+    process.stderr.write(`completion teardown inbox ${root}\n`);
+    await waitForInboxIdle(path.join(org, 'supervisor/inbox.log'));
+    process.stderr.write(`completion teardown remove ${root}\n`);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
   return { root, repo, org, env, git, record, recover, queue, lane, drain, show, gates, events, fault, members, checker, preload, workers };
 }
 

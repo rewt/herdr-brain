@@ -377,6 +377,7 @@ for (const mode of ['complete', 'missing-member', 'wrong-head', 'reopened', 'new
   f.recover(first, ['note', first.item, 'Inspected change requires a newly prepared receipt']);
   f.drain(); assert.equal((f.queue.load().interrupted ?? []).length, 1);
   manualRecovery(f, rows, mode);
+  process.stderr.write(`completion manual reconciled ${mode} ${f.root}\n`);
   if (mode === 'missing-member' || mode === 'wrong-head') {
     f.drain(); assert.equal(f.gates(), 1); assert.equal((f.queue.load().interrupted ?? []).length, 1);
     assert.equal(fs.readFileSync(receipt + '.record.json', 'utf8'), original);
@@ -396,11 +397,14 @@ for (const mode of ['complete', 'missing-member', 'wrong-head', 'reopened', 'new
     const reply = JSON.parse(retry.stdout);
     assert.equal(reply.result, 'resuming_completion');
     f.workers.remember(reply);
+    process.stderr.write(`completion manual worker wait ${JSON.stringify(reply)}\n`);
     await f.workers.wait();
+    process.stderr.write(`completion manual worker finished ${f.root}\n`);
     assert.equal(f.queue.load().current, null, 'normal resume worker completes bookkeeping');
   } else f.drain();
   assert.ok(fs.existsSync(second.workspace), 'native bookkeeping cannot tail the separate manual completion');
   finishManualCloseout(f);
+  process.stderr.write(`completion manual closeout finished ${f.root}\n`);
   assert.equal(f.gates(), 1); assert.equal((f.queue.load().interrupted ?? []).length, 0);
   assert.equal(fs.readFileSync(receipt + '.record.json', 'utf8'), original);
   assert.deepEqual(JSON.parse(fs.readFileSync(receipt)).attempts, attempts);

@@ -146,7 +146,7 @@ export function fixture(t, { source = rootTool, actor = 'settle-test-agent', exe
   const show = (id) => JSON.parse(record(['show', id, '--json']));
   const report = (id, outcome = 'done', { artifacts = ['work.txt'], body = 'Claim: work.txt contains correct.' } = {}) => fs.writeFileSync(show(id).report_path, `---\nrun: ${id}\noutcome: ${outcome}\nsummary: The worker says the work is correct.\nheadline: The work is correct\nblockers: ${outcome === 'done' ? '[]' : '["A scope decision is needed"]'}\nproposals: []\nartifacts: ${artifacts.length ? `\n${artifacts.map(entry => `  - ${JSON.stringify(entry)}`).join('\n')}` : '[]'}\n---\n\n${body}\n`);
   const commit = (text) => { fs.writeFileSync(path.join(workspace, 'work.txt'), text); git(['add', 'work.txt'], workspace); git(['commit', '-qm', 'Implement work'], workspace); };
-  fs.writeFileSync(path.join(bin, 'herdr'), fake, { mode: 0o755 });
+  fs.writeFileSync(path.join(bin, 'herdr'), fake(workspace), { mode: 0o755 });
   const settle = (id, args = []) => exec(process.execPath, [path.join(source, 'settle/settle.mjs'), id, '--brief', brief, ...args]);
   const retry = (id, args = []) => exec(process.execPath, [path.join(source, 'settle/settle.mjs'), id, '--retry', ...args]);
   // Recovery witnesses request their ONE formal fix explicitly after the
@@ -172,7 +172,7 @@ export function fixture(t, { source = rootTool, actor = 'settle-test-agent', exe
 }
 // The fake and its foreground owner must use the same interpreter, even when
 // PATH selects a different Node in the fixture's scratch directory.
-const fake = `#!${process.execPath}
+const fake = workspace => `#!${process.execPath}
 import fs from 'node:fs'; import path from 'node:path'; import {execFileSync} from 'node:child_process';
 const {lookupProcess}=await import(path.join(path.dirname(process.env.SETTLE_TEST_RECORD),'../lib/processes.mjs'));
 const root=process.env.SETTLE_TEST_ROOT, repo=path.join(root,'project'), cwd=path.join(root,'lane'), args=process.argv.slice(2);

@@ -5,7 +5,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { setup, events, effects, lanes } from './helpers/closeout-fixture.mjs';
 import { fixture as dispatchFixture } from '../dispatch/test/dispatch-fixture.mjs';
-import { completionSession, completedSession } from '../lib/completion-session.mjs';
+import { completionSession, completedSession, closedSessionCompletion } from '../lib/completion-session.mjs';
 import { resumeSource } from '../dispatch/resume-source.mjs';
 import { fold } from '../lib/state.mjs';
 import { fold as olderFold } from './fixtures/state-v0.mjs';
@@ -156,4 +156,12 @@ test('conflicting session bindings never become a resumable completion identity'
   const state = { sessionBindings: new Map([['R-1', [{ session }, { session: 'other' }]]]) };
   assert.equal(completionSession(run, state).agent_session_id, null);
   assert.equal(completedSession([], session), null);
+});
+
+test('a linked reviewer completion retains its own native conversation and family', () => {
+  const run = { id: 'R-1', workspace: '/saved/lane', meta: { harness: 'codex', agent_session_id: session, lane: 'topic' } };
+  const reviewer = '01a173a6-8116-7051-a945-b630511218de';
+  const closed = closedSessionCompletion(run, {}, { session: reviewer, harness: 'claude', workspace: '/saved/lane', branch: 'lane/topic' });
+  assert.equal(closed.agent_session_id, reviewer); assert.equal(closed.harness, 'claude');
+  assert.deepEqual(closed.resume, { workspace: '/saved/lane', lane: 'topic', branch: 'lane/topic' });
 });

@@ -136,6 +136,9 @@ test('a capped first file frees admission while a concurrent peer and every queu
   const timeout = result.rows.find(row => row.kind === 'file' && row.reason === 'file-timeout');
   assert.ok(timeout, JSON.stringify(result.rows));
   const owned = JSON.parse(fs.readFileSync(entered, 'utf8'));
+  const beforeYield = Buffer.from(owned.partial.beforeYield, 'base64');
+  t.diagnostic(JSON.stringify({ partial: { original_boundary_stdout_bytes: beforeYield.length,
+    original_boundary_pass_serialized: beforeYield.includes(Buffer.from('test:pass')), retained_prefix: owned.partial.tap } }));
   const evidence = [];
   for (const file of files) {
     const reference = result.references.find(row => row.file === file);
@@ -150,7 +153,10 @@ test('a capped first file frees admission while a concurrent peer and every queu
     assert.equal(start.depth, suite.depth);
     assert.equal(finishes.length, 1, file);
     const failed = file === blocked || file === crash;
-    assert.equal(finishes[0].exit_code, failed ? 1 : 0, file);
+    // file-timing observes the in-process exit hook. A self-signal can arrive
+    // after that hook reports zero; the native completion below must still
+    // fail with SIGTERM and retain the entire crash diagnostic.
+    if (file !== crash) assert.equal(finishes[0].exit_code, failed ? 1 : 0, file);
     assert.equal(reference.exit_code, failed ? 1 : 0, file);
     if (!failed) assert.match(tap, /# pass 1\n# fail 0\n/);
     if (file === blocked) {
@@ -171,7 +177,8 @@ test('a capped first file frees admission while a concurrent peer and every queu
       assert.ok(Date.parse(start.at) < Date.parse(timeout.at), 'peer must already be running at the cap');
       assert.ok(Date.parse(finishes[0].at) > Date.parse(timeout.at), 'peer must complete after the cap');
     }
-    evidence.push({ file: path.basename(file), exit_code: reference.exit_code, tap_bytes: Buffer.byteLength(tap), start: start.at, finish: finishes[0].at });
+    evidence.push({ file: path.basename(file), exit_code: reference.exit_code, timing_exit_code: finishes[0].exit_code,
+      ...(reference.failure?.signal ? { signal: reference.failure.signal } : {}), tap_bytes: Buffer.byteLength(tap), start: start.at, finish: finishes[0].at });
   }
   const reaped = { file: owned.file, worker: owned.worker, fixture: owned.fixture };
   for (const pid of Object.values(reaped)) {
@@ -179,10 +186,7 @@ test('a capped first file frees admission while a concurrent peer and every queu
     assert.equal(current.ok, true, current.error);
     assert.ok(!current.value || /^Z/.test(current.value.state), `capped file descendant ${pid} survived`);
   }
-  const beforeYield = Buffer.from(owned.partial.beforeYield, 'base64');
-  t.diagnostic(JSON.stringify({ cap_ms: 5000, concurrency: 2, result: result.code, timeout, crash_stderr_bytes: Buffer.byteLength(diagnostic), reaped,
-    partial: { original_boundary_stdout_bytes: beforeYield.length, original_boundary_pass_serialized: beforeYield.includes(Buffer.from('test:pass')),
-      retained_prefix: owned.partial.tap }, files: evidence }));
+  t.diagnostic(JSON.stringify({ cap_ms: 5000, concurrency: 2, result: result.code, timeout, crash_stderr_bytes: Buffer.byteLength(diagnostic), reaped, files: evidence }));
 });
 
 test('independent file reporters retain admission limits, name selection and successful output', async t => {

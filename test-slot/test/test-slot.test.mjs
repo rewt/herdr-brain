@@ -614,10 +614,17 @@ describe('workspace configuration and timeout retry', () => {
   for (const [tier, failedStep, expected] of [
     ['promotion', 'test:promotion:core', ['test:slot', 'test:promotion:core', 'test:promotion:core', 'test:promotion:lanes', 'test:promotion:logic']],
     ['release', 'test:core', ['test:slot', 'test:core', 'test:core', 'test:cycle', 'test:lanes', 'test:acceptance', 'test:release:only']],
-  ]) it(`${tier} retries only the timed-out heavy step and continues the remaining steps once`, async () => {
-    const s = scratch(), count = s.file('steps'), preload = s.file('load.mjs');
+  ]) for (const leafRetries of [false, true]) it(leafRetries
+    ? `${tier} retries only the timed-out heavy step with explicit leaf opt-in and continues the remaining steps once`
+    : `${tier} keeps active recipes single-attempt without replaying completed steps`, async () => {
+    const s = scratch(), count = s.file('steps'), preload = s.file('load.mjs'), result = s.file('result.json');
     fs.writeFileSync(preload, "import os from 'node:os';os.loadavg=()=>[1000,1000,1000];");
     const scripts = JSON.parse(fs.readFileSync(path.join(REPO, 'package.json'), 'utf8')).scripts;
+    // Active recipes deliberately omit retries. Exercise the optional leaf
+    // contract separately, without enabling a retry on the containing adapter.
+    if (leafRetries) for (const name of ['test', `test:${tier}:steps`]) {
+      scripts[name] = scripts[name].replaceAll(' -- npm run ', ' --retry-timeout-under-load -- npm run ');
+    }
     fs.writeFileSync(s.file('npm'), `#!${process.execPath}
 const fs=require('fs'),file=${JSON.stringify(count)},name=process.argv[3];
 if(process.argv[2]==='test'){const r=require('child_process').spawnSync('/bin/sh',['-c',${JSON.stringify(scripts.test)}],{stdio:'inherit',env:process.env,timeout:10000});process.exit(r.status??1);}
@@ -626,12 +633,13 @@ fs.appendFileSync(file,name+'\\n');
 process.exit(name===${JSON.stringify(failedStep)}&&!previous.includes(${JSON.stringify(failedStep)})?124:0);
 `, { mode: 0o755 });
     const steps = scripts[`test:${tier}:steps`];
-    const done = await cli(['run', `${tier} adapter`, '--lock-path', s.lockPath, '--retry-timeout-under-load',
+    const done = await cli(['run', `${tier} adapter`, '--lock-path', s.lockPath, '--result-path', result,
       '--', '/bin/sh', '-c', steps], { env: { ...ENV, PATH: `${s.dir}:${ENV.PATH}`, NODE_OPTIONS: `--import=${preload}` } }).done;
-    assert.equal(done.code, 0, done.stderr);
+    assert.equal(done.code, leafRetries ? 0 : 124, done.stderr);
     assert.deepEqual(fs.readFileSync(count, 'utf8').trim().split('\n'),
-      expected);
-    assert.equal((done.stderr.match(/TEST_SLOT_TIMEOUT_RETRY:/g) ?? []).length, 1);
+      leafRetries ? expected : ['test:slot', failedStep]);
+    assert.equal((done.stderr.match(/TEST_SLOT_TIMEOUT_RETRY:/g) ?? []).length, leafRetries ? 1 : 0);
+    assert.equal(JSON.parse(fs.readFileSync(result, 'utf8')).attempts, 1, 'the containing adapter never replays the chain');
     assert.equal(fs.existsSync(s.lockPath), false);
   });
 

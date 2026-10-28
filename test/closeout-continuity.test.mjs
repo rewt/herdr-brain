@@ -15,10 +15,27 @@ import { createLineService as createMeasuredLineService, sourceRoot } from '../l
 const createLineService=options=>createMeasuredLineService({...options,closeoutMeasure:()=>{}});
 import { closeoutEvaluations } from '../lib/closeout.mjs';
 import { readCloseoutObservations, appendCloseoutObservation } from '../lib/closeout-diagnostics.mjs';
-import { closeoutWaitId, closeoutWaitState, registerCloseoutWait } from '../lib/closeout-status.mjs';
+import { closeoutWaitId, closeoutWaitState, registerCloseoutWait, nativeCloseoutWait } from '../lib/closeout-status.mjs';
 import { obsoleteOutcomeDecision } from '../line-service/outcome-decision.mjs';
 import { unresolvedCloseoutEffect } from '../lib/closeout.mjs';
 import { events, setup, evaluations, effects, retainNativeOutcome } from './helpers/closeout-fixture.mjs';
+
+// Spend the target's allowance after the ownership locks are held. An already
+// expired allowance is rejected at lock entry, before any target is evaluated.
+function drainWithSpentTargetBudget(f,key) {
+  const now=Date.now,command=f.options.command,deadline=now()+60000;
+  let spent=false;
+  f.options.command=(exe,args,opt)=>{
+    const result=command(exe,args,opt);
+    if(!spent&&exe===f.job.herdr){spent=true;Date.now=()=>deadline;}
+    return result;
+  };
+  let result;
+  try{result=f.drain({keys:[key],retirementOptions:{...f.options,deadline}});}
+  finally{Date.now=now;f.options.command=command;}
+  assert.equal(spent,true,'the target reached native observation before its budget expired');
+  return result;
+}
 
 test('phase1 conditional source completion binds one real landed worktree removal without promotion callback',t=>{
   const f=setup(t,{occupied:false});f.git(['merge','--ff-only',f.head]);f.report();
@@ -30,16 +47,18 @@ test('phase1 conditional source completion binds one real landed worktree remova
 test('phase1 deadline-deferred closeout retries its original unattempted target and exits once with a fresh budget',t=>{
   const f=setup(t,{merged:true});f.report();const rows=f.append([{type:'item.closed',id:'ENG-1',as:'done',completed_run:'R-1'}]),entry=rows[0].closeout_targets.find(t=>t.signal==='landed');
   const bytes=fs.readFileSync(f.eventFile);
-  const first=f.drain({keys:[entry.key],retirementOptions:{...f.options,deadline:Date.now()-1}});
+  assert.throws(()=>f.drain({keys:[entry.key],retirementOptions:{...f.options,deadline:Date.now()-1}}),{code:'RETIREMENT_DEADLINE'});
+  assert.deepEqual(fs.readFileSync(f.eventFile),bytes,'expired lock entry evaluates no target');assert.deepEqual(f.read().actions,[]);
+  const first=drainWithSpentTargetBudget(f,entry.key);
   assert.equal(first.evaluated[0].completed,false);assert.match(first.evaluated[0].reason,/deadline/);assert.equal(effects(f).some(e=>e.action==='agent-exit-requested'),false);
   assert.equal(first.evaluated[0].diagnostic,true);assert.deepEqual(fs.readFileSync(f.eventFile).subarray(0,bytes.length),bytes);
-  const wait=events(f).find(e=>e.type==='closeout.waiting'&&e.key===entry.key);
-  assert.equal(closeoutWaitState(wait,events(f)),'defect');
-  assert.match(wait.waiting.defect,/deadline/);
+  assert.equal(first.evaluated[0].condition.kind,'pre-effect-budget');
+  assert.equal(first.evaluated[0].condition.continuation.kind,'pre-effect-observation');
+  assert.equal(events(f).some(e=>e.type==='closeout.waiting'&&e.key===entry.key),false,'the closer owns its fresh budget; no outside completion is invented');
   const deferredBytes=fs.readFileSync(f.eventFile);
   assert.equal(readCloseoutObservations(f.common,f.org,events(f)).length,1);
   assert.deepEqual(f.drain({keys:[entry.key]}).evaluated,[],'restart suppresses the unchanged observation');
-  assert.deepEqual(fs.readFileSync(f.eventFile),deferredBytes,'unchanged restart adds no duplicate wait');
+  assert.deepEqual(fs.readFileSync(f.eventFile),deferredBytes,'unchanged restart adds no wait');
   const next=f.drain({keys:[entry.key],retrySafe:true});assert.equal(next.evaluated[0]?.completed,true,JSON.stringify(next));
   assert.equal(f.read().actions.filter(a=>a[0]==='agent'&&a[1]==='prompt').length,1);assert.equal(fs.existsSync(f.lane),false);
 });
@@ -148,8 +167,9 @@ test('retirement phase retains original unknown exits and a fresh service STOP b
 
 test('phase1 deadline retry retains the original pending native exit without evaluation or readback',t=>{
   const f=setup(t,{merged:true});f.report();const rows=f.append([{type:'item.closed',id:'ENG-1',as:'done',completed_run:'R-1'}]),entry={...rows[0].closeout_targets.find(t=>t.signal==='landed'),source:{seq:rows[0].seq,type:'item.closed'}};
-  f.drain({keys:[entry.key],retirementOptions:{...f.options,deadline:Date.now()-1}});
-  f.append([{type:'closeout.effect',key:entry.key,identity:f.common,run:'R-1',item:'ENG-1',source:{seq:rows[0].seq,type:'item.closed'},effect:'fixture-original-exit-intent',outcome:{action:'agent-exit-requested',run:'R-1',pane:'w:p',tab_id:'w:t',occupant:['worker','codex','w:p','w',f.lane,'term','session'],shell:{pid:1,identity:'shell',command:'[zsh]'}}}]);
+  const deferred=drainWithSpentTargetBudget(f,entry.key);assert.equal(deferred.evaluated[0]?.condition.kind,'pre-effect-budget');
+  const intent='fixture-original-exit-intent',outcome={action:'agent-exit-requested',run:'R-1',pane:'w:p',tab_id:'w:t',occupant:['worker','codex','w:p','w',f.lane,'term','session'],shell:{pid:1,identity:'shell',command:'[zsh]'}};
+  f.append([{type:'closeout.effect',key:entry.key,identity:f.common,run:'R-1',item:'ENG-1',source:entry.source,effect:intent,producer:'native-closeout/v2',outcome},nativeCloseoutWait(entry,outcome,intent)]);
   const retained=retainNativeOutcome(f,entry),prior=evaluations(f);
   assert.deepEqual(f.drain({keys:[entry.key],retrySafe:true}).evaluated,[]);retained();
   f.append([{type:'closeout.retry',identity:f.common,keys:[entry.key],why:'fixture manual retry cannot resolve the original native intent'}]);
@@ -271,13 +291,16 @@ test('flood backlog current refusal decisions stay owned while changed or unlink
   assert.equal(obsoleteOutcomeDecision({meta:{uncertain_outcome:{key:'other',check:{key:'dispatch:ENG-9:input'}}}},view()),null,'non-cleanup outcome decisions keep their existing path');
 });
 
-test('session_bound supersession binds its predecessor once under the current and historical event names',t=>{
+test('session_bound supersession preserves its already-bound predecessor under the current and historical event names',t=>{
   const f=setup(t,{merged:true});f.report();const key=closeoutKey(fs.realpathSync(f.lane),'R-1','ready');
+  const original=readCloseoutEntries(f.common).find(e=>e.key===key),file=path.join(f.common,'closeout/entries',key+'.json'),bytes=fs.readFileSync(file);
+  assert.deepEqual(original.panes.map(p=>[p.run,p.session]),[['R-1','session']]);
   f.append([{type:'run.started',id:'R-2',item:'ENG-1',workspace:f.lane,meta:{lane:'topic'}}]);
   for(const type of ['run.session_bound','run.session_bound','run.session-bound']){
     const [bound]=f.append([{type,run:'R-2',session:{agent_session_id:'later'}}]);
-    assert.deepEqual(bound.closeout_targets.map(t=>[t.run,t.signal,t.key]),[['R-1','ready',key]],type);
-    assert.ok(bound.closeout_targets[0].panes.every(p=>p.run==='R-1'),'no successor identity is fabricated');
+    assert.deepEqual(bound.closeout_targets,[],`${type}: the original source already owns its target`);
+    assert.deepEqual(fs.readFileSync(file),bytes,'no successor identity or new source replaces the original target');
+    assert.deepEqual(readCloseoutEntries(f.common).find(e=>e.key===key),original);
     assert.equal(readCloseoutEntries(f.common).filter(e=>e.run==='R-1'&&e.signal==='ready').length,1,type);
   }
   assert.ok(closeoutRevision(readCloseoutEntries(f.common).find(e=>e.key===key),events(f))>events(f).find(e=>e.type==='report.ingested').seq);

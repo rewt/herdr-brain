@@ -588,10 +588,14 @@ test('phase1 deadline-deferred closeout retries its original unattempted target 
   const bytes=fs.readFileSync(f.eventFile);
   const first=f.drain({keys:[entry.key],retirementOptions:{...f.options,deadline:Date.now()-1}});
   assert.equal(first.evaluated[0].completed,false);assert.match(first.evaluated[0].reason,/deadline/);assert.equal(effects(f).some(e=>e.action==='agent-exit-requested'),false);
-  assert.equal(first.evaluated[0].diagnostic,true);assert.deepEqual(fs.readFileSync(f.eventFile),bytes);
+  assert.equal(first.evaluated[0].diagnostic,true);assert.deepEqual(fs.readFileSync(f.eventFile).subarray(0,bytes.length),bytes);
+  const wait=events(f).find(e=>e.type==='closeout.waiting'&&e.key===entry.key);
+  assert.equal(closeoutWaitState(wait,events(f)),'defect');
+  assert.match(wait.waiting.defect,/deadline/);
+  const deferredBytes=fs.readFileSync(f.eventFile);
   assert.equal(readCloseoutObservations(f.common,f.org,events(f)).length,1);
   assert.deepEqual(f.drain({keys:[entry.key]}).evaluated,[],'restart suppresses the unchanged observation');
-  assert.deepEqual(fs.readFileSync(f.eventFile),bytes);
+  assert.deepEqual(fs.readFileSync(f.eventFile),deferredBytes,'unchanged restart adds no duplicate wait');
   const next=f.drain({keys:[entry.key],retrySafe:true});assert.equal(next.evaluated[0]?.completed,true,JSON.stringify(next));
   assert.equal(f.read().actions.filter(a=>a[0]==='agent'&&a[1]==='prompt').length,1);assert.equal(fs.existsSync(f.lane),false);
 });
@@ -940,8 +944,11 @@ test(`automatic report stays opt-in; default landing/named policy (${config === 
   assert.equal(source.report.outcome, 'done');
   if (config?.retirement?.closeout_queue) {
     assert.equal(source.closeout_targets.length, 1);
+    assert.equal(source.closeout_targets[0].reportCloseout,true);
+    assert.deepEqual(readCloseoutEntries(f.common),[],'direct report wakeup creates no per-allocation queue file');
     await waitForChange([f.eventFile], () => evaluations(f).length && !fs.existsSync(path.join(f.common, 'closeout/consumer.lock')));
     assert.ok(f.herdrCalls().some(a => a[0] === 'workspace' && a[1] === 'list'));
+    assert.deepEqual(readCloseoutEntries(f.common),[]);
   } else {
     assert.equal(source.closeout_targets, undefined);
     assert.deepEqual(readCloseoutEntries(f.common), []);

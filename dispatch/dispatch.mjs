@@ -259,8 +259,28 @@ function unlandedAdmission(request, { requireLink = false } = {}) {
   const { config } = loadDiscoveredRoutes({ cwd: request.repo });
   return checkSourceAdmission({ config, org: request.org, common: request.common, request, requireLink });
 }
-function requestStarts() {
-  return loadEvents(job.org).events.filter(event => event.type === 'run.started' && matchesDispatchStart(event, { ...job, journal }));
+function requestStarts(request = job) {
+  return loadEvents(request.org).events.filter(event => event.type === 'run.started' && matchesDispatchStart(event, { ...request, journal }));
+}
+function originalUnclaimedStart(saved, run) {
+  // A start can commit before its first claim does. This is continuation of
+  // that exact pre-native request, never admission of arbitrary legacy work.
+  if (run.owner || saved.stage !== 'starting' || saved.run !== run.id || saved.ownership ||
+      !saved.release || saved.native_launch_attempted !== false || saved.worker || saved.launchProcess ||
+      saved.sessionBinding || saved.watcher || run.report || run.abandoned ||
+      ['agent', 'pane', 'worker_workspace', 'terminal_id', 'agent_session_id'].some(key => run.meta?.[key] != null)) return false;
+  const starts = requestStarts(saved), start = starts[0];
+  return starts.length === 1 && start.id === run.id && start.meta.dispatch_record === saved.org &&
+    start.meta.lane === saved.lane && start.meta.route === saved.route &&
+    (start.meta.dispatch_from_run ?? null) === (saved.fromRun ?? null) &&
+    (start.meta.dispatch_unblocks ?? null) === (saved.unblocks ?? null) &&
+    Object.entries(saved.declared).every(([key, value]) => (start.meta[key] ?? null) === value) &&
+    fs.realpathSync(start.workspace) === fs.realpathSync(saved.workspace) &&
+    run.item === saved.item && fs.realpathSync(run.workspace) === fs.realpathSync(saved.workspace);
+}
+function retryCommand() {
+  return [process.execPath, local('./dispatch.mjs'), '--repo', job.repo, '--org', job.org,
+    '--retry', job.run ?? journal].map(quote).join(' ');
 }
 function prepareSessionBinding(run) {
   const binding = job.sessionBinding;
@@ -381,8 +401,9 @@ async function main() {
       if(!preflight)throw Error('original preflight has no positive original prelaunch continuation; retain unknown/native/foreign/spent request');
     }
     const boundRun = saved.run ?? saved.fromRun;
-    if (boundRun) {
-      const binding = requireController(readOwnedRun(saved.org, boundRun), opt.controller);
+    const owned = boundRun && readOwnedRun(saved.org, boundRun);
+    if (owned && !originalUnclaimedStart(saved, owned)) {
+      const binding = requireController(owned, opt.controller);
       if (saved.ownership && saved.ownership.generation !== binding.generation) throw new Error('RUN_OWNED_ELSEWHERE: dispatch receipt has an earlier claim');
       const target = binding.owner.release.root;
       if (target !== bundleRelease().root) {
@@ -845,9 +866,10 @@ catch (error) {
       job.failure={...outcomeFailure(error),kind:['DISPATCH_SESSION_CAP','DISPATCH_REVIEW_CAP','DISPATCH_DECISION_CAP'].includes(error.code)?'capacity':outcomeFailure(error).kind,stage:job.stage,observed_at:new Date().toISOString(),native_launch_attempted:job.native_launch_attempted??null,...(error.sessions?{capacity:error.sessions}:{}),...(error.launch_input?{launch_input:error.launch_input}:{})};
       if(job.detached&&!job.native_launch_attempted&&!job.worker&&!['starting','launching','prompting'].includes(job.stage))job.detached_refused=true;
       save();
-      if (job.run) try { note(`incomplete at ${job.stage}: ${error.message}; retry with --retry ${job.run}`); } catch {}
+      if (job.run) try { note(`incomplete at ${job.stage}: ${error.message}; retry with ${retryCommand()}`); } catch {}
     }
-    process.stderr.write(`dispatch: ${error.message}${journal ? `\nrequest: ${journal}` : ''}\n`);
+    const retry = job && journal && ownsLock ? retryCommand() : undefined;
+    process.stderr.write(`dispatch: ${error.message}${journal ? `\nrequest: ${journal}` : ''}${retry ? `\nretry: ${retry}` : ''}\n`);
     if (error.code === 'DISPATCH_STOPPED') {
       process.stdout.write(`${JSON.stringify({ result: 'stopped', run: job.run, item: job.item, lane: job.lane,
         reason: error.message, stage: job.stage, journal })}\n`);
@@ -862,7 +884,7 @@ catch (error) {
     } else {
       // Coordinators inherit stderr for live waits; retain failure evidence on
       // their captured stdout as well, including failures before a journal exists.
-      process.stdout.write(`${JSON.stringify({ result: 'failed', code: dispatchCodes.has(error.code) ? error.code : 'DISPATCH_FAILED', reason: error.message, journal })}\n`);
+      process.stdout.write(`${JSON.stringify({ result: 'failed', code: dispatchCodes.has(error.code) ? error.code : 'DISPATCH_FAILED', reason: error.message, journal, ...(retry ? { retry } : {}) })}\n`);
       process.exitCode = 1;
     }
   }

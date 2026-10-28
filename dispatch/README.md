@@ -533,6 +533,12 @@ retry reports that fact and clears its saved PID; another retry re-arms it witho
 replaying the prompt. A live saved watcher is retained. Watch's per-run lock
 refuses duplicate watchers, including one whose acknowledgement was lost.
 
+Record start, worker receipt and claim preparation use the record's bounded
+pre-append conflict retry: an ordinary concurrent append refreshes the record
+and rechecks authority before any effect. No native launch or prompt is replayed.
+Failures print a quoted retry command with the original repository and record;
+before a run exists it selects the saved journal instead of a run ID.
+
 Some failures cannot be safely retried by guessing:
 
 - A lost `record start` result leaves `starting`. Retry reconciles the item's
@@ -543,6 +549,12 @@ Some failures cannot be safely retried by guessing:
   and `--recover-run R-n`; dispatch never guesses or creates another run in
   those cases. A committed run's missing brief is restored by `record brief`
   before worker launch.
+- An interrupted first claim can also leave `starting` with a saved run ID.
+  Retry by that run or journal finishes admission only for one matching original
+  immutable start, with the same project, record, route and workspace and positive
+  evidence that no native launch occurred. It retains the saved release. Claimed
+  work still requires its controller and exact saved claim generation; foreign,
+  abandoned, ambiguous or previously launched work is never admitted this way.
 - Failed/lost worker launch leaves `launching`. Inspect Herdr, then use
   `--adopt AGENT` for the worker that actually started, or `--fresh` to explicitly
   authorize another launch after checking the first attempt. Adoption verifies

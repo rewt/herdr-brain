@@ -115,7 +115,7 @@ export function reviewCorrectionEvents({ state, events, run, review, report, fin
           capability: proposal?.capability ?? null,
           title: proposal?.title ?? `${severity === 'major' ? 'Fix' : 'Follow up'} ${source} at ${target.head.slice(0, 10)}: ${selected[0].text.slice(0, 120)}`,
           parent: review.id, from_run: run.id, accept: proposal?.accept ?? selected.map(row => row.text),
-          why: proposal?.why ?? selected.map(row => row.text).join('\n'), meta: { ...proposal?.extra, ...meta } });
+          why: proposal?.why ?? selected.map(row => row.text).join('\n'), meta: { ...proposal?.extra, ...meta, queue_selected:true } });
       } else if (!historical.meta.review_fix_of) {
         add.push({ type: 'item.updated', id, fields: { meta } });
       }

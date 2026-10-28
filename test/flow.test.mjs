@@ -327,6 +327,7 @@ learnings:
   assert.match(first, /ENG-1 is now blocked/);
   assert.match(ok(['sync']), /nothing to record/);
 
+  ok(['set', 'ARCH-1', 'meta.queue_selected=true']);
   ok(['start', 'ARCH-1', '--harness', 'codex', '--model', 'gpt-5'], { now: '2026-09-15T10:00:00Z' });
   const brief2 = fs.readFileSync(path.join(dir, 'runs/R-2/brief.md'), 'utf8');
   assert.match(brief2, /ENG-1 needs it/);
@@ -354,12 +355,13 @@ proposals:
     title: Independent review of ENG-1
     blocking: false`));
   const reviewIngest = ok(['sync'], { now: '2026-09-15T12:00:00Z' });
-  assert.match(reviewIngest, /\+ REV-1 "Independent review of ENG-1" \(reviewer\) blocks ENG-1/);
+  assert.match(reviewIngest, /\+ REV-1 "Independent review of ENG-1" \(reviewer\)/);
+  assert.doesNotMatch(reviewIngest, /blocks ENG-1/);
 
   const status = ok(['status'], { now: '2026-09-15T12:05:00Z' });
-  assert.match(status, /G-1\s+Rate limiting shipped\s+1 done · 1 blocked · 1 ready/);
-  assert.match(status, /READY\n\s+REV-1\s+Independent review of ENG-1/);
-  assert.match(status, /BLOCKED\n\s+ENG-1 .*← REV-1 ready/);
+  assert.match(status, /G-1\s+Rate limiting shipped\s+2 done · 1 proposed/);
+  assert.match(status, /PROPOSAL NOTES\n\s+REV-1\s+Independent review of ENG-1/);
+  assert.doesNotMatch(status, /BLOCKED\n\s+ENG-1/);
 
   const snap = ok(['snapshot'], { now: '2026-09-15T12:05:00Z' });
   assert.match(snap, /## Decisions\n- ARCH-1 .*SQLite for rate-limit state/);
@@ -557,9 +559,10 @@ proposals:
   - architect: Decide storage
   - researcher: Measure latency`));
   ok(['sync']);
+  ok(['set', 'ARCH-1', 'meta.queue_selected=true']);
   ok(['start', 'ARCH-1']);
   const brief = fs.readFileSync(path.join(dir, 'runs/R-2/brief.md'), 'utf8');
-  assert.match(brief, /Related items \(same parent\)\n- \*\*RES-1\*\* Measure latency — ready/);
+  assert.match(brief, /Related items \(same parent\)\n- \*\*RES-1\*\* Measure latency — proposed/);
   assert.match(brief, /full report: `record show R-1`/);
 });
 

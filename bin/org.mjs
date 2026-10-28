@@ -20,6 +20,7 @@ import { requestRetirement } from '../lib/retire-trigger.mjs';
 import { bindCloseoutSources, publishCloseoutEvents } from '../lib/closeout.mjs';
 import { lessonProposal, lessonsJson } from '../lib/lessons.mjs';
 import { readReport } from '../lib/report.mjs';
+import { proposalIntakeEvents, proposalSelection } from '../lib/proposal-intake.mjs';
 import { completionSession } from '../lib/completion-session.mjs';
 import { approvalPolicy, CATEGORY_CHECKLIST, categoryFlag, categoryFlagText, reportCategoryFlags } from '../lib/discernment.mjs';
 import { sanitizeTerminal } from '../lib/sanitize.mjs';
@@ -54,6 +55,11 @@ Work
   record add <title> [--goal] [--role R] [--capability C] [--parent ID]
           [--blocked-by ID]... [--accept TEXT]... [--priority N] [--budget key=N]...
   record queue-review R-n|canonical:SHA [--head SHA --base SHA]  idempotent landed-source review item
+  record proposals file R-n --index N     reuse an immutable report proposal
+  record proposals metrics               daily filing and ever-run cohorts (UTC)
+  record proposals token ID               current proposal/dependency version
+  record proposals lapse ID --cut selection|release --expect TOKEN --why TEXT
+  record proposals duplicate ID --into ID --key KEY --expect TOKEN --successor-expect TOKEN --why TEXT
   record block <ID> --by <ID>             record that --by blocks ID
   record unblock <ID> --by <ID>           remove that blocking link
   record note <ID> <text> [--decision [--summary TEXT]]
@@ -625,6 +631,7 @@ function close(argv) {
   const { added, result } = mutate(openOrg(), (s, events) => {
     const item = requireItem(s, id);
     if (item.meta.operator_reserved && writer().actor !== 'human') throw new UserError('release questions are reserved for the operator');
+    if (proposalSelection(item) && proposalSelection(item) !== 'selected') throw new UserError('unselected proposal records require explicit selection or an owning proposal disposition');
     if (values['if-current-run'] !== undefined) {
       const runId = values['if-current-run'];
       requireCurrentRun(s, id, runId);
@@ -711,6 +718,7 @@ function start(argv) {
   const { result } = mutate(ctx, (s) => {
     const item = requireItem(s, id);
     if (item.meta.operator_reserved && writer().actor !== 'human') throw new UserError('release questions are reserved for the operator');
+    if (proposalSelection(item) && proposalSelection(item) !== 'selected') throw new UserError('select the proposal separately with meta.queue_selected=true before starting work');
     if (values['if-current-run'] !== undefined) {
       requireCurrentRun(s, id, values['if-current-run']);
       if (item.closed) throw new UserError(`${id} is closed; conditional start needs supervisor judgment`);
@@ -829,22 +837,14 @@ async function ingestFile(ctx, file, runHint, currentRun) {
     for (const flag of categoryFlags) events.push({ type: 'category.flagged', id: run.item, run: runId, ...flag });
     const taken = new Set();
     const created = [];
-    const queuedReview=s.items.get(run.item)?.meta.review_key;
-    const correctionIntake=queuedReview&&roleIs(s.items.get(run.item),'REV')&&s.items.get(run.item).meta.review_target&&s.items.get(run.item).meta.review_source_item;
-    for (const p of report.proposals) {
-      if(queuedReview&&roleIs(p,'REV'))throw new UserError('a landed-change review cannot propose another review; retain cap1 and use linked engineer correction');
-      if(correctionIntake&&roleIs(p,'ENG'))continue;
-      const id = nextItemId(s, { kind: 'work', role: p.role }, taken);
-      taken.add(id);
-      events.push({
-        type: 'item.added', id, kind: 'work', title: p.title, role: p.role ?? null, capability: p.capability ?? null,
-        parent: run.item, accept: p.accept ?? [], why: p.why ?? null, from_run: runId, meta: { ...(p.extra??{}),...(queuedReview&&roleIs(p,'ENG')?{review_fix_of:queuedReview,review_owner_run:s.items.get(run.item).meta.review_source_run,review_source_item:s.items.get(run.item).meta.review_source_item,review_round_cap:1}:{}) },
-      });
-      const blocking = p.blocking ?? report.outcome === 'blocked';
-      if (blocking) events.push({ type: 'link.added', blocker: id, blocked: run.item, from_run: runId });
-      const reviewHold = s.items.get(run.item)?.kind === 'work' && roleIs(p, 'REV');
-      created.push({ id, title: p.title, role: p.role, blocking, reviewHold });
+    const proposals = proposalIntakeEvents({ state:s, events:committedEvents, run, report, sha256 });
+    for (const e of proposals) if (e.type === 'item.added') {
+      taken.add(e.id);
+      created.push({ id:e.id, title:e.title, role:e.role,
+        blocking:proposals.some(l=>l.type==='link.added'&&l.blocker===e.id&&l.blocked===run.item),
+        reviewHold:false });
     }
+    events.push(...proposals);
     const reviewFacts=reviewResultEvents({state:s,events:committedEvents,run,report,sha256,body:parsed.body,usedIds:taken});
     for(const e of reviewFacts)if(e.type==='item.added')created.push({id:e.id,title:e.title,role:e.role,
       blocking:reviewFacts.some(link=>link.type==='link.added'&&link.blocker===e.id&&link.blocked===run.item),reviewHold:false});
@@ -1062,7 +1062,9 @@ const COMMANDS = {
   'complete-batch': argv => completeBatchCommand(argv, { openOrg, mutate, out }),
   releases: argv => releasesCommand(argv, { openOrg, out }),
   handoffs: argv => handoffsCommand(argv, { openOrg, mutate, out }),
-  init, add, 'queue-review': queueReview, block, unblock: (argv) => block(argv, true), note, ask, answer, set, close, reopen,
+  init, add, 'queue-review': queueReview,
+  proposals: async argv => (await import('../lib/proposals-command.mjs')).proposalsCommand(argv, { openOrg, mutate, out }),
+  block, unblock: (argv) => block(argv, true), note, ask, answer, set, close, reopen,
   start, worker, check, ingest, sync, abandon, brief, status, snapshot, show, log, today,
   // Module views load only when used, so a fault in one of them cannot break every record command.
   claim: lazy('../lib/run-owner.mjs', 'claimCommand'),

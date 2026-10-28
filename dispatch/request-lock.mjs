@@ -8,7 +8,17 @@ export function lockRequest(journal,{kill=process.kill}={}){
   fs.mkdirSync(directory,{recursive:true});fs.writeFileSync(contender,'',{flag:'wx',mode:0o600});let owned=false;
   const busy=pid=>Error(`dispatch is already running (pid ${pid})`);
   const gone=pid=>{if(!Number.isInteger(pid)||pid<1)throw Error('invalid dispatch lock owner; inspect request lock');try{kill(pid,0);return false;}catch(e){if(e.code!=='ESRCH')throw e;return true;}};
+  const ticketFor=file=>{try{const value=fs.readFileSync(file,'utf8');return /^[1-9]\d*$/.test(value)?BigInt(value):0n;}catch(e){if(e.code==='ENOENT')return null;throw e;}};
   try{
+    // Publish a ticket before probing any owner. A later arrival must follow
+    // an already-checking contender even when PID/name ordering wraps around.
+    // Empty/legacy peers are still choosing; wait for publication or ESRCH.
+    let ticket=1n;
+    for(const entry of fs.readdirSync(directory)){
+      const file=directory+'/'+entry;if(file===contender)continue;
+      const peer=ticketFor(file);if(peer!==null&&peer>=ticket)ticket=peer+1n;
+    }
+    fs.writeFileSync(contender,String(ticket),{flag:'r+'});
     const deadline=Date.now()+loadTimeout(5000),pause=new Int32Array(new SharedArrayBuffer(4));
     for(;;){
       // An established owner never participates in contender arbitration.
@@ -17,12 +27,12 @@ export function lockRequest(journal,{kill=process.kill}={}){
       for(const entry of fs.readdirSync(directory)){
         const file=directory+'/'+entry;if(file===contender)continue;
         // A losing contender may have withdrawn since the directory snapshot.
-        try{fs.lstatSync(file);}catch(e){if(e.code==='ENOENT')continue;throw e;}
+        const peer=ticketFor(file);if(peer===null)continue;
         const pid=Number(entry.split('-')[0]);
         if(gone(pid)){try{fs.unlinkSync(file);}catch(e){if(e.code!=='ENOENT')throw e;}continue;}
-        // Lower names stay published while higher names withdraw. Never ignore
-        // a live peer: doing so could race another stale-lock recovery.
-        if(entry<name||pid===process.pid)throw busy(pid);
+        // Earlier tickets stay published while later ones withdraw. Equal
+        // tickets use stable names; an unfinished publication cannot be ignored.
+        if(pid===process.pid||peer!==0n&&(peer<ticket||peer===ticket&&entry<name))throw busy(pid);
         waiting=pid;
       }
       if(waiting===undefined)break;

@@ -98,6 +98,26 @@ test('descriptor policy reads retain their path and detect a post-read replaceme
   assert.equal(observation.value, 'old'); assert.throws(observation.validate, /observation conflict/);
 });
 
+test('exact path fences refuse a retargeted ancestor even when both paths name the same inode', t => {
+  const f = fixture(t), left = path.join(f.root, 'left'), right = path.join(f.root, 'right'), alias = path.join(f.root, 'alias');
+  fs.mkdirSync(left); fs.mkdirSync(right);
+  fs.writeFileSync(path.join(left, 'policy'), 'same bytes');
+  fs.linkSync(path.join(left, 'policy'), path.join(right, 'policy'));
+  fs.symlinkSync(left, alias);
+  const observation = captureReads(() => observed.readFileSync(path.join(alias, 'policy'), 'utf8'));
+  fs.unlinkSync(alias); fs.symlinkSync(right, alias);
+  assert.equal(fs.statSync(path.join(left, 'policy')).ino, fs.statSync(path.join(right, 'policy')).ino);
+  assert.throws(observation.validate, /observation conflict/);
+});
+
+test('exact path fences resolve unicode and chained symlinks without caching later validation', t => {
+  const f = fixture(t), target = path.join(f.root, 'policy-λ'), first = path.join(f.root, 'first'), second = path.join(f.root, 'second');
+  fs.writeFileSync(target, 'original'); fs.symlinkSync(target, first); fs.symlinkSync(first, second);
+  const observation = captureReads(() => observed.readFileSync(new URL(`file://${second}`), 'utf8'));
+  observation.validate(); fs.writeFileSync(target, 'changed!');
+  assert.throws(observation.validate, /observation conflict/);
+});
+
 test('Git inputs fence a moved HEAD and a newly created reference before append', t => {
   const f = fixture(t); f.git(['init', '-qb', 'main']);
   const observation = captureReads(() => observeGit(f.root));

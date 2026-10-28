@@ -195,10 +195,12 @@ function mutate(ctx, fn, authority) {
   }
   // Event derivation and read-only guards precede the append lock. Intake and
   // queue-review defer their immutable/native effects to the final commit hook.
-  const planned = new Set(['add', 'block', 'unblock', 'note', 'ask', 'answer', 'set', 'close', 'reopen', 'start', 'worker', 'abandon', 'lesson', 'ingest', 'sync', 'queue-review']);
+  const planned = new Set(['add', 'block', 'unblock', 'note', 'ask', 'answer', 'set', 'close', 'reopen', 'start', 'worker', 'abandon', 'lesson', 'ingest', 'sync', 'queue-review', 'messages']);
   // Only event derivation may refresh on a race. Commit hooks never replay;
   // nested configuration audits also revoke replay permission in the store.
-  const replaySafe = !process.env.ORG_GUARD_OVERRIDE;
+  // Message preparation includes its fresh native sender observation. It may
+  // precede acquisition, but a record/file race must never replay that lookup.
+  const replaySafe = process.argv[2] !== 'messages' && !process.env.ORG_GUARD_OVERRIDE;
   const transaction = planned.has(process.argv[2]) ? planTransaction : transact;
   const res = transaction(ctx.dir, (events, state) => {
     return bindCloseoutSources({ org: ctx.dir, events, mutation: protectRecordMutation({ org: ctx.dir, events, state, mutation: fn(state, events), command: process.argv[2], ...authority }) });

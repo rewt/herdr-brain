@@ -10,6 +10,7 @@ import {claimRun,fenceOwner} from '../lib/run-owner.mjs';
 import {ownWorktreeGuard} from '../promote/own-worktree.mjs';
 import {preparePromotionGuard,withPromotionGuards} from '../promote/guard.mjs';
 import {fixtureFleet} from './helpers/offline-herdr.mjs';
+import {recordOwnLanding} from '../lib/landing-receipt.mjs';
 
 function fixture(t,{git=false}={}) {
   const root=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'record-outer-'))),org=path.join(root,'.org'),lock=path.join(org,'lock');
@@ -95,6 +96,28 @@ test('native own promotion observes its worker outside the record lock and refus
   guard(()=>assert.equal(fs.existsSync(f.lock),true));assert.equal(calls,2);
   atLock(t,f,()=>fs.appendFileSync(f.file,JSON.stringify({seq:4,type:'item.updated',id:'ENG-1',fields:{meta:{hold:true}}})+'\n'));
   assert.throws(()=>guard(()=>assert.fail('raced native effect')),/guard conflict/);assert.equal(calls,3);
+});
+
+test('native own promotion and landing receipts retain the newest non-abandoned owner only',t=>{
+  const f=fixture(t,{git:true}),identity=path.join(f.root,'.git'),base=f.git(['rev-parse','HEAD']);
+  fs.writeFileSync(path.join(f.root,'owned-source'),'owned');f.git(['add','owned-source']);f.git(['commit','-qm','Owned source']);
+  const head=f.git(['rev-parse','HEAD']),native={name:'worker',pane_id:'pane',workspace_id:'workspace',terminal_id:'term',cwd:f.root,agent_session:{value:'sid'}},
+    owner={controller:'brain',legacy:false,release:{id:'source',root:f.root,commit:null,identity}},
+    env={...process.env,ORG_DIR:f.org,HERDR_ENV:'1',HERDR_PANE_ID:'pane',HERDR_WORKSPACE_ID:'workspace',CODEX_THREAD_ID:'sid'},
+    call=()=>{assert.equal(fs.existsSync(f.lock),false);return JSON.stringify({result:{agent:native}});};
+  transact(f.org,()=>({add:[{type:'item.added',id:'ENG-1',kind:'work',role:'engineer',title:'Fixture'},
+    {type:'run.started',id:'R-1',item:'ENG-1',workspace:f.root,meta:{lane:'topic',agent:'worker',pane:'pane',worker_workspace:'workspace',terminal_id:'term',agent_session_id:'sid'}},
+    {type:'run.claimed',run:'R-1',record:f.org,project:identity,owner},
+    {type:'run.started',id:'R-2',item:'ENG-1',workspace:f.root},
+    {type:'run.abandoned',id:'R-2',why:'Duplicate abandoned without replacing the actual worker'}]}));
+  const guard=ownWorktreeGuard({canonical:f.root,identity,workspace:f.root,topic:'topic',env,call});
+  guard(()=>assert.equal(fs.existsSync(f.lock),true));
+  const receipt=recordOwnLanding({canonical:f.root,workspace:f.root,base,head,landedAt:new Date().toISOString(),env,call});
+  assert.equal(receipt.recorded,true);assert.equal(receipt.changes.length,1);assert.equal(receipt.changes[0].run,'R-1');
+  transact(f.org,()=>({add:[{type:'run.started',id:'R-3',item:'ENG-1',workspace:f.root}]}));
+  assert.throws(()=>guard(()=>assert.fail('superseded owner')),/one active owning native worker/);
+  assert.throws(()=>recordOwnLanding({canonical:f.root,workspace:f.root,base,head,landedAt:new Date().toISOString(),env,call}),/ownership is missing\/ambiguous/);
+  assert.equal(loadEvents(f.org).events.filter(e=>e.type==='change.landed').length,1);
 });
 test('prepared promotion refuses a late Git ref or STOP without executing FF',t=>{
   const f=fixture(t,{git:true}),head=f.git(['rev-parse','HEAD']),args={canonical:f.root,identity:path.join(f.root,'.git'),workspace:f.root,topic:'topic',expectedHead:head};

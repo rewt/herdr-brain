@@ -22,7 +22,8 @@ export function ownWorktreeGuard({ canonical, identity, workspace, topic, env = 
     const native = binding.native;
     const matches = [...state.runs.values()].filter(run => {
       const item = state.items.get(run.item), worker = effectiveWorkerIdentity(run, state);
-      return item?.kind === 'work' && item.role === 'engineer' && item.runs.at(-1) === run.id &&
+      return item?.kind === 'work' && item.role === 'engineer' &&
+        item.runs.findLast(id => !state.runs.get(id)?.abandoned) === run.id &&
         !item.closed && !item.meta.operator_reserved && !run.abandoned && !run.report &&
         run.workspace && (!run.meta.lane || run.meta.lane === topic) && !worker.identity_conflict &&
         worker.agent === native.name && worker.pane === native.pane_id &&

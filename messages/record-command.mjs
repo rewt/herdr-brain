@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import { parseArgs } from 'node:util';
 import { parseEvent } from './schema.mjs';
-import { nativeSender, makeEnvelope, prepareEnvelope, recordMessages, pushReserved, operatorDigest } from './operator-inbox.mjs';
+import { nativeSender, makeEnvelope, prepareEnvelope, recordMessages, reservedQuestion, pushReserved, operatorDigest } from './operator-inbox.mjs';
 import { renderOperatorDigest } from '../lib/render.mjs';
 import { UserError, loadEvents } from '../lib/store.mjs';
 import { fold } from '../lib/state.mjs';
@@ -44,8 +44,15 @@ export async function messagesCommand(argv, { openOrg, mutate, out }) {
   // Re-read source/question/native binding at the distinct transport boundary.
   let push;
   try {
-    const binding = nativeSender(ctx.dir), { events } = loadEvents(ctx.dir);
-    push = await pushReserved(envelope, binding, fold(events));
+    const state = fold(loadEvents(ctx.dir).events);
+    if (!reservedQuestion(envelope, state, fs.realpathSync(ctx.dir))) {
+      // Recording already checked the actual sender and exact claim/source.
+      // With no transport effect, no second native observation is necessary.
+      push = { state: 'record-only', reason: 'no pending explicitly operator-reserved question' };
+    } else {
+      const binding = nativeSender(ctx.dir), { events } = loadEvents(ctx.dir);
+      push = await pushReserved(envelope, binding, fold(events));
+    }
   } catch (error) { push = { state: 'held', error: error.message }; }
   out(JSON.stringify({ id: envelope.eventId, recorded: true, push }) + '\n');
   return push.error ? 1 : 0;

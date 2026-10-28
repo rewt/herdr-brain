@@ -40,6 +40,10 @@ const root=${JSON.stringify(root)}, inbox=${JSON.stringify(inbox)}, a=process.ar
 const targets=JSON.parse(fs.readFileSync(root+'/targets','utf8')), mode=fs.existsSync(root+'/mode')?fs.readFileSync(root+'/mode','utf8'):'';
 fs.appendFileSync(root+'/calls',JSON.stringify(a)+'\\n');
 if(a[0]==='agent'&&a[1]==='get') {
+ if(fs.existsSync(root+'/outside-lock')) {
+  if(fs.existsSync(root+'/.org/lock')) {console.error('native preparation ran under record lock');process.exit(3);}
+  if(mode==='native-refused') {console.error(JSON.stringify({error:{code:'agent_blocked'}}));process.exit(1);}
+ }
  if(fs.existsSync(root+'/slow-read')) {fs.unlinkSync(root+'/slow-read');Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,1100);}
  const agent=targets[a[2]];
  if(mode==='changed-final'&&a[2]==='brain-chat'&&fs.existsSync(inbox)&&fs.readFileSync(inbox,'utf8').trim().split('\\n').map(JSON.parse).at(-1)?.type==='sending') agent.agent_session.value='replacement';
@@ -222,6 +226,45 @@ test('operator plain wording sends authored content through the actual CLI with 
   const changed = [...args]; changed[changed.indexOf('--details') + 1] = 'Different details';
   assert.match(run(changed).stderr, /different content or target/);
   assert.equal(fs.readFileSync(path.join(f.org, 'events.jsonl'), 'utf8'), before);
+});
+
+test('message preparation runs once outside the lock and record-only output needs no transport lookup', t => {
+  const f = fixture(t); fs.writeFileSync(path.join(f.root, 'outside-lock'), '');
+  const result = spawnSync(process.execPath, [cli, 'messages', 'send', '--id', 'prepared', '--summary', 'Progress', '--run', 'R-1', '--item', 'ENG-1'], { cwd: f.root, env: f.env, encoding: 'utf8' });
+  assert.equal(result.status, 0, result.stderr); assert.equal(JSON.parse(result.stdout).push.state, 'record-only');
+  const calls = fs.readFileSync(path.join(f.root, 'calls'), 'utf8').trim().split('\n').map(JSON.parse);
+  assert.deepEqual(calls, [['agent', 'get', 'fake:p1']]); assert.equal(recordMessages(loadEvents(f.org).events).length, 1);
+});
+
+for (const race of ['claim', 'hold', 'unknown', 'file']) test(`message preparation refuses a late ${race} without replaying its native lookup`, t => {
+  const f = fixture(t); fs.writeFileSync(path.join(f.root, 'outside-lock'), '');
+  const hook = path.join(f.root, 'at-lock.mjs');
+  fs.writeFileSync(hook, `import fs from 'node:fs'; const mkdir=fs.mkdirSync; fs.mkdirSync=function(file,...args){const value=mkdir.call(this,file,...args); if(file===${JSON.stringify(path.join(f.org, 'lock'))}) {
+    ${race === 'file' ? `fs.appendFileSync(${JSON.stringify(path.join(f.root, '.identity-root'))},'changed');` : `const log=${JSON.stringify(path.join(f.org, 'events.jsonl'))},events=fs.readFileSync(log,'utf8').trim().split('\\n').map(JSON.parse); fs.appendFileSync(log,JSON.stringify({seq:events.at(-1).seq+1,...${JSON.stringify(race === 'claim' ? { type: 'run.updated', id: 'R-1', meta: { agent_session_id: 'replacement' } } : race === 'hold' ? { type: 'item.updated', id: 'ENG-1', fields: { meta: { hold: true } } } : { type: 'future.unknown' })}})+'\\n');`}
+  }return value;};`);
+  const result = spawnSync(process.execPath, ['--import', hook, cli, 'messages', 'send', '--id', `race-${race}`, '--summary', 'Progress', '--run', 'R-1', '--item', 'ENG-1'], { cwd: f.root, env: f.env, encoding: 'utf8' });
+  assert.notEqual(result.status, 0); assert.match(result.stderr, /record (planning|observation) conflict/);
+  assert.equal(recordMessages(loadEvents(f.org).events).length, 0);
+  assert.deepEqual(fs.readFileSync(path.join(f.root, 'calls'), 'utf8').trim().split('\n').map(JSON.parse), [['agent', 'get', 'fake:p1']]);
+});
+
+test('message preparation preserves a native refusal without acquiring or retrying', t => {
+  const f = fixture(t); fs.writeFileSync(path.join(f.root, 'outside-lock'), ''); fs.writeFileSync(path.join(f.root, 'mode'), 'native-refused');
+  const before = fs.readFileSync(path.join(f.org, 'record-lock.timings.jsonl'), 'utf8');
+  const result = spawnSync(process.execPath, [cli, 'messages', 'send', '--id', 'refused', '--summary', 'Progress', '--run', 'R-1'], { cwd: f.root, env: f.env, encoding: 'utf8' });
+  assert.notEqual(result.status, 0); assert.match(result.stderr, /agent_blocked/);
+  assert.equal(fs.readFileSync(path.join(f.org, 'record-lock.timings.jsonl'), 'utf8'), before);
+  assert.equal(recordMessages(loadEvents(f.org).events).length, 0);
+  assert.equal(fs.readFileSync(path.join(f.root, 'calls'), 'utf8').trim().split('\n').length, 1);
+});
+
+test('message preparation keeps the distinct fresh native boundary for a pending reserved question', t => {
+  const f = fixture(t), hook = path.join(f.root, 'after-lock.mjs');
+  fs.writeFileSync(hook, `import fs from 'node:fs';const remove=fs.rmSync;fs.rmSync=function(file,...args){const result=remove.call(this,file,...args);if(file===${JSON.stringify(path.join(f.org, 'lock'))})process.env.HERDR_ENV='0';return result;};`);
+  const result = spawnSync(process.execPath, ['--import', hook, cli, 'messages', 'send', '--id', 'reserved-boundary', '--summary', 'A choice is waiting', '--kind', 'question', '--question', 'HUM-1', '--run', 'R-1'], { cwd: f.root, env: f.env, encoding: 'utf8' });
+  assert.notEqual(result.status, 0); const reply = JSON.parse(result.stdout);
+  assert.equal(reply.recorded, true); assert.equal(reply.push.state, 'held'); assert.match(reply.push.error, /native caller binding is missing/);
+  assert.equal(recordMessages(loadEvents(f.org).events).length, 1); assert.deepEqual(readInbox(f.inbox), []); assert.deepEqual(f.sent(), []);
 });
 
 test('operator plain wording renders legacy technical summaries honestly without opening bodies or changing bytes', t => {

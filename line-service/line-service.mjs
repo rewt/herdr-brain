@@ -26,6 +26,9 @@ import { roleIs } from '../lib/roles.mjs';
 import { recordLineNotice,canonicalFailure } from './record-inbox.mjs';
 import { enqueueNamedDecision } from './decision-wake.mjs';
 import { canonical } from '../messages/schema.mjs';
+import {bundleRelease} from '../lib/releases.mjs';
+import {serviceSource,acceptedRuntime} from './runtime.mjs';
+import {installedContext} from './cutoff.mjs';
 import { discoverChanges,dispatchInput,phase0Boundary,morningDigest,recordReviewResults,reviewCompletionPlan,recordReviewCompletion,ensureReviewBoundary,canonicalReviewIndex,observeReviewHealth } from './phase1.mjs';
 import {preflightContinuation,initialCapacityRefusal,initialBriefRefusal} from '../dispatch/preflight.mjs';
 import {createWorkerBrief,projectExceptionAddress} from '../lib/worker-brief.mjs';
@@ -99,7 +102,7 @@ export function routeFor(item, config) {
 
 export function createLineService({ repo, org, to, herdr = 'herdr', env = process.env, command = foregroundCommand,
   recordNotice = recordLineNotice, wakeDecision = enqueueNamedDecision, capacity, identify = gitProject, now = () => new Date().toISOString(),
-  childTimeoutMs=120000,maxStarts,maxStepsPerStage=8,passBudgetMs=480000,alertAfter=3,haltAfter=Number(env.HERDR_LINE_HALT_PASSES??3),workClock=()=>performance.now() }) {
+  childTimeoutMs=120000,maxStarts,maxStepsPerStage=8,passBudgetMs=480000,alertAfter=3,haltAfter=Number(env.HERDR_LINE_HALT_PASSES??3),workClock=()=>performance.now(),runtimeHome }) {
   if(!Number.isSafeInteger(haltAfter)||haltAfter<1)throw Error('halt repair threshold must be a positive completed-pass count');
   const project = identify(repo);
   if (project.checkout !== project.canonical) throw Error('line service requires the canonical project checkout');
@@ -138,6 +141,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
     if (timings) timings.snapshots++;
     const live = identify(repo);
     if (live.identity !== project.identity || live.canonical !== repo) throw Error('project identity changed');
+    if(bundleRelease().commit)acceptedRuntime(repo,{verifyFiles:false,home:runtimeHome});
     if (fs.existsSync(path.join(directory, 'STOP')) || fs.existsSync(path.join(repo, '.lane/supervisor/STOP')) || fs.existsSync(path.join(repo, '.lane/supervisor/HOLD'))) throw Error('STOP/HOLD prevents line-service effects');
     const loaded = loadRecord(org);
     if (loaded.tornTail) throw Error('incomplete record tail');
@@ -226,7 +230,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         if (entry.state === 'held') note(key, entry.error);
         return entry;
       };
-      log({ action: 'pass-start', pid: process.pid, identity: project.identity, source: sourceRoot,source_head:sourceGit(sourceRoot,['rev-parse','HEAD']) });
+      log({ action: 'pass-start', pid: process.pid, identity: project.identity, source: sourceRoot,source_head:bundleRelease().commit??sourceGit(sourceRoot,['rev-parse','HEAD']) });
       try { snapshot = current(); } catch (e) { log({ action: 'pass-held', reason: e.message }); return { held: e.message, directory }; }
       let intakeSteps=0;
       for (const run of snapshot.state.runs.values()) {
@@ -609,7 +613,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
   return { pass, directory, log };
 }
 
-export async function main(argv = process.argv.slice(2)) {
+export async function main(argv = process.argv.slice(2), {home}={}) {
   const { values } = parseArgs({ args: argv, usage: 'line-service.mjs --once --repo CANONICAL --org RECORD --to SUPERVISOR', options: {
     once: { type: 'boolean' },digest:{type:'boolean'},since:{type:'string'}, repo: { type: 'string' }, org: { type: 'string' }, to: { type: 'string' }, herdr: { type: 'string' },
   } });
@@ -622,9 +626,9 @@ export async function main(argv = process.argv.slice(2)) {
     process.stdout.write(JSON.stringify(morningDigest({events:loadEvents(values.org).events,diagnostics,since:values.since}),null,2)+'\n');return;
   }
   if (!values.once || !values.repo) throw Error('use --once --repo CANONICAL; launchd owns the schedule');
-  const source = gitProject(sourceRoot);
-  if (source.checkout !== source.canonical) throw Error('live line service must use the canonical development source');
-  const service = createLineService(values);
+  serviceSource(values.repo,{home});
+  installedContext(values.repo,values.org??findOrgDir({cwd:values.repo,env:{...process.env,ORG_DIR:''}}));
+  const service = createLineService({...values,runtimeHome:home});
   const result = service.pass();
   process.stdout.write(JSON.stringify(result) + '\n');
 }

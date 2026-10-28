@@ -12,6 +12,7 @@ import { acquireLock } from '../lanes/promotion-lock.mjs';
 import { noticeLock } from '../supervisor/notice-lock.mjs';
 import { loadDiscoveredRoutes } from '../lanes/routes.mjs';
 import { bundleRelease } from '../lib/releases.mjs';
+import {migratedCutover} from './runtime.mjs';
 
 export const developmentRoot=fs.realpathSync(fileURLToPath(new URL('../',import.meta.url)));
 const hash=v=>createHash('sha256').update(v).digest('hex');
@@ -32,6 +33,7 @@ export function lineContext(repo,org) {
 export function installedContext(repo,org) {
   const c=lineContext(repo,org),file=path.join(c.directory,'installation.json'),installation=regularJSON(file);
   if(!installation||installation.repo!==c.repo||installation.org!==c.org||fs.realpathSync(installation.source)!==developmentRoot||installation.file!==path.join(c.directory,'service.plist')||installation.node!==process.execPath||installation.target!==`gui/${process.getuid()}/dev.herdr.line.${path.basename(c.directory)}`)throw Error('service installation binding is UNKNOWN');
+  if(installation.migration)serviceCutoff(loadEvents(c.org).events,{repo:c.repo,org:c.org,identity:c.identity});
   return {...c,installation,installationFile:file};
 }
 const reject=message=>{throw Object.assign(Error(message),{code:'REVIEW_CUTOFF'});};
@@ -39,7 +41,12 @@ export function serviceCutoff(events,{repo,org,identity}) {
   const found=events.filter(e=>e.type==='line-service.cutover'&&e.project===identity&&e.org===org);
   if(found.length!==1)reject('durable service cutover is missing/ambiguous; historical review remains held');
   const e=found[0];
-  if(e.repo!==repo||e.source!==developmentRoot||!Number.isSafeInteger(e.seq)||e.seq<1||!e.id||!/^[a-f0-9]{40}(?:[a-f0-9]{24})?$/.test(e.canonical_head??'')||!e.main)reject('service cutover binding is UNKNOWN');
+  if(e.repo!==repo||!Number.isSafeInteger(e.seq)||e.seq<1||!e.id||!/^[a-f0-9]{40}(?:[a-f0-9]{24})?$/.test(e.canonical_head??'')||!e.main)reject('service cutover binding is UNKNOWN');
+  if(e.source!==developmentRoot){
+    const directory=lineDirectory(org,identity),installation=regularJSON(path.join(directory,'installation.json'));
+    if(!installation||installation.source!==developmentRoot||installation.repo!==repo||installation.org!==org)reject('service cutover binding is UNKNOWN');
+    migratedCutover(events,{repo,org,identity,directory,installation,cutover:e});
+  }
   return e;
 }
 export function postCutoffLanding({events,repo,org,identity,head}) {

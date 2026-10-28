@@ -5,27 +5,33 @@ import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { gitProject } from '../lib/project.mjs';
 import { findOrgDir, writeFileAtomic,loadEvents } from '../lib/store.mjs';
-import { serviceCutoff } from './cutoff.mjs';
+import { serviceCutoff,installedContext } from './cutoff.mjs';
 import { parseArgs, isMain } from '../lib/cli-help.mjs';
 import { sourceRoot, serviceDirectory } from './line-service.mjs';
+import {serviceSource} from './runtime.mjs';
+import {migrateRuntime} from './migrate-runtime.mjs';
+import {nativeSender} from '../messages/operator-inbox.mjs';
+import {noticeLock} from '../supervisor/notice-lock.mjs';
+import {acquireLock} from '../lanes/promotion-lock.mjs';
 
-const xml = value => String(value).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' })[c]);
-export function launchPlist({ label, repo, org, to, herdr, socket, directory, interval = 30, node = process.execPath, searchPath = process.env.PATH }) {
-  if (!Number.isSafeInteger(interval) || interval < 1) throw Error('interval must be positive integer seconds');
-  const args = [node, path.join(sourceRoot, 'line-service/line-service.mjs'), '--once', '--repo', repo, '--org', org, '--to', to, '--herdr', herdr];
-  // Only transport/executable locations. Never copy a caller's pane/SID/claims.
-  const env = { PATH: `${path.dirname(node)}:${path.dirname(herdr)}:${searchPath ?? '/usr/bin:/bin'}`, HERDR_SOCKET_PATH: socket };
-  return `<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0"><dict>\n<key>Label</key><string>${xml(label)}</string>\n<key>ProgramArguments</key><array>${args.map(a => `<string>${xml(a)}</string>`).join('')}</array>\n<key>WorkingDirectory</key><string>${xml(repo)}</string>\n<key>EnvironmentVariables</key><dict>${Object.entries(env).map(([k, v]) => `<key>${xml(k)}</key><string>${xml(v)}</string>`).join('')}</dict>\n<key>StartInterval</key><integer>${interval}</integer>\n<key>RunAtLoad</key><true/>\n<key>StandardOutPath</key><string>${xml(path.join(directory, 'launchd.log'))}</string>\n<key>StandardErrorPath</key><string>${xml(path.join(directory, 'launchd.error.log'))}</string>\n</dict></plist>\n`;
-}
+import {launchPlist} from './plist.mjs';
+export {launchPlist} from './plist.mjs';
 
-export function main(argv = process.argv.slice(2), { command = spawnSync } = {}) {
+export function main(argv = process.argv.slice(2), { command = spawnSync,call:nativeCall,home,cwd=process.cwd(),env=process.env } = {}) {
   const { positionals, values: v } = parseArgs({ args: argv, allowPositionals: true,
-    usage: 'launchd.mjs install|restart|status|stop|revert --repo CANONICAL [--org RECORD --to SUPERVISOR --herdr ABS_PATH --socket ABS_PATH --interval 30 --commit SHA]', options: {
+    usage: 'launchd.mjs install|migrate|restart|status|stop|revert --repo CANONICAL [--org RECORD --id MIGRATION --dry-run --expected-plan SHA256 --to SUPERVISOR --herdr ABS_PATH --socket ABS_PATH --interval 30 --commit SHA]', options: {
       repo: { type: 'string' }, org: { type: 'string' }, to: { type: 'string' }, herdr: { type: 'string' }, socket: { type: 'string' },
       interval: { type: 'string' }, commit: { type: 'string', multiple: true },
+      id:{type:'string'},'dry-run':{type:'boolean'},
+      'expected-plan':{type:'string'},
     } });
   const action = positionals[0];
-  if (positionals.length !== 1 || !['install', 'restart', 'status', 'stop', 'revert'].includes(action) || !v.repo) throw Error('name install|restart|status|stop|revert and --repo CANONICAL');
+  if (positionals.length !== 1 || !['install','migrate', 'restart', 'status', 'stop', 'revert'].includes(action) || !v.repo) throw Error('name install|migrate|restart|status|stop|revert and --repo CANONICAL');
+  if(action!=='migrate'&&(v.id||v['dry-run']||v['expected-plan']))throw Error('--id/--dry-run/--expected-plan apply only to migrate');
+  if(action==='migrate'){
+    if(v.to||v.herdr||v.socket||v.interval||v.commit)throw Error('migration preserves saved bindings; no install/revert options');
+    return migrateRuntime({repo:v.repo,org:v.org??findOrgDir({cwd:v.repo,env:{...env,ORG_DIR:''}}),id:v.id,dryRun:v['dry-run'],expectedPlan:v['expected-plan'],command,call:nativeCall,home,cwd,env});
+  }
   const project = gitProject(v.repo), repo = project.canonical;
   if (project.checkout !== repo) throw Error('service control requires the canonical project checkout');
   const discovered = findOrgDir({ cwd: repo, env: { ...process.env, ORG_DIR: '' } });
@@ -38,7 +44,6 @@ export function main(argv = process.argv.slice(2), { command = spawnSync } = {})
     if (r.error || r.status !== 0) throw Error((r.stderr || r.stdout || r.error?.message || `exit ${r.status}`).trim());
     return r.stdout?.trim() ?? '';
   };
-  fs.mkdirSync(directory, { recursive: true });
   const audit = value => {
     const fd = fs.openSync(path.join(directory, 'controls.jsonl'), 'a', 0o600);
     try { fs.writeFileSync(fd, JSON.stringify({ at: new Date().toISOString(), action, target, ...value }) + '\n'); fs.fsyncSync(fd); }
@@ -51,20 +56,39 @@ export function main(argv = process.argv.slice(2), { command = spawnSync } = {})
     throw Error((r.stderr || r.stdout || r.error?.message || `launchctl print exit ${r.status}`).trim());
   };
   if (action === 'status') return { target, directory, stopped: fs.existsSync(stopped), ...inspect() };
+  fs.mkdirSync(directory, { recursive: true });
+  const releaseControl=noticeLock(path.join(directory,'control.lock'),{recover:false});
+  let releasePass,releasePromotion;
+  try{
+    if(action==='install'||action==='restart'){
+      releasePass=noticeLock(path.join(directory,'pass.lock'),{recover:false});
+      releasePromotion=acquireLock(path.join(project.identity,'lane-promote.lock'));
+    }
+    return control();
+  }finally{releasePromotion?.();releasePass?.();releaseControl();}
+  function control(){
+  const bind=()=>{
+    const b=nativeSender(org,{cwd,env,...(nativeCall?{call:nativeCall}:{})});
+    if(b.project.checkout!==repo||b.project.identity!==project.identity)throw Error('service launch requires actual own canonical native supervisor');
+    return {name:b.native.name,pane:b.native.pane_id,workspace:b.native.workspace_id,terminal:b.native.terminal_id,session:b.native.agent_session.value};
+  };
+  let owner;
   if (action === 'install' || action === 'restart') {
     if (process.platform !== 'darwin') throw Error('launchd control requires macOS');
     if (process.version !== 'v20.19.4') throw Error('use the project-pinned Node 20.19.4');
-    if (gitProject(sourceRoot).checkout !== gitProject(sourceRoot).canonical) throw Error('launch from canonical development source');
+    owner=bind();serviceSource(repo,{home});
     if (fs.existsSync(path.join(repo, '.lane/supervisor/STOP')) || fs.existsSync(path.join(repo, '.lane/supervisor/HOLD'))) throw Error('project STOP/HOLD prevents launch');
     const record=loadEvents(org);if(record.tornTail)throw Error('incomplete record prevents launch');
     serviceCutoff(record.events,{repo,org,identity:project.identity});
   }
   if (action === 'restart') {
-    const receipt = readInstallation();
+    const receipt = installedContext(repo,org).installation;
     if (!receipt || receipt.repo !== repo || receipt.org !== org || receipt.target !== target || receipt.file !== file || fs.realpathSync(receipt.source) !== fs.realpathSync(sourceRoot)) throw Error('saved installation binding differs; retain and inspect it');
     if (!fs.lstatSync(file).isFile() || fs.realpathSync(file) !== file) throw Error('saved plist is redirected');
     if (!fs.existsSync(stopped)) throw Error('restart requires this service own STOP; use status/stop first');
     if (inspect().loaded) throw Error('service remains loaded; retain STOP and finish its supported stop before restart');
+    if(JSON.stringify(bind())!==JSON.stringify(owner))throw Error('native service owner changed before restart');
+    serviceSource(repo,{home});
     const archive = path.join(directory, 'stops', `${randomUUID()}.STOP`);
     fs.mkdirSync(path.dirname(archive), { recursive: true });
     audit({ phase: 'starting', stop_archive: archive, installation: path.join(directory, 'installation.json') });
@@ -114,10 +138,8 @@ export function main(argv = process.argv.slice(2), { command = spawnSync } = {})
     return { target, stopped: true, revert: git(['revert', '--no-edit', ...commits]) };
   }
   return { target, stopped: true, directory };
-  function readInstallation() {
-    try { return JSON.parse(fs.readFileSync(path.join(directory, 'installation.json'), 'utf8')); }
-    catch (e) { if (e.code === 'ENOENT') return null; throw e; }
   }
+
 }
 if (isMain(import.meta.url)) try { process.stdout.write(JSON.stringify(main()) + '\n'); }
 catch (e) { process.stderr.write(`line-service: ${e.message}\n`); process.exitCode = 1; }

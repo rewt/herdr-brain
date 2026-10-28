@@ -98,6 +98,89 @@ main CAS/FF and archives remain mandatory. Ordinary lock recovery requires fresh
 positive ESRCH, existing recovery serialization, owner re-read/CAS and original
 owner archive; live, EPERM and unknown stay held. There is no force entry.
 
+### Move a stopped development-source service to an accepted release
+
+The project's **own canonical native supervisor** runs this handoff. Brain's
+maintainer supplies source and offline evidence; it performs no BCH effects.
+The old `rc-20261028-d993883a63` bundle has no migration command. The release
+coordinator must first qualify a release containing this implementation, with
+full final-release coverage, live acceptance and corrected Majors. The project
+owner then adopts that accepted release through its normal pin process. Source
+landing or the fixture tests below do not qualify an installed release or lift
+any existing admission/priority hold.
+
+Keep the service's own STOP throughout migration, with its exact launchd job
+already absent through the supported stop. Project `.lane/supervisor/STOP` and
+`HOLD` still refuse this control. A retained pass/control/promotion lock also
+refuses; this command never probes/reclaims an old owner. Resolve any actual
+native refusal or uncertain owner through its existing owner, not by removing
+files, editing a plist, borrowing an identity or changing saved runtimes.
+
+From the actual canonical project checkout and existing native session, use
+the immutable installed root reported by the project's READY pin. Substitute
+the real project, record, release and a stable migration ID:
+
+```sh
+NODE=/Users/rewt/.nvm/versions/node/v20.19.4/bin/node
+ACCEPTED_ROOT=/ABS/installed/releases/ACCEPTED_RELEASE_WITH_MIGRATION
+"$NODE" "$ACCEPTED_ROOT/line-service/launchd.mjs" status --repo /OWN/CANONICAL --org /OWN/RECORD
+"$NODE" "$ACCEPTED_ROOT/line-service/launchd.mjs" migrate --repo /OWN/CANONICAL --org /OWN/RECORD --id development-to-release --dry-run
+# Copy archive.sha256 from that dry-run's JSON into PLAN_SHA256.
+PLAN_SHA256=EXACT_64_CHARACTER_DRY_RUN_DIGEST
+"$NODE" "$ACCEPTED_ROOT/line-service/launchd.mjs" migrate --repo /OWN/CANONICAL --org /OWN/RECORD --id development-to-release --expected-plan "$PLAN_SHA256"
+```
+
+Dry-run performs read-only native/record/pin/payload checks and writes no files
+or locks. Apply requires its exact plan digest, the same native owner and clean
+canonical main, unchanged installation/plist/STOP, the original cutover, an
+absent launchd job and READY acceptance for the exact fully verified installed
+payload. Drift between planning and application refuses; inspect it before
+planning any new action. No global-current or development-source fallback is
+used. The Node executable must equal the original recorded installation and
+execute Node20.19.4; it is retained rather than upgraded.
+
+The only plist change is the controller entry point in `ProgramArguments[1]`.
+Label, project/record, recipient, Node, Herdr executable, socket, PATH, interval
+and log paths remain the saved values. The installation retains its original
+time/target and records the immutable accepted runtime plus migration archive.
+No install flags are accepted for migration. Original installation/plist bytes
+are fsynced once to `line-service/PROJECT/migrations/ID.json`, then a completed
+`line-service.runtime-migrated` event links that archive to the untouched original
+cutover. Phase0, STOP, saved dispatch/watch/settle/closeout jobs, claims, effects
+and UNKNOWN review attempts are not rewritten. Those jobs keep their recorded
+runtime; only new controller invocations use the installed entry point.
+
+The control takes the existing pass, promotion and record locks plus one
+service-control lock, with no recovery. An interrupted application leaves STOP
+and its immutable intent; either the same ID or another ID refuses replacement
+of an UNKNOWN attempt. A completed exact-ID retry only reads the original
+completion. Partial migration is not authority to restore files by hand or
+retry a native effect. The owner inspects the retained archive and refusal and
+routes any necessary repair through the normal correction path.
+
+Migration never starts a job or archives STOP. After the supervisor's separate
+admission/priority decision and fresh own guards permit launch, restart through
+the **same installed root**:
+
+```sh
+"$NODE" "$ACCEPTED_ROOT/line-service/launchd.mjs" restart --repo /OWN/CANONICAL --org /OWN/RECORD
+"$NODE" "$ACCEPTED_ROOT/line-service/launchd.mjs" status --repo /OWN/CANONICAL --org /OWN/RECORD
+```
+
+Restart validates the completed handoff, installed payload and current project
+pin before its one bootstrap. Its existing STOP archive/restoration and native
+refusal behavior remain. Installed passes no longer require a development Git
+checkout; their source head is the release commit. A changed project pin holds
+future controller effects rather than silently rebinding a saved controller.
+Observe the first real pass's source, queue, capacity and effects using existing
+receipts. Offline controls simulate launchctl in disposable projects and are
+not a BCH restart or live acceptance receipt.
+
+Focused producer selection for this change: `node test/helpers/run.mjs
+test/line-service-runtime.test.mjs` and the existing `launchd uses` control in
+`test/line-service.test.mjs`, through one lane check on clean committed source.
+No full/default suite or reviewer suite is selected here.
+
 The original service cutover remains immutable. Before Phase1 activation, the
 owning native supervisor records its designated intended pre-Phase0 SOURCE
 boundary with the existing stopped-service helper:

@@ -121,3 +121,32 @@ test('correction source keeps foreign unknown and stale-claim owners protected o
     assert.deepEqual(f.read().actions, []);
   }
 });
+
+test('queued review rerun after non-done report keeps captured head', t => {
+  const f = fixture(t, { merged: true, occupied: false });
+  isolatedEnv(t, f);
+  const base = f.git(['rev-parse', `${f.head}^`]), review = path.join(f.scratch, 'review-lane');
+  f.git(['worktree', 'add', '-b', 'lane/review-rev-1', review, f.head]);
+  transact(f.org, () => ({ add: [
+    { type: 'item.added', id: 'REV-1', kind: 'work', role: 'reviewer', meta: { review_source_item: 'ENG-1', review_source_run: 'R-1',
+      review_round_cap: 1, review_key: `ENG-1:${f.head}`, review_target: { base, head: f.head, diff_sha256: 'captured-diff', evidence: 'author-report' } } },
+    { type: 'run.started', id: 'R-5', item: 'REV-1', workspace: review, meta: { lane: 'review-rev-1', route: 'review' } },
+    { type: 'report.ingested', run: 'R-5', report: { outcome: 'blocked', summary: 'reviewer stopped before a verdict' }, sha256: 'blocked-review' },
+  ] }));
+  const advance = () => {
+    fs.appendFileSync(path.join(f.repo, 'seed'), '\nnew integration input');
+    f.git(['commit', '-am', 'advance owning integration']);
+    return f.git(['rev-parse', 'HEAD']);
+  };
+  const current = () => { const events = loadEvents(f.org).events, state = fold(events);
+    return correctionSource({ item: state.items.get('REV-1'), state, events, repo: f.repo, org: f.org }); };
+  assert.notEqual(advance(), f.head);
+  assert.equal(current(), null, 'a queued review is never a fix continuation');
+  // With no correction, dispatch.mjs saves --base (the captured head) and no job.correction.
+  const job = { item: 'REV-1', org: f.org, repo: f.repo, common: f.common, base: f.head };
+  assert.equal(checkDispatchEligibility(job, 'offline-review-boundary').item, 'REV-1');
+  advance();
+  assert.equal(checkDispatchEligibility(job, 'offline-review-boundary').item, 'REV-1', 'a later main move does not refuse the captured review');
+  assert.equal(current(), null);
+  assert.deepEqual(f.read().actions, [], 'no native dispatch or live project effects');
+});

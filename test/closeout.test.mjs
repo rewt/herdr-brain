@@ -269,6 +269,29 @@ test('cleanup tail historical discovery retains working reused foreign unknown d
   }
 });
 
+test('cleanup refresh binds an abandoned kept lane once',t=>{
+  const f=setup(t,{merged:true});transact(f.org,()=>({add:[{type:'run.abandoned',id:'R-1'}]}));
+  fs.writeFileSync(path.join(f.lane,'unique-uncommitted'),'retain');selectCurrentCleanup(f);
+  const lane=fs.realpathSync(f.lane),refresh=()=>refreshCloseouts({cwd:f.repo,org:f.org,env:f.env,retirementOptions:f.options});
+  const bound=()=>events(f).filter(e=>e.type==='cleanup.bound'&&e.run==='R-1'&&e.closeout_targets.some(t=>t.cwd===lane));
+  const first=refresh();assert.equal(first.created.length,1,JSON.stringify(first));
+  const entry=readCloseoutEntries(f.common).find(e=>e.key===first.created[0]),revision=closeoutRevision(entry,events(f));
+  for(let pass=0;pass<3;pass++){
+    const again=refresh();assert.deepEqual(again.created,[],`pass ${pass}: ${JSON.stringify(again)}`);
+    assert.equal(bound().length,1,`pass ${pass}`);assert.equal(closeoutRevision(entry,events(f)),revision,`pass ${pass}`);
+  }
+  const evaluations=()=>events(f).filter(e=>e.type==='closeout.evaluated'&&e.key===entry.key);
+  for(let pass=0;pass<3;pass++){f.drain({keys:[entry.key]});refresh();}
+  assert.equal(bound().length,1);assert.ok(evaluations().filter(e=>e.disposition==='kept').length<=1,JSON.stringify(evaluations()));
+  assert.ok(events(f).filter(e=>e.type==='closeout.kept'&&e.run==='R-1').length<=1);
+  assert.equal(fs.readFileSync(path.join(f.lane,'unique-uncommitted'),'utf8'),'retain','dirty abandoned content stays');
+  const g=setup(t,{merged:true});selectCurrentCleanup(g);
+  transact(g.org,()=>({add:[{type:'report.ingested',run:'R-1',report:{outcome:'blocked'},sha256:'reported'}]}));
+  for(let pass=0;pass<3;pass++)assert.deepEqual(refreshCloseouts({cwd:g.repo,org:g.org,env:g.env,retirementOptions:g.options}).created,[],`reported pass ${pass}`);
+  assert.equal(events(g).some(e=>e.type==='cleanup.bound'),false,'a reported lane takes the direct path');
+  assert.equal(currentCloseoutEntries(g.common,g.org,events(g)).filter(e=>e.reportCloseout&&e.run==='R-1').length,1);
+});
+
 test('cleanup tail fresh binding preserves an exact active settle reference as an executor fence',async t=>{
   const f=historicalTail(t),{refreshCloseouts}=await import('../lib/closeout-consumer.mjs');
   const directory=path.join(f.org,'settle');fs.mkdirSync(directory,{recursive:true});
@@ -824,7 +847,7 @@ test('code handoff unsent then uncertain native retry',t=>{
       return command(exe,args,opt);
     };
     const actual=f.drain({keys:[key],sessionsOnly:!workspace}),all=events(f),attempts=all.filter(e=>e.type==='closeout.effect'&&e.key===key&&e.outcome.action===action),later=attempts.at(-1);
-    assert.equal(actual.evaluated[0]?.completed,false,JSON.stringify(actual));assert.equal(attempts.length,2);assert.notEqual(later.effect,original.effect);
+    assert.equal(actual.evaluated[0]?.completed,false,JSON.stringify({action,first,actual,waits:all.filter(e=>e.type==='closeout.waiting'&&e.key===key).map(e=>e.waiting)}));assert.equal(attempts.length,2);assert.notEqual(later.effect,original.effect);
     const laterWait=waitFor(all,later.effect);assert.ok(laterWait);assert.notEqual(laterWait.wait_id,waitFor(all,original.effect).wait_id);assert.ok(laterWait.seq>later.seq);
     assert.deepEqual(all.find(e=>e.seq===unsent.seq),unsent,'original positive no-start evidence stays immutable');
     assert.equal(closeoutWaitState(waitFor(all,original.effect),all),'complete');assert.equal(closeoutWaitState(laterWait,all),'failed');

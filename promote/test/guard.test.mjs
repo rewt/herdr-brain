@@ -195,6 +195,10 @@ const refusalMessage = (f, kind) => {
 
 test('ordinary and clean-pass guards work without green modules, and disabled requests do no Git work', async t => {
   const f = await fixture(t, { cohort: 'clean-pass' });
+  // Unchanged bytes with stale stat data force status to refresh its cache if
+  // optional index writes are allowed; this must not depend on Git timing.
+  fs.utimesSync(path.join(f.workspace, 'docs/guide.md'), 0, 0);
+  const index = f.git(['rev-parse', '--path-format=absolute', '--git-path', 'index'], f.workspace);
   // A fresh process cannot hide eager initialization behind an import cache.
   for (const file of ['supervisor/green-pass.mjs', 'supervisor/green-contracts.json']) fs.rmSync(path.join(f.repo, file));
   const probe = path.join(f.root, 'unused-green.mjs');
@@ -216,7 +220,9 @@ for (const policy of [undefined, {}, {enabled:false,cohort:'green-pass'}, {enabl
 assert.equal(git, 0); assert.equal(admitted, 1);
 cp.execFileSync = original; syncBuiltinESMExports();
 fs.writeFileSync(config, JSON.stringify({autopilot:{enabled:true,cohort:'clean-pass'}}));
+const index = ${JSON.stringify(index)}, before = fs.statSync(index, {bigint:true});
 withPromotionGuard(guard, () => admitted++);
+assert.deepEqual(fs.statSync(index, {bigint:true}), before, 'clean-pass scope must not refresh the index');
 assert.equal(admitted, 2);
 console.log('ordinary and clean-pass admitted; disabled Git calls=0; green modules absent');
 `);
@@ -297,7 +303,21 @@ test('clean-pass keeps its ordinary documentation scope and named refusals', asy
   f.change('docs/guide.md', 'A clean-pass documentation edit.\n');
   f.guard.expectedHead = f.git(['rev-parse', 'HEAD'], f.workspace); f.settled.finalHead = f.guard.expectedHead; f.settled.result.head = f.guard.expectedHead; f.save();
   // Use a documentation-only baseline so the existing one-area rule applies.
-  f.settled.mainHead = f.head; f.save(); f.check();
+  f.settled.mainHead = f.head; f.save();
+  const guide = path.join(f.workspace, 'docs/guide.md');
+  fs.utimesSync(guide, 0, 0);
+  const index = f.git(['rev-parse', '--path-format=absolute', '--git-path', 'index'], f.workspace);
+  const before = fs.statSync(index, { bigint: true });
+  f.check();
+  assert.deepEqual(fs.statSync(index, { bigint: true }), before, 'scope inspection leaves stale index metadata untouched');
+  const { preparePromotionGuard } = await import(pathToFileURL(path.join(f.repo, 'promote/guard.mjs')));
+  const prepared = preparePromotionGuard(f.guard);
+  fs.copyFileSync(index, `${index}.replacement`); fs.renameSync(`${index}.replacement`, index);
+  assert.throws(() => prepared.run(() => assert.fail('changed index integrated')), { code: 'RECORD_OBSERVATION_CONFLICT' });
+  assert.equal(fs.existsSync(path.join(f.org, 'lock')), false);
+  fs.appendFileSync(guide, 'Uncommitted change.\n');
+  assert.throws(() => f.check(), /AUTOPILOT_SCOPE_UNKNOWN: candidate worktree is dirty/);
+  fs.writeFileSync(guide, 'A clean-pass documentation edit.\n');
   f.change('promote/guard.mjs', '// protected edit\n');
   f.guard.expectedHead = f.git(['rev-parse', 'HEAD'], f.workspace); f.settled.finalHead = f.guard.expectedHead; f.settled.result.head = f.guard.expectedHead; f.save();
   assert.throws(() => f.check(), /AUTOPILOT_SCOPE_EXCLUDED/);

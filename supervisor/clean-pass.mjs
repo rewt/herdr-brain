@@ -20,7 +20,9 @@ const areaOf = file => {
 };
 export function cleanPassScope({ repo, workspace, base, head, review }) {
   const git = args => {
-    const r = spawnSync('git', ['-C', workspace, ...args], { encoding: null, maxBuffer: 32 * 1024 * 1024 });
+    // Scope inspection runs inside the record read fence. A status refresh must
+    // not rewrite the index that the promotion guard is still observing.
+    const r = spawnSync('git', ['--no-optional-locks', '-C', workspace, ...args], { encoding: null, maxBuffer: 32 * 1024 * 1024 });
     if (r.error || r.status !== 0) throw Error(r.stderr?.toString('utf8').trim() || r.error?.message || 'Git scope unavailable');
     const text = r.stdout.toString('utf8');
     if (!Buffer.from(text, 'utf8').equals(r.stdout)) throw Error('non-UTF-8 scope evidence');

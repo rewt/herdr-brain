@@ -436,9 +436,10 @@ process.stdout.write(r.stdout);process.stderr.write(r.stderr);process.exit(r.sta
     '--meta',`dispatch_unlanded_admitted=${job.unlandedCap.admission.admitted}`]);
   r=f.dispatch(['--retry',journal]);assert.equal(r.status,1);assert.match(r.stderr,/multiple matches/);
   assert.equal(promptCalls(f).length,0);assert.equal(f.show(f.item).runs.length,2);
-  // Also cover a committed run whose brief was never materialized.
-  fs.unlinkSync(f.show('R-1').brief_path);
-  r=f.dispatch(['--retry',journal,'--recover-run','R-1']);assert.equal(r.status,0,r.stderr);
-  assert.ok(fs.readFileSync(f.show('R-1').brief_path,'utf8').includes('R-1'));
-  assert.equal(JSON.parse(r.stdout).run,'R-1');assert.equal(f.show(f.item).runs.length,2);
+  // Recover the current match (an older one is superseded at launch); also
+  // cover a committed run whose brief was never materialized.
+  fs.unlinkSync(f.show('R-2').brief_path);
+  r=f.dispatch(['--retry',journal,'--recover-run','R-2']);assert.equal(r.status,0,r.stderr);
+  assert.ok(fs.readFileSync(f.show('R-2').brief_path,'utf8').includes('R-2'));
+  assert.equal(JSON.parse(r.stdout).run,'R-2');assert.equal(f.show(f.item).runs.length,2);
 });

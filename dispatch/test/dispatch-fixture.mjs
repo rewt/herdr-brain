@@ -184,8 +184,8 @@ const startupHookReviewScreen = `╭──────────────�
 │   2. Trust all and continue                                           │
 │   3. Continue without trusting (hooks won't run)                       │
 ╰──────────────────────────────────────────────────────────────────────╯`;
-async function until(predicate) {
-  const end=Date.now()+5000;
+async function until(predicate, limit = 5000) {
+  const end=Date.now()+limit;
   while(!predicate()) { if(Date.now()>end)throw new Error('test barrier timed out');await new Promise(r=>setTimeout(r,10)); }
 }
 function pauseHook(f,body) {

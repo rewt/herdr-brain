@@ -16,6 +16,13 @@ import { fixture, promptCalls, until, pauseHook, savedReuse, hooksTableScreen, s
 const DISPATCH = fileURLToPath(new URL('../dispatch.mjs', import.meta.url));
 const RECORD = fileURLToPath(new URL('../../bin/org.mjs', import.meta.url));
 const WATCH = fileURLToPath(new URL('../../watch/watch.mjs', import.meta.url));
+// A refused saved request appends only its own completion status.
+function onlyCompletion(f, before, journal) {
+  const after = fs.readFileSync(path.join(f.org, 'events.jsonl'));
+  assert.deepEqual(after.subarray(0, before.length), before);
+  const added = after.subarray(before.length).toString().trim().split('\n').filter(Boolean).map(JSON.parse);
+  assert.deepEqual(added.map(e => [e.type, e.journal, e.stage, e.run, e.exit_code]), [['dispatch.completed', journal, 'open', null, 1]]);
+}
 test('timely saved unbound proposal retries through dispatch without a new native observation or prompt', t => {
   const f = fixture(t, { lateSession: 'delayed' }), first = f.start(); assert.equal(first.status, 0, first.stderr);
   const file = f.jobs()[0], job = JSON.parse(fs.readFileSync(file)), b = job.sessionBinding;
@@ -396,7 +403,7 @@ test('saved reuse lane, route and declared-field mismatches refuse before any la
     const events=fs.readFileSync(path.join(f.org,'events.jsonl')),calls=f.calls().length,jobs=f.jobs().length;
     const r=f.dispatch(['--retry',saved]);
     assert.equal(r.status,1,field);assert.equal(JSON.parse(r.stdout).code,'REUSE_MISMATCH',r.stderr);
-    assert.deepEqual(fs.readFileSync(path.join(f.org,'events.jsonl')),events);
+    onlyCompletion(f,events,saved);
     assert.equal(f.jobs().length,jobs);assert.equal(f.calls().slice(calls).filter(c=>c.type==='lane').length,0);
   }
 });
@@ -446,7 +453,7 @@ test('an older reported run cannot lend a saved reuse worker held by a newer ope
     const events=fs.readFileSync(path.join(f.org,'events.jsonl')),jobs=f.jobs().length,calls=f.calls().length;
     const r=reuse();assert.equal(r.status,1);assert.equal(JSON.parse(r.stdout).code,'REUSE_WORKER_BUSY');
     assert.ok(JSON.parse(r.stdout).reason.includes(correction.run));
-    assert.deepEqual(fs.readFileSync(path.join(f.org,'events.jsonl')),events);
+    onlyCompletion(f,events,saved);
     assert.equal(f.jobs().length,jobs);assert.equal(f.calls().slice(calls).filter(c=>c.type==='lane').length,0);
     assert.equal(promptCalls(f).length,2);
   }
@@ -477,7 +484,8 @@ fs.rmSync=function(target,...args) {
   const pending=f.concurrent(['--retry',savedReuse(f,first.run)],hook);
   let holder;
   try {
-    await until(()=>fs.existsSync(hook.PAUSE_MARKER));
+    // The saved retry replays start, worker and watch stages before its prompt.
+    await until(()=>fs.existsSync(hook.PAUSE_MARKER),loadTimeout(30000));
     const other=f.rec(['add','Sibling work','--role','engineer']).split(' ')[0],prior=f.show(first.run);
     holder=f.rec(['start',other,'--workspace',prior.workspace]).match(/R-\d+/)[0];
     f.rec(['worker',holder,'--agent',prior.meta.agent,'--pane',prior.meta.pane,
@@ -526,7 +534,7 @@ fs.rmSync=function(target,...args) {
   hook.NODE_OPTIONS+=` --require=${preload}`;
   const pending=f.concurrent(['--retry',savedReuse(f,prior.id)],hook);
   try {
-    await until(()=>fs.existsSync(hook.PAUSE_MARKER));
+    await until(()=>fs.existsSync(hook.PAUSE_MARKER),loadTimeout(30000));
     f.rec(['worker',holder,'--agent','temporary-holder','--pane','holder:pane',
       '--worker-workspace',prior.meta.worker_workspace,'--cwd',prior.workspace,'--terminal-id',prior.meta.terminal_id]);
   } finally {fs.writeFileSync(hook.PAUSE_RELEASE,'go');await pending.done;}

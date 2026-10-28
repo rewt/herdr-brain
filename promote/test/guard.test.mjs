@@ -19,9 +19,12 @@ import { lookupProcess } from '../../lib/processes.mjs';
 
 // Containment is installed already; green checks require absent loader inputs.
 delete process.env.NODE_OPTIONS;
-// Node's runner forwards name selection in execArgv. Remove only that runner
-// flag before pinning the private Brain launcher used by the native children.
-process.execArgv = process.execArgv.filter(arg => !arg.startsWith('--test-name-pattern='));
+// The file runner has already installed its signal observer. Neither that
+// preload nor name selection is passed to the private Brain's native children.
+// Pin their actual launcher, retaining every argument outside these two known
+// runner inputs so the production drift check still rejects other differences.
+const signalObserver = `--import=${fileURLToPath(new URL('../../test/helpers/runner-limits.mjs', import.meta.url))}`;
+process.execArgv = process.execArgv.filter(arg => arg !== signalObserver && !arg.startsWith('--test-name-pattern='));
 const source = fileURLToPath(new URL('../../', import.meta.url));
 const loader = fileURLToPath(new URL('./helpers/green-loader.mjs', import.meta.url));
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -282,7 +285,7 @@ test('clean-pass keeps its ordinary documentation scope and named refusals', asy
   assert.throws(() => f.check(), /AUTOPILOT_SCOPE_EXCLUDED/);
 });
 
-for (const kind of ['admitted', ...Object.keys(refusals)]) test(`native --existing-worker green candidate is ${kind}`, async t => {
+for (const kind of ['admitted', ...Object.keys(refusals), 'launcher-drift']) test(`native --existing-worker green candidate is ${kind}`, async t => {
   const f = await fixture(t, { foreign: kind === 'foreign' });
   const cli = path.join(f.repo, 'promote/promote.mjs');
   const { enqueue, queueFor } = await import(pathToFileURL(cli));
@@ -295,7 +298,9 @@ for (const kind of ['admitted', ...Object.keys(refusals)]) test(`native --existi
   fs.writeFileSync(anchorGate, `const fs=require('fs');fs.writeFileSync(${JSON.stringify(started)},'started');const end=Date.now()+${loadTimeout(30000)};while(!fs.existsSync(${JSON.stringify(release)})&&Date.now()<end)Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,20);process.exitCode=1;`);
   enqueue(queue, ['anchor'], { to: 'offline', herdr: f.herdr, attempts: 1, retry: 0, org: null,
     laneCLI: path.join(f.repo, 'lanes/lane.mjs'), validate: `${process.execPath} ${anchorGate}` });
-  const child = spawnScenarioChild(t, process.execPath, [cli, '--drain', '--repo', f.project], { cwd: f.project, env: f.env });
+  // An unrelated Node flag is real launcher drift, even though the file
+  // runner's already-installed observer is excluded from the fixture pin.
+  const child = spawnScenarioChild(t, process.execPath, [...(kind === 'launcher-drift' ? ['--no-warnings'] : []), cli, '--drain', '--repo', f.project], { cwd: f.project, env: f.env });
   const done = waitForExit(child); f.worker(done);
   const deadline = Date.now() + loadTimeout(10000);
   while (!fs.existsSync(started) && child.exitCode === null && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 20));
@@ -322,7 +327,8 @@ for (const kind of ['admitted', ...Object.keys(refusals)]) test(`native --existi
     assert.equal(f.show(f.item).closed.as, 'done'); assert.ok(fs.existsSync(f.checked));
     assert.equal(f.git(['rev-list', '--merges', 'main'], f.project), '');
   } else {
-    assert.equal(row.outcome, 'refused', evidence); assert.equal(row.reason, refusalMessage(f, kind), evidence);
+    const expected = kind === 'launcher-drift' ? 'GREEN_REACH_UNKNOWN: Node launcher drift; nothing merged' : refusalMessage(f, kind);
+    assert.equal(row.outcome, 'refused', evidence); assert.equal(row.reason, expected, evidence);
     assert.equal(f.git(['rev-parse', 'main'], f.project), f.base);
     assert.ok(fs.existsSync(f.workspace)); assert.equal(f.show(f.item).closed, null);
     assert.equal(fs.existsSync(f.checked), false, 'refused before candidate validation');

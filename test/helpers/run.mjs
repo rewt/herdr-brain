@@ -63,9 +63,15 @@ if (worker) {
     ChildProcess.prototype.spawn = function (options) {
       const capture = options.envPairs.includes('NODE_TEST_CONTEXT=child-v8') &&
         stderrCaptures.get(path.resolve(options.args.at(-1)));
+      if (capture) {
+        options.args.splice(1, 0, `--import=${fileURLToPath(new URL('./runner-limits.mjs', import.meta.url))}`);
+        options.envPairs.push(`MONITOR_TEST_FILE_SIGNAL_RECEIPT=${capture.signalReceipt}`);
+      }
       const result = originalSpawn.call(this, options);
       if (capture && this.stderr) {
         capture.started = true;
+        capture.pid = this.pid;
+        this.once('exit', (exit_code, signal) => { capture.nativeExit = { exit_code, signal }; });
         // Node 20's test:stderr events are line-normalized, and its file runner
         // waits for stdout but not stderr. Retain bytes at the native pipe.
         this.stderr.on('data', bytes => { if (capture.fd !== null) fs.writeFileSync(capture.fd, bytes); });
@@ -140,7 +146,7 @@ if (worker) {
         console.error(`FILE_TAP: ${JSON.stringify(reference)}`);
         const fd = fs.openSync(artifact, 'wx', 0o600);
         const stderrFD = fs.openSync(reference.stderr_artifact, 'wx', 0o600);
-        const capture = { fd: stderrFD, started: false };
+        const capture = { fd: stderrFD, started: false, signalReceipt: `${artifact}.signal.json` };
         capture.closed = new Promise((resolve, reject) => { capture.resolve = resolve; capture.reject = reject; });
         capture.closed.catch(() => {});
         stderrCaptures.set(reference.file, capture);
@@ -173,9 +179,25 @@ if (worker) {
             const timer = setTimeout(() => reject(Error(`File stderr drain exceeded ${outputDrainMs}ms`)), outputDrainMs);
             capture.closed.then(() => { clearTimeout(timer); resolve(); }, error => { clearTimeout(timer); reject(error); });
           });
+          // Reporter events alone cannot prove a successful file. Preserve the
+          // native exit even if Node emits no failure event, and any delivered
+          // signal that its in-process termination handler would otherwise hide.
+          if (!capture.nativeExit) throw Error('File process exit was not observed');
+          if (fs.existsSync(capture.signalReceipt)) {
+            const receipt = JSON.parse(fs.readFileSync(capture.signalReceipt, 'utf8'));
+            if (receipt.pid !== capture.pid || !['SIGINT', 'SIGTERM'].includes(receipt.signal)) throw Error('Invalid file signal receipt');
+            capture.nativeExit.received_signal = receipt.signal;
+          }
+          const signal = capture.nativeExit.signal ?? capture.nativeExit.received_signal;
+          if (capture.nativeExit.exit_code !== 0 || signal) {
+            fileCode = 1;
+            failure = { ...(failure ?? { message: 'File process failed', failureType: 'testCodeFailure' }),
+              exit_code: capture.nativeExit.exit_code, ...(signal ? { signal } : {}) };
+          }
         } catch (error) { console.error(error); fileCode = 1; runnerError = error.stack ?? String(error); }
         finally { capture.fd = null; stderrCaptures.delete(reference.file); fs.closeSync(fd); fs.closeSync(stderrFD); }
         const completion = { ...reference, exit_code: fileCode, tap_complete: !runnerError, observed_by: 'worker',
+          ...(capture.nativeExit ? { native_exit: capture.nativeExit } : {}),
           ...(failure ? { failure } : {}), ...(runnerError ? { reason: 'reporter-error', runner_error: runnerError } : {}) };
         // The durable terminal receipt survives a lost final IPC reply.
         fs.writeFileSync(reference.completion_artifact, JSON.stringify(completion) + '\n', { flag: 'wx', mode: 0o600 });

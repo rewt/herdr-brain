@@ -1,3 +1,26 @@
+import fs from 'node:fs';
+
+// The runner preloads this only for an admitted file. Node 20's test harness
+// handles SIGINT/SIGTERM with process.exit(), which can otherwise exit zero
+// and erase the signal before the parent observes the native child exit.
+const signalReceipt = process.env.MONITOR_TEST_FILE_SIGNAL_RECEIPT;
+delete process.env.MONITOR_TEST_FILE_SIGNAL_RECEIPT;
+if (signalReceipt && process.env.NODE_TEST_CONTEXT === 'child-v8') {
+  let recorded = false;
+  for (const signal of ['SIGINT', 'SIGTERM']) {
+    process.prependOnceListener(signal, () => {
+      if (!recorded) {
+        fs.writeFileSync(signalReceipt, JSON.stringify({ pid: process.pid, signal }) + '\n', { flag: 'wx', mode: 0o600 });
+        recorded = true;
+      }
+      process.exitCode ||= 1;
+      // Observing a signal must not swallow its default native termination.
+      // Existing harness or fixture handlers still run after this observer.
+      if (process.listenerCount(signal) === 0) process.kill(process.pid, signal);
+    });
+  }
+}
+
 // Load controls admission only. Zero consistently means no wall-clock cap.
 // A nonzero fileTimeout is enforced by Node's file cancellation, handed back
 // through fixture-policy to that file's owned-group teardown and drain. Capped

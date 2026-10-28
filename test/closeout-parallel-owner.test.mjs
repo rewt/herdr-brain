@@ -27,7 +27,7 @@ test('parallel cleanup retains one parent consumer and retirement owner through 
       exits++;assert.ok(fs.existsSync(consumer));assert.ok(fs.existsSync(owner));
       for(const directory of [consumer,owner])assert.equal(JSON.parse(fs.readFileSync(path.join(directory,'owner.json'))).pid,process.pid);
     }});
-  assert.equal(claims,1);assert.equal(exits,1);assert.equal(result.evaluated.length,2,JSON.stringify(result));
+  assert.equal(claims,1,JSON.stringify(result));assert.equal(exits,1,JSON.stringify(result));assert.equal(result.evaluated.length,2,JSON.stringify(result));
   assert.ok(result.evaluated.every(e=>!e.completed&&/retirement held:/.test(e.reason)));
   assert.equal(fs.existsSync(consumer),false);assert.equal(fs.existsSync(owner),false);
   assert.ok(fs.existsSync(f.lane)&&fs.existsSync(second));assert.equal(f.herdrCalls().length,0);

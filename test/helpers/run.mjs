@@ -75,12 +75,22 @@ if (worker) {
         console.error(`FILE_TAP: ${JSON.stringify(reference)}`);
         const fd = fs.openSync(artifact, 'wx', 0o600);
         let fileCode = 0;
+        let bytes = 0, lastProgress = Date.now();
         try {
           const stream = run({ files: [file], concurrency: 1, testNamePatterns, timeout: fileTimeout || undefined });
           stream.on('test:fail', () => { fileCode = 1; });
           await pipeline(stream.compose(tap), async source => {
             // No pending artifact writes may be lost to the coordinator's cap.
-            for await (const chunk of source) fs.writeFileSync(fd, chunk);
+            for await (const chunk of source) {
+              fs.writeFileSync(fd, chunk); bytes += Buffer.byteLength(chunk);
+              // Retained TAP is real activity even before a file completes.
+              // Keep the existing output/silence watcher informed, without
+              // interleaving TAP from live files or adding a background timer.
+              if (Date.now() - lastProgress >= 1000) {
+                console.error(`FILE_TAP_PROGRESS: ${JSON.stringify({ ...reference, bytes })}`);
+                lastProgress = Date.now();
+              }
+            }
           });
           console.error(`FILE_TAP_COMPLETE: ${JSON.stringify({ ...reference, exit_code: fileCode })}`);
         } catch (error) { console.error(error); fileCode = 1; }

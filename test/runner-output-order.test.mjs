@@ -93,3 +93,24 @@ test('independent file reporters retain admission limits, name selection and suc
   assert.equal(starts.length, files.length);
   for (const start of starts) assert.equal(result.rows.filter(row => row.id === start.id && row.event === 'finish' && row.exit_code === 0).length, 1);
 });
+
+test('live artifact writes keep output watchers informed before file completion', async t => {
+  const f = fixture(t);
+  const file = f.file('progress', `for(let i=0;i<4;i++)test('live progress '+i,async()=>{
+    await new Promise(resolve=>setTimeout(resolve,650));
+  });`);
+  const result = await f.run([file]);
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  const progress = [...result.stderr.matchAll(/^FILE_TAP_PROGRESS: (.*)$/gm)];
+  assert.ok(progress.length >= 1, 'live TAP must notify the existing output watcher');
+  let previous = 0;
+  for (const match of progress) {
+    const reference = JSON.parse(match[1]);
+    assert.equal(reference.file, file);
+    assert.ok(reference.bytes > previous, 'progress must reflect newly retained TAP');
+    previous = reference.bytes;
+    assert.ok(match.index < result.stderr.indexOf('FILE_TAP_COMPLETE:'), 'activity must be visible before completion');
+  }
+  assert.equal(result.references.length, 1);
+  assert.match(fs.readFileSync(result.references[0].artifact, 'utf8'), /# tests 4\n# suites 0\n# pass 4\n# fail 0\n/);
+});

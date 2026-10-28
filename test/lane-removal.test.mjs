@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { spawnChild, waitForExit } from './helpers/child.mjs';
 import { measureLaneEvidence, readLaneCwdReferences } from '../lib/lane-removal.mjs';
+import { sealScopedRemovalInputs } from '../lib/retire-local.mjs';
 import { scratchEnvironment, assertCloseScratch } from './helpers/scratch-fixture.mjs';
 
 const cli = fileURLToPath(new URL('../lanes/lane.mjs', import.meta.url));
@@ -225,6 +226,91 @@ for (const kind of ['symlink', 'directory']) test(`a ${kind} JSON reference bloc
   const r = f.close(); f.kept(r); assert.match(r.stderr, /reference is not a regular JSON file; project kept/);
   assert.equal(fs.lstatSync(file).isSymbolicLink(), kind === 'symlink');
   assert.equal(fs.lstatSync(file).isDirectory(), kind === 'directory');
+});
+
+function scopedFixture(t) {
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'reference-seal-')));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const references = path.join(root, 'record/references'), retirement = path.join(root, 'record/retirement');
+  const receipts = ['occupants', 'exits'].map(name => path.join(retirement, name));
+  for (const directory of [references, ...receipts]) fs.mkdirSync(directory, { recursive: true });
+  const context = { common: path.join(root, 'repo/.git'), cwd: path.join(root, 'lane'), runs: ['R-1'] };
+  const options = { referenceDirectories: [references], inertLinkParents: receipts };
+  const row = JSON.stringify({ common: context.common, cwd: context.cwd, run: 'R-1' });
+  const seal = () => sealScopedRemovalInputs([references, retirement], context, options);
+  return { root, references, retirement, receipts, context, options, row, seal };
+}
+
+test('scoped removal reference selector ignores hidden and nested entries without deleting them', t => {
+  const f = scopedFixture(t), nested = path.join(f.references, 'notes');
+  fs.mkdirSync(nested); fs.writeFileSync(path.join(nested, 'bad.json'), '{');
+  for (const name of ['.hidden.json', 'notes.txt']) fs.writeFileSync(path.join(f.references, name), '{');
+  fs.symlinkSync('missing', path.join(f.references, '.hidden-link.json'));
+  const before = fs.readdirSync(f.references).sort(), verify = f.seal();
+  fs.writeFileSync(path.join(f.references, '.hidden.json'), 'still ignored');
+  fs.writeFileSync(path.join(nested, 'bad.json'), 'still ignored');
+  assert.doesNotThrow(verify);
+  assert.deepEqual(fs.readdirSync(f.references).sort(), before);
+  assert.equal(fs.readFileSync(path.join(nested, 'bad.json'), 'utf8'), 'still ignored');
+  assert.equal(fs.readlinkSync(path.join(f.references, '.hidden-link.json')), 'missing');
+});
+
+test('scoped removal reference selector refuses visible malformed and nonregular JSON on every read', t => {
+  for (const kind of ['malformed', 'symlink', 'directory']) {
+    const f = scopedFixture(t), file = path.join(f.references, 'new.json'), verify = f.seal();
+    if (kind === 'malformed') fs.writeFileSync(file, '{');
+    if (kind === 'symlink') { const target = path.join(f.root, 'target.json'); fs.writeFileSync(target, f.row); fs.symlinkSync(target, file); }
+    if (kind === 'directory') fs.mkdirSync(file);
+    const refusal = kind === 'malformed' ? /JSON/ : /not a regular JSON file/;
+    assert.throws(f.seal, refusal, kind); assert.throws(verify, refusal, kind);
+  }
+});
+
+test('scoped removal receipt selectors ignore hidden files and directories but retain inert link CAS', t => {
+  for (const kind of ['occupants', 'exits']) {
+    const f = scopedFixture(t), directory = path.join(f.retirement, kind), nested = path.join(directory, 'unexpected.json');
+    fs.mkdirSync(nested); fs.writeFileSync(path.join(nested, 'bad.json'), '{');
+    fs.writeFileSync(path.join(directory, '.hidden.json'), '{');
+    const link = path.join(directory, 'link.json'); fs.symlinkSync('missing', link);
+    const before = fs.readdirSync(directory).sort(), verify = f.seal();
+    fs.writeFileSync(path.join(directory, '.hidden.json'), 'ignored');
+    fs.writeFileSync(path.join(nested, 'bad.json'), 'ignored');
+    assert.doesNotThrow(verify); assert.deepEqual(fs.readdirSync(directory).sort(), before);
+    fs.unlinkSync(link); fs.symlinkSync('other-missing', link);
+    assert.throws(verify, /authority changed/, kind);
+  }
+});
+
+test('scoped removal selected references and receipts retain matching additions edits and disappearance CAS', t => {
+  for (const kind of ['references', 'occupants', 'exits']) for (const change of ['add', 'edit', 'remove', 'malformed']) {
+    const f = scopedFixture(t), directory = kind === 'references' ? f.references : path.join(f.retirement, kind);
+    const file = path.join(directory, 'target.json'); fs.writeFileSync(file, f.row);
+    const verify = f.seal();
+    if (change === 'add') fs.writeFileSync(path.join(directory, 'new.json'), f.row);
+    if (change === 'edit') fs.writeFileSync(file, JSON.stringify({ ...JSON.parse(f.row), changed: true }));
+    if (change === 'remove') fs.unlinkSync(file);
+    if (change === 'malformed') fs.writeFileSync(file, '{');
+    assert.throws(verify, /authority changed|JSON/, `${kind}: ${change}`);
+  }
+});
+
+test('scoped removal seals accept stable record aliases and refuse ancestor or authority redirects', t => {
+  for (const missing of [false, true]) {
+    const f = scopedFixture(t), alias = path.join(f.root, 'alias'), other = path.join(f.root, 'other');
+    fs.mkdirSync(other); fs.symlinkSync(path.join(f.root, 'record'), alias);
+    if (missing) fs.rmdirSync(f.references);
+    const directory = path.join(alias, 'references');
+    const verify = sealScopedRemovalInputs([directory], f.context, { referenceDirectories: [directory] });
+    assert.doesNotThrow(verify);
+    fs.unlinkSync(alias); fs.symlinkSync(other, alias);
+    assert.throws(verify, /redirected/, 'even a missing authority directory binds its ancestor alias');
+  }
+  const f = scopedFixture(t), redirected = path.join(f.root, 'references-link');
+  fs.symlinkSync(f.references, redirected);
+  assert.throws(() => sealScopedRemovalInputs([redirected], f.context), /redirected/);
+  const verify = f.seal();
+  fs.rmdirSync(f.receipts[0]); fs.symlinkSync(f.references, f.receipts[0]);
+  assert.throws(verify, /redirected/, 'receipt authority directories cannot be inert redirects');
 });
 
 test('a Git index writer lock keeps the worktree, branch and lock intact', t => {

@@ -205,8 +205,23 @@ test('ready ignores detached, non-Git and foreign workspaces, including a foreig
   assert.equal(readCloseoutEntries(f.common)[0].cwd, f.lane);
 });
 
-test('non-lane done reports are not applicable, while an unavailable registered lane still records a binding failure', t => {
+test('non-lane and unavailable registered-lane reports retain typed binding exceptions without cleanup effects', t => {
   const f = setup(t), plain = path.join(f.scratch, 'planning'); fs.mkdirSync(plain);
+  const assertKeptBinding = (source, code) => {
+    assert.deepEqual(source.closeout_targets, []);
+    const [error] = source.closeout_binding_errors;
+    assert.equal(source.closeout_binding_errors.length, 1);
+    assert.deepEqual({ run: error.run, signal: error.signal, code: error.code, disposition: error.disposition, owner: error.owner },
+      { run: source.run, signal: 'ready', code, disposition: 'kept', owner: source.run });
+    assert.ok(error.reason);
+    assert.equal(source.closeout_binding_error, undefined);
+    const kept = events(f).filter(e => e.type === 'closeout.binding-kept' && e.run === source.run);
+    assert.equal(kept.length, 1);
+    assert.deepEqual(kept[0].source, { seq: source.seq, type: source.type });
+    assert.equal(kept[0].condition.kind, 'missing-identity');
+    assert.equal(kept[0].completed, false);
+    for (const resource of ['session', 'folder', 'branch']) assert.equal(kept[0].resources[resource].status, 'kept');
+  };
   const stderr = process.stderr.write, messages = [];
   process.stderr.write = chunk => { messages.push(String(chunk)); return true; };
   try {
@@ -214,15 +229,13 @@ test('non-lane done reports are not applicable, while an unavailable registered 
       { type: 'run.started', id: `R-${i + 2}`, item: 'ENG-1', workspace, meta: {} },
       { type: 'report.ingested', run: `R-${i + 2}`, report: { outcome: 'done' } },
     ]));
-    for (const e of added.filter(e => e.type === 'report.ingested')) {
-      assert.deepEqual(e.closeout_targets, []); assert.equal(e.closeout_binding_errors, undefined);
-      assert.equal(e.closeout_binding_error, undefined);
-    }
-    assert.deepEqual(readCloseoutEntries(f.common), []); assert.deepEqual(messages, []);
+    for (const source of added.filter(e => e.type === 'report.ingested')) assertKeptBinding(source, 'NO_REGISTERED_ALLOCATION');
     fs.renameSync(f.lane, `${f.lane}-unavailable`);
     const [bad] = f.report();
-    assert.equal(bad.closeout_binding_errors[0].run, 'R-1');
-    assert.match(messages.join(''), /no durable target binding/);
+    assertKeptBinding(bad, 'ALLOCATION_BINDING_FAILED');
+    assert.deepEqual(readCloseoutEntries(f.common), []);
+    assert.deepEqual(f.herdrCalls(), []); assert.deepEqual(effects(f), []); assert.deepEqual(f.read().actions, []);
+    assert.deepEqual(messages, [], 'binding exceptions are durable record facts, without stderr-only warnings');
   } finally { process.stderr.write = stderr; }
 });
 

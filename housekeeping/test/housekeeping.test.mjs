@@ -307,9 +307,28 @@ test('the housekeeping CLI record reader loads confirmed handoffs and reserves t
   assert.deepEqual(f.actions, [['tab', 'close', 'w:t']]);
 });
 
-test('abandonment alone never substitutes for ingestion', (t) => {
-  const f = fixture(t); f.run.report = null; f.run.abandoned = { seq: 4 };
-  f.runner().tick(); assert.equal(f.actions.length, 0);
+for (const [condition, reason] of [
+  ['landed with a closed chain', null],
+  ['missing abandonment sequence', /report is not ingested/],
+  ['unlanded source', /lane is not clean and integrated or archived/],
+  ['dirty source', /lane is not clean and integrated or archived/],
+  ['open chain', /chain is still open/],
+]) test(`recorded abandonment retirement: ${condition}`, t => {
+  const f = fixture(t, { promoted: condition !== 'unlanded source' });
+  f.run.report = null;
+  f.run.abandoned = condition === 'missing abandonment sequence' ? {} : { seq: 4 };
+  if (condition === 'dirty source') fs.writeFileSync(path.join(f.lane, 'file'), 'unsaved work');
+  if (condition === 'open chain') { f.items[0].closed = null; f.items[0].status = 'active'; }
+  const plan = f.runner().tick({ resume: false });
+  if (reason) {
+    assert.deepEqual(plan.close, []);
+    assert.match(plan.keep.find(row => row.tab_id === 'w:t').why, reason);
+    assert.deepEqual(f.actions, []);
+  } else {
+    assert.deepEqual(plan.close.map(row => row.tab_id), ['w:t']);
+    assert.deepEqual(f.actions, [['tab', 'close', 'w:t']]);
+  }
+  assert.equal(fs.existsSync(f.lane), true, 'the fixture opts out of queued worktree removal');
 });
 
 test('a removed checkout with an archive stays unknown without an exact observed head', (t) => {

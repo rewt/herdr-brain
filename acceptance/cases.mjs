@@ -15,7 +15,7 @@ export const cases = Object.freeze({
   missing: spec('missing-worker', 'Failure path: missing worker', ['herdr-fixture']),
   invalid: spec('invalid-worker', 'Failure path: invalid worker', ['herdr-fixture']),
   blocked: spec('blocked-worker', 'Failure path: blocked worker', ['herdr-fixture']),
-  fix: spec('fix-round', 'Fix round: same worker, fresh durable run', ['herdr-fixture']),
+  fix: spec('fix-round', 'Fix round: fresh worker from saved author source', ['herdr-fixture']),
   grace: spec('watch-grace', 'Watch cutover: idle grace and exclusive watcher', ['herdr-fixture']),
   housekeeping: spec('housekeeping', 'Housekeeping closes only eligible finished workers', ['herdr-fixture']),
   release: spec('scratch-release', 'Scratch release build/activate/rollback'),

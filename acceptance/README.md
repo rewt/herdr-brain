@@ -31,6 +31,13 @@ unrun/SKIP. A focused summary always has `ready: false`; `selectionPassed` repor
 only that selection's outcome. It cannot qualify a release or reuse prior live
 coverage with `--continue`.
 
+Stand-ins wait for an idle owned-pane inventory receipt before direct lookup;
+native failures still stop startup. Their raw PTY prompts include an explicit
+newline before Enter and require the worker's input receipt. Correction rounds
+dispatch a fresh allocation from the saved author branch, then integrate and
+retire both workers. A process-cwd KEEP is accepted only with the exact lane and
+a matching native worker shell/foreground PID.
+
 `--skip-live` is retained as a compatibility option. The former real-model cases,
 entry installation probes, generated permission-profile verification and copied
 bch-cloak cutover rehearsals have been removed. The release lane supplies the

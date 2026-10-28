@@ -75,12 +75,26 @@ export function promoteAndComplete(job, { lane, record }) {
 
 // Unresolved fixtures exercise KEEP, then the receipt-owned scratch cleanup
 // disposes of them after all producers drain. Abandonment is not completion.
-export function assertWorkerKept(job, { lane, reason }) {
+export function assertWorkerKept(job, { lane, reason, h }) {
   const output = lane(['close', job.lane], undefined, { ok: false });
   const actions = output.split('\n').filter(line => line.startsWith('{')).map(JSON.parse);
-  assert.ok(actions.some(action => action.action === 'keep' &&
-    action.workspace_id === job.info.meta.worker_workspace && reason.test(action.why)),
+  const kept = actions.find(action => action.action === 'keep' && reason.test(action.why) &&
+    (action.workspace_id === job.info.meta.worker_workspace ||
+      action.cwd === job.info.workspace && action.branch === `lane/${job.lane}`));
+  assert.ok(kept,
     `${job.run}: expected worker KEEP (${reason}): ${output}`);
+  if (!kept.workspace_id) {
+    // Git's cwd guard can stop before native retirement emits a workspace
+    // receipt. Bind that precise process reference back to the owned worker.
+    const pid = Number(/^process cwd reference (\d+)$/.exec(kept.why)?.[1]);
+    assert.ok(h && pid > 0, `${job.run}: KEEP needs native process evidence`);
+    const pane = h('pane', 'get', job.pane).pane;
+    assert.equal(pane.pane_id, job.pane); assert.equal(pane.workspace_id, job.info.meta.worker_workspace);
+    assert.equal(pane.foreground_cwd, job.info.workspace);
+    const processes = h('pane', 'process-info', '--pane', job.pane).process_info;
+    assert.ok([processes.shell_pid, ...(processes.foreground_processes ?? []).map(p => p.pid)].includes(pid),
+      `${job.run}: KEEP process does not belong to the owned worker`);
+  }
   assert.ok(fs.existsSync(job.info.workspace), `${job.run}: kept worktree remains`);
 }
 
@@ -243,14 +257,13 @@ function auditSnapshot(directory) {
     } else if (entry.isDirectory()) auditSnapshot(file);
   }
 }
-async function dispatch(mode, topic, { reuse, item } = {}) {
+async function dispatch(mode, topic, { item } = {}) {
   requirePrerequisite(results, cases.fixture.key);
   requireCandidate('dispatch/dispatch.mjs');
   write(path.join(root, 'mode'), mode);
   if (!item) item = record(['add', `Acceptance ${topic}`, '--role', 'engineer']).match(/^(\S+)/)[1];
   const args = [item, '--repo', fixture.repo, '--org', fixture.org, '--lane', topic, '--route', 'scripted',
     '--brief', fixture.brief, '--report', path.join(fixture.org, `${topic}-${Date.now()}.md`), '--to', supervisor.name];
-  if (reuse) args.push('--reuse', reuse);
   const job = json(node(path.join(candidate, 'dispatch/dispatch.mjs'), args, { cwd: fixture.repo }).stdout);
   pids.add(job.watcher.pid);
   return { ...job, info: json(record(['show', job.run, '--json'])) };
@@ -565,7 +578,7 @@ try {
       process.kill(job.watcher.pid, 0);
       assert.equal(json(record(['show', job.run, '--json'])).report, null);
       await stopWatcher(job);
-      assertWorkerKept(job, { lane, reason: /report is not ingested/ });
+      assertWorkerKept(job, { lane, h, reason: /report is not ingested|^process cwd reference \d+$/ });
       return `${job.run}: matching intermediate notice, watcher alive, no ingestion; abandoned watcher exited, unresolved worker kept for scratch cleanup`;
     });
   }
@@ -573,10 +586,16 @@ try {
     const first = await dispatch('blocked-report', 'fix-round');
     await final(first);
     await until(() => ['idle', 'done'].includes(h('agent', 'get', first.agent).agent.agent_status), 'worker idle');
-    const second = await dispatch('done', first.lane, { item: first.item, reuse: first.run });
-    assert.equal(first.agent, second.agent); assert.equal(first.pane, second.pane); assert.notEqual(first.run, second.run);
+    const authorHead = git(first.info.workspace, ['rev-parse', 'HEAD']);
+    const second = await dispatch('done', `${first.lane}-correction`, { item: first.item });
+    assert.notEqual(first.agent, second.agent); assert.notEqual(first.pane, second.pane); assert.notEqual(first.run, second.run);
+    assert.notEqual(first.info.workspace, second.info.workspace);
+    const request = JSON.parse(read(second.info.meta.dispatch_journal));
+    assert.equal(request.base, authorHead); assert.equal(request.correction.ref, `refs/heads/lane/${first.lane}`);
+    assert.equal(request.correction.head, authorHead);
     await final(second); lane(['check'], second.info.workspace); promoteAndComplete(second, { lane, record }); await closeWorker(second);
-    return `${first.run} -> ${second.run}: blocked report then done, same PTY, distinct run/report`;
+    await closeWorker(first);
+    return `${first.run} -> ${second.run}: blocked report then done in a fresh PTY/run/report from the saved author branch; both integrated workers retired`;
   });
   await test(cases.grace, async () => {
     requireCandidate('watch/watch.mjs');

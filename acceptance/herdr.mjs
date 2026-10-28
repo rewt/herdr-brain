@@ -226,7 +226,10 @@ try {
       const role = fs.readFileSync(ready, 'utf8');
       const receipt = path.join(root, `${role}-input.jsonl`);
       const before = fs.existsSync(receipt) ? fs.statSync(receipt).size : 0;
-      body(await real(['pane', 'send-text', agent.pane_id, argv[3]]));
+      // Scripted readline needs a byte delimiter. Native Enter can use the
+      // pane's keyboard encoding; it is not necessarily a newline on stdin.
+      const text = argv[3].endsWith('\n') ? argv[3] : argv[3] + '\n';
+      body(await real(['pane', 'send-text', agent.pane_id, text]));
       body(await real(['pane', 'send-keys', agent.pane_id, 'Enter']));
       const deadline = Date.now() + loadTimeout(10_000);
       while (Date.now() < deadline) {

@@ -8,12 +8,24 @@ import {bindCloseoutSources,currentCloseoutEntries,unresolvedCloseoutEffect} fro
 import {closeoutNextStage} from '../lib/closeout-status.mjs';
 import {runCloseoutTurn} from '../line-service/closeout-turn.mjs';
 import {refreshCloseouts} from '../lib/closeout-consumer.mjs';
+import {closeoutCondition} from '../lib/closeout-facts.mjs';
 import {acquireLock} from '../lanes/promotion-lock.mjs';
 import {setup,events,evaluations,effects,selectCurrentCleanup} from './helpers/closeout-fixture.mjs';
 
 const entry=f=>currentCloseoutEntries(f.common,f.org,events(f))[0];
 const drain=f=>f.drain({keys:[entry(f).key],retrySafe:true});
 const latest=f=>evaluations(f).findLast(e=>e.key===entry(f).key);
+
+test('late binding keeps original finality age and names the uncertain effect footprint',()=>{
+  const entry={run:'R-1',common:'/git',key:'target',source:{seq:9,type:'cleanup.bound'}},
+    events=[{type:'report.ingested',run:'R-1',seq:4,at:'2026-01-01T00:00:00Z'},
+      {type:'cleanup.bound',seq:9,at:'2026-01-01T01:00:00Z'},
+      {type:'closeout.effect',seq:10,identity:entry.common,key:entry.key,source:entry.source,effect:'original',outcome:{action:'git-removal-started',operation:'branch'}}];
+  const condition=closeoutCondition(entry,{reason:'original command returned without completion'},events,{uncertain:true});
+  assert.equal(condition.first_seen,events[0].at);assert.deepEqual(condition.resources,['branch']);
+  assert.deepEqual(condition.evidence.intent,{effect:'original',seq:10,action:'git-removal-started'});
+  assert.equal(condition.continuation.kind,'owner-evidence');
+});
 
 test('negated report prose grants no refusal; independent session folder and unlanded branch receipts survive restart',t=>{
   const f=setup(t,{direct:true,bound:true});
@@ -154,6 +166,7 @@ test('actual structured tab refusal remains scoped and held after its producer r
   f.options.command=(exe,args,options)=>exe===f.job.herdr&&args[0]==='tab'&&args[1]==='close'?
     {status:1,stdout:'',stderr:JSON.stringify({error:{code:'NATIVE_REFUSAL',message:'original native permission required'}})}:command(exe,args,options);
   const row=drain(f).evaluated[0];assert.equal(row.condition.kind,'native-refusal');assert.equal(row.failure.code,'NATIVE_REFUSAL');
+  assert.deepEqual(row.condition.resources,['session']);assert.ok(row.resources.session.evidence.intent.effect);
   const calls=f.herdrCalls(),actions=f.read().actions,before=events(f);
   assert.deepEqual(drain(f).evaluated,[]);assert.deepEqual(f.herdrCalls(),calls);assert.deepEqual(f.read().actions,actions);
   assert.deepEqual(events(f).slice(0,before.length),before);assert.equal(fs.existsSync(f.lane),true);

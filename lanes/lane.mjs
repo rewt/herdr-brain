@@ -1005,15 +1005,19 @@ function requireClean(path, what) {
   }
 }
 
-function open(topic, base = MAIN, { gitOnly = false } = {}) {
+function open(topic, base = MAIN, { gitOnly = false, reopenAt } = {}) {
   repositoryRoot({ requiredBy: "open" });
   const branch = laneBranch(topic);
-  if (branchExists(branch)) fail(`branch ${branch} already exists; use status/promote/close`);
+  const kept = branchExists(branch);
+  if (kept && !reopenAt) fail(`branch ${branch} already exists; use status/promote/close`);
+  if (reopenAt && (!gitOnly || !isAbsolute(reopenAt))) fail('reopen-at requires --git-only and an absolute saved worktree path');
+  if (kept && git(['rev-parse', `${branch}^{commit}`]) !== git(['rev-parse', `${base}^{commit}`]))
+    fail('kept resume branch differs from expected base');
   if (tryGit(["rev-parse", "--verify", "--quiet", `${base}^{commit}`]) === undefined) {
     fail(`base ref does not resolve: ${base}`);
   }
   const baseTip = git(['rev-parse', `${base}^{commit}`]);
-  const path = join(WORKTREE_ROOT, `lane-${topic}`);
+  const path = reopenAt ?? join(WORKTREE_ROOT, `lane-${topic}`);
   assertSafeNewWorktreePath(path);
   let workspaces = gitOnly ? [] : herdrJson(["workspace", "list"])?.workspaces ?? [];
   const label = workspaceLabel(topic, path, workspaces);
@@ -1030,7 +1034,7 @@ function open(topic, base = MAIN, { gitOnly = false } = {}) {
     { encoding: "utf8" },
   );
   if (gitOnly || herdr.status !== 0 || !existsSync(path)) {
-    git(["worktree", "add", "-b", branch, path, base]);
+    git(kept ? ["worktree", "add", path, branch] : ["worktree", "add", "-b", branch, path, base]);
     if (!gitOnly) process.stdout.write("(herdr refused or is unavailable; created via git worktree)\n");
   } else {
     workspaces = herdrJson(["workspace", "list"])?.workspaces ?? [];
@@ -2836,11 +2840,19 @@ switch (command) {
     check([topic, ...rest].filter((argument) => argument !== undefined));
     break;
   case "open": {
-    const positionals = rest.filter(value => value !== "--git-only");
-    if (topic === undefined || positionals.length > 1 || positionals.some(value => value.startsWith("--"))) {
-      fail("usage: lane.mjs open <topic> [base-ref] [--git-only]");
+    const args = [...rest];
+    const at = args.indexOf('--reopen-at');
+    let reopenAt;
+    if (at !== -1) {
+      reopenAt = args[at + 1];
+      if (!reopenAt || reopenAt.startsWith('--')) fail('--reopen-at requires a saved worktree path');
+      args.splice(at, 2);
     }
-    open(topic, positionals[0], { gitOnly: rest.includes("--git-only") });
+    const positionals = args.filter(value => value !== "--git-only");
+    if (topic === undefined || positionals.length > 1 || positionals.some(value => value.startsWith("--"))) {
+      fail("usage: lane.mjs open <topic> [base-ref] [--git-only] [--reopen-at PATH]");
+    }
+    open(topic, positionals[0], { gitOnly: rest.includes("--git-only"), reopenAt });
     break;
   }
   case "status":

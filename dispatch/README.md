@@ -59,6 +59,30 @@ owning that conversation prevents concurrent resume. A saved ID grants no
 ownership or permission. Existing saved/in-flight reuse journals keep their
 original contract and runtime; they are not rewritten or silently replaced.
 
+New report completions carry `agent_session_id`, `harness`, and `resume`
+(`workspace`, `lane`, `branch`); tab/workspace close effects carry the same data
+per closed session in `sessions`, plus the singular fields for one session.
+Unknown legacy identity stays null; report retries never rewrite a completion.
+Folded run/report fingerprints are unchanged, and old folds ignore the fields.
+
+New resume requests resolve the UUID from those completion records, require the
+recorded harness and original lane, and recreate its original checkout path.
+An unlanded branch is kept and reopened directly; after its branch was deleted
+on main, the lane is recreated from current main. The lane's `open --git-only
+--reopen-at PATH` operation retains the normal real-path/common-directory and
+expected-base checks. A dirty saved folder, relocated branch, unknown completion,
+wrong harness or unrelated item refuses before native launch. Resume defaults
+its watcher recipient to the configured project supervisor, while its task
+prompt still targets the newly verified worker. Other fresh dispatches and
+saved jobs retain their existing recipient selection.
+
+Both harnesses keep saved context outside the checkout. Claude can find an
+explicit UUID from another directory; Codex retains the recorded working
+directory. Brain deliberately restores the original path for both so filesystem
+references and session context agree. Checked native behavior and focused
+offline close/reopen/resume coverage are described in
+[the implementation evidence](../docs/evidence/ENG-801-session-completion.md).
+
 Current-source dispatch admits against running native workers and reviewers,
 under the existing per-project session/resource cap. Finished reported source
 frees worker admission even while review, physical cleanup or lifecycle records

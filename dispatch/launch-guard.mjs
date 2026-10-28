@@ -12,6 +12,7 @@ import {dispatchInput} from '../line-service/phase1.mjs';
 import {itemLaunchHold} from '../lib/item-launch-hold.mjs';
 import {correctionSource} from '../lib/report-closeout.mjs';
 import {effectiveWorkerIdentity} from '../lib/worker-identity.mjs';
+import {resumeSource} from './resume-source.mjs';
 
 export const launchDigest = bytes => createHash('sha256').update(bytes).digest('hex');
 const changed = (reason, input) => {
@@ -56,6 +57,21 @@ export function checkDispatchEligibility(job, journal, {boundary='launch'}={}) {
       if(actual.identity!==job.common||actual.checkout!==job.workspace||actual.canonical!==job.repo||job.workspace===job.repo||
           registered!==job.workspace||git(['rev-parse','HEAD'])!==job.base||git(['status','--porcelain=v1']))
         refuse('launched fresh fix source changed before prompt');
+    }
+  }
+  if (job.resume) {
+    if (boundary === 'launch') {
+      const source = resumeSource({ events, session: job.resumeSession, item, lane: job.lane,
+        harness: job.declared.harness, repo: job.repo });
+      if (source.base !== job.resume.base || source.workspace !== job.resume.workspace)
+        refuse('saved resume source changed before launch');
+    }
+    if (job.workspace) {
+      const actual = gitProject(job.workspace);
+      const git = args => execFileSync('git', ['-C', job.workspace, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+      if (actual.identity !== job.common || actual.checkout !== job.resume.workspace ||
+          git(['symbolic-ref', '--short', 'HEAD']) !== job.resume.branch || git(['rev-parse', 'HEAD']) !== job.base || git(['status', '--porcelain=v1']))
+        refuse('resumed allocation source or worktree path changed');
     }
   }
   if(job.lineInput){

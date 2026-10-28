@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from '../lib/cli-help.mjs';
 import { loadDiscoveredRoutes, mergeRoutesConfig, resolveRoute, resolveLaunchRoute, resumeSessionArguments } from '../lanes/routes.mjs';
 import { correctionSource } from '../lib/report-closeout.mjs';
+import { resumeSource } from './resume-source.mjs';
 import { BRAIN_CONTROLLER, brainOwner, claimRun, readOwnedRun, requireController, fenceOwner, continueOwnerRelease } from '../lib/run-owner.mjs';
 import { findOrgDir, loadEvents, writeFileAtomic } from '../lib/store.mjs';
 import { fold } from '../lib/state.mjs';
@@ -199,6 +200,8 @@ function worktree() {
 function liveWorker(worker) {
   lane(['verify-agent', worker.agentName, job.workspace]);
   const agent = herdr(['agent', 'get', worker.agentName]).agent;
+  if (job.resumeSession && agent?.agent_session?.value && agent.agent_session.value !== job.resumeSession)
+    throw Error('resumed native conversation differs from the requested saved session');
   if (!agent || agent.name !== worker.agentName || agent.pane_id !== worker.pane || agent.workspace_id !== worker.workspaceId ||
       fs.realpathSync(agent.cwd) !== job.workspace ||
       (worker.terminalId && agent.terminal_id !== worker.terminalId) ||
@@ -396,6 +399,11 @@ async function main() {
     if (correction && opt.base && git(['rev-parse', `${opt.base}^{commit}`], repo) !== correction.base) throw Error('fix base differs from actual saved author branch or main');
     const declaredFields = { harness: declared.kind, model: declared.model ?? null, effort: declared.effort ?? null };
     const exceptionAddress = projectExceptionAddress(repo, config, opt.route);
+    const resume = opt['resume-session'] ? resumeSource({ events: loadEvents(org).events,
+      session: opt['resume-session'], item, lane: opt.lane, harness: declared.kind, repo }) : null;
+    if (resume && !opt.to && !exceptionAddress.to) throw Error('resume requires a configured project supervisor watcher recipient');
+    if (resume && opt.base && git(['rev-parse', `${opt.base}^{commit}`], repo) !== resume.base)
+      throw Error('resume base differs from the saved branch or main');
     const workerBrief = opt.detach ? createWorkerBrief({ item, ask: brief, askText: fs.readFileSync(brief, 'utf8'), extra: opt.extra,
       project: repo, org, lane: opt.lane, route: opt.route, harness: declared.kind,
       reviewRoute: reviewQueue ? opt.route : reviewQueueRoute(config), exception: exceptionAddress }) : undefined;
@@ -414,8 +422,9 @@ async function main() {
       item: positionals[0], lane: opt.lane, route: opt.route, reviewQueueProtocol: 1,
       ...(reviewQueue ? { reviewQueue, reviewQueueBrief: reviewQueueBrief(item) } : {}),
       ...(dispatchPool({item})==='decision'?{decisionQueue:{key:item.meta.decision_request?.key}}:{}),
-      brief, report: opt.report ?? null, to: opt.to ?? null,
-      base: git(['rev-parse', `${correction?.base ?? opt.base ?? 'HEAD'}^{commit}`], repo), extra: (opt.extra ?? '') + (correction?.brief ?? ''), reuse: null, resumeSession: opt['resume-session'] ?? null,
+      brief, report: opt.report ?? null, to: opt.to ?? (resume ? exceptionAddress.to : null),
+      base: git(['rev-parse', `${resume?.base ?? correction?.base ?? opt.base ?? 'HEAD'}^{commit}`], repo), extra: (opt.extra ?? '') + (correction?.brief ?? ''), reuse: null, resumeSession: opt['resume-session'] ?? null,
+      ...(resume ? { resume } : {}),
       ...(correction ? { correction } : {}), fromRun: opt['from-run'] ?? null, unblocks: opt.unblocks ?? null,
       declared: declaredFields, exceptionAddress, ...(workerBrief ? { workerBrief } : {}),
       stage: 'open', run: null,native_launch_attempted:false,completion_protocol:1,...(opt.detach?{phase1_protocol:1,detachedRequested:true}:{}) };
@@ -500,8 +509,10 @@ async function main() {
     if (job.fromRun) checkOrigin(job.fromRun, json(record(['show', job.item, '--json'])));
     if (job.reuse) checkReuse(json(record(['show', job.reuse, '--json'])), job);
     memoryGate('memory_open', 'dispatch', checkStop);
-    if (!worktree()) lane(['open', job.lane, ...(job.base ? [job.base] : []), '--git-only']);
+    if (!worktree()) lane(['open', job.lane, ...(job.base ? [job.base] : []), '--git-only',
+      ...(job.resume ? ['--reopen-at', job.resume.workspace] : [])]);
     job.workspace = fs.realpathSync(worktree());
+    if (job.resume && job.workspace !== job.resume.workspace) throw Error('resumed worktree differs from the saved session path');
     // prepare validates that the registered lane is owned by this repository.
     lane(['prepare', job.lane]);
     if (job.base) {

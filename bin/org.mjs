@@ -20,6 +20,7 @@ import { requestRetirement } from '../lib/retire-trigger.mjs';
 import { bindCloseoutSources, publishCloseoutEvents } from '../lib/closeout.mjs';
 import { lessonProposal, lessonsJson } from '../lib/lessons.mjs';
 import { readReport } from '../lib/report.mjs';
+import { completionSession } from '../lib/completion-session.mjs';
 import { approvalPolicy, CATEGORY_CHECKLIST, categoryFlag, categoryFlagText, reportCategoryFlags } from '../lib/discernment.mjs';
 import { sanitizeTerminal } from '../lib/sanitize.mjs';
 import { renderToday, todayJson } from '../lib/today.mjs';
@@ -822,7 +823,8 @@ async function ingestFile(ctx, file, runHint, currentRun) {
     const late = laterRuns(s, runId).some((r) => r.report);
     let brief_sha256;
     try{if(run.brief_path&&fs.lstatSync(run.brief_path).isFile())brief_sha256=crypto.createHash('sha256').update(fs.readFileSync(run.brief_path)).digest('hex');}catch{/* Unknown brief does not fabricate a revision. */}
-    const events = [{ type: 'report.ingested', run: runId, item: run.item, file: stored, source: abs, sha256, late, report,...(brief_sha256?{brief_sha256}:{}) }];
+    const events = [{ type: 'report.ingested', run: runId, item: run.item, file: stored, source: abs, sha256, late, report,
+      ...completionSession(run, s), ...(brief_sha256?{brief_sha256}:{}) }];
     const categoryFlags = reportCategoryFlags(ctx.config, report);
     for (const flag of categoryFlags) events.push({ type: 'category.flagged', id: run.item, run: runId, ...flag });
     const taken = new Set();

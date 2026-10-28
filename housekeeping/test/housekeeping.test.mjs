@@ -505,7 +505,9 @@ test('an existing housekeeping tick recovers pending notice intent while dry-run
   fs.mkdirSync(path.dirname(inbox));
   const notice = { type: 'notice', at: new Date().toISOString(), id: 'tick-recovery', to: 'supervisor',
     message: 'tick notice', herdr: f.fake, attempts: 1, retrySeconds: 0, title: 'Notice', sound: 'request' };
-  fs.writeFileSync(inbox, JSON.stringify(notice) + '\n' + JSON.stringify({ type: 'sending', id: notice.id }) + '\n');
+  // A pending notice, not an unacknowledged 'sending' attempt: ambiguous input
+  // is never replayed and waits for explicit --resolve.
+  fs.writeFileSync(inbox, JSON.stringify(notice) + '\n');
   fs.writeFileSync(f.fake, `#!${process.execPath}\nimport fs from 'node:fs';const a=process.argv.slice(2);
 if(a[0]==='agent'&&a[1]==='get') console.log(JSON.stringify({result:{agent:{agent:'claude',agent_status:'idle',pane_id:'fake:supervisor'}}}));
 else if(a[0]==='pane'&&a[1]==='read') console.log('────────────────────\\n❯ \\n────────────────────');
@@ -514,7 +516,7 @@ console.log(JSON.stringify({result:a[0]==='status'?{runs:[],items:[]}:a[0]==='wo
   const env = { ...TEST_ENV, SUPERVISOR_INPUT_CONFIRM_SECONDS: '.02', SUPERVISOR_INPUT_POLL_SECONDS: '.01', SUPERVISOR_INPUT_WAIT_SECONDS: '0' };
   const preview = spawnSync(process.execPath, [...f.args, '--once', '--dry-run'], { env, encoding: 'utf8', timeout: loadTimeout(5000) });
   assert.equal(preview.status, 0, preview.stderr); assert.equal(fs.existsSync(`${inbox}.owner.lock`), false);
-  assert.equal(readInbox(inbox)[0].state, 'uncertain');
+  assert.equal(readInbox(inbox)[0].state, 'pending');
   const tick = spawnSync(process.execPath, [...f.args, '--once'], { env, encoding: 'utf8', timeout: loadTimeout(5000) });
   assert.equal(tick.status, 0, tick.stderr); assert.match(tick.stdout, /supervisor-inbox-owned/);
   await waitForInboxIdle(inbox);

@@ -137,7 +137,22 @@ function main() {
   for (const k of plan.keep) console.log(`${opt['dry-run'] ? '[dry-run] ' : ''}keep ${k.tab_id}: ${k.why}`);
   for (const diagnostic of plan.diagnostics) console.log(JSON.stringify(diagnostic));
   if (opt['dry-run']) for (const c of plan.close) console.log(`[dry-run] would close ${c.tab_id}: ${c.why}`);
-  else retirement.apply(plan);
+  else {
+    // A close changes the authority of recorded siblings in its lane, so the
+    // executor refuses them for a replan. Replan only those tabs from a fresh
+    // observation while each pass still closes one; every retry runs the full
+    // policy and token recheck, and the set shrinks every pass.
+    let results = retirement.apply(plan);
+    for (;;) {
+      const replan = new Set(results.filter(r => r.action === 'skip-close' &&
+        r.why === 'authority changed since plan; replan required').map(r => r.tab_id));
+      if (!replan.size || !results.some(r => r.action === 'closed')) break;
+      const fresh = retirement.plan();
+      for (const k of fresh.keep) if (replan.has(k.tab_id)) console.log(`keep ${k.tab_id}: ${k.why}`);
+      results = retirement.apply({ ...fresh, close: fresh.close.filter(c => replan.has(c.tab_id)),
+        sessionReleases: [], laneClose: [], workspaceClose: [] });
+    }
+  }
 }
 if (isMain(import.meta.url)) {
   try { main(); } catch (e) { console.error(`tidy-tabs: ${e.message}`); process.exitCode = 1; }

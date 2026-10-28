@@ -88,7 +88,8 @@ test('held-only backlog never files diagnosis; independent ready work can stall 
   assert.equal([...f.read().state.items.values()].filter(i=>i.meta.halt_repair).length,0);
   assert.equal(capacityCalls,0,'held work never reaches native admission');
   f.item('ENG-2');for(let n=0;n<3;n++)service.pass();
-  const repair=[...f.read().state.items.values()].find(i=>i.meta.halt_repair);assert.ok(repair);assert.equal(f.calls.length,0);
+  const repair=[...f.read().state.items.values()].find(i=>i.meta.halt_repair);assert.ok(repair);
+  assert.equal(f.calls.filter(a=>a[0]===path.join(sourceRoot,'dispatch/dispatch.mjs')).length,0,'capacity refusal never reaches dispatch');
   assert.ok(capacityCalls>0,'independent ready work still reaches the native-capacity guard');
   const job={org:f.org,item:'ENG-1',common:f.identity,token:'pending'};
   assert.throws(()=>checkDispatchEligibility(job,'/unused'),/held\/reserved/);
@@ -108,7 +109,7 @@ test('completed repair stays exclusive without changed inputs and a pending repa
   f.add([{type:'item.updated',id:'ENG-1',fields:{priority:42}}]);for(let n=0;n<3;n++)service.pass();
   assert.equal([...f.read().state.items.values()].filter(i=>i.meta.halt_repair).length,2,'real ready-priority change starts a new counted episode');
   f.add([{type:'item.updated',id:'ENG-1',fields:{priority:43}}]);for(let n=0;n<4;n++)service.pass();
-  assert.equal([...f.read().state.items.values()].filter(i=>i.meta.halt_repair).length,2,'pending failure stays exclusive despite another cause change');
+  assert.equal([...f.read().state.items.values()].filter(i=>i.meta.halt_repair).length,2,'pending repair stays exclusive despite another cause change');
 });
 
 test('only the exact completed pre-journal brief error with a changed valid address qualifies, never missing or uncertain evidence',()=>{

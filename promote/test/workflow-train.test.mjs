@@ -78,12 +78,13 @@ test('lane promote-batch no longer takes the retired workflow flag', t => {
 
 test('older queued jobs that carry a workflow field are accepted and promoted on the default train', t => {
   const f = fixture(t), queue = queueFor(f.repo), herdr = path.join(f.root, 'herdr');
-  fs.writeFileSync(herdr, `#!${process.execPath}\nconst a=process.argv.slice(2);if(a[0]==='agent'&&a[1]==='get')console.log(JSON.stringify({result:{agent:{agent:'claude',agent_status:'idle',pane_id:'fake'}}}));else if(a[0]==='pane'&&a[1]==='read')console.log('────────────────────\\n❯ \\n────────────────────');else console.log(JSON.stringify({result:{workspaces:[],agents:[]}}));`, { mode: 0o755 });
+  fs.writeFileSync(herdr, `#!${process.execPath}\nconst a=process.argv.slice(2);if(a[0]==='agent'&&a[1]==='get')console.log(JSON.stringify({result:{agent:{agent:'claude',agent_status:'idle',pane_id:'fake',terminal_id:${JSON.stringify(path.join(f.root, 'recipient-terminal'))}}}}));else if(a[0]==='pane'&&a[1]==='read')console.log('────────────────────\\n❯ \\n────────────────────');else console.log(JSON.stringify({result:{workspaces:[],agents:[]}}));`, { mode: 0o755 });
   enqueue(queue, ['first'], { workflow: true, expectedHead: f.head, org: null, herdr, to: 'fake', attempts: 1, retry: 0, laneCLI: path.join(source, 'lanes/lane.mjs') });
   assert.equal(queue.load().pending[0].workflow, true);
   const result = f.exec(process.execPath, [path.join(source, 'promote/promote.mjs'), '--drain'], f.repo);
   assert.equal(result.status, 0, result.stderr);
   const saved = queue.load().results[0]; assert.equal(saved.outcome, 'promoted', JSON.stringify(saved));
+  assert.equal(saved.delivered, true, 'the legacy workflow notice reaches the quiet scratch terminal before teardown');
   const plan = JSON.parse(fs.readFileSync(saved.receipt));
   assert.equal(plan.workflow, undefined); assert.equal(plan.workflow_runs, undefined);
   assert.equal(f.git(['rev-parse', 'main']), plan.attempts[0].tip);

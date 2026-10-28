@@ -432,7 +432,7 @@ async function main() {
   if (!job.reuse && (['open', 'start', 'starting', 'worker'].includes(job.stage) ||
       (job.stage === 'launching' && opt.fresh))) admission(job.repo, job.org, common);
   const stop = path.join(gitProject(job.repo).canonical, '.lane/supervisor/STOP');
-  const checkStop = () => {
+  const checkStop = ({boundary='launch'}={}) => {
     if(Date.now()>=controllerDeadline)throw Object.assign(Error('detached controller command budget exhausted; original journal retained'),{code:'DISPATCH_CONTROLLER_DEADLINE'});
     if (fs.existsSync(stop) || fs.existsSync(path.join(path.dirname(stop), 'HOLD'))) {
       const error = new Error('Supervisor STOP appeared before dispatch; no new worker launched');
@@ -441,7 +441,7 @@ async function main() {
     }
     if((job.detached||job.detachedRequested)&&fs.existsSync(path.join(job.org,'line-service',
       createHash('sha256').update(JSON.stringify(job.common)).digest('hex').slice(0,20),'STOP')))throw Object.assign(Error('service STOP appeared before detached effect'),{code:'DISPATCH_STOPPED'});
-    checkDispatchEligibility(job,journal);
+    checkDispatchEligibility(job,journal,{boundary});
     if (job.reviewQueue) {
       const events = loadEvents(job.org).events, state = fold(events), item = state.items.get(job.item);
       if (!item || item.closed || item.meta.hold || item.meta.held) throw Error('queued review item closed/held before native effect');
@@ -722,7 +722,7 @@ async function main() {
       prepareSessionBinding(run);
       job.stage = 'prompting'; save();
       checkReviewContinuationNative();
-      checkStop();
+      checkStop({boundary:'prompt'});
       herdr(['agent', 'prompt', job.worker.agentName, prompt]);
       job.stage = 'complete'; save();
       note(`prompt sent; worker ${job.worker.agentName} and watcher ${job.watcher.pid} started`);

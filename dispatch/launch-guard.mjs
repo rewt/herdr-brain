@@ -2,6 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
+import {execFileSync} from 'node:child_process';
 import {loadEvents} from '../lib/store.mjs';
 import {fold} from '../lib/state.mjs';
 import {assertOwner,readOwnedRun} from '../lib/run-owner-guard.mjs';
@@ -17,7 +18,8 @@ const changed = (reason, input) => {
   throw Object.assign(Error(`dispatch launch input changed: ${reason}`), {code:'DISPATCH_INPUT_CHANGED',launch_input:input});
 };
 
-export function checkDispatchEligibility(job, journal) {
+export function checkDispatchEligibility(job, journal, {boundary='launch'}={}) {
+  if(!['launch','prompt'].includes(boundary))throw Error('unknown dispatch input boundary');
   const {events,tornTail}=loadEvents(job.org),state=fold(events);
   const input={journal,token:job.token,item:job.item,run:job.run??null,project:job.common,
     release:job.release,observed_seq:events.at(-1)?.seq??0};
@@ -38,8 +40,23 @@ export function checkDispatchEligibility(job, journal) {
       refuse('run/intent no longer matches the saved request');
   }
   if(job.correction) {
-    const source=correctionSource({item,state,events,repo:job.repo,org:job.org,request:{job,journal}});
-    if(source?.base!==job.correction.base||source?.ref!==job.correction.ref)refuse('saved author source changed before fresh fix launch');
+    if(boundary==='launch') {
+      const source=correctionSource({item,state,events,repo:job.repo,org:job.org,request:{job,journal}});
+      if(source?.base!==job.correction.base||source?.ref!==job.correction.ref)refuse('saved author source changed before fresh fix launch');
+    } else {
+      // Mutable author refs/main select the source BEFORE native launch. Once
+      // launched, this allocation owns the frozen commit; unrelated landings or
+      // removal of an integrated author ref must not strand its idle worker.
+      // Keep the prompt bound to the actual registered, unchanged allocation.
+      if(!job.run||!job.worker||job.native_launch_attempted!==true||job.base!==job.correction.base)
+        refuse('fresh fix has no owned launched source before prompt');
+      const actual=gitProject(job.workspace),git=args=>execFileSync('git',['-C',job.workspace,...args],{encoding:'utf8',stdio:['ignore','pipe','pipe']}).trim();
+      const entry=git(['worktree','list','--porcelain']).split('\n\n').find(e=>e.split('\n').includes(`branch refs/heads/lane/${job.lane}`));
+      const registered=entry?.split('\n').find(l=>l.startsWith('worktree '))?.slice(9);
+      if(actual.identity!==job.common||actual.checkout!==job.workspace||actual.canonical!==job.repo||job.workspace===job.repo||
+          registered!==job.workspace||git(['rev-parse','HEAD'])!==job.base||git(['status','--porcelain=v1']))
+        refuse('launched fresh fix source changed before prompt');
+    }
   }
   if(job.lineInput){
     // Exclude only this request's own admission. Its original predecessor and

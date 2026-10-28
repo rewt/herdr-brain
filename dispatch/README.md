@@ -97,6 +97,14 @@ Unrelated record changes and ordinary predecessor evidence do not invalidate a
 valid original request. This replaces the detached item's earlier item-only
 check; saved runtime selection, native identity, capacity and source guards remain.
 
+Fresh fixes compare their frozen author/main source before native launch,
+including the launcher's final pending-intent check. Before the coordinated
+prompt, they verify their own registered lane still has the clean frozen commit
+instead of resolving the mutable author/main source again. Main advancing or an
+integrated author branch disappearing during startup cannot strand an admitted
+worker. Changed source before launch still refuses with `DISPATCH_INPUT_CHANGED`;
+item/ancestor, current-run, claim and native guards still run before prompting.
+
 Queued reviewers dispatch into their OWN registered review worktree at the exact
 captured immutable head. The dispatcher validates actual Git common-directory,
 canonical project, registered path and HEAD before effects, then passes the

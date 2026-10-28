@@ -19,7 +19,7 @@ import {spawnChild,waitForExit} from './helpers/child.mjs';
 import {lockRequest} from '../dispatch/request-lock.mjs';
 
 const root=fs.realpathSync(fileURLToPath(new URL('../',import.meta.url))),entry=path.join(root,'bin/org.mjs');
-function fixture(t,{canonical=true,abandoned=true}={}){
+function fixture(t,{canonical=true,abandoned=true,sourceMeta={},producerHarness}={}){
   const f=configFixture(t,{custom:true}),org=f.env.ORG_DIR,identity=gitProject(f.cwd).identity,base=f.git('rev-parse','HEAD');
   const git=(args,cwd=f.cwd)=>{const r=spawnSync('git',['-C',cwd,...args],{env:f.env,encoding:'utf8'});assert.equal(r.status,0,r.stderr);return r.stdout.trim();};
   fs.writeFileSync(path.join(f.cwd,'build'),'actual source');git(['add','build']);git(['commit','-qm','Landed change']);const head=git(['rev-parse','HEAD']);
@@ -32,7 +32,7 @@ function fixture(t,{canonical=true,abandoned=true}={}){
   if(!canonical){
     const dispatch=path.join(org,'dispatch/source.json'),report='---\nrun: R-1\noutcome: done\nsummary: Landed source.\nartifacts:\n  - "Commit: '+head+'"\n---\n';
     fs.writeFileSync(dispatch,JSON.stringify({token:'source',run:'R-1',item:'ENG-1',org,common:identity,workspace:f.cwd,base,stage:'complete'}));fs.writeFileSync(path.join(org,'reports/R-1.md'),report);
-    add([{type:'item.added',id:'ENG-1',role:'engineer',title:'Build'},{type:'run.started',id:'R-1',item:'ENG-1',workspace:f.cwd,meta:{lane:'source',dispatch_journal:dispatch,dispatch_attempt:'source'}},{type:'run.claimed',run:'R-1',project:identity,record:org,owner},{type:'report.ingested',run:'R-1',file:'reports/R-1.md',sha256:hash(report),report:{outcome:'done',artifacts:[`Commit: ${head}`],extra:{},blockers:[],proposals:[]}}]);
+    add([{type:'item.added',id:'ENG-1',role:'engineer',title:'Build',meta:sourceMeta},{type:'run.started',id:'R-1',item:'ENG-1',workspace:f.cwd,meta:{lane:'source',dispatch_journal:dispatch,dispatch_attempt:'source',...(producerHarness?{harness:producerHarness}:{})}},{type:'run.claimed',run:'R-1',project:identity,record:org,owner},{type:'report.ingested',run:'R-1',file:'reports/R-1.md',sha256:hash(report),report:{outcome:'done',artifacts:[`Commit: ${head}`],extra:{},blockers:[],proposals:[]}}]);
   }
   const serviceEnv={...f.env,ORG_ACTOR:'line-service',HERDR_BRAIN_ROOT:root};for(const k of ['HERDR_ENV','HERDR_PANE_ID','HERDR_WORKSPACE_ID','CODEX_THREAD_ID'])delete serviceEnv[k];
   const queued=spawnSync(process.execPath,[entry,'queue-review',canonical?`canonical:${head}`:'R-1'],{cwd:f.cwd,env:serviceEnv,encoding:'utf8'});assert.equal(queued.status,0,queued.stderr);const reviewId=JSON.parse(queued.stdout).review_item;
@@ -199,11 +199,17 @@ test('never-started public owner command serializes competing authorizations wit
   for(const r of replies)if(!r.stdout.includes('unstarted_review_ready'))assert.match(r.stderr,/already running|lock/i);
 });
 
-test('never-started canonical authorization reaches the existing normal dispatcher once with exact HEAD as base',t=>{
-  const f=fixture(t);recoverUnstartedReview(f.args());const d=dispatchFixture(t,{project:f,sourceEntry:true}),lane=path.join(d.root,'bin/lane');fs.writeFileSync(lane,fs.readFileSync(lane,'utf8').replaceAll('lane/topic','lane/review-replacement'));
-  const options={env:{...d.env,HERDR_BRAIN_ROOT:root}},args=[f.reviewId,'--lane','review-replacement','--route','review-codex','--base',f.head,'--brief',d.brief];
-  const wrong=d.dispatch(args.map(a=>a===f.head?f.base:a),options);assert.equal(wrong.status,1);assert.equal(f.context().events.some(e=>e.type==='review.unstarted-consumed'),false);
+for(const scenario of [
+  {name:'canonical',route:'review',wrongRoute:'review-codex'},
+  {name:'classified Claude producer',canonical:false,producerHarness:'claude',sourceMeta:{judgment_heavy:true},route:'review-codex',wrongRoute:'review'},
+  {name:'classified Codex producer',canonical:false,producerHarness:'codex',sourceMeta:{outward:true},route:'review',wrongRoute:'review-codex'},
+])test(`never-started ${scenario.name} authorization reaches the existing normal dispatcher once with exact HEAD as base`,t=>{
+  const f=fixture(t,scenario);recoverUnstartedReview(f.args());const d=dispatchFixture(t,{project:f,sourceEntry:true}),lane=path.join(d.root,'bin/lane');fs.writeFileSync(lane,fs.readFileSync(lane,'utf8').replaceAll('lane/topic','lane/review-replacement'));
+  // Recovery authorizes the current classified route, not the historical attempt's route.
+  const options={env:{...d.env,HERDR_BRAIN_ROOT:root}},args=[f.reviewId,'--lane','review-replacement','--route',scenario.route,'--base',f.head,'--brief',d.brief],before=f.context().events,original=fs.readFileSync(f.journal);
+  const wrongRoute=d.dispatch(args.map(a=>a===scenario.route?scenario.wrongRoute:a),options);assert.equal(wrongRoute.status,1);assert.match(wrongRoute.stderr,/queued review must use the normal reviewer route/);assert.deepEqual(f.context().events,before);assert.equal(promptCalls(d).length,0);
+  const wrong=d.dispatch(args.map(a=>a===f.head?f.base:a),options);assert.equal(wrong.status,1);assert.match(wrong.stderr,/exact captured head/);assert.deepEqual(f.context().events,before);assert.equal(promptCalls(d).length,0);
   const result=d.dispatch(args,options);assert.equal(result.status,0,result.stderr);assert.equal(promptCalls(d).length,1);
   const c=f.context();assert.equal(c.item.runs.length,2);assert.equal(c.item.runs[0],'R-918');assert.equal(c.events.filter(e=>e.type==='review.unstarted-consumed').length,1);assert.equal(c.events.filter(e=>e.type==='run.claimed'&&e.run==='R-918').length,1);
-  const again=d.dispatch(args,options);assert.equal(again.status,1);assert.equal(promptCalls(d).length,1);
+  const again=d.dispatch(args,options);assert.equal(again.status,1);assert.equal(promptCalls(d).length,1);assert.equal(f.context().events.filter(e=>e.type==='review.unstarted-consumed').length,1);assert.deepEqual(fs.readFileSync(f.journal),original);
 });

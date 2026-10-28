@@ -62,6 +62,8 @@ for (const [blocking, resolved] of [[false, false], [true, false], [true, true]]
   assert.ok(child); assert.equal(child.role, 'engineer'); assert.ok(m.job.id);
   assert.ok(f.queue.load().pending[0].admittedSeq >= child.seq);
   if (resolved) {
+    // Report proposals require explicit selection before work can start.
+    f.recover(m, ['set', child.id, 'meta.queue_selected=true']);
     const run = f.recover(m, ['start', child.id]).match(/^R-\d+/)[0], report = path.join(f.root, 'child-done.md');
     fs.writeFileSync(report, `---\nrun: ${run}\noutcome: done\nsummary: Follow-up complete\n---\n`);
     f.record(['ingest', report]);

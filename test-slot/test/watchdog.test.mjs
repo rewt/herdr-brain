@@ -462,7 +462,8 @@ test('fixture gates cannot create or modify the real repository history', t => {
 // even the deliberate leak below cannot write the operator's history.
 for (const writer of ['unattributed', 'foreign', 'descendant-leak']) test(`history origin guard handles a concurrent ${writer} writer`, t => {
   const s = scratch(t), repo = fileURLToPath(new URL('../../', import.meta.url));
-  for (const name of ['test/helpers/gate-history.mjs', 'test-slot/limits.mjs', 'lanes/promotion-lock.mjs', 'lib/deadline.mjs', 'lib/files.mjs']) {
+  // Include files.mjs's observation facade so the isolated writer can load.
+  for (const name of ['test/helpers/gate-history.mjs', 'test-slot/limits.mjs', 'lanes/promotion-lock.mjs', 'lib/deadline.mjs', 'lib/files.mjs', 'lib/record-observation.mjs']) {
     const target = path.join(s.root, name);
     fs.mkdirSync(path.dirname(target), { recursive: true });
     fs.copyFileSync(path.join(repo, name), target);
@@ -495,7 +496,7 @@ for (const writer of ['unattributed', 'foreign', 'descendant-leak']) test(`histo
   `);
   const result = spawnSync(process.execPath, [guarded], { cwd: s.root, env: s.env, encoding: 'utf8' });
   const sample = healthyHistory(common, 'gate', command, historyFile(common, 'gate', command, undefined, {}))[0];
-  assert.ok(sample, 'the non-slot writer published under the guarded real Git identity');
+  assert.ok(sample, `the non-slot writer published under the guarded real Git identity\n${result.stderr}`);
   if (writer === 'descendant-leak') {
     assert.equal(sample.origin, fs.readFileSync(path.join(s.root, 'origin'), 'utf8'), 'nested helper preserves the process-tree origin');
     assert.equal(result.status, 1, result.stderr);

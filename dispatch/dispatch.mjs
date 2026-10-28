@@ -469,7 +469,7 @@ async function main() {
       ...(reviewQueue ? { reviewQueue, reviewQueueBrief: reviewQueueBrief(item) } : {}),
       ...(dispatchPool({item})==='decision'?{decisionQueue:{key:item.meta.decision_request?.key}}:{}),
       brief, report: opt.report ?? null, to: opt.to ?? (resume ? exceptionAddress.to : null),
-      base: git(['rev-parse', `${resume?.base ?? correction?.base ?? opt.base ?? 'HEAD'}^{commit}`], repo), extra: (opt.extra ?? '') + (correction?.brief ?? ''), reuse: null, resumeSession: opt['resume-session'] ?? null,
+      base: git(['rev-parse', `${resume?.base ?? correction?.base ?? opt.base ?? 'HEAD'}^{commit}`], repo), extra: [opt.extra, correction?.brief].filter(Boolean).join('\n\n'), reuse: null, resumeSession: opt['resume-session'] ?? null,
       ...(resume ? { resume, resumeDeliveryProtocol: 1 } : {}),
       ...(correction ? { correction } : {}), fromRun: opt['from-run'] ?? null, unblocks: opt.unblocks ?? null,
       declared: declaredFields, exceptionAddress, ...(workerBrief ? { workerBrief } : {}),

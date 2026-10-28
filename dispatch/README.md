@@ -49,6 +49,29 @@ the exact kept unlanded author branch, otherwise main. A dirty saved author
 folder is retained and reported to its owner; dispatch does not branch around it.
 The brief carries both reports, immutable base/head/diff, failed and unrun proof
 locations, and the specific correction control for each Major.
+It names the ingested report copies and their hashes, the exact Git diff command,
+all assigned findings (including Minors), preserved check status/log/receipt, and
+both reports' complete artifact lists. Missing legacy evidence is explicitly
+UNKNOWN; it never becomes PASS. A retried correction also receives earlier fixer
+reports and packets and continues its own kept unlanded branch when present.
+Foreground and detached/resume dispatch use the same assembled context through
+the saved request; retry does not rewrite a saved prompt or create another review.
+
+Reviewers can supply a distinct control for each Major in report frontmatter:
+
+```yaml
+findings:
+  - severity: major
+    text: "codec.mjs:41 - Reject invalid source paths"
+    correction_check: "node test/helpers/run.mjs test/codec.test.mjs; invalid paths refuse before effects"
+```
+
+The text must match the finding bullet. Intake preserves this control even when
+the same finding also appears in the report body. A linked engineer proposal can
+instead provide `review_correction_checks` keyed by exact finding text (or finding
+key); its existing single `correction_check` remains supported. Legacy findings
+without a control explicitly require selecting a focused reproduction and assertion
+before editing. No reviewer suite or additional concurrence stage is introduced.
 
 New `--reuse` requests refuse with `REUSE_REMOVED`. To recover saved context, use
 `--resume-session UUID`. This launches a new allocation through the configured

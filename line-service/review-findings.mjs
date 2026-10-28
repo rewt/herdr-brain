@@ -24,6 +24,12 @@ export function reviewCorrectionEvents({ state, events, run, review, report, fin
   for (const finding of findings) {
     const key = reviewFindingKey(review, finding);
     if (!rows.has(key)) rows.set(key, { ...finding, key });
+    else if (finding.correction_check) {
+      const row = rows.get(key);
+      if (row.correction_check && row.correction_check !== finding.correction_check)
+        throw Error('one immutable finding has contradictory correction checks');
+      row.correction_check = finding.correction_check;
+    }
   }
   const declared = new Set(rows.keys());
   const proposals = (report.proposals ?? []).filter(p => roleIs(p, 'ENG'));
@@ -100,7 +106,9 @@ export function reviewCorrectionEvents({ state, events, run, review, report, fin
         review_source_run: review.meta.review_source_run, review_owner_run: review.meta.review_source_run,
         review_round_cap: 1, severity, review_finding_keys: missing };
       meta.review_correction_checks = Object.fromEntries(selected.filter(row => row.severity === 'major').map(row =>
-        [row.key, proposal?.extra?.correction_check ?? `Reproduce and correct this exact Major trigger: ${row.text}`]));
+        [row.key, row.correction_check ?? proposal?.extra?.review_correction_checks?.[row.key] ??
+          proposal?.extra?.review_correction_checks?.[row.text] ?? proposal?.extra?.correction_check ??
+          `Selection required before editing: reproduce this exact Major trigger and assert its corrected behavior: ${row.text}`]));
       if (!historical) {
         taken.add(id);
         add.push({ type: 'item.added', id, kind: 'work', role: proposal?.role ?? 'engineer',

@@ -105,7 +105,7 @@ test('batch promotion prepares every record before taking the first lock and val
   const f=fixture(t,{git:true}),head=f.git(['rev-parse','HEAD']),owner={controller:'brain',legacy:false,release:{id:'source',root:f.root,commit:null,identity:path.join(f.root,'.git')}};
   transact(f.org,()=>({add:[{type:'item.added',id:'ENG-1',kind:'work',role:'engineer',title:'Fixture'},{type:'run.started',id:'R-1',item:'ENG-1',workspace:f.root},{type:'run.claimed',run:'R-1',record:f.org,project:path.join(f.root,'.git'),owner},{type:'report.ingested',run:'R-1',file:'reports/x',sha256:'a'.repeat(64),report:{outcome:'done'}}]}));
   // A waived candidate needs no independent review in this focused fixture.
-  fs.writeFileSync(path.join(f.root,'.lane.validation.json'),JSON.stringify({landing_waiver:'fixture'}));
+  fs.writeFileSync(path.join(f.root,'.lane.validation.json'),JSON.stringify({landing_waiver:'operator-20261025-until-stable-release'}));
   const lane={canonical:f.root,identity:path.join(f.root,'.git'),workspace:f.root,topic:'topic',expectedHead:head,run:'R-1',org:f.org};
   atLock(t,f,()=>fs.appendFileSync(f.file,JSON.stringify({seq:5,type:'future.unknown'})+'\n'));
   assert.throws(()=>withPromotionGuards([lane,lane],()=>assert.fail('changed batch')),/guard conflict/);
@@ -116,4 +116,11 @@ test('post-FF dynamic receipt loads against the already cached legacy store expo
   fs.writeFileSync(loader,`export async function load(url,context,next){if(url.endsWith('/lib/store.mjs'))return{format:'module',shortCircuit:true,source:'export { LOG_FILE,CONFIG_FILE,DEFAULT_CONFIG,UserError,now,findOrgDir,isOrgDir,initOrg,readConfig,loadEvents,loadRecord,writer,transact,planTransaction,withLock,writeFileAtomic } from '+JSON.stringify(url+'?implementation')+';'};return next(url,context);}`);
   const result=spawnSync(process.execPath,['--experimental-loader',loader,'--input-type=module','-e',`await import(${JSON.stringify(receipt)});`],{encoding:'utf8'});
   assert.equal(result.status,0,result.stderr);
+});
+
+test('residual timing attributes the exact callback without changing legacy acquisition labels',t=>{
+  const f=fixture(t);transact(f.org,()=>({add:[{type:'future.unknown'}]}));
+  const rows=fs.readFileSync(path.join(f.org,'record-lock.timings.jsonl'),'utf8').trim().split('\n').map(JSON.parse),row=rows.at(-1);
+  assert.equal(row.label,'transact');assert.match(row.caller,/^test\/record-outer-locks.test.mjs:\d+$/);assert.equal(row.schema,'record-lock/v1');
+  assert.equal(loadEvents(f.org).events.length,1);
 });

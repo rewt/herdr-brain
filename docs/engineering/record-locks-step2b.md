@@ -36,6 +36,9 @@ Successful acquisitions retain the timing journal. `owner-reservation`,
 identify formerly anonymous outer callbacks. The source fingerprint continues to
 identify the store/fold implementation, not a claim about every loaded module.
 Use source path, immutable head and collection window together.
+An optional `caller` field names the residual callback's source location while
+preserving existing acquisition labels. It is derived before acquisition and
+has no role in permission, identity, claim or recovery decisions.
 
 Recovery requires a positive PID and an ESRCH probe. A live/reused PID, EPERM,
 missing or malformed PID remains UNKNOWN regardless of age. New writers must

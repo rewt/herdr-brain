@@ -50,8 +50,6 @@ import { VALIDATION_TIERS, resolveValidation, validateValidation, validateTree, 
 import { readReceiptDeclaration, restrictEnvironment, excludedAdditions, requireExactPlan, selectionUnknown } from './exact-validation.mjs';
 import { changedPaths, plannedCommand } from '../promote/test-plan.mjs';
 import { canonicalTestPlan } from '../settle/test-plan.mjs';
-import { recordOwnLanding } from '../lib/landing-receipt.mjs';
-import { checkDispatchLaunch } from '../dispatch/launch-guard.mjs';
 
 import {
   loadRegistry,
@@ -1200,7 +1198,7 @@ function supportsInitialEnvironment(pane, deadline) {
   return ["sh", "bash", "zsh", "dash", "ash", "ksh"].includes(basename(shell ?? "").replace(/^-/, ""));
 }
 
-function dispatch(topic, promptText, options = {}) {
+async function dispatch(topic, promptText, options = {}) {
   repositoryRoot({ requiredBy: "dispatch" });
   const branch = laneBranch(topic);
   const resolved = resolveDispatch(options);
@@ -1210,6 +1208,9 @@ function dispatch(topic, promptText, options = {}) {
     if(options.expectedHead===undefined)return;
     if(!/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(options.expectedHead)||samePath(path,REPO_ROOT)||worktreeFor(branch)!==path||gitIdentityForPath(path)!==REPO_IDENTITY||tryGit(['rev-parse','HEAD'],{cwd:path})!==options.expectedHead)fail('review worktree path/common-directory/captured HEAD changed; no new reviewer may launch');
   };
+  // The launch graph has top-level await; load it asynchronously only for dispatch.
+  const { checkDispatchLaunch } = options.dispatchJournal
+    ? await import('../dispatch/launch-guard.mjs') : {};
   let launchRequest;
   const checkLaunch=()=>{
     if(!options.dispatchJournal)return;
@@ -2458,7 +2459,7 @@ async function review(topic, args, memoryChecked = false) {
   let session;
   try {
     try {
-      session = dispatch(topic, prompt, { route: options.route, routeConfig: options.routeConfig, run: options.run, silent: true, deadline, capturedHead });
+      session = await dispatch(topic, prompt, { route: options.route, routeConfig: options.routeConfig, run: options.run, silent: true, deadline, capturedHead });
     } catch (error) {
       fail(`review dispatch failed: ${error.code === "ETIMEDOUT" ? "timeout" : "Herdr command error"}`);
     }
@@ -2645,7 +2646,7 @@ function promote(topic, options = {}) {
   return withPromotionLock(() => promoteLocked(topic, root, options));
 }
 
-function promoteLocked(topic, root, options) {
+async function promoteLocked(topic, root, options) {
   const branch = laneBranch(topic);
   if (!branchExists(branch)) fail(`no such lane branch: ${branch}`);
   const path = worktreeFor(branch);
@@ -2733,6 +2734,7 @@ function promoteLocked(topic, root, options) {
   // The FF is finished. A receipt failure retains that fact and is reported
   // separately; it never turns source landing into a report/review gate.
   if(process.env.HERDR_ENV==='1')try{
+    const { recordOwnLanding } = await import('../lib/landing-receipt.mjs');
     const receipt=recordOwnLanding({canonical:root,workspace:path,base:mainHead,head:validatedHead,landedAt});
     process.stdout.write(`landing receipt: ${JSON.stringify(receipt)}\n`);
   }catch(error){process.stderr.write(`post-FF landing receipt held: ${error.message}; source is landed, exact record timing UNKNOWN\n`);}
@@ -2894,7 +2896,7 @@ switch (command) {
     laneBranch(topic);
     resolveDispatch(options);
     if (!launchMemoryGate('lane dispatch', options.memoryChecked)) break;
-    const result = dispatch(topic, promptText, options);
+    const result = await dispatch(topic, promptText, options);
     if (options.silent) process.stdout.write(`${JSON.stringify(result)}\n`);
     break;
   }
@@ -2985,7 +2987,7 @@ switch (command) {
     if (options.expectedHead !== undefined && !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u.test(options.expectedHead)) fail(usage);
     if (options.run !== undefined && (!/^R-\d+$/u.test(options.run) || options.expectedHead === undefined || !options.org)) fail(usage);
     if (options.org !== undefined) options.org = realpathSync(resolve(options.org));
-    promote(topic, options);
+    await promote(topic, options);
     break;
   }
   case "close": {

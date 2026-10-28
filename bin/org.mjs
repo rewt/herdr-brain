@@ -20,7 +20,6 @@ import { requestRetirement } from '../lib/retire-trigger.mjs';
 import { bindCloseoutSources, publishCloseoutEvents } from '../lib/closeout.mjs';
 import { lessonProposal, lessonsJson } from '../lib/lessons.mjs';
 import { readReport } from '../lib/report.mjs';
-import { reviewResultEvents } from '../line-service/phase1.mjs';
 import { approvalPolicy, CATEGORY_CHECKLIST, categoryFlag, categoryFlagText, reportCategoryFlags } from '../lib/discernment.mjs';
 import { sanitizeTerminal } from '../lib/sanitize.mjs';
 import { renderToday, todayJson } from '../lib/today.mjs';
@@ -784,7 +783,7 @@ function worker(argv) {
   return 0;
 }
 
-function ingestFile(ctx, file, runHint, currentRun) {
+async function ingestFile(ctx, file, runHint, currentRun) {
   const abs = path.resolve(file);
   let text;
   try {
@@ -801,6 +800,8 @@ function ingestFile(ctx, file, runHint, currentRun) {
     return fail([`the report says run ${parsed.report.run} but --run is ${runHint}`]);
   }
   const sha256 = crypto.createHash('sha256').update(text).digest('hex');
+  // Load review services before the synchronous record transaction, only for intake.
+  const { reviewResultEvents } = await import('../line-service/phase1.mjs');
   const { result } = mutate(ctx, (s, committedEvents) => {
     const run = s.runs.get(runId);
     if (!run) throw new UserError(`unknown run ${runId}`);
@@ -900,12 +901,12 @@ function printIngest(res) {
   return true;
 }
 
-function ingest(argv) {
+async function ingest(argv) {
   const { values, positionals } = args(argv, { run: { type: 'string' }, 'if-current-run': { type: 'string' } }, { min: 1, max: 1, usage: 'record ingest <report.md> [--run R-n] [--if-current-run R-n]' });
-  return printIngest(ingestFile(openOrg(), positionals[0], values.run, values['if-current-run'])) ? 0 : 1;
+  return printIngest(await ingestFile(openOrg(), positionals[0], values.run, values['if-current-run'])) ? 0 : 1;
 }
 
-function sync(argv) {
+async function sync(argv) {
   args(argv, {}, { max: 0, usage: 'record sync' });
   const ctx = openOrg();
   const runs = [...ctx.state.runs.values()];
@@ -921,7 +922,7 @@ function sync(argv) {
       printSkippedReport(run.id);
       continue;
     }
-    if (!printIngest(ingestFile(openOrg(), run.report_path, run.id))) failed++;
+    if (!printIngest(await ingestFile(openOrg(), run.report_path, run.id))) failed++;
   }
   return failed ? 1 : 0;
 }

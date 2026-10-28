@@ -7,8 +7,8 @@ import { gitProject } from '../lib/project.mjs';
 import { findOrgDir, UserError } from '../lib/store.mjs';
 import { readOwnedRun } from '../lib/run-owner-guard.mjs';
 import { effectiveWorkerIdentity } from '../lib/worker-identity.mjs';
-import { invokeHerdr } from '../supervisor/herdr-edge.mjs';
-import { enqueueSupervisor, inboxPath, readInbox, resumeInbox } from '../supervisor/prompt-supervisor.mjs';
+import { invokeHerdr } from '../lib/herdr-command.mjs';
+import { inboxPath, readInbox } from './inbox-read.mjs';
 import { identityRootAt } from './journal.mjs';
 import { fold } from '../lib/state.mjs';
 import { validateOperatorText, operatorWording } from './operator-text.mjs';
@@ -99,9 +99,14 @@ function pendingReservedQuestions(envelope, state, org) {
 }
 export const pushId = (org, id) => `operator-message-${digest(canonical([org, id]))}`;
 
-export async function pushReserved(envelope, binding, state, { enqueue = enqueueSupervisor, resume = resumeInbox, call = invokeHerdr } = {}) {
+export async function pushReserved(envelope, binding, state, { enqueue, resume, call = invokeHerdr } = {}) {
   const question = reservedQuestion(envelope, state, binding.org);
   if (!question) return { state: 'record-only', reason: 'no pending explicitly operator-reserved question' };
+  if (!enqueue || !resume) {
+    const transport = await import('../supervisor/prompt-supervisor.mjs');
+    enqueue ??= transport.enqueueSupervisor;
+    resume ??= transport.resumeInbox;
+  }
   const file = inboxPath({ org: binding.org }), id = pushId(binding.org, question.id);
   const prior = readInbox(file).find(e => e.id === id);
   // Once queued, the original named-role target and ambiguous-delivery journal

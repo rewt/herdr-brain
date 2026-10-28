@@ -184,7 +184,8 @@ test('failed audit and reported survivors still use freshly confirmed owned tear
     if (kind === 'audit error') h.state.auditError = true;
     else h.state.survivors = [{ ...h.state.current, pid: 4243, ppid: 4242, command: 'controlled-descendant' }];
     h.complete(); h.pending();
-    assert.deepEqual(h.trace.slice(-5), ['watch.stop', 'audit', 'lookup', 'signal', 'disconnect']);
+    const teardown = ['watch.stop', 'audit', ...(kind === 'survivor' ? ['fixture-survivor'] : []), 'lookup', 'signal', 'disconnect'];
+    assert.deepEqual(h.trace.slice(-teardown.length), teardown);
     assert.deepEqual(h.signals, [[-4242, 'SIGKILL']]);
     assert.match(h.errors.join('\n'), kind === 'audit error' ? /injected audit failure/ : /Surviving fixture: PID 4243, command controlled-descendant\. Files: controlled\.test\.mjs/);
     h.exit(); h.finished(1);

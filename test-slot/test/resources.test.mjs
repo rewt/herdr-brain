@@ -123,45 +123,20 @@ child.on('message',({pid})=>{
 
 function unprofiledNestedFixture(t, { mutateLock = false } = {}) {
   const f = fixture(t), parent = path.join(f.root, 'unprofiled.cjs');
-  const pending = path.join(f.root, 'parent-saw-pending-group'), preload = path.join(f.root, 'delay-group.cjs');
-  // Force the startup race: pause the wrapper's final group publication until
-  // the parent has observed the pending record. Never patch product code.
-  fs.writeFileSync(preload, `const fs=require('fs'),path=require('path'),rename=fs.renameSync;
-fs.renameSync=(from,to)=>{
- if(fs.realpathSync(path.dirname(path.resolve(to)))===${JSON.stringify(path.join(fs.realpathSync(f.root), 'slot.occupancy'))} && fs.existsSync(to)) {
-  const holder=JSON.parse(fs.readFileSync(from,'utf8'));
-  if(holder.pid===process.pid&&holder.groupStart!==null) {
-   const deadline=Date.now()+${loadTimeout(5000)};
-   while(!fs.existsSync(${JSON.stringify(pending)})) {
-    if(Date.now()>=deadline)throw Error('parent did not observe pending group');
-    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,10);
-   }
-  }
- }
- return rename(from,to);
-};`);
   const mutation = mutateLock ? `const fs=require('fs'),dir=process.env.MONITOR_TEST_SLOT_PATH+'.occupancy',file=require('path').join(dir,fs.readdirSync(dir).find(n=>!n.startsWith('.'))),holder=JSON.parse(fs.readFileSync(file,'utf8'));holder.label+='/nested-mutation';fs.writeFileSync(file,JSON.stringify(holder)+'\\n');` : '';
   const argv = [process.execPath, '-e', `console.log("nested marker");${mutation}`];
   fs.writeFileSync(parent, `const fs=require('fs'),cp=require('child_process'),assert=require('assert/strict');
-const deadline=Date.now()+${loadTimeout(5000)};
-const dir=${JSON.stringify(f.lock + '.occupancy')},occupancy=require('path').join(dir,fs.readdirSync(dir).find(n=>!n.startsWith('.')));
-let before;
-while(!before) {
- const bytes=fs.readFileSync(occupancy,'utf8');
- if(JSON.parse(bytes).groupStart!==null)before=bytes;
- else {
-  fs.writeFileSync(${JSON.stringify(pending)},'observed pending group');
-  assert(Date.now()<deadline,'outer wrapper did not record its group before the snapshot');
-  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,10);
- }
-}
+// The shared startup barrier publishes the group before this payload runs.
+// Snapshot its first visible record; a pending-state wait would deadlock
+// with the wrapper that must publish before releasing this payload.
+const occupancy=process.env.MONITOR_TEST_SLOT_OCCUPANCY_PATH,before=fs.readFileSync(occupancy,'utf8'),holder=JSON.parse(before);
+assert.equal(holder.pgid,process.pid,'outer wrapper did not publish the payload group');
+assert(holder.groupStart,'outer wrapper did not record its group before the snapshot');
 for(const profiled of [false,true]) {
  const r=cp.spawnSync(process.execPath,[${JSON.stringify(cli)},'run','nested','--lock-path',${JSON.stringify(f.lock)},'--result-path',${JSON.stringify(path.join(f.root, 'inner-'))}+profiled+'.json',...(profiled?['--resource',JSON.stringify(${JSON.stringify(resourceStanza('fixture/inner', argv))})]:[]),'--',...${JSON.stringify(argv)}],{encoding:'utf8'});
  assert.equal(r.status,0,r.stderr);assert.equal(fs.readFileSync(occupancy,'utf8'),before,'nested command changed outer holder record');
 }`);
-  const result = f.run([process.execPath, parent], { profiled: false,
-    environment: { ...f.env, NODE_OPTIONS: `${f.env.NODE_OPTIONS ?? ''} --require=${JSON.stringify(preload)}` } });
-  assert.equal(fs.existsSync(pending), true, `the fixture exercised the pending group publication: ${result.stderr}`);
+  const result = f.run([process.execPath, parent], { profiled: false });
   return { f, result };
 }
 

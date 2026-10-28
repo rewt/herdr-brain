@@ -4,7 +4,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { waitForFile, waitForChange } from '../../test/helpers/file-wait.mjs';
-import { ADMISSION_WAIT_MS } from '../../lib/deadline.mjs';
+import { ADMISSION_WAIT_MS, loadTimeout } from '../../lib/deadline.mjs';
+import { publishProvingReservation } from '../../test-slot/reservations.mjs';
 import { fixture } from './fixture.mjs';
 import { ROUTE_PRESET } from '../../lanes/preset.mjs';
 import { INHERITED_GATE_NON_CLAIM } from '../../lanes/review-evidence.mjs';
@@ -72,8 +73,21 @@ test('settle retains the review stage under simulated memory pressure and launch
   assert.equal(f.calls().filter(args => args[1] === 'start').length, 1);
 });
 
-test('STOP arriving during correction dispatch memory wait returns a resumable stopped handoff', async t => {
+test('STOP arriving during correction dispatch proving wait returns a resumable stopped handoff', async t => {
+  let held;
+  const releaseProving = () => {
+    if (!held) return;
+    assert.equal(held.release(), true, 'only the fixture owner releases its proving reservation');
+    held = undefined;
+  };
+  // Release before fixture cleanup awaits children if setup or observation fails.
+  t.after(releaseProving);
   const f = fixture(t), run = f.start();
+  const reserve = () => {
+    held = publishProvingReservation({ lockPath: f.env.MONITOR_TEST_SLOT_COMPAT_PATH, cwd: f.repo,
+      label: 'settle correction', reason: 'STOP correction dispatch fixture',
+      expiresAt: new Date(Date.now() + loadTimeout(2 * ADMISSION_WAIT_MS)).toISOString() });
+  };
   // Reaching dispatch crosses record/source checks and another CLI launch.
   // Observe that lifecycle with its admission allowance, not a file-read wait.
   const waitForDispatch = async (pending, output, phase) => {
@@ -81,7 +95,7 @@ test('STOP arriving during correction dispatch memory wait returns a resumable s
       await waitForChange([], () => {
         if (pending.child.exitCode !== null) throw Error(`child exited ${pending.child.exitCode}`);
         if (pending.child.signalCode !== null) throw Error(`child received ${pending.child.signalCode}`);
-        return output().stderr.includes('dispatch: waiting');
+        return output().stderr.includes('dispatch: waiting; proving');
       }, { timeoutMs: ADMISSION_WAIT_MS });
     } catch (error) {
       // Exit can precede pipe drain. Preserve the actual completion/refusal and
@@ -89,7 +103,7 @@ test('STOP arriving during correction dispatch memory wait returns a resumable s
       const completed = pending.child.exitCode !== null || pending.child.signalCode !== null
         ? await pending.done : output();
       const saved = journal(f, run);
-      throw Error(`${phase} dispatch memory observation: ${error.message}; ${JSON.stringify({
+      throw Error(`${phase} dispatch proving observation: ${error.message}; ${JSON.stringify({
         stage: saved.stage, result: saved.result ?? null, stdout: completed.stdout, stderr: completed.stderr,
       })}`, { cause: error });
     }
@@ -97,11 +111,17 @@ test('STOP arriving during correction dispatch memory wait returns a resumable s
   f.commit('correct\n'); f.report(run);
   fs.writeFileSync(path.join(f.root, 'review-result.json'), JSON.stringify({ verdict: 'NEEDS-WORK',
     findings: '- [Moderate] work.txt:1 - Follow-up remains; Fix: follow up' }));
-  assert.equal(result(f.settle(run, ['--review-round-cap', '1'])).result, 'promotable_with_findings');
+  const reviewed = result(f.settle(run, ['--review-round-cap', '1']));
+  assert.equal(reviewed.result, 'promotable_with_findings');
+  assert.equal(reviewed.review_policy.cap, 1); assert.equal(reviewed.review_policy.round, 1);
   const starts = f.calls().filter(args => args[1] === 'start').length;
   const memory = path.join(f.root, 'memory.json');
-  fs.writeFileSync(memory, JSON.stringify({ available: 128 * 1024 ** 2, swap_used: 0 }));
+  // Low memory is advisory for dispatch. A real private proving reservation
+  // supplies the launch barrier and remains separate from STOP authority.
+  const lowMemory = { available: 128 * 1024 ** 2, swap_used: 0 };
+  fs.writeFileSync(memory, JSON.stringify(lowMemory));
   f.env.TEST_MEMORY_FILE = memory;
+  reserve();
   const pending = f.concurrent(run, undefined, ['--retry', '--fix-findings']);
   let stderr = '', stdout = '';
   pending.child.stderr.on('data', data => { stderr += data; });
@@ -109,10 +129,13 @@ test('STOP arriving during correction dispatch memory wait returns a resumable s
   const stop = path.join(f.repo, '.lane/supervisor/STOP');
   try {
     await waitForDispatch(pending, () => ({ stderr, stdout }), 'initial');
-    assert.match(stderr, /dispatch: waiting; memory pressure/);
-    fs.mkdirSync(path.dirname(stop), { recursive: true }); fs.writeFileSync(stop, 'Stop during memory wait');
+    assert.match(stderr, /dispatch: waiting; proving .*STOP correction dispatch fixture/);
+    assert.equal(journal(f, run).stage, 'dispatching');
+    fs.mkdirSync(path.dirname(stop), { recursive: true }); fs.writeFileSync(stop, 'Stop during proving wait');
+    await pending.done;
+    held.assertOwned(); assert.ok(fs.existsSync(held.path), 'STOP returns while proving is still reserved');
   } finally {
-    fs.writeFileSync(memory, JSON.stringify({ available: 8 * 1024 ** 3, swap_used: 0 }));
+    releaseProving();
     await pending.done;
   }
   assert.equal(pending.child.exitCode, 0, stderr);
@@ -120,30 +143,40 @@ test('STOP arriving during correction dispatch memory wait returns a resumable s
   assert.equal(stopped.result, 'stopped'); assert.match(stopped.reason, /Supervisor STOP/);
   assert.match(fs.readFileSync(stopped.handoff, 'utf8'), /resume settle with --retry/);
   assert.equal(journal(f, run).stage, 'dispatching');
+  assert.deepEqual(journal(f, run).cappedResult, reviewed);
   assert.equal(f.calls().filter(args => args[1] === 'start').length, starts, 'no correction worker starts');
   const directory = path.join(f.org, 'dispatch');
   const requests = fs.readdirSync(directory).filter(x => x.endsWith('.json') && !x.endsWith('.routes.json'));
   assert.equal(requests.length, 1);
   const dispatch = JSON.parse(fs.readFileSync(path.join(directory, requests[0])));
   assert.equal(dispatch.stage, 'open'); assert.equal(dispatch.run, null);
+  assert.equal(dispatch.base, reviewed.head, 'correction retains the verified reviewed lane head');
   fs.unlinkSync(stop);
-  fs.writeFileSync(memory, JSON.stringify({ available: 128 * 1024 ** 2, swap_used: 0 }));
+  reserve();
   const retry = f.concurrent(run, undefined, ['--retry']);
   let retryStderr = '', retryStdout = '';
   retry.child.stderr.on('data', data => { retryStderr += data; });
   retry.child.stdout.on('data', data => { retryStdout += data; });
   try {
     await waitForDispatch(retry, () => ({ stderr: retryStderr, stdout: retryStdout }), 'retry');
-    assert.match(retryStderr, /dispatch: waiting; memory pressure/);
-  } finally { fs.writeFileSync(memory, JSON.stringify({ available: 8 * 1024 ** 3, swap_used: 0 })); }
-  await retry.done;
+    assert.match(retryStderr, /dispatch: waiting; proving .*STOP correction dispatch fixture/);
+    assert.equal(journal(f, run).stage, 'dispatching');
+    assert.equal(f.calls().filter(args => args[1] === 'start').length, starts, 'retry still waits without a worker');
+  } finally { releaseProving(); await retry.done; }
   assert.equal(retry.child.exitCode, 0, retryStderr);
-  assert.match(retryStderr, /cleared; proceeding/);
+  assert.match(retryStderr, /proving reservation ended; proceeding/);
+  assert.deepEqual(JSON.parse(fs.readFileSync(memory, 'utf8')), lowMemory, 'retry does not need low memory to clear');
   const resumed = JSON.parse(retryStdout);
   assert.equal(resumed.result, 'fix_round'); assert.ok(resumed.fix.run);
   assert.equal(JSON.parse(fs.readFileSync(path.join(directory, requests[0]))).run, resumed.fix.run);
+  assert.deepEqual(fs.readdirSync(directory).filter(x => x.endsWith('.json') && !x.endsWith('.routes.json')), requests,
+    'retry resumes the original request without creating a replacement');
   assert.equal(f.show(stopped.item).runs.length, 2, 'retry creates exactly one correction run');
   assert.equal(f.calls().filter(args => args[1] === 'start').length, starts + 1);
+  t.diagnostic(JSON.stringify({ stopped: { result: stopped.result, reason: stopped.reason, dispatch_stage: dispatch.stage,
+    dispatch_run: dispatch.run }, resumed: { result: resumed.result, run: resumed.fix.run },
+    request: requests[0], starts_before: starts, starts_after: starts + 1, review_policy: reviewed.review_policy,
+    memory: JSON.parse(fs.readFileSync(memory, 'utf8')) }));
 });
 
 test('fixture teardown waits for a concurrent child to finish writing before removing its directory', async (t) => {

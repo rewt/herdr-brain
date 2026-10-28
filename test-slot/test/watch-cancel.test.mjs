@@ -30,9 +30,12 @@ const execute=cp.spawnSync;cp.spawnSync=(file,args,...rest)=>{
   }
   return execute(file,args,...rest);
 };syncBuiltinESMExports();`);
-  const env = { ...testSlotEnvironment(), MONITOR_TEST_SLOT_PATH: lock, MONITOR_TEST_SLOT_COMPAT_PATH: lock };
+  // Poll every 250 ms via the idle clock, while keeping frozen cancellation
+  // well above the brief audit hold. These clocks apply only to this fixture.
+  const env = { ...testSlotEnvironment(), MONITOR_TEST_SLOT_PATH: lock, MONITOR_TEST_SLOT_COMPAT_PATH: lock,
+    MONITOR_TEST_SLOT_FROZEN_SECONDS: '120' };
   env.NODE_OPTIONS = `${env.NODE_OPTIONS ?? ''} --import=${JSON.stringify(preload)}`;
-  const child = spawn(process.execPath, [cli, 'run', 'cancel at startup', '--', '/bin/sh', '-c',
+  const child = spawn(process.execPath, [cli, 'run', 'cancel at startup', '--idle-timeout-seconds', '1', '--', '/bin/sh', '-c',
     `${JSON.stringify(process.execPath)} ${JSON.stringify(leaf)}; :`], { env, stdio: ['ignore', 'pipe', 'pipe'] });
   let stderr = ''; child.stderr.on('data', data => { stderr += data; }); child.stdout.resume();
   let spawnError;

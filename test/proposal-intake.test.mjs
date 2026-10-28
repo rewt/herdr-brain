@@ -38,7 +38,7 @@ test('proposal intake records notes, ignores dispatch_after and producer selecti
 test('proposal intake groups four ordinary follow-ups and retains every payload, evidence and finding identity', () => {
   const proposals = Array.from({ length:5 }, (_, i) => proposal(`Follow-up ${i}`, { extra:{ evidence:`evidence-${i}`, finding_id:`finding-${i}` } }));
   proposals.splice(2, 0, proposal('Dependency obligation', { blocking:true }));
-  proposals.push(proposal('Major obligation', { extra:{ severity:'major', review_findings:['typed finding'] } }));
+  proposals.push(proposal('Major obligation', { extra:{ severity:'Major' } }));
   const events = seed(), data = report(proposals), before = JSON.stringify(data), add = intake(events, data);
   assert.equal(items(add).length, 3);
   const reshape = items(add).find(e => e.role === 'architect');
@@ -103,7 +103,9 @@ test('record ingest and supervisor re-filing reuse one note and require a separa
   const count = f.events().length;
   assert.equal(f.json(['proposals', 'file', 'R-1', '--index', '0']).reused, true); assert.equal(f.events().length, count);
   assert.match(f.fail(['close', note.id, '--dropped']), /owning proposal disposition/);
-  assert.match(f.fail(['proposals', 'lapse', note.id, '--cut', 'selection', '--expect', proposalToken(state, note.id), '--why', 'Explicit cut']), /native caller|owning record/);
+  const recordBeforeRefusal = fs.readFileSync(path.join(f.dir, 'events.jsonl'));
+  assert.match(f.fail(['proposals', 'lapse', note.id, '--cut', 'selection', '--expect', proposalToken(state, note.id), '--why', 'Explicit cut']), /native authority unavailable/);
+  assert.deepEqual(fs.readFileSync(path.join(f.dir, 'events.jsonl')), recordBeforeRefusal);
   f.ok(['set', note.id, 'meta.queue_selected=true']); f.ok(['start', note.id]);
   assert.equal(fs.readFileSync(path.join(f.dir, 'reports/R-1.md'), 'utf8'), bytes);
 });
@@ -143,6 +145,8 @@ test('lapse retains active, committed, saved UNKNOWN, selected, reserved and dep
     { type:'item.updated', id, fields:{ meta:{ committed:true } } },
     { type:'item.updated', id, fields:{ meta:{ queue_selected:true } } },
     { type:'item.updated', id, fields:{ meta:{ operator_reserved:true } } },
+    { type:'item.updated', id, fields:{ meta:{ severity:'Major' } } },
+    { type:'item.updated', id, fields:{ role:'reviewer' } },
     { type:'link.added', blocker:id, blocked:'ENG-99' }, { type:'link.added', blocker:'ENG-99', blocked:id },
   ];
   for (const extra of cases) assert.throws(() => disposition(stamp([...base, extra]), id), /retained|unselected dependency-free/);

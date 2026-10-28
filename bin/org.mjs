@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import crypto from 'node:crypto';
-import fs from 'node:fs';
+import fs from '../lib/record-observation.mjs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
@@ -9,7 +9,7 @@ import { discoverArchive } from '../lib/archive.mjs';
 import { checkFleetRecord, FleetError } from '../lib/fleet.mjs';
 import { forwardRelease, bundleRelease, projectEnvironment } from '../lib/releases.mjs';
 import {
-  UserError, findOrgDir, initOrg, isOrgDir, loadEvents, loadRecord, now as clock, readConfig, transact, writeFileAtomic, writer,
+  UserError, findOrgDir, initOrg, isOrgDir, loadEvents, loadRecord, now as clock, readConfig, transact, planTransaction, writeFileAtomic, writer,
 } from '../lib/store.mjs';
 import {
   BUDGET_KEYS, attention, blockedBy, blockersOf, fold, isResolved, itemStatus, laterRuns, nextItemId, nextRunId, openRuns,
@@ -193,12 +193,20 @@ function mutate(ctx, fn, authority) {
     warnedUnattributed = true;
     err('record: recorded as human but unattributed (no ORG_ACTOR, no terminal). An agent session sets ORG_ACTOR=<its session name>.\n');
   }
-  const res = transact(ctx.dir, (events, state) => {
+  // These local callbacks only derive events from state. Effectful report
+  // intake and native queue-review retain transact's once-under-lock contract.
+  const planned = new Set(['add', 'block', 'unblock', 'note', 'ask', 'answer', 'set', 'close', 'reopen', 'start', 'worker', 'abandon', 'lesson']);
+  // These commands never bind closeout sources or write immutable files/audits.
+  // Re-derive only their pure events on a racing append/queue observation.
+  const replaySafe = !process.env.ORG_GUARD_OVERRIDE && new Set(['add', 'block', 'unblock', 'note', 'set', 'reopen', 'start', 'worker', 'lesson']).has(process.argv[2]);
+  const transaction = planned.has(process.argv[2]) ? planTransaction : transact;
+  const res = transaction(ctx.dir, (events, state) => {
     return bindCloseoutSources({ org: ctx.dir, events, mutation: protectRecordMutation({ org: ctx.dir, events, state, mutation: fn(state, events), command: process.argv[2], ...authority }) });
   }, {
     at: ctx.now,
     actor: who.actor,
     unattributed: who.unattributed,
+    replaySafe,
   });
   if (res.repaired) err('record: repaired an incomplete last event left by an interrupted write\n');
   try { publishCloseoutEvents({ org: ctx.dir, added: res.added }); }

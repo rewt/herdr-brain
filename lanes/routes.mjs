@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync, realpathSync } from "node:fs";
+import observedFS from '../lib/record-observation.mjs';
+const { existsSync, readFileSync, realpathSync } = observedFS;
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { ROUTE_PRESET } from './preset.mjs';

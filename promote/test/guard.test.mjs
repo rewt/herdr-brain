@@ -29,6 +29,12 @@ process.execArgv = process.execArgv.filter(arg => arg !== signalObserver && !arg
 const source = fileURLToPath(new URL('../../', import.meta.url));
 const loader = fileURLToPath(new URL('./helpers/green-loader.mjs', import.meta.url));
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
+// Reading the index may update atime; only identity and write-version fields
+// distinguish an optional refresh from a read-only scope query.
+const indexVersion = file => {
+  const stat = fs.statSync(file, { bigint: true });
+  return ['dev', 'ino', 'mode', 'size', 'birthtimeNs', 'mtimeNs', 'ctimeNs'].map(key => stat[key]);
+};
 
 // Release sources are git archives, plus generated release/test state. Keep the
 // full archive universe: productFiles() omits root config and test/helpers/ that
@@ -220,9 +226,10 @@ for (const policy of [undefined, {}, {enabled:false,cohort:'green-pass'}, {enabl
 assert.equal(git, 0); assert.equal(admitted, 1);
 cp.execFileSync = original; syncBuiltinESMExports();
 fs.writeFileSync(config, JSON.stringify({autopilot:{enabled:true,cohort:'clean-pass'}}));
-const index = ${JSON.stringify(index)}, before = fs.statSync(index, {bigint:true});
+const indexVersion = ${indexVersion.toString()};
+const index = ${JSON.stringify(index)}, before = indexVersion(index);
 withPromotionGuard(guard, () => admitted++);
-assert.deepEqual(fs.statSync(index, {bigint:true}), before, 'clean-pass scope must not refresh the index');
+assert.deepEqual(indexVersion(index), before, 'clean-pass scope must not refresh the index');
 assert.equal(admitted, 2);
 console.log('ordinary and clean-pass admitted; disabled Git calls=0; green modules absent');
 `);
@@ -307,9 +314,9 @@ test('clean-pass keeps its ordinary documentation scope and named refusals', asy
   const guide = path.join(f.workspace, 'docs/guide.md');
   fs.utimesSync(guide, 0, 0);
   const index = f.git(['rev-parse', '--path-format=absolute', '--git-path', 'index'], f.workspace);
-  const before = fs.statSync(index, { bigint: true });
+  const before = indexVersion(index);
   f.check();
-  assert.deepEqual(fs.statSync(index, { bigint: true }), before, 'scope inspection leaves stale index metadata untouched');
+  assert.deepEqual(indexVersion(index), before, 'scope inspection leaves stale index metadata untouched');
   const { preparePromotionGuard } = await import(pathToFileURL(path.join(f.repo, 'promote/guard.mjs')));
   const prepared = preparePromotionGuard(f.guard);
   fs.copyFileSync(index, `${index}.replacement`); fs.renameSync(`${index}.replacement`, index);

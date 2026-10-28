@@ -23,7 +23,7 @@ export function checkDispatchEligibility(job, journal) {
     release:job.release,observed_seq:events.at(-1)?.seq??0};
   const refuse=(reason,subject=job.item)=>changed(reason,{...input,subject});
   if(tornTail)refuse('incomplete record input');
-  const item=state.items.get(job.item),hold=itemLaunchHold(state,job.item);
+  const item=state.items.get(job.item),hold=itemLaunchHold(state,job.item,events);
   if(hold)refuse(hold.reason,hold.subject);
   if(job.resumeSession && [...state.runs.values()].some(r=>r.id!==job.run&&!r.report&&!r.abandoned&&
     effectiveWorkerIdentity(r,state).agent_session_id===job.resumeSession))

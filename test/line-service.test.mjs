@@ -80,14 +80,21 @@ test('a changed supervisor address recovers only the exact zero-effect pre-journ
 
 test('three completed engineering-idle passes file and immediately dispatch one repair across restart while original native refusal remains retained',t=>{
   const f=fixture(t),item=f.add('Native refusal'),options={haltAfter:3};f.setFailure('native permission refused');
-  // The first refusal files its missing-producer decision. That real input
-  // change starts a new idle episode; only unchanged observations accumulate.
+  // Readback precedes admission: the initial refusal is first observed on the
+  // next pass. Its missing-producer decision starts a new idle episode.
   f.service(options).pass();
   const journal=path.join(f.service().directory,'effects.json'),key=Object.keys(JSON.parse(fs.readFileSync(journal)).actions).find(k=>k.startsWith(`dispatch:${item}:`));
   const original=JSON.parse(fs.readFileSync(journal)).actions[key].receipt;
   const repairs=()=>[...fold(loadEvents(f.org).events).items.values()].filter(i=>i.meta.halt_repair===1);
+  assert.equal([...fold(loadEvents(f.org).events).items.values()].filter(i=>i.meta.uncertain_outcome).length,0);
+  const initial=JSON.parse(fs.readFileSync(journal)).halt_progress;
+  assert.equal(initial.count,1);
+  f.service(options).pass();assert.equal(repairs().length,0);
   assert.equal([...fold(loadEvents(f.org).events).items.values()].filter(i=>i.meta.uncertain_outcome).length,1);
-  for(let n=0;n<2;n++){f.service(options).pass();assert.equal(repairs().length,0);}
+  const readback=JSON.parse(fs.readFileSync(journal)).halt_progress;
+  assert.equal(readback.count,1);assert.notEqual(readback.episode,initial.episode);
+  f.service(options).pass();assert.equal(repairs().length,0);
+  assert.equal(JSON.parse(fs.readFileSync(journal)).halt_progress.count,2);
   f.service(options).pass();
   assert.equal(repairs().length,1);const repair=repairs()[0];
   assert.equal(f.calls.filter(c=>c.args[1]===item).length,1);

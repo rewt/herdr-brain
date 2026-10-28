@@ -108,14 +108,25 @@ for (const kind of ['pending', 'native', 'manual', 'decision', 'unknown', 'legac
     else if (kind === 'unknown') { fs.mkdirSync(path.join(f.org, 'retirement/reviews'), { recursive: true }); fs.writeFileSync(path.join(f.org, 'retirement/reviews/unmapped.json'), '{"qualification":"UNKNOWN"}'); }
     else { const claim=f.events.find(e=>e.type==='run.claimed');claim.owner = { ...claim.owner, legacy: true }; }
     const unbound = kind === 'manual' || kind === 'unknown';
-    const evidence = kind === 'manual' ? path.join(f.org, 'evidence/ENG-1/owner/review-launch.json') : kind === 'unknown' ? path.join(f.org, 'retirement/reviews/unmapped.json') : null;
+    const evidence = kind === 'manual' ? path.join(f.org, 'evidence/ENG-1/owner/review-launch.json') : kind === 'unknown' ? path.join(f.org, 'retirement/reviews/unmapped.json') : kind === 'native' ? path.join(f.org,'retirement/occupants/native.json') : null;
     const original = evidence && fs.readFileSync(evidence);
     f.write(); const next = f.context();
     if(kind==='unknown')assert.equal(reviewAttempt(next.item,next),null);
     else try { assert.ok(reviewAttempt(next.item, next)); } catch (e) { assert.match(e.message, /UNKNOWN|unmapped/); }
     // Unattributed UNKNOWN evidence stays visible; it cannot hold this commit.
     if (unbound) assert.equal(reviewAttempt(next.item, { ...next, target: bindReviewTarget(next) }), null);
-    f.service().pass(); f.service().pass(); assert.equal(f.calls.length, unbound ? 1 : 0, kind);
+    f.service().pass(); f.service().pass();
+    if(kind==='native'){
+      const state=fold(fs.readFileSync(path.join(f.org,'events.jsonl'),'utf8').trim().split('\n').map(JSON.parse));
+      const decisions=[...state.items.values()].filter(i=>i.meta.uncertain_outcome);
+      assert.equal(decisions.length,1);const decision=decisions[0];
+      assert.deepEqual(decision.meta.uncertain_outcome.check.subject,{item:'ENG-1',run:'R-1',head:f.head});
+      assert.match(decision.meta.uncertain_outcome.check.defect,/Typed original review attempt has no linked completion producer/);
+      assert.equal(f.calls.length,1);
+      assert.equal(f.calls[0].args[0],path.join(sourceRoot,'dispatch/dispatch.mjs'));
+      assert.equal(f.calls[0].args[1],decision.id,'only the missing-producer decision dispatches');
+      assert.equal(f.calls.filter(c=>c.args[1]==='queue-review').length,0,'the native attempt never gets a replacement');
+    }else assert.equal(f.calls.length, unbound ? 1 : 0, kind);
     if (unbound) {
       assert.equal(f.calls[0].args[1], 'queue-review');
       assert.equal(f.calls[0].args[f.calls[0].args.indexOf('--head') + 1], f.head);
@@ -145,19 +156,20 @@ test('settled history sweep has constant identity work and bounded log rows whil
     f.events.push({ type: 'item.added', id: item, title: 'Settled history', meta: {}, seq }, { type: 'run.started', id: run, item, workspace: `/gone-history/${n}`, report_path: `/gone-history/${n}/report.md`, meta: {}, seq: seq + 1 },
       { type: 'report.ingested', run, item, file: `old/${n}.md`, sha256: 'a'.repeat(64), report: { outcome: 'done', artifacts: [] }, seq: seq + 2 }, { type: 'item.closed', id: item, as: 'done', seq: seq + 3 });
   }
-  f.write(); let identities = 0, historicalReads = 0;
+  f.write(); const identities=[];let historicalReads = 0;
   const exists = fs.existsSync; fs.existsSync = file => { if (String(file).startsWith('/gone-history/')) historicalReads++; return exists(file); };
   let s;
-  try { s = f.service({ identify: cwd => { identities++; return gitProject(cwd); } }); s.pass(); } finally { fs.existsSync = exists; }
-  assert.equal(identities, 2); assert.equal(historicalReads, 0); assert.equal(f.calls.length, 0);
+  try { s = f.service({ identify: cwd => { identities.push(cwd); return gitProject(cwd); } }); s.pass(); } finally { fs.existsSync = exists; }
+  assert.deepEqual(identities,[f.repo,f.repo,f.repo,f.repo],'construction, initial scan, post-refresh scan and halt scan stay constant');
+  assert.equal(historicalReads, 0); assert.equal(f.calls.length, 0);assert.equal(f.refreshes.length,1);
   const rows = fs.readFileSync(path.join(s.directory, 'passes.jsonl'), 'utf8').trim().split('\n').map(JSON.parse);
-  assert.ok(rows.length <= 5, JSON.stringify(rows, null, 2));
+  assert.deepEqual(rows.map(r=>r.action),['pass-start','review-retained','review-health','queue-order','engineering-idle-observation','engineering-idle','pass-complete']);
   const retained = rows.find(r => r.action === 'review-retained'); assert.ok(retained);
   assert.equal(retained.notice_record.entry.count, 1);
   assert.equal(retained.notice_record.entry.scope.head, f.head);
   assert.equal(rows.find(r => r.action === 'review-health').health.errors.occurrences, 1);
   const timing = rows.find(r => r.action === 'pass-complete').timing;
-  assert.equal(timing.snapshots, 1); assert.equal(timing.historical_intake_skipped, 2035); assert.equal(timing.effect_command_ms, 0);
+  assert.equal(timing.snapshots, 3); assert.equal(timing.historical_intake_skipped, 2035); assert.ok(timing.effect_command_ms>0,'the one independent cleanup refresh is timed');
 });
 
 test('producer linked review references require readable typed evidence and preserve exact pending native scope',t=>{

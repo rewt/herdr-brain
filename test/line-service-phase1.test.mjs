@@ -279,12 +279,21 @@ test('phase1 dedup retains same-change UNKNOWN but unrelated old attempts and pr
   assert.match(reviewAttempt(c.item,{...c,target}),/same-change.*UNKNOWN/);
 });
 
-test('phase1 explicit current-source manual review reference holds without inspecting another identity',t=>{
+test('phase1 explicit current-source manual review references require readable typed same-change evidence',t=>{
   const f=fixture(t),c=f.context(),target=discoverChanges(c).changes[0].target;
-  c.run.report.artifacts.push('/outside-owner/archive/source-review.json');
-  let probes=0;const stat=fs.lstatSync;fs.lstatSync=(file,...args)=>{if(String(file).startsWith('/outside-owner/'))probes++;return stat(file,...args);};
-  try{assert.match(reviewAttempt(c.item,{...c,target}),/source-owner review reference UNKNOWN/);}finally{fs.lstatSync=stat;}
-  assert.equal(probes,0);
+  const file=path.join(f.scratch,'source-review.json'),unrelated=path.join(f.scratch,'another-owner');
+  fs.mkdirSync(unrelated);fs.writeFileSync(path.join(unrelated,'review.json'),'{"kind":"review","qualification":"UNKNOWN"}');
+  c.run.report.artifacts.push(file);
+  let probes=0;const stat=fs.lstatSync;fs.lstatSync=(file,...args)=>{if(String(file).startsWith(unrelated+path.sep))probes++;return stat(file,...args);};
+  const attempt=()=>reviewAttempt(c.item,{...c,target});
+  try{
+    assert.equal(attempt(),null,'a missing locator is not an attempt');
+    for(const bytes of ['opaque','{}',JSON.stringify({run:'R-1',head:target.head,description:'review mentioned'})]){fs.writeFileSync(file,bytes);assert.equal(attempt(),null);}
+    fs.writeFileSync(file,JSON.stringify({run:'R-1',head:target.head,native_launch_attempted:true,qualification:'UNKNOWN'}));
+    const saved=fs.readFileSync(file);assert.match(attempt(),/source-owner typed review reference UNKNOWN/);assert.deepEqual(fs.readFileSync(file),saved);
+    for(const value of [{run:'R-other',head:f.base},{run:'R-1',head:f.base}]){fs.writeFileSync(file,JSON.stringify({...value,native_launch_attempted:true,qualification:'UNKNOWN'}));assert.equal(attempt(),null,'typed evidence retains only its captured change');}
+  }finally{fs.lstatSync=stat;}
+  assert.equal(probes,0,'unreferenced owner folders are never inventoried');
 });
 
 test('phase1 creates one queue item per whole producer change with immutable evidence and never duplicates intermediate tuples',t=>{
@@ -339,10 +348,10 @@ test('landing-before-report keeps a captured native group immutable and queues o
 });
 
 test('landing-before-report actual source queue command is reached by the installed model-free pass while independent native capacity remains authoritative',t=>{
-  const f=fixture(t,{reported:false});unreportedNativeLandings(f);const env=installedService(f),calls=[],before=process.cwd();let capacityCalls=0;process.chdir(f.cwd);
+  const f=fixture(t,{reported:false});unreportedNativeLandings(f);f.add([{type:'run.updated',id:'R-1',meta:{harness:'codex'}}]);const env=installedService(f),calls=[],before=process.cwd();let capacityCalls=0;process.chdir(f.cwd);
   try{createLineService({repo:f.cwd,org:f.org,to:'brain-chat',env,maxStarts:1,capacity:()=>{capacityCalls++;throw Object.assign(Error('review pool is occupied'),{code:'DISPATCH_REVIEW_CAP'});},command:(exe,args,options)=>{calls.push(args);if(args[1]==='queue-review')return spawnSync(exe,args,options);assert.equal(args[0].endsWith('dispatch.mjs'),false,'capacity prevents a native launch');return{status:0,stdout:'{}',stderr:''};}}).pass();}
   finally{process.chdir(before);}
-  assert.equal(calls.filter(a=>a[1]==='queue-review').length,1);assert.equal(capacityCalls,1,'the selected current helper actually validates this evidence before native capacity');const c=f.context(),q=[...c.state.items.values()].filter(i=>i.role==='reviewer');assert.equal(q.length,1);assert.equal(q[0].meta.review_target.evidence_kind,'native-landings/v1');assert.equal(c.run.report,null);assert.equal(c.events.some(e=>e.type==='run.started'&&e.item===q[0].id),false);assert.equal(diagnosticHealth(f).queued,1);
+  assert.equal(calls.filter(a=>a[1]==='queue-review').length,1);assert.equal(capacityCalls,1,JSON.stringify(diagnostics(f)));const c=f.context(),q=[...c.state.items.values()].filter(i=>i.role==='reviewer');assert.equal(q.length,1);assert.equal(q[0].meta.review_target.evidence_kind,'native-landings/v1');assert.equal(c.run.report,null);assert.equal(c.events.some(e=>e.type==='run.started'&&e.item===q[0].id),false);assert.equal(diagnosticHealth(f).queued,1);
 });
 
 test('landing-before-report retains an original UNKNOWN attempt and refuses admission-only foreign or unqualified ownership as positive source evidence',t=>{
@@ -367,7 +376,8 @@ test('actual native producer receipt shapes distinguish red or unrun validation 
   const before=process.cwd(),env={...installedService(f),ORG_ACTOR:'line-service'};process.chdir(f.cwd);
   try{const result=queueReviewMutation({...f.context(),runId:'R-1',env});f.add(result.add);const c=f.context(),q=c.state.items.get(result.result.review_item);assert.deepEqual(validateQueuedReview({...c,item:q}),q.meta.review_target);assert.equal(c.run.report,null);assert.equal(c.events.find(e=>e.seq===verdict.seq).verdict,'PASS');
     const unknown=write('manual-review-unknown.json',{run:'R-1',head:f.heads[1],gate:gate2,checks:[{file:gate2}],qualification:'UNKNOWN',native_launch_attempted:true});assert.throws(()=>validateQueuedReview({...c,item:q}),/UNKNOWN|attempt/,'a real/unknown attempt cannot borrow a producer gate as absence proof');fs.unlinkSync(unknown);
-    fs.writeFileSync(gate1,JSON.stringify({schema:'lane-validation/v1',head:foreign,branch:'lane/source',executed:true}));assert.throws(()=>validateQueuedReview({...c,item:q}),/UNKNOWN|attempt|producer evidence/,'foreign or changed evidence is retained');
+    fs.writeFileSync(gate1,JSON.stringify({schema:'lane-validation/v1',head:foreign,branch:'lane/source',executed:true}));const changed=fs.readFileSync(gate1);
+    assert.deepEqual(validateQueuedReview({...c,item:q}),q.meta.review_target,'a rejected untyped producer proof does not become a native attempt');assert.deepEqual(fs.readFileSync(gate1),changed);
   }finally{process.chdir(before);}
 });
 
@@ -466,7 +476,10 @@ test('canonical unattributed targets retain exact-head UNKNOWN attempts, ownersh
   const f=fixture(t,{reported:false}),env={...installedService(f),ORG_ACTOR:'line-service'},before=process.cwd();process.chdir(f.cwd);
   try{
     const selector=canonicalSelector(f.heads[0]);fs.mkdirSync(path.join(f.org,'settle'),{recursive:true});const unknown=path.join(f.org,'settle/unknown.json');fs.writeFileSync(unknown,JSON.stringify({head:f.heads[0],qualification:'UNKNOWN'}));
-    assert.throws(()=>queueReviewMutation({...f.context(),runId:selector,env}),/UNKNOWN|attempt/);assert.equal([...f.context().state.items.values()].filter(q=>q.role==='reviewer').length,0);fs.unlinkSync(unknown);
+    const context=f.context(),target=discoverChanges(context).unattributed.find(c=>c.selector===selector).target;
+    assert.equal(reviewAttempt({id:selector,runs:[]},{...context,target}),null,'head/qualification alone does not establish a native attempt');
+    fs.writeFileSync(unknown,JSON.stringify({kind:'review',head:f.heads[0],qualification:'UNKNOWN'}));const bytes=fs.readFileSync(unknown);
+    assert.throws(()=>queueReviewMutation({...f.context(),runId:selector,env}),/UNKNOWN|attempt/);assert.equal([...f.context().state.items.values()].filter(q=>q.role==='reviewer').length,0);assert.deepEqual(fs.readFileSync(unknown),bytes);fs.unlinkSync(unknown);
     assert.throws(()=>queueReviewMutation({...f.context(),runId:selector,env:{...env,HERDR_ENV:'1'}}),/genuine canonical/);
     fs.writeFileSync(path.join(f.directory,'STOP'),'hold');assert.throws(()=>queueReviewMutation({...f.context(),runId:selector,env}),/STOP/);fs.unlinkSync(path.join(f.directory,'STOP'));
     const result=queueReviewMutation({...f.context(),runId:selector,env});f.add(result.add);const c=f.context(),q=c.state.items.get(result.result.review_item);f.add([{type:'item.added',id:'REV-999',role:'reviewer',title:'UNKNOWN duplicate',meta:{review_source_selector:selector,review_source_item:'REV-999',review_target:{head:f.heads[0],qualification:'UNKNOWN'}}}]);
@@ -513,13 +526,17 @@ function originalPartialFixture(t){
 }
 
 test('original REV4-shaped continuation preserves its disjoint PASS peer and zero-native journal then uses one same-request native launch without replacement',async t=>{
-  const f=originalPartialFixture(t),before=f.context(),original=fs.readFileSync(f.journal),verdict=before.events.find(e=>e.type==='change.reviewed'),calls=[];
+  const f=originalPartialFixture(t),before=f.context(),original=fs.readFileSync(f.journal),verdict=before.events.find(e=>e.type==='change.reviewed'),calls=[],refreshes=[];
   const service=createLineService({repo:f.cwd,org:f.org,to:'brain-chat',env:f.env,maxStarts:1,capacity:()=>({cap:3,count:0}),recordNotice:d=>({id:d.id,state:'record-only'}),command:(exe,args)=>{
+    if(args[0]===path.join(sourceRoot,'supervisor/closeout.mjs')){assert.deepEqual(args,[path.join(sourceRoot,'supervisor/closeout.mjs'),'refresh','--repo',f.cwd,'--org',f.org]);refreshes.push(args);return{status:0,stdout:'{"created":[]}',stderr:''};}
     calls.push(args);if(exe==='herdr')return{status:0,stdout:'{"result":{"agents":[]}}',stderr:''};
     assert.equal(args[0],path.join(sourceRoot,'dispatch/dispatch.mjs'));assert.equal(args[args.indexOf('--retry')+1],f.journal);assert.ok(args.includes('--continue-preflight'));return f.d.dispatch(args.slice(1),{env:{...f.d.env,HERDR_BRAIN_ROOT:fs.realpathSync(sourceRoot)}});
   }});service.pass();
   const c=f.context(),proof=c.events.find(e=>e.type==='review.original-prestart');assert.ok(proof,'legacy product hold is reconsidered on the checked original-scope capability');assert.equal(proof.original_native_launch_attempted,false);assert.equal(c.state.items.get('REV-4').closed,null);assert.equal(c.events.some(e=>e.type==='review.recovery-completed'),false);assert.deepEqual(c.events.find(e=>e.seq===verdict.seq),verdict);
-  assert.equal(calls.filter(a=>a[0]===path.join(sourceRoot,'dispatch/dispatch.mjs')).length,1);const archived=JSON.parse(fs.readFileSync(proof.archive.file)),savedOriginal=archived.files.find(f=>f.original===proof.journal);assert.deepEqual(fs.readFileSync(savedOriginal.archive),original);
+  assert.equal(calls.filter(a=>a[0]===path.join(sourceRoot,'dispatch/dispatch.mjs')).length,0,'the newly filed decision changes the first admission selection');
+  assert.ok(diagnostics(f).some(r=>r.action==='queue-selection-changed'));assert.deepEqual(fs.readFileSync(f.journal),original);
+  service.pass();assert.equal(refreshes.length,2);
+  assert.equal(calls.filter(a=>a[0]===path.join(sourceRoot,'dispatch/dispatch.mjs')).length,1,JSON.stringify(diagnostics(f)));const archived=JSON.parse(fs.readFileSync(proof.archive.file)),savedOriginal=archived.files.find(f=>f.original===proof.journal);assert.deepEqual(fs.readFileSync(savedOriginal.archive),original);
   const file=f.journal+'.driver/results.jsonl';let terminal;
   for(;;){if(fs.existsSync(file)){terminal=JSON.parse(fs.readFileSync(file,'utf8').trim().split('\n').at(-1));if(terminal.stage==='complete'||terminal.exit_code!==0)break;}await new Promise(resolve=>setTimeout(resolve,25));}
   assert.equal(terminal.stage,'complete',JSON.stringify(terminal));assert.equal(promptCalls(f.d).length,1);const saved=JSON.parse(fs.readFileSync(f.journal));assert.equal(saved.token,'original-r4');assert.equal(saved.reviewQueue.head,f.heads[0]);assert.equal(saved.reviewQueue.base,f.base);assert.equal(saved.native_launch_attempted,true);assert.equal(saved.preflightContinuations[0].native_launch_attempted,false);assert.equal(saved.preflightContinuations[0].original_prestart_seq,proof.seq);assert.equal(f.context().state.items.get('REV-4').runs.length,1);assert.deepEqual(f.context().events.find(e=>e.seq===verdict.seq),verdict);assert.equal([...f.context().state.items.values()].filter(i=>i.role==='reviewer').length,2);
@@ -679,12 +696,19 @@ test('original worker continuation refuses UNKNOWN native flags changed claim re
   }
 });
 
-test('permanent health and first errors remain visible in diagnostics with one gap alert and no record appends',t=>{
+test('permanent health and first errors stay diagnostic while one missing-producer decision retains the failed queue attempt',t=>{
   const f=fixture(t),env=installedService(f);f.add([{type:'item.closed',id:'ENG-1',as:'done'}]);const bytes=fs.readFileSync(path.join(f.org,'events.jsonl'));
-  let calls=0;const service=()=>createLineService({repo:f.cwd,org:f.org,to:'brain-chat',env,capacity:()=>({cap:0,count:0}),command:(_exe,args)=>{calls++;assert.equal(args[1],'queue-review');return{status:1,stdout:'',stderr:'selected helper cannot certify immutable review target'};}});
+  let calls=0,refreshes=0;const service=()=>createLineService({repo:f.cwd,org:f.org,to:'brain-chat',env,haltAfter:100,capacity:()=>{throw Object.assign(Error('decision pool occupied'),{code:'DISPATCH_DECISION_CAP'});},command:(_exe,args)=>{
+    if(args[0]===path.join(sourceRoot,'supervisor/closeout.mjs')){assert.deepEqual(args,[path.join(sourceRoot,'supervisor/closeout.mjs'),'refresh','--repo',f.cwd,'--org',f.org]);refreshes++;return{status:0,stdout:'{"created":[]}',stderr:''};}
+    calls++;assert.equal(args[1],'queue-review');return{status:1,stdout:'',stderr:'selected helper cannot certify immutable review target'};
+  }});
   for(let n=0;n<5;n++)service().pass();const health=diagnosticHealth(f),rows=diagnostics(f);
-  assert.deepEqual(fs.readFileSync(path.join(f.org,'events.jsonl')),bytes);assert.equal(health.gap_passes,5);assert.equal(health.owed,1);assert.equal(health.owed_commits,2);assert.equal(health.queued,0);
-  assert.equal(rows.filter(r=>r.boundary==='review-gap'&&r.inspection_due).length,1);assert.equal(calls,5);
+  const after=fs.readFileSync(path.join(f.org,'events.jsonl'));assert.deepEqual(after.subarray(0,bytes.length),bytes);
+  const added=after.subarray(bytes.length).toString().trim().split('\n').map(JSON.parse);assert.equal(added.length,1);assert.equal(added[0].type,'item.added');
+  assert.deepEqual(added[0].meta.uncertain_outcome.check.subject,{item:'ENG-1',effect:`review:ENG-1:${f.heads[1]}`});
+  assert.match(added[0].meta.uncertain_outcome.check.defect,/no pending status producer/);
+  assert.equal(health.gap_passes,5);assert.equal(health.owed,1);assert.equal(health.owed_commits,2);assert.equal(health.queued,0);
+  assert.equal(rows.filter(r=>r.boundary==='review-gap'&&r.inspection_due).length,1);assert.equal(calls,1);assert.equal(refreshes,5);
   const digest=morningDigest({events:f.context().events,diagnostics:rows});assert.ok(digest.review_errors.occurrences>=5);assert.equal(digest.review_health.pass_id,health.pass_id);
   assert.equal(fs.existsSync(path.join(f.org,'supervisor/inbox.log')),false);
 });
@@ -727,7 +751,10 @@ test('continuity base notices retain identity and recorded state across recurren
   const boundary=`review:ENG-1:${f.heads[1]}`,reason='selected helper native refusal; preserve original attempt',scope={},key=hash(canonical([boundary,reason,scope])),id=`line-record-${key}`,first_at='2026-10-26T00:00:00.000Z';
   const file=path.join(f.directory,'effects.json'),audit=path.join(f.directory,'passes.jsonl'),prior={first_at,reason,scope,state:'recorded',id,count:4,record:{id,state:'record-only'}};
   fs.writeFileSync(file,JSON.stringify({identity:f.identity,org:f.org,actions:{},record_notices:{[key]:prior},notice_audit_offset:0}));
-  let calls=0,deliveries=0;const service=createLineService({repo:f.cwd,org:f.org,to:'brain-chat',env,capacity:()=>({cap:0,count:0}),recordNotice:d=>{if(d.id===id){deliveries++;throw Error('recorded notice must not redeliver');}return{id:d.id,state:'record-only'};},command:(_exe,args)=>{calls++;assert.equal(args[1],'queue-review');return{status:1,stdout:'',stderr:reason};}});
+  let calls=0,deliveries=0,refreshes=0;const service=createLineService({repo:f.cwd,org:f.org,to:'brain-chat',env,haltAfter:100,capacity:()=>{throw Object.assign(Error('decision pool occupied'),{code:'DISPATCH_DECISION_CAP'});},recordNotice:d=>{if(d.id===id){deliveries++;throw Error('recorded notice must not redeliver');}return{id:d.id,state:'record-only'};},command:(_exe,args)=>{
+    if(args[0]===path.join(sourceRoot,'supervisor/closeout.mjs')){assert.deepEqual(args,[path.join(sourceRoot,'supervisor/closeout.mjs'),'refresh','--repo',f.cwd,'--org',f.org]);refreshes++;return{status:0,stdout:'{"created":[]}',stderr:''};}
+    calls++;assert.equal(args[1],'queue-review');return{status:1,stdout:'',stderr:reason};
+  }});
   // Simulate interruption after the compact fsync but before the journal
   // checkpoint. Already-written counters must deduplicate on recovery too.
   const write=fs.writeFileSync;let interrupted=false;
@@ -742,7 +769,7 @@ test('continuity base notices retain identity and recorded state across recurren
   const interruptedKeys=new Set(interruptedRows.filter(r=>r.notice_record).map(r=>r.notice_record.key));assert.ok(interruptedKeys.has(key));assert.equal(last.timing.notice_audit_replayed,interruptedKeys.size);assert.equal(last.timing.notice_record_attempts,0);
   assert.equal(calls,1,'replay must retain the prior held effect rather than requeue it');
   const typed=f.context().events.filter(e=>e.type==='line-service.review-error'&&e.key===key),repeats=f.context().events.filter(e=>e.type==='line-service.review-error-counts'&&key in e.counts);assert.equal(typed.length,0);assert.equal(repeats.length,0);assert.equal(entry.count,6);
-  service.pass();assert.equal(calls,1);assert.equal(JSON.parse(fs.readFileSync(file)).record_notices[key].count,7);assert.equal(deliveries,0);
+  service.pass();assert.equal(calls,1);assert.equal(refreshes,3);assert.equal(JSON.parse(fs.readFileSync(file)).record_notices[key].count,7);assert.equal(deliveries,0);
 });
 
 test('permanent review route falls back to the existing review route without replacing explicit task policy',()=>{
@@ -750,7 +777,7 @@ test('permanent review route falls back to the existing review route without rep
   config.routes.review={kind:'codex',model:'fixture-reviewer',effort:'max'};
   assert.equal(reviewQueueRoute(config),'review');
   config.selection_policy.by_task_class.review='review-codex';assert.equal(reviewQueueRoute(config),'review-codex');
-  delete config.selection_policy.by_task_class.review;delete config.routes.review;assert.throws(()=>reviewQueueRoute(config),/unknown task class: review/);
+  delete config.selection_policy.by_task_class.review;delete config.selection_policy.by_task_class['review-other-family'];delete config.routes.review;assert.throws(()=>reviewQueueRoute(config),/unknown task class: review/);
   config.routes.review=3;assert.throws(()=>reviewQueueRoute(config),/route|object/);
 });
 
@@ -877,7 +904,7 @@ test('saved-phase readiness preserves immutable blocked evidence and original so
   f.add([{type:'item.reopened',id:'ENG-1',note:'Actual owner explicitly hands remaining unfinished scope back to normal work; no done claim.'}]);assert.ok(dispatchInput(f.context()));assert.deepEqual(f.context().run.report,report);assert.equal(f.context().item.closed,null);
 });
 
-test('phase1 valid report ingests with no live pane and retries a transient safe failure while independent starts continue',t=>{
+test('phase1 report ingestion retains its original failure while independent starts continue without a live pane',t=>{
   const f=fixture(t,{reported:false});fs.mkdirSync(path.join(f.org,'runs/R-1'),{recursive:true});fs.writeFileSync(path.join(f.org,'runs/R-1/report.md'),f.report);
   f.add([{type:'item.added',id:'ENG-2',title:'Ready',role:'engineer'},{type:'item.added',id:'ENG-3',title:'Also ready',role:'engineer'}]);
   const calls=[];let failed=false;
@@ -887,7 +914,9 @@ test('phase1 valid report ingests with no live pane and retries a transient safe
     return {status:0,stdout:args[0].endsWith('dispatch.mjs')?JSON.stringify({result:'detached',journal:path.join(f.org,'dispatch',`new-${calls.length}.json`)}):'{}',stderr:''};};
   const service=()=>createLineService({repo:f.cwd,org:f.org,to:'brain-chat',env:f.env,command,capacity:()=>({cap:2,count:0}),recordNotice:d=>({id:d.id,state:'record-only'}),maxStarts:2});
   service().pass();assert.equal(calls.filter(a=>a[0].endsWith('dispatch.mjs')).length,2);assert.ok(calls.filter(a=>a[0].endsWith('dispatch.mjs')).every(a=>a.includes('--detach')));
-  service().pass();assert.equal(f.context().run.report.outcome,'done');assert.equal(calls.some(a=>a[0]==='agent'),false);
+  const journal=path.join(f.directory,'effects.json'),initial=JSON.parse(fs.readFileSync(journal)).actions['ingest:R-1'];assert.equal(initial.state,'held');assert.equal(initial.receipt.error,'ETIMEDOUT');
+  service().pass();assert.equal(f.context().run.report,null);assert.equal(calls.filter(a=>a[1]==='ingest').length,1,'safe classification alone grants no replay without completion evidence');
+  assert.deepEqual(JSON.parse(fs.readFileSync(journal)).actions['ingest:R-1'].receipt,initial.receipt);assert.equal(calls.some(a=>a[0]==='agent'),false);
 });
 
 test('phase1 measured inactive owned child failure does not freeze independent work or replay a native launch',t=>{
@@ -951,20 +980,27 @@ test('useful admission proceeds after unrelated productive cleanup exceeds its w
   }
 });
 
-test('phase1 service retains unknown exit authority while scheduling only the original supported outcome readback',t=>{
+test('phase1 service retains an unknown exit intent and files one missing-producer decision without native replay',t=>{
   const f=fixture(t),policy=JSON.parse(fs.readFileSync(path.join(f.cwd,'.lane.json'),'utf8'));policy.retirement={closeout_queue:true};fs.writeFileSync(path.join(f.cwd,'.lane.json'),JSON.stringify(policy));
   const a=f.observation.agents[0];f.add([{type:'run.updated',id:'R-1',meta:{agent:a.name,pane:a.pane_id,worker_workspace:a.workspace_id,terminal_id:a.terminal_id,agent_session_id:a.agent_session.value}}]);
   const added=transact(f.org,events=>bindCloseoutSources({cwd:f.cwd,org:f.org,events,env:f.env,mutation:{add:[{type:'item.closed',id:'ENG-1',as:'done',completed_run:'R-1'}]}})).added;
   publishCloseoutEvents({cwd:f.cwd,org:f.org,added,start:false,env:f.env});const target=added[0].closeout_targets.find(t=>t.signal==='landed'),source={seq:added[0].seq,type:'item.closed'};
   f.add([{type:'closeout.effect',key:target.key,identity:f.identity,source,outcome:{action:'agent-exit-requested',run:'R-1',pane:a.pane_id,tab_id:a.tab_id,occupant:[a.name,a.agent,a.pane_id,a.workspace_id,f.workspace,a.terminal_id,a.agent_session.value],shell:{pid:1,identity:'original-shell',command:'[zsh]'}}},
     {type:'closeout.evaluated',key:target.key,completed:false,revision:source.seq,reason:CLOSEOUT_EXIT_PENDING}]);
-  const calls=[],service=createLineService({repo:f.cwd,org:f.org,to:'brain-chat',env:f.env,capacity:()=>({count:0,cap:4}),recordNotice:data=>({id:data.id,state:'record-only'}),command:(_exe,args)=>{
-    if(args[0]===path.join(sourceRoot,'supervisor/closeout.mjs')){calls.push(args);assert.ok(args.includes('--retry-safe'));assert.deepEqual(JSON.parse(args[args.indexOf('--keys')+1]),[target.key]);return{status:0,stdout:JSON.stringify({evaluated:[{key:target.key,run:'R-1',completed:false,reason:CLOSEOUT_EXIT_PENDING}]}),stderr:''};}
+  const original=f.context().events.filter(e=>e.type==='closeout.effect'||e.type==='closeout.evaluated');
+  const calls=[],refreshes=[],service=createLineService({repo:f.cwd,org:f.org,to:'brain-chat',env:f.env,capacity:()=>({count:0,cap:4}),recordNotice:data=>({id:data.id,state:'record-only'}),command:(_exe,args)=>{
+    if(args[0]===path.join(sourceRoot,'supervisor/closeout.mjs')){assert.deepEqual(args,[path.join(sourceRoot,'supervisor/closeout.mjs'),'refresh','--repo',f.cwd,'--org',f.org]);refreshes.push(args);return{status:0,stdout:'{"created":[]}',stderr:''};}
+    calls.push(args);
     return{status:0,stdout:'{}',stderr:''};
   }});
-  service.pass();service.pass();assert.equal(calls.length,2,'pending identity/outcome wording is an observation protocol, not a native-identity waiver or a completed effect');
-  const entry=Object.values(JSON.parse(fs.readFileSync(path.join(service.directory,'effects.json'),'utf8')).actions).find(e=>e.result?.evaluated?.[0]?.key===target.key);
-  assert.equal(entry.state,'held');assert.equal(entry.history.length,1);assert.equal(f.context().events.some(e=>e.type==='closeout.effect'&&e.outcome?.action==='exit-observed'),false);
+  service.pass();service.pass();assert.equal(refreshes.length,2,'independent cleanup inventory remains allowed');
+  const c=f.context(),waits=c.events.filter(e=>e.type==='closeout.waiting'&&e.key===target.key);assert.equal(waits.length,1);
+  assert.match(waits[0].waiting.defect,/no existing runtime transport writes a later exit\/close status/);assert.deepEqual(waits[0].waiting.producers,[]);
+  const decisions=[...c.state.items.values()].filter(i=>i.meta.uncertain_outcome?.check.subject.key===target.key);assert.equal(decisions.length,1);
+  assert.ok(calls.every(a=>a[0]===path.join(sourceRoot,'dispatch/dispatch.mjs')&&a[1]===decisions[0].id),'only the owned decision may dispatch');
+  assert.equal(Object.keys(JSON.parse(fs.readFileSync(path.join(service.directory,'effects.json'))).actions).some(key=>key.startsWith('closeout:')),false,'no native observation/drain attempt is authorized');
+  assert.deepEqual(c.events.filter(e=>e.type==='closeout.effect'||e.type==='closeout.evaluated'),original,'the original unknown outcome is never relabelled');
+  assert.equal(c.events.some(e=>e.type==='closeout.effect'&&e.outcome?.action==='exit-observed'),false);
 });
 
 test('phase1 morning digest is record-derived and marks unknown durations rather than inventing zero',()=>{

@@ -96,10 +96,18 @@ test('producer old reported source skips cheaply while an unresolved manual revi
 test('producer routine failures collapse in diagnostics with stable counts across volatile occurrences and reload',t=>{
   const f=fixture(t);f.add([{type:'item.added',id:'ENG-1',role:'engineer',title:'Ready',meta:{}}]);
   let n=0;const capacity=()=>{n++;throw Object.assign(Error(`capacity PID ${100+n} at 2026-10-26T21:00:0${n}.000Z\n    at volatile.mjs:${n}:2`),{code:'DISPATCH_SESSION_CAP'});};
-  f.service({capacity}).pass();f.service({capacity}).pass();f.service({capacity}).pass();
+  const counts=[];
+  for(let pass=0;pass<3;pass++){
+    f.service({capacity}).pass();
+    counts.push(Object.values(JSON.parse(fs.readFileSync(path.join(f.directory,'effects.json'))).record_notices)[0].count);
+  }
+  assert.deepEqual(counts,[1,2,4],'the threshold pass also admits the independent halt repair');
+  assert.equal(n,7,'three admission checks, three halt observations and one repair admission');
+  assert.equal(f.diagnostics().filter(e=>e.action==='halt-capacity-held').length,3);
+  assert.equal([...f.state().items.values()].filter(i=>i.meta.halt_repair===1).length,1);
   assert.equal(f.messages().length,0);assert.equal(f.diagnostics().filter(e=>e.inspection_due).length,1);
   assert.equal(fs.existsSync(inboxPath({org:f.org})),false);assert.equal(f.calls.length,0);
-  const journal=JSON.parse(fs.readFileSync(path.join(f.directory,'effects.json'))),notices=Object.values(journal.record_notices);assert.equal(notices.length,1);assert.equal(notices[0].count,3);
+  const journal=JSON.parse(fs.readFileSync(path.join(f.directory,'effects.json'))),notices=Object.values(journal.record_notices);assert.equal(notices.length,1);assert.equal(notices[0].count,4);
   assert.equal(canonicalFailure('PID 1 at 2026-10-26T21:00:00.000Z\n at a.mjs:1'),canonicalFailure('pid 2 at 2026-10-26T22:00:00.000Z\n at b.mjs:99'));
 });
 

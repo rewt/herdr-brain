@@ -10,6 +10,7 @@ import { readTiming, readAdmissionTiming } from '../../lib/run-timing.mjs';
 import { policyLocation } from '../../lib/config-home.mjs';
 import { transact } from '../../lib/store.mjs';
 import { ownerIdentity } from '../../lib/process-owner.mjs';
+import { ADMISSION_WAIT_MS, loadTimeout } from '../../lib/deadline.mjs';
 import { fixture, promptCalls, unlandedSetting, pendingItem, until, pauseHook, admissionHook, admissionAttempts } from './dispatch-fixture.mjs';
 
 const DISPATCH = fileURLToPath(new URL('../dispatch.mjs', import.meta.url));
@@ -44,7 +45,7 @@ async function homeCapFixture(t, cap) {
   return { ...fixture(t, { project }), project };
 }
 
-async function provingWait(f, stage) {
+async function provingWait(f, stage, { workerDelayMs = 0 } = {}) {
   const lock = path.join(f.root, 'proving-slot');
   // Pause the saved worker stage before its proving check. The open check
   // remains real and unheld; only the intended stage gets a reservation.
@@ -52,7 +53,7 @@ async function provingWait(f, stage) {
 fs.renameSync=function(from,to) {
  const result=rename.call(this,from,to);
  if(once && String(to).startsWith(${JSON.stringify(path.join(f.org, 'dispatch') + path.sep)}) && String(to).endsWith('.json') && JSON.parse(read(to)).stage==='worker') {
-  once=false;pause();
+  once=false;Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,${workerDelayMs});pause();
  }
  return result;
 };`) : {};
@@ -64,10 +65,11 @@ fs.renameSync=function(from,to) {
   pending.child.stderr.on('data', data => { stderr += data; });
   try {
     if (stage === 'worker') {
-      await until(() => fs.existsSync(hook.PAUSE_MARKER));
+      // Reaching this saved stage includes real lane preparation and record I/O.
+      await until(() => fs.existsSync(hook.PAUSE_MARKER), loadTimeout(ADMISSION_WAIT_MS));
       held = reserve(); fs.writeFileSync(hook.PAUSE_RELEASE, 'go');
     }
-    await until(() => stderr.includes('waiting; proving'));
+    await until(() => stderr.includes('waiting; proving'), loadTimeout(ADMISSION_WAIT_MS));
     return { pending, held };
   } catch (error) {
     held?.release();
@@ -247,7 +249,8 @@ for (const [stage, cap] of [['open', 2], ['worker', 2], ['worker', 1]]) {
   test(`a ${stage} proving wait allows another dispatch below cap ${cap} and recounts before launch`, async t => {
     const f = fixture(t); capSetting(f, cap);
     const other = f.rec(['add', 'Independent work outside proving hold', '--role', 'engineer']);
-    const { pending, held } = await provingWait(f, stage);
+    // Keep the release's slow worker-stage observation reproducible past 5s.
+    const { pending, held } = await provingWait(f, stage, { workerDelayMs: stage === 'worker' && cap === 2 ? 6000 : 0 });
     try {
       assert.equal(JSON.parse(fs.readFileSync(f.jobs()[0])).stage, stage);
       const directory = path.join(f.git(['rev-parse', '--path-format=absolute', '--git-common-dir']), 'dispatch-session-cap');

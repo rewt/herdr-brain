@@ -6,6 +6,8 @@ import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import test from '../../test/helpers/bounded-test.mjs';
+import { loadRecord } from '../../lib/store.mjs';
+import { SNAPSHOT_FILE } from '../../lib/record-snapshot.mjs';
 import { buildDigest, recordDigest } from '../lib/signals.mjs';
 
 const BIN = fileURLToPath(new URL('../bin/brain.mjs', import.meta.url));
@@ -171,7 +173,7 @@ test('settle enrichment uses only verified evidence tied to the recorded run and
   assert.match(fallback.detail, /unavailable/);
 });
 
-test('foreground CLI is model-free, read-only on the record, and persists only Brain state', t => {
+test('foreground CLI is model-free, read-only on the event log, and persists only derived state', t => {
   const f = fixture(t);
   const env = { ...process.env, BRAIN_STATE: f.stateDir, ORG_DIR: f.orgDir };
   const before = fs.readFileSync(path.join(f.orgDir, 'events.jsonl'), 'utf8');
@@ -190,7 +192,13 @@ test('foreground CLI is model-free, read-only on the record, and persists only B
     assert.equal(r.status, 2); assert.match(r.stderr, /Usage: brain digest --org DIR/);
   }
   assert.equal(fs.readFileSync(path.join(f.orgDir, 'events.jsonl'), 'utf8'), before);
-  assert.deepEqual(fs.readdirSync(f.orgDir), ['events.jsonl']);
+  // Store reads may persist a rebuildable snapshot, never authoritative state.
+  assert.deepEqual(fs.readdirSync(f.orgDir).sort(), ['events.jsonl', SNAPSHOT_FILE].sort());
+  const cached = loadRecord(f.orgDir), replay = loadRecord(f.orgDir, { snapshot: false });
+  assert.equal(cached.snapshot.used, true);
+  assert.equal(cached.events.length, base.length);
+  assert.deepEqual(cached.events, replay.events);
+  assert.deepEqual(cached.state, replay.state);
 });
 
 test('empty and entirely covered records can be acknowledged without a model', t => {

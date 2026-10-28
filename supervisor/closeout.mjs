@@ -3,19 +3,16 @@ import { captureCloseoutLaunch } from '../lib/closeout-code.mjs';
 import { parseArgs } from 'node:util';
 import { isMain } from '../lib/cli-help.mjs';
 import { gitProject } from '../lib/project.mjs';
-import { isMainThread, parentPort, workerData } from 'node:worker_threads';
 
 export async function closeoutMain(argv = process.argv.slice(2)) {
   const { positionals, values } = parseArgs({ args: argv, allowPositionals: true, options: {
     keys: { type: 'string' }, receipt: { type: 'string' }, deadline: { type: 'string' }, 'no-restart': { type: 'boolean' }, 'retry-safe': { type: 'boolean' },'sessions-only':{type:'boolean'}, owner:{type:'boolean'},
-    parallel: { type: 'boolean' }, 'session-keys': { type: 'string' },
     repo: { type: 'string', default: process.cwd() }, org: { type: 'string' }, seq: { type: 'string' }, why: { type: 'string' },
     original: { type: 'string' }, candidate: { type: 'string' },
   } });
   const [command, topic] = positionals, cwd = values.repo;
   if (values.owner && command !== 'status') throw Error('--owner is a read-only status option');
   if ((values.original || values.candidate) && command !== 'packet') throw Error('--original/--candidate are read-only packet options');
-  if ((values.parallel || values['session-keys']) && command !== 'drain') throw Error('parallel/session keys require a named drain');
   if (command === 'capabilities' && positionals.length === 1) {
     const { readCloseoutCapabilities } = await import('../lib/closeout-packet.mjs');
     process.stdout.write(JSON.stringify(readCloseoutCapabilities()) + '\n');
@@ -39,16 +36,10 @@ export async function closeoutMain(argv = process.argv.slice(2)) {
     const keys = values.keys === undefined ? undefined : JSON.parse(values.keys), bound = values.deadline===undefined?Date.now()+180000:Number(values.deadline);
     if ((keys !== undefined && (!Array.isArray(keys) || keys.some(k => !/^[a-f0-9]{64}$/.test(k)))) || !Number.isSafeInteger(bound)||bound<0||(!bound||values['sessions-only'])&&keys===undefined) throw Error('invalid closer keys/deadline; unbounded/session phases need exact named targets');
     const deadline=bound===0?Infinity:bound;
-    const sessionKeys=values['session-keys']===undefined?[]:JSON.parse(values['session-keys']);
-    if(values.parallel&&(!keys||!Array.isArray(sessionKeys)||sessionKeys.some(k=>!keys.includes(k)))||values['session-keys']&&!values.parallel)
-      throw Error('parallel drain requires exact named keys and a session-key subset');
     const { drainCloseout } = await import('../lib/closeout-consumer.mjs');
     const { restartCloseout } = await import('../lib/closeout-attempt.mjs');
     const command=bound===0?(await import('../dispatch/foreground-command.mjs')).foregroundCommand:undefined;
-    result = values.parallel
-      ? await (await import('../lib/closeout-executor.mjs')).drainCloseoutParallel({ cwd, org, keys, loadedCode, retrySafe: values['retry-safe'],
-        sessionsOnly: values['sessions-only'], sessionKeys, retirementOptions: { deadline }, foreground: bound===0 })
-      : drainCloseout({ cwd, org, keys, loadedCode, retrySafe: values['retry-safe'],sessionsOnly:values['sessions-only'], retirementOptions: { deadline,...(command?{command}:{}) } });
+    result = drainCloseout({ cwd, org, keys, loadedCode, retrySafe: values['retry-safe'],sessionsOnly:values['sessions-only'], retirementOptions: { deadline,...(command?{command}:{}) } });
     if (result.restart) result.successor = restartCloseout({ cwd, org, restart: result.restart, deadline, noRestart: values['no-restart'] });
   }
   else if (command === 'handoff' && positionals.length === 1 && values.receipt) {
@@ -76,16 +67,5 @@ export async function closeoutMain(argv = process.argv.slice(2)) {
   process.stdout.write(JSON.stringify(result) + '\n');
 }
 
-// The parent owns both existing global claims until every lane thread exits.
-// Capture physical source before importing the executor, just as the CLI does.
-if (!isMainThread && workerData?.kind === 'closeout-lane/v1') {
-  try {
-    const loadedCode=captureCloseoutLaunch(gitProject(workerData.cwd));
-    const { runCloseoutLane }=await import('../lib/closeout-executor.mjs');
-    parentPort.postMessage(runCloseoutLane({...workerData,loadedCode}));
-  } catch(error) {
-    parentPort.postMessage({error:{message:error.message,code:error.code,binding:error.binding,current:error.current}});
-  } finally { parentPort.close(); }
-}
-else if (isMain(import.meta.url)) try { await closeoutMain(); }
+if (isMain(import.meta.url)) try { await closeoutMain(); }
 catch (e) { process.stderr.write(`closeout: ${e.message}\n`); process.exitCode = 1; }

@@ -93,9 +93,12 @@ test('closer lock contention discards preparation; only a named safe turn retrie
     if (row.action === 'lane-preflight') preparation.push(row);
     if (row.action === 'lane-evidence-discarded') discarded.push(row.directory);
   };
-  const read = fs.readFileSync; let producerReads = 0;
+  const read = fs.readFileSync; let queueReads = 0;
   fs.readFileSync = function(file, ...args) {
-    if (file === path.join(f.common, 'promote/queue.json')) producerReads++;
+    if (file === path.join(f.common, 'promote/queue.json')) {
+      queueReads++;
+      assert.equal(fs.existsSync(path.join(f.org, 'lock')), false, 'promotion queue observations are outside the append lock');
+    }
     return read.call(this, file, ...args);
   };
   t.after(() => { fs.readFileSync = read; });
@@ -127,7 +130,7 @@ test('closer lock contention discards preparation; only a named safe turn retrie
   assert.equal(preparation.length, 2, 'the named turn prepares removal again');
   assert.notEqual(preparation[1].evidence.directory, preparation[0].evidence.directory);
   assert.equal(effects(f).find(e => e.action === 'worktree-removed').evidence.directory, preparation[1].evidence.directory);
-  assert.equal(producerReads, 0, 'pre-effect contention needs no outside promotion-job producer');
+  assert.ok(queueReads > 0, 'the promotion queue observation path was exercised');
   assert.deepEqual(events(f).slice(0, before.length), before, 'the original contention evidence stays immutable');
   assertRemoved(f);
 });

@@ -344,12 +344,19 @@ test('restart after worktree removal revalidates preservation and finishes branc
   assert.equal(effects(f).filter(e => e.action === 'lane-preflight').length, 2, 'each preservation manifest retains its own receipt');
 });
 
-test('lost native replies retain the unresolved workspace intent despite physical absence and a manual retry', t => {
-  const f = setup(t, { terminal: true }), base = f.options.command, lost = new Set();
+for (const [command, action, count] of [
+  ['agent prompt', 'agent-exit-requested', 1],
+  ['tab close', 'shell-close-requested', 2],
+  ['workspace close', 'workspace-close-requested', 3],
+]) test(`a lost ${command} reply retains its original intent despite physical effect and a manual retry`, t => {
+  const f = setup(t, { terminal: true }), base = f.options.command;
+  let lost = 0;
   f.options.command = (exe, args, opt) => {
     const result = base(exe, args, opt), key = args.slice(0, 2).join(' ');
-    if (exe === f.job.herdr && ['agent prompt', 'tab close', 'workspace close'].includes(key) && !lost.has(key)) {
-      lost.add(key); return { ...result, status: 1, stderr: 'injected lost acknowledgement' };
+    // Reach each stage with positively acknowledged prerequisites. Losing an
+    // earlier reply must stop cleanup before it can attempt the next stage.
+    if (exe === f.job.herdr && key === command) {
+      lost++; return { ...result, status: 1, stderr: 'injected lost acknowledgement' };
     }
     return result;
   };
@@ -357,17 +364,42 @@ test('lost native replies retain the unresolved workspace intent despite physica
   const entry = readCloseoutEntries(f.common).find(e => unresolvedCloseoutEffect(e, events(f)));
   assert.ok(entry);
   const intent = unresolvedCloseoutEffect(entry, events(f)), original = events(f), native = f.herdrCalls(), recorded = effects(f);
+  assert.equal(lost, 1);
+  assert.equal(intent.action, action);
+  const physical = f.read(), workspace = command === 'workspace close';
+  assert.deepEqual(physical.actions, [['agent', 'prompt', 'worker', '/quit'], ['tab', 'close', 'w:t'], ['workspace', 'close', 'w']].slice(0, count));
+  assert.deepEqual(physical.agents, [], 'the original exit physically ran even when its reply was lost');
+  assert.equal(physical.panes.length, command === 'agent prompt' ? 1 : 0);
+  assert.equal(physical.workspaces.length, workspace ? 0 : 1);
+  if (workspace) assertRemoved(f);
+  else {
+    assert.ok(fs.existsSync(f.lane), 'an unresolved session command keeps the worktree');
+    assert.equal(f.git(['rev-parse', 'lane/topic']), f.head);
+    assert.equal(recorded.some(e => e.action === 'lane-removed'), false);
+  }
+  const completed = e => action === 'agent-exit-requested' ? e.action === 'exit-observed' && e.pane === 'w:p' :
+    e.action === 'closed' && (workspace ? e.workspace_id === 'w' : e.tab_id === 'w:t');
+  assert.equal(recorded.some(completed), false, 'physical effect is not the original producer completion');
   const file = path.join(f.common, 'closeout/entries', entry.key + '.json'), bytes = fs.readFileSync(file);
+  let nativeCalls = 0;
+  f.options.command = (exe, args, opt) => {
+    if (exe === f.job.herdr) nativeCalls++;
+    return base(exe, args, opt);
+  };
   retryCloseout({ cwd: f.repo, org: f.org, topic: 'topic', why: 'reconcile lost native replies', start: false });
-  assert.deepEqual(f.drain().evaluated, []); assertRemoved(f);
+  assert.deepEqual(f.drain().evaluated, []);
+  assert.equal(nativeCalls, 0, 'a manual retry cannot read back or replay an unresolved native command');
   assert.deepEqual(unresolvedCloseoutEffect(entry, events(f)), intent);
   assert.deepEqual(events(f).slice(0, original.length), original);
   assert.deepEqual(f.herdrCalls(), native); assert.deepEqual(effects(f), recorded); assert.deepEqual(fs.readFileSync(file), bytes);
   assert.equal(evaluations(f).some(e => e.key === entry.key && e.completed), false);
-  assert.deepEqual(f.read().actions, [['agent', 'prompt', 'worker', '/quit'], ['tab', 'close', 'w:t'], ['workspace', 'close', 'w']]);
-  assert.ok(effects(f).some(e => e.action === 'closed' && e.tab_id === 'w:t' && e.reconciled));
-  assert.equal(effects(f).some(e => e.action === 'closed' && e.workspace_id === 'w'), false,
-    'workspace absence is not the original producer completion');
+  assert.deepEqual(f.read(), physical);
+  assert.equal(fs.existsSync(f.lane), !workspace);
+  const intentId = original.find(e => e.type === 'closeout.effect' && e.outcome === intent).effect;
+  const waits = events(f).filter(e => e.type === 'closeout.waiting' && e.key === entry.key &&
+    (e.waiting.defect || e.waiting.producers.some(p => p.kind === 'native-command' && p.intent === intentId)));
+  assert.ok(waits.length > 0, 'the original pending or failed producer remains durably linked');
+  for (const wait of waits) assert.notEqual(closeoutWaitState(wait, events(f)), 'complete');
 });
 
 test('queue ownership skips both scheduled retirement passes and promotion-owned cleanup', t => {

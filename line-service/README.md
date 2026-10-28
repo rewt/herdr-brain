@@ -411,7 +411,9 @@ it uses its actual owned pass/installation and fresh run ownership, without
 changing that consumer, a pin or the report. Major correction checks remain
 required before final release.
 An explicit verdict may be in frontmatter or a standalone `Verdict: PASS`,
-`FAIL` or `NEEDS-WORK` body line. Quoted/fenced examples grant no verdict;
+`Verdict: FAIL` or `Verdict: NEEDS-WORK` body line, including Markdown headings.
+An isolated `**PASS**`, `**FAIL**` or `**NEEDS-WORK**` is also a declaration.
+Quoted/fenced examples and indented code grant no verdict;
 missing, unknown or contradictory declarations hold intake. The fact records
 the declaration location and original report hash; report bytes are unchanged.
 

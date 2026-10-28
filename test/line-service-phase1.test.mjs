@@ -810,6 +810,61 @@ test('phase1 ingests an explicit immutable body verdict and holds missing quoted
   assert.equal(fs.readFileSync(path.join(f.org,'reports/R-2.md'),'utf8'),text,'original report bytes stay immutable');
 });
 
+test('review intake ingests heading and isolated bold verdicts exactly once through the line service and normal record CLI',t=>{
+  const f=fixture(t),target=discoverChanges(f.context()).changes[0].target,owner=f.context().run.owner;
+  const policy=JSON.parse(fs.readFileSync(path.join(f.cwd,'.lane.json')));policy.retirement={closeout_queue:false,line_service_cleanup:false};
+  fs.writeFileSync(path.join(f.cwd,'.lane.json'),JSON.stringify(policy));
+  const cases=[['R-2','REV-1','## Verdict: PASS','PASS'],['R-3','REV-2','**FAIL**','FAIL'],['R-4','REV-3','## Verdict: PASS','PASS']];
+  const originals=new Map();
+  for(const [id,item,body,verdict]of cases){
+    const file=path.join(f.org,`runs/${id}/report.md`),text=`---\nrun: ${id}\noutcome: done\nsummary: Independent immutable review.\nproposals: []\n---\n\n${body}\n\n${verdict==='FAIL'?'- [Major] source-1:1 - broken invariant':'No findings.'}\n`;
+    fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,text);originals.set(id,text);
+    f.add([{type:'item.added',id:item,role:'reviewer',title:'Review',meta:{review_source_item:'ENG-1',review_source_run:'R-1',review_key:`ENG-1:${target.head}`,review_target:target,review_round_cap:1}},
+      {type:'run.started',id,item,workspace:f.workspace,report_path:file,meta:{dispatch_project:f.identity}},
+      {type:'run.claimed',run:id,record:f.org,project:f.identity,owner}]);
+  }
+  const calls=[],env={...f.env,HERDR_BRAIN_ROOT:f.bundle};
+  const command=(exe,args,options)=>{
+    assert.notEqual(exe,'herdr','intake never consults or relaunches the reviewer');
+    if(args[1]!=='ingest')return {status:0,stdout:'{}',stderr:''};
+    calls.push(args);
+    return spawnSync(process.execPath,[path.join(f.bundle,'bin/org.mjs'),...args.slice(1)],{...options,env:{...options.env,HERDR_BRAIN_ROOT:f.bundle}});
+  };
+  const service=()=>createLineService({repo:f.cwd,org:f.org,to:'brain-chat',env,command,maxStarts:0,capacity:()=>({count:0,cap:4}),recordNotice:d=>({id:d.id})});
+  service().pass();service().pass();assert.equal(calls.length,3);
+  for(const [id,item,,verdict]of cases){
+    const r=f.context().state.runs.get(id),text=originals.get(id),file=r.report_path;
+    assert.equal(r.report.extra.verdict,verdict);assert.equal(r.report.sha256,hash(text));assert.deepEqual(r.owner,owner);
+    assert.equal(fs.readFileSync(file,'utf8'),text);assert.equal(fs.readFileSync(path.join(f.org,r.report.file),'utf8'),text);
+    const again=spawnSync(process.execPath,[path.join(f.bundle,'bin/org.mjs'),'ingest',file,'--run',id,'--if-current-run',id],{cwd:f.cwd,env,encoding:'utf8'});
+    assert.equal(again.status,0,again.stderr);assert.match(again.stdout,/already recorded/);
+    const c=f.context(),facts=c.events.filter(e=>e.type==='change.reviewed'&&e.review_run===id);
+    assert.equal(c.events.filter(e=>e.type==='report.ingested'&&e.run===id).length,1);assert.equal(facts.length,1);
+    assert.equal(facts[0].verdict,verdict);assert.deepEqual(facts[0].verdict_evidence,{frontmatter:false,body_lines:[1]});
+    assert.deepEqual(c.state.items.get(item).meta.review_target,target);assert.deepEqual(c.state.items.get(item).runs,[id]);
+  }
+  const fixes=[...f.context().state.items.values()].filter(i=>i.meta.review_fix_of===`ENG-1:${target.head}`);
+  assert.equal(fixes.length,1);assert.equal(fixes[0].parent,'REV-2');assert.equal(fixes[0].meta.severity,'major');
+});
+
+test('review intake heading and isolated bold judgments retain quoted fenced malformed indented and contradictory refusals',t=>{
+  const f=fixture(t),target=discoverChanges(f.context()).changes[0].target;
+  f.add([{type:'item.added',id:'REV-1',role:'reviewer',title:'Review',meta:{review_source_item:'ENG-1',review_source_run:'R-1',review_target:target}},
+    {type:'run.started',id:'R-2',item:'REV-1',workspace:f.cwd}]);
+  const c=f.context(),run=c.state.runs.get('R-2'),report={outcome:'done',proposals:[],extra:{}};
+  for(const body of ['> ## Verdict: PASS','> **FAIL**','```md\n## Verdict: PASS\n```','~~~\n**FAIL**\n~~~',
+    '    ## Verdict: PASS','    **FAIL**','\t**FAIL**','- **FAIL**','**FAIL** means a correction is needed.',
+    '**FAIL','**UNKNOWN**','####### Verdict: PASS','##Verdict: PASS','## Verdict: UNKNOWN',
+    '## Verdict: PASS\n**FAIL**','**PASS**\n## Verdict: FAIL'])
+    assert.throws(()=>reviewResultEvents({...c,run,report,body,sha256:hash(body)}),/explicit|ambiguous/,body);
+  for(const body of ['## Verdict: PASS','**PASS**'])
+    assert.throws(()=>reviewResultEvents({...c,run,report:{...report,extra:{verdict:'FAIL'}},body,sha256:hash(body)}),/ambiguous/);
+  for(const body of ['# Verdict: NEEDS-WORK','### **NEEDS-WORK**'])
+    assert.equal(reviewResultEvents({...c,run,report,body,sha256:hash(body)})[0].verdict,'NEEDS-WORK');
+  assert.deepEqual(f.context().events,c.events,'parsing never writes report, judgment or replacement-attempt events');
+  assert.equal(f.context().state.runs.get('R-2').report,null);
+});
+
 test('permanent review verdict accepts the actual PASS sentence and bold FAIL prefix with frontmatter agreement and one Major fix',t=>{
   const f=fixture(t),target=discoverChanges(f.context()).changes[0].target;
   f.add([{type:'item.added',id:'REV-1',role:'reviewer',title:'Review',meta:{review_source_item:'ENG-1',review_source_run:'R-1',review_key:`ENG-1:${target.head}`,review_target:target,review_round_cap:1}},

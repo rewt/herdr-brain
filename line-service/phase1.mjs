@@ -318,7 +318,12 @@ export function reviewResultEvents({state,events,run,report,sha256,body=report.b
     const marker=/^\s{0,3}(`{3,}|~{3,})/.exec(line);
     if(marker){if(!fence)fence=marker[1];else if(marker[1][0]===fence[0]&&marker[1].length>=fence.length)fence=null;continue;}
     if(fence)continue;
-    const match=/^\s{0,3}(\*\*)?Verdict:\s*(.*?)\s*$/i.exec(line);
+    // A heading or an isolated emphasized verdict is still the reviewer's
+    // explicit declaration. Keep quotes, lists, code and prose out of intake.
+    const declaration=line.replace(/^ {0,3}#{1,6}[ \t]+/, '');
+    const isolated=/^ {0,3}\*\*(PASS|FAIL|NEEDS-WORK)\*\*[ \t]*$/i.exec(declaration);
+    if(isolated){declarations.push(isolated[1].toUpperCase());bodyLines.push(index+1);continue;}
+    const match=/^ {0,3}(\*\*)?Verdict:\s*(.*?)\s*$/i.exec(declaration);
     if(match){
       let value=match[2];
       // Markdown may emphasize the entire declaration, including its label.

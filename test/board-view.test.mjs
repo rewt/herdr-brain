@@ -228,8 +228,10 @@ test('CLI validates options, independent snapshots survive closure, and all sour
 });
 test('the release archive includes the board and its dependency closure', t => {
   if (!fs.existsSync(new URL('../.git', import.meta.url))) { t.skip('git-archive snapshot has no repository metadata'); return; }
-  const archive = execFileSync('git', ['archive', 'HEAD'], { maxBuffer: 32 * 1024 * 1024 });
-  // tar reads archive bytes on stdin; no release activation, tag or live gate.
-  const listing = execFileSync('tar', ['-tf', '-'], { input: archive, encoding: 'utf8' });
+  const f = boardFixture(t), archive = path.join(f.root, 'release.tar');
+  // Keep the full archive off the child-output buffer as the repository grows.
+  execFileSync('git', ['archive', '--output', archive, 'HEAD']);
+  // Inspect the archive without release activation, tags or a live gate.
+  const listing = execFileSync('tar', ['-tf', archive], { encoding: 'utf8' });
   for (const name of ['board/board.mjs', 'board/rows.mjs', 'board/brain.mjs', 'contrib/settle-watch.mjs', 'lib/cli-help.mjs']) assert.ok(listing.split('\n').includes(name), name);
 });

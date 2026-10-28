@@ -8,19 +8,25 @@ import { fileURLToPath } from 'node:url';
 import { testSlotEnvironment } from '../../test/helpers/test-slot-env.mjs';
 
 const cli = fileURLToPath(new URL('../test-slot.mjs', import.meta.url));
-for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) test(`${signal} during the first watch audit reaches compound descendants`, async t => {
+for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) test(`${signal} during the first payload watch audit reaches compound descendants`, async t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'watch-cancel-'));
   const ready = path.join(root, 'ready'), got = path.join(root, 'got'), auditing = path.join(root, 'auditing');
+  const startupAudit = path.join(root, 'startup-audit');
   const resume = path.join(root, 'resume'), lock = path.join(root, 'slot'), preload = path.join(root, 'audit.mjs');
   const leaf = path.join(root, 'leaf.cjs');
   fs.writeFileSync(leaf, `const fs=require('fs');process.on(${JSON.stringify(signal)},()=>{fs.writeFileSync(${JSON.stringify(got)},${JSON.stringify(signal)});process.exit(0);});fs.writeFileSync(${JSON.stringify(ready)},String(process.pid));setInterval(()=>{},1000);`);
-  // Hold the real first CPU audit until the payload is ready and cancellation
-  // has arrived. This exercises startup ordering without relying on ps speed.
+  // The occupancy barrier must finish its pre-payload audit before granting
+  // exec. Hold the first real CPU audit containing the ready descendant so
+  // cancellation still exercises the compound tree without a circular wait.
   fs.writeFileSync(preload, `import cp from 'node:child_process';import fs from 'node:fs';import {syncBuiltinESMExports} from 'node:module';
 const execute=cp.spawnSync;cp.spawnSync=(file,args,...rest)=>{
   if(file==='/bin/ps'&&args.includes('pid=,time=,stat=')){
-    fs.writeFileSync(${JSON.stringify(auditing)},args.at(-1));
-    while(!fs.existsSync(${JSON.stringify(resume)}))Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,10);
+    const pids=args.at(-1).split(',');
+    if(!fs.existsSync(${JSON.stringify(startupAudit)}))fs.writeFileSync(${JSON.stringify(startupAudit)},JSON.stringify({pids,payload_ready:fs.existsSync(${JSON.stringify(ready)})}));
+    if(fs.existsSync(${JSON.stringify(ready)})&&pids.includes(fs.readFileSync(${JSON.stringify(ready)},'utf8'))){
+      fs.writeFileSync(${JSON.stringify(auditing)},args.at(-1));
+      while(!fs.existsSync(${JSON.stringify(resume)}))Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,10);
+    }
   }
   return execute(file,args,...rest);
 };syncBuiltinESMExports();`);
@@ -53,6 +59,11 @@ const execute=cp.spawnSync;cp.spawnSync=(file,args,...rest)=>{
     await new Promise(resolve => setTimeout(resolve, 20));
   }
   assert.ok(fs.existsSync(ready) && fs.existsSync(auditing), stderr);
+  const startup = JSON.parse(fs.readFileSync(startupAudit, 'utf8'));
+  const descendant = fs.readFileSync(ready, 'utf8');
+  assert.equal(startup.payload_ready, false, 'the pre-grant audit completes before the payload can start');
+  assert.equal(startup.pids.includes(descendant), false);
+  assert.ok(fs.readFileSync(auditing, 'utf8').split(',').includes(descendant), 'cancellation is held in an audit of the ready descendant');
   child.kill(signal);
   fs.writeFileSync(resume, 'resume');
   const result = await done;

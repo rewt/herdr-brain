@@ -55,6 +55,13 @@ Read in full for this decision, in the owning record under `.org/`:
 - `evidence/CLOSEOUT-MECHANICS-20261027/COMPARISON.md`: duplicated ready/landed
   requests, nonproducing waits, main movement between intent and invocation,
   and separate session/physical passes already produced stranded closeouts.
+- `runs/R-1191/report.md` (ENG-853), supplied after the first decision landing:
+  build on landed `8249d8dd` and `3f5d229f` (already in this document's base).
+  They provide bounded fresh guard preparation, retryable landing-receipt
+  derivation, conflict diagnostics and append-only closer transaction callbacks.
+  The measured five-minute lock hold was a dependency-wait callback, not a
+  whole-drain lock. Native watcher/closer controls and busy-hour notice/guard
+  acceptance remain unproven. Do not create a competing retry/transaction layer.
 
 The recurrence class is incomplete allocation accounting and progress. Repairing
 one ingress bug or increasing a budget does not ensure that every finished
@@ -233,6 +240,7 @@ epoch moves. Record real hold intervals separately and expose all exclusions.
 | Orphan processes in finished vacant lanes | 0; owners resolve them through authorized teardown, never a generic cwd/uid kill |
 | Manual assistance / unexplained disappearance | 0 supervisor hand closes or sweeps; absence without an exact automated receipt is unexplained, never presumed automatic success |
 | Safety | 0 wrong-occupant closes, lost unsaved bytes, deleted unlanded refs, replayed UNKNOWN commands or bypassed STOP/HOLD/refusals |
+| Busy-hour notice/guard reliability | 0 lost final notices and 0 operations ending on a retryable guard conflict; count expected final IDs and their actual terminal delivery receipts |
 | Exception visibility | 100% typed scope/evidence/owner/age/completion route; 0 unaccounted or fictitiously subscribed waits |
 
 Split every numerator/denominator, latency and oldest age by **project**, **Codex
@@ -251,6 +259,17 @@ main/source changes, partial effects, refusal, UNKNOWN, STOP/HOLD and dirty work
 Metric oracle controls must deliberately inject a manual close, missing inventory,
 false refusal and cohort exclusion and show that they prevent a green result.
 Worker/reviewer suites never substitute for full final-release and live acceptance.
+
+Carry ENG-853's still-unrun `watch/test/watch.test.mjs`,
+`test/closeout-contention.test.mjs` and `test/closeout-lifecycle.test.mjs` into the
+coordinator's next candidate full suite. Their existing producer evidence is
+reused, never called native coverage. The busy hour must run the candidate source
+and establish the expected-final-notice denominator and actual delivery receipts,
+not just an absence of conflict sidecar rows. Bounded pre-effect guard refreshes
+are allowed; zero terminal retryable guard-conflict failures is the measure,
+not zero races or bypassing a real refusal. Unknown or old-runtime outcomes stay
+visible and cannot count as candidate success. Keep this proof in ENG-856 rather
+than re-filing the ordinary follow-up from R-1191 as another implementation item.
 
 The narrow candidate contains these slices, their necessary compatibility,
 packaging and correction work, and required acceptance evidence, with no unrelated

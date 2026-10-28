@@ -824,7 +824,7 @@ test('code handoff unsent then uncertain native retry',t=>{
       return command(exe,args,opt);
     };
     const actual=f.drain({keys:[key],sessionsOnly:!workspace}),all=events(f),attempts=all.filter(e=>e.type==='closeout.effect'&&e.key===key&&e.outcome.action===action),later=attempts.at(-1);
-    assert.equal(actual.evaluated[0]?.completed,false,JSON.stringify({action,actual}));assert.equal(attempts.length,2);assert.notEqual(later.effect,original.effect);
+    assert.equal(actual.evaluated[0]?.completed,false,JSON.stringify(actual));assert.equal(attempts.length,2);assert.notEqual(later.effect,original.effect);
     const laterWait=waitFor(all,later.effect);assert.ok(laterWait);assert.notEqual(laterWait.wait_id,waitFor(all,original.effect).wait_id);assert.ok(laterWait.seq>later.seq);
     assert.deepEqual(all.find(e=>e.seq===unsent.seq),unsent,'original positive no-start evidence stays immutable');
     assert.equal(closeoutWaitState(waitFor(all,original.effect),all),'complete');assert.equal(closeoutWaitState(laterWait,all),'failed');

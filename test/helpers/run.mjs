@@ -24,6 +24,14 @@ if (worker) argv.shift();
 const fileGroup = argv.includes('--file-group');
 // Bound output flushing only, never execution or the wait for a live leader.
 const outputDrainMs = 5_000;
+async function copyOutput(source, output) {
+  // A pipeline into shared stdio retains destination listeners after each
+  // file. Await each write callback instead: it handles backpressure and
+  // errors without adding listeners or ending the shared destination.
+  for await (const bytes of source) {
+    await new Promise((resolve, reject) => output.write(bytes, error => error ? reject(error) : resolve()));
+  }
+}
 const selected = new Set(JSON.parse(process.env.MONITOR_PROMOTION_TEST_FILES ?? '[]'));
 const files = argv.filter(arg => !arg.startsWith('--')).filter(file => !argv.some(arg => arg.startsWith('--test-name-pattern=')) || !selected.has(file));
 const nameOption = argv.find(arg => arg.startsWith('--test-name-pattern='));
@@ -80,7 +88,7 @@ if (worker) {
         const entry = completed.shift();
         copyingFileOutput = true;
         try {
-          if (entry.stderr) await pipeline(fs.createReadStream(entry.stderr), process.stderr, { end: false });
+          if (entry.stderr) await copyOutput(fs.createReadStream(entry.stderr), process.stderr);
           yield* fs.createReadStream(entry.artifact);
         } finally { copyingFileOutput = false; }
       }
@@ -316,8 +324,8 @@ if (worker) {
           // raw stderr and partial TAP remain separate durable artifacts too.
           if (fileGroup && process.connected) process.send({ fileTapComplete: completion });
           else forwardOutput(`\nFILE_TAP_COMPLETE: ${JSON.stringify(completion)}\n`, process.stderr);
-          await pipeline(fs.createReadStream(reference.stderr_artifact), process.stderr, { end: false });
-          await pipeline(fs.createReadStream(reference.artifact), process.stdout, { end: false });
+          await copyOutput(fs.createReadStream(reference.stderr_artifact), process.stderr);
+          await copyOutput(fs.createReadStream(reference.artifact), process.stdout);
         }
         fileArtifacts.clear();
       }

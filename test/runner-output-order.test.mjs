@@ -81,10 +81,29 @@ test('a capped first file frees admission while a concurrent peer and every queu
   const entered = path.join(f.root, 'entered.json'), released = path.join(f.root, 'released');
   const peerActive = path.join(f.root, 'peer-active');
   const blocked = f.file('first-cap', `import {spawn} from 'node:child_process';
+    const writes=[],write=process.stdout.write;
+    process.stdout.write=function(bytes,...args){writes.push(Buffer.from(bytes));return write.call(this,bytes,...args);};
     test('partial result before cap',()=>{});
-    test('blocked first file',()=>{
+    test('blocked first file',async()=>{
+      // Observe the old synchronous-block boundary before yielding. Node's
+      // async serializer need not have written the preceding result yet.
+      const beforeYield=Buffer.concat(writes).toString('base64');
+      process.stdout.write=write;
+      // Block only after the real reporter has retained a passing result.
+      // The cap must preserve this observed prefix, not manufacture a result
+      // that never reached the file runner before the synchronous block.
+      let partial;
+      while(!partial){
+        for(const name of fs.readdirSync(${JSON.stringify(f.root)}).filter(name=>name.startsWith('test-file-tap-'))){
+          const artifact=${JSON.stringify(f.root)}+'/'+name+'/1.tap';
+          if(!fs.existsSync(artifact))continue;
+          const tap=fs.readFileSync(artifact,'utf8');
+          if(/^ok 1 - partial result before cap$/m.test(tap)){partial={artifact,tap,beforeYield};break;}
+        }
+        if(!partial)await new Promise(resolve=>setTimeout(resolve,10));
+      }
       const child=spawn(process.execPath,['-e','setInterval(()=>{},1000)']);
-      fs.writeFileSync(${JSON.stringify(entered)},JSON.stringify({file:process.pid,worker:process.ppid,fixture:child.pid}));
+      fs.writeFileSync(${JSON.stringify(entered)},JSON.stringify({file:process.pid,worker:process.ppid,fixture:child.pid,partial}));
       fs.writeSync(2,'FIRST-CAP-DIAGNOSTIC\\n');
       Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0);
     });`);
@@ -116,6 +135,7 @@ test('a capped first file frees admission while a concurrent peer and every queu
   assert.equal(result.rows.filter(row => row.kind === 'suite' && row.event === 'finish').length, 1);
   const timeout = result.rows.find(row => row.kind === 'file' && row.reason === 'file-timeout');
   assert.ok(timeout, JSON.stringify(result.rows));
+  const owned = JSON.parse(fs.readFileSync(entered, 'utf8'));
   const evidence = [];
   for (const file of files) {
     const reference = result.references.find(row => row.file === file);
@@ -134,7 +154,9 @@ test('a capped first file frees admission while a concurrent peer and every queu
     assert.equal(reference.exit_code, failed ? 1 : 0, file);
     if (!failed) assert.match(tap, /# pass 1\n# fail 0\n/);
     if (file === blocked) {
-      assert.match(tap, /partial result before cap/);
+      assert.equal(owned.partial.artifact, reference.artifact);
+      assert.match(owned.partial.tap, /^ok 1 - partial result before cap$/m);
+      assert.ok(tap.startsWith(owned.partial.tap), 'the exact TAP observed before blocking must survive the cap');
       assert.equal(reference.reason, 'file-timeout');
       assert.equal(reference.tap_complete, false);
       assert.match(fs.readFileSync(reference.stderr_artifact, 'utf8'), /FIRST-CAP-DIAGNOSTIC/);
@@ -151,13 +173,16 @@ test('a capped first file frees admission while a concurrent peer and every queu
     }
     evidence.push({ file: path.basename(file), exit_code: reference.exit_code, tap_bytes: Buffer.byteLength(tap), start: start.at, finish: finishes[0].at });
   }
-  const owned = JSON.parse(fs.readFileSync(entered, 'utf8'));
-  for (const pid of Object.values(owned)) {
+  const reaped = { file: owned.file, worker: owned.worker, fixture: owned.fixture };
+  for (const pid of Object.values(reaped)) {
     const current = lookupProcess(pid);
     assert.equal(current.ok, true, current.error);
     assert.ok(!current.value || /^Z/.test(current.value.state), `capped file descendant ${pid} survived`);
   }
-  t.diagnostic(JSON.stringify({ cap_ms: 5000, concurrency: 2, result: result.code, timeout, crash_stderr_bytes: Buffer.byteLength(diagnostic), reaped: owned, files: evidence }));
+  const beforeYield = Buffer.from(owned.partial.beforeYield, 'base64');
+  t.diagnostic(JSON.stringify({ cap_ms: 5000, concurrency: 2, result: result.code, timeout, crash_stderr_bytes: Buffer.byteLength(diagnostic), reaped,
+    partial: { original_boundary_stdout_bytes: beforeYield.length, original_boundary_pass_serialized: beforeYield.includes(Buffer.from('test:pass')),
+      retained_prefix: owned.partial.tap }, files: evidence }));
 });
 
 test('independent file reporters retain admission limits, name selection and successful output', async t => {

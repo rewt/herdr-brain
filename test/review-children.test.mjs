@@ -264,7 +264,7 @@ test('CLI views release missing verdicts and name unlinked child reviews with fa
   assert.match(f.ok(['snapshot']), /\*\*ENG-1\*\* .*REV-1 done, verdict NEEDS-WORK/);
 });
 
-test('reviewer proposals explicitly marked nonblocking still announce and derive the child hold', t => {
+test('nonblocking reviewer proposals remain durable notes until selected, then derive the child hold', t => {
   const f = setupOrg(); t.after(() => fs.rmSync(f.root, { recursive: true, force: true }));
   f.ok(['add', 'Implement the change', '--role', 'engineer']);
   f.ok(['start', 'ENG-1']);
@@ -276,9 +276,39 @@ proposals:
   - role: Review
     title: Review compatibility
     blocking: false`));
-  assert.match(f.ok(['sync']), /\+ REV-1 "Review compatibility" \(review\) blocks ENG-1/);
+  const output = f.ok(['sync']);
+  assert.match(output, /\+ REV-1 "Review compatibility" \(review\)\n/);
+  assert.doesNotMatch(output, /blocks ENG-1/);
+  const note = f.json(['show', 'REV-1', '--json']);
+  assert.equal(note.role, 'review');
+  assert.equal(note.parent, 'ENG-1');
+  assert.equal(note.status, 'proposed');
+  assert.equal(note.meta.proposal_intake, 'report-proposal/v1');
+  assert.equal(note.meta.queue_selected, false);
+  const source = f.events().find(e => e.type === 'proposal.recorded' && e.item === 'REV-1').source;
+  assert.equal(source.key, 'report-proposal/v1:R-1:0');
+  assert.equal(source.proposal.blocking, false, 'retain the original proposal intent');
+  assert.deepEqual(note.meta.proposal_sources, [source]);
   assert.equal(f.events().some(e => e.type === 'link.added' && e.blocker === 'REV-1'), false);
+  assert.equal(f.json(['show', 'ENG-1', '--json']).status, 'done');
+  assert.match(f.fail(['start', 'REV-1']), /select the proposal separately/);
+
+  f.ok(['set', 'REV-1', 'meta.queue_selected=true']);
+  assert.equal(f.json(['show', 'REV-1', '--json']).status, 'ready');
   assert.equal(f.json(['show', 'ENG-1', '--json']).status, 'blocked');
+  assert.deepEqual(f.json(['show', 'ENG-1', '--json']).blocked_by, ['REV-1']);
+  for (const [run, verdict, status] of [['R-2', 'NEEDS-WORK', 'blocked'], ['R-3', 'PASS', 'done']]) {
+    f.ok(['start', 'REV-1']);
+    fs.writeFileSync(path.join(f.dir, `runs/${run}/report.md`), report(`run: ${run}
+outcome: done
+verdict: ${verdict}
+summary: Review completed.
+headline: Review completed`));
+    f.ok(['sync']);
+    assert.equal(f.json(['show', 'ENG-1', '--json']).status, status);
+  }
+  assert.equal(f.events().some(e => e.type === 'link.added' && e.blocker === 'REV-1'), false,
+    'selection restores the derived reviewer-child hold without an explicit blocker link');
 });
 
 test('an unmapped role with a REV fallback prefix does not announce or derive a review hold', t => {

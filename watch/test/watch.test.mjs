@@ -19,6 +19,7 @@ import {
 } from '../notice.mjs';
 import { seedOwnedRun } from '../../test/helpers/run-claim.mjs';
 import { readInbox } from '../../supervisor/prompt-supervisor.mjs';
+import { noticeLock } from '../../supervisor/notice-lock.mjs';
 import { waitForInboxIdle } from '../../test/helpers/inbox.mjs';
 import { stateDirectory, readJournal } from '../../messages/journal.mjs';
 import { gitProject } from '../../lib/project.mjs';
@@ -546,7 +547,7 @@ esac`);
 test('watch shadow uses the checked review verdict and scope while preserving the final tag', async t => {
   for (const [suffix, extra, route] of [['1', 'verdict: PASS', 'triage'], ['2', 'verdict: NEEDS-WORK', 'supervisor'], ['3', 'review_scope: deferred', 'supervisor'], ['4', 'verdict:\n  toString: inert-data', 'unknown']]) {
     const run = `R-99${suffix}`, f = watcherFixture(run);
-    t.after(() => fs.rmSync(f.root, { recursive: true, force: true }));
+    cleanWatcherFixture(t, f.root);
     fs.mkdirSync(path.join(f.root, '.org'), { recursive: true });
     fs.writeFileSync(f.report, reportText(run).replace('outcome: done', `outcome: done\n${extra}`));
     executable(f.herdr, `printf '%s\\n' "$*" >> '${f.calls}'
@@ -556,7 +557,11 @@ case "$1 $2" in
   *) exit 2 ;;
 esac`);
     const root = path.join(fs.realpathSync(f.root), 'shadow');
-    const child = spawnChild(t, process.execPath, f.args, { env: { ...TEST_ENV, BRAIN_SHADOW_ROOT: root, BRAIN_IDENTITY: 'example' } });
+    // This case verifies the shadow and acknowledged delivery, not the caller's
+    // cap. Its detached owner may hold the drain lock through slow native reads.
+    const child = spawnChild(t, process.execPath, f.args, { env: { ...TEST_ENV,
+      SUPERVISOR_INPUT_WAIT_SECONDS: String(loadTimeout(10_000) / 1000),
+      BRAIN_SHADOW_ROOT: root, BRAIN_IDENTITY: 'example' } });
     const done = await waitForExit(child); assert.equal(done.code, 0, done.stderr);
     const text = reportNotice({ run, item: 'ENG-9', outcome: 'done', headline: 'The report arrived', report: f.report });
     await t.test(`shadow mirror for ${run}`, async t => {
@@ -573,6 +578,60 @@ esac`);
     });
     assert.ok(fs.readFileSync(f.calls, 'utf8').includes(`agent prompt supervisor-test ${text} notice-id=watch:${run}:final`));
   }
+});
+
+test('a final watch notice survives a contended drain past its caller cap and delivers once after restart', async t => {
+  for (const owner of ['live', 'unidentified']) await t.test(owner, async t => {
+    const run = owner === 'live' ? 'R-9931' : 'R-9932', f = watcherFixture(run);
+    const inbox = path.join(f.root, '.org/supervisor/inbox.log'), lock = `${inbox}.drain.lock`;
+    cleanWatcherFixture(t, f.root);
+    fs.mkdirSync(path.dirname(inbox), { recursive: true });
+    let release;
+    if (owner === 'live') release = noticeLock(lock);
+    else { fs.mkdirSync(lock); release = () => fs.rmdirSync(lock); }
+    const ownerFile = path.join(lock, 'owner.json');
+    const ownerText = fs.existsSync(ownerFile) ? fs.readFileSync(ownerFile, 'utf8') : null;
+    fs.writeFileSync(f.report, reportText(run));
+    executable(f.herdr, `printf '%s\\n' "$*" >> '${f.calls}'
+case "$1 $2" in
+  "agent get") printf '%s\\n' '{"result":{"agent":{"agent_status":"done"}}}' ;;
+  "agent prompt") printf '%s\\n' '{}' ;;
+  *) exit 2 ;;
+esac`);
+    try {
+      // Both the foreground watcher and its acknowledged detached owner must
+      // leave the occupied lock intact. Restart while it is still occupied to
+      // adopt the same durable final notice rather than enqueue another one.
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const child = spawnChild(t, process.execPath, f.args, { env: { ...TEST_ENV,
+          SUPERVISOR_INPUT_WAIT_SECONDS: '0.1' } });
+        const done = await waitForExit(child);
+        assert.equal(done.code, 1, done.stdout + done.stderr);
+        assert.match(done.stderr, /drain\.lock; owner is live or unidentified/);
+        assert.ok(fs.existsSync(lock));
+        assert.equal(fs.existsSync(ownerFile) ? fs.readFileSync(ownerFile, 'utf8') : null, ownerText);
+        const entries = readInbox(inbox);
+        assert.equal(entries.length, 1);
+        assert.equal(entries[0].id, `watch:${run}:final`);
+        assert.equal(entries[0].state, 'pending');
+        assert.ok(Number.isInteger(entries[0].owner_pid) && entries[0].owner_pid > 0);
+        assert.doesNotMatch(fs.readFileSync(f.calls, 'utf8'), /agent prompt /);
+      }
+    } finally { release(); }
+    // No watcher is running here: the existing owner must complete delivery.
+    await waitForText(inbox, /"type":"sent"/);
+    await waitForInboxIdle(inbox);
+    const restarted = await waitForExit(startWatcher(t, f.args));
+    assert.equal(restarted.code, 0, restarted.stdout + restarted.stderr);
+    const text = reportNotice({ run, item: 'ENG-9', outcome: 'done',
+      headline: 'The report arrived', report: f.report });
+    const prompts = fs.readFileSync(f.calls, 'utf8').trim().split('\n').filter(call => call.startsWith('agent prompt '));
+    assert.deepEqual(prompts, [`agent prompt supervisor-test ${text} notice-id=watch:${run}:final`]);
+    const entries = readInbox(inbox);
+    assert.equal(entries.length, 1);
+    assert.equal(entries[0].to, 'supervisor-test');
+    assert.equal(entries[0].state, 'sent');
+  });
 });
 
 test('final watch notice waits for fake operator typing, then sends once across watcher restart', async (t) => {

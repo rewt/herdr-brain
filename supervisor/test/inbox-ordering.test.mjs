@@ -3,12 +3,14 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { execFileSync } from 'node:child_process';
 import test from '../../test/helpers/bounded-test.mjs';
 import { fixtureFleet } from '../../test/helpers/offline-herdr.mjs';
 import { spawnChild, waitForExit } from '../../test/helpers/child.mjs';
 import { drainInbox, enqueueSupervisor, readInbox, resolveNotice, resumeInbox } from '../prompt-supervisor.mjs';
 import { noticeLock } from '../notice-lock.mjs';
 import { loadTimeout } from '../../lib/deadline.mjs';
+import { initOrg, transact } from '../../lib/store.mjs';
 
 const empty = fs.readFileSync(new URL('./fixtures/claude-empty.ansi', import.meta.url), 'utf8');
 const typed = fs.readFileSync(new URL('./fixtures/claude-typed.ansi', import.meta.url), 'utf8');
@@ -61,13 +63,13 @@ if(args[0]==='agent'&&args[1]==='get') {
     for (const entry of readInbox(inbox).filter(entry => entry.state === 'uncertain'))
       resolveNotice(inbox, entry.id, rows('sent').some(args => args[3].endsWith(` notice-id=${entry.id}`)));
     await drain(undefined, { confirmSeconds: 0 });
-    assert.ok(readInbox(inbox).every(entry => entry.state === 'sent'), 'fixture finishes its retained journal');
+    assert.ok(readInbox(inbox).every(entry => ['sent', 'handled'].includes(entry.state)), 'fixture finishes its retained journal');
     fs.rmSync(root, { recursive: true, force: true });
   });
   return { root, inbox, herdr, options, write, target, add, drain, state, corr, sent: () => rows('sent'), calls: () => rows('calls') };
 }
 
-for (const mode of ['working', 'blocked', 'unavailable', 'get-error', 'read-error', 'typed', 'missing-binding'])
+for (const mode of ['working', 'blocked', 'get-error', 'read-error', 'typed', 'missing-binding'])
   test(`independent B receives while A is ${mode}, with A durably pending`, async t => {
     const f = fixture(t), A = f.target('A');
     if (['working', 'blocked'].includes(mode)) A.agent_status = mode;
@@ -82,14 +84,96 @@ for (const mode of ['working', 'blocked', 'unavailable', 'get-error', 'read-erro
       assert.match(readInbox(f.inbox)[0].error, /fixture (recipient unavailable|unreadable composer)/);
   });
 
-test('recipient FIFO and same-run cross-recipient order hold while a proven independent run progresses', async t => {
+test('recipient FIFO holds while other recipients progress even with the same run correlation', async t => {
   const f = fixture(t); f.write('modes', { A: 'typed' });
   f.add('a1', 'A', 'R-1'); f.add('a2', 'A', 'R-2');
   f.add('same-run', 'B', 'R-1'); f.add('independent', 'C', 'R-3');
   assert.equal((await f.drain('independent')).delivered, true);
-  assert.deepEqual(readInbox(f.inbox).map(e => e.state), ['pending', 'pending', 'pending', 'sent']);
+  assert.deepEqual(readInbox(f.inbox).map(e => e.state), ['pending', 'pending', 'sent', 'sent']);
   f.write('modes', {}); await f.drain();
-  assert.deepEqual(f.sent().map(args => args[3]), ['independent notice-id=independent', 'a1 notice-id=a1', 'a2 notice-id=a2', 'same-run notice-id=same-run']);
+  assert.deepEqual(f.sent().map(args => args[3]), ['same-run notice-id=same-run', 'independent notice-id=independent', 'a1 notice-id=a1', 'a2 notice-id=a2']);
+});
+
+test('absent recipients become durably undeliverable without input, rerouting or replay of the stable ID', async t => {
+  const f = fixture(t); f.write('targets', { B: f.target('B') });
+  f.add('gone', 'A', 'R-1'); f.add('gone-next', 'A', 'R-2'); f.add('independent', 'B', 'R-1');
+  const receipt = await f.drain('gone');
+  assert.equal(receipt.delivered, false); assert.equal(receipt.queued, false);
+  assert.equal(receipt.undeliverable.reason, 'recipient-absent');
+  await f.drain('independent');
+  assert.deepEqual(readInbox(f.inbox).map(e => e.state), ['handled', 'handled', 'sent']);
+  assert.deepEqual(f.sent().map(args => args[2]), ['B']);
+  const bytes = fs.readFileSync(f.inbox, 'utf8');
+  assert.equal(bytes.includes('"type":"sending","id":"gone"'), false);
+  f.write('targets', { A: { ...f.target('A'), terminal_id: 'replacement' }, B: f.target('B') });
+  f.add('gone', 'A', 'R-1');
+  assert.equal((await f.drain('gone')).delivered, false);
+  assert.equal(fs.readFileSync(f.inbox, 'utf8'), bytes);
+  assert.equal(f.sent().length, 1);
+});
+
+function recordedRecipient(f, terminal) {
+  const git = args => execFileSync('git', ['-C', f.root, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  git(['init', '-q']);
+  const org = path.join(f.root, '.org'); initOrg(org);
+  const agent = f.target('A');
+  const start = id => ({ type: 'run.started', id, item: 'ENG-1', workspace: f.root,
+    meta: { agent: agent.name, pane: agent.pane_id, worker_workspace: agent.workspace_id,
+      terminal_id: agent.terminal_id, agent_session_id: agent.agent_session.value } });
+  transact(org, () => ({ add: [
+    { type: 'item.added', id: 'ENG-1', title: 'Recipient', role: 'engineer' }, start('R-1'),
+    ...(terminal === 'finished' ? [{ type: 'report.ingested', run: 'R-1', report: { outcome: 'done' } }] :
+      terminal === 'abandoned' ? [{ type: 'run.abandoned', id: 'R-1' }] : []),
+  ] }));
+  return { org, start, options: { org, cwd: f.root } };
+}
+
+for (const terminal of ['finished', 'abandoned']) test(`an exactly bound ${terminal} recipient has a recorded undeliverable outcome even with an open unknown pane`, async t => {
+  const f = fixture(t), record = recordedRecipient(f, terminal), A = f.target('A'); A.agent_status = 'unknown';
+  f.write('targets', { A, B: f.target('B') });
+  f.add('terminal', 'A', undefined, record.options); f.add('independent', 'B', 'R-2');
+  const receipt = await f.drain('terminal');
+  assert.equal(receipt.delivered, false); assert.equal(receipt.queued, false);
+  assert.equal(receipt.undeliverable.reason, `recipient-${terminal}`);
+  assert.equal(receipt.undeliverable.run, 'R-1'); assert.ok(receipt.undeliverable.evidence_seq);
+  await f.drain('independent');
+  assert.deepEqual(f.sent().map(args => args[2]), ['B']);
+  assert.equal(f.calls().some(args => args[0] === 'pane' && args[2] === A.pane_id), false);
+  const events = fs.readFileSync(f.inbox, 'utf8').trim().split('\n').map(JSON.parse);
+  assert.ok(events.some(e => e.id === 'terminal' && e.type === 'autopilot' && e.result.disposition === 'handled' && e.result.undeliverable));
+  assert.equal(events.some(e => e.id === 'terminal' && ['sending', 'sent'].includes(e.type)), false);
+});
+
+for (const changed of ['terminal', 'session', 'missing-session']) test(`a ${changed} identity mismatch cannot receive a finished worker's notice`, async t => {
+  const f = fixture(t), record = recordedRecipient(f, 'finished'), A = f.target('A');
+  if (changed === 'terminal') A.terminal_id += '-new';
+  else if (changed === 'session') A.agent_session.value += '-new';
+  else delete A.agent_session;
+  f.write('targets', { A, B: f.target('B') });
+  f.add('old', 'A', undefined, record.options); f.add('independent', 'B', 'R-2');
+  await f.drain('independent');
+  assert.equal(f.state('old'), 'pending'); assert.deepEqual(f.sent().map(args => args[2]), ['B']);
+  assert.match(readInbox(f.inbox)[0].error, /recorded worker identity/);
+  // This is a test-owned changed binding; restore it for ordinary teardown.
+});
+
+test('native done is deliverable without a terminal record, and an open same-session continuation is preserved', async t => {
+  const f = fixture(t), record = recordedRecipient(f, 'finished'), A = f.target('A'); A.agent_status = 'done';
+  transact(record.org, () => ({ add: [record.start('R-2')] }));
+  f.write('targets', { A }); f.add('continuation', 'A', undefined, record.options);
+  assert.equal((await f.drain('continuation')).delivered, true);
+  assert.equal(readInbox(f.inbox)[0].undeliverable, undefined);
+  assert.equal(f.sent().length, 1);
+});
+
+test('an absent recipient never resolves or replaces an uncertain attempt', async t => {
+  const f = fixture(t); f.add('unknown', 'A', 'R-1'); f.add('same-recipient', 'A', 'R-2'); f.add('independent', 'B', 'R-3');
+  fs.appendFileSync(f.inbox, JSON.stringify({ type: 'sending', id: 'unknown',
+    occupant: JSON.stringify(['fake:A', 'terminal-A', 'session-A', 'fake', f.root]) }) + '\n');
+  f.write('targets', { B: f.target('B') });
+  await f.drain('independent');
+  assert.deepEqual(readInbox(f.inbox).map(e => e.state), ['uncertain', 'pending', 'sent']);
+  assert.deepEqual(f.sent().map(args => args[2]), ['B']);
 });
 
 test('equal run numbers in different actual record scopes remain independent', async t => {

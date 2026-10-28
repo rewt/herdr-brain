@@ -33,6 +33,7 @@ export function readInbox(file) {
         delete entry.autopilot_owner;
         if (event.result.disposition === 'handled') entry.state = 'handled';
         else entry.delivery_message = event.result.summary;
+        if (event.result.undeliverable) entry.undeliverable = { at: event.at, ...event.result.undeliverable };
       }
       if (event.type === 'autopilot-started') entry.autopilot_owner = event.pid;
       if (event.type === 'retry') entry.state = event.recovery || event.may_have_delivered === false ? 'pending'

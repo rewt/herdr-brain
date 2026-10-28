@@ -661,17 +661,29 @@ node supervisor/prompt-supervisor.mjs --org /record --drain
 
 Every prompt ends with `notice-id=ID`. The journal records that same ID and
 complete delivered text before the attempt and after its acknowledgement.
-FIFO applies within each target and across targets for the same explicit
+FIFO applies within each target and its live native aliases. A pending notice
+does not order other recipients just because they share an explicit
 `correlation: { run, record, project }`. Record/project are canonical absolute
 paths; `project` is the Git common directory. Watch and record-bound promotion
 supply these from their actual run and namespace. IDs and prose never supply
 ordering authority. Conflicting known correlation or an explicitly changed Herdr
 transport for the same ID refuses. Pending legacy notices without correlation
 retain recipient and live-alias FIFO; they do not hold unrelated recipients.
-Same-run cross-recipient order uses explicit canonical correlation only, never
-run numbers inferred from IDs or prose. Saved callers adopt existing metadata
-without rewriting it. Producers requiring cross-recipient same-run order must
-supply authoritative correlation when enqueuing.
+Correlation retains its uncertain-attempt recovery scope; it is not an implicit
+cross-recipient dependency for unattempted input. Saved callers adopt existing
+metadata without rewriting it.
+
+A definite native `agent_not_found`, or an exactly bound worker whose owning
+record has an ingested report or abandonment, finishes pending delivery as
+**undeliverable**. The journal retains the notice, target, reason and available
+native/record evidence in `autopilot.result.undeliverable`, using the existing
+terminal `handled` disposition so older live owners also stop attempting the ID.
+Receipts report `delivered: false`, `queued: false` and the explicit outcome;
+there is no `sending`/`sent` event, reroute, replacement ID or replay if the name
+later reappears. Native `done` means idle, not a finished run. Missing/changed
+record identity, ambiguous lookup failures and unknown native status stay held.
+An open continuation sharing the exact native session remains deliverable.
+Lifecycle checks never resolve uncertain attempts or bypass their dependencies.
 
 Live aliases resolving to the same native occupant share ordering. The same
 global drain lock serializes input even across processes, with fresh alias and

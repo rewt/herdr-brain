@@ -17,11 +17,13 @@ import { bestEffort, mirrorNotice } from '../messages/mirror.mjs';
 import { invokeHerdr as invoke } from './herdr-edge.mjs';
 import { fixtureInboxEnrolled } from '../messages/fixture.mjs';
 import { inboxPath, readInbox } from '../messages/inbox-read.mjs';
+import { recipientOutcomes } from '../messages/recipient-outcome.mjs';
 export { inboxPath, readInbox } from '../messages/inbox-read.mjs';
 
 const SELF = fileURLToPath(import.meta.url);
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const complete = entry => ['sent', 'handled'].includes(entry?.state);
+const delivered = entry => complete(entry) && !entry.undeliverable;
 function noticeProject(file, options) {
   try {
     const cwd = options.cwd ?? process.cwd(), project = gitProject(cwd);
@@ -50,6 +52,13 @@ export function inboxTransaction(file, fn, lockOptions = {}) {
 const transaction = inboxTransaction;
 const record = (file, event) => transaction(file, (_entries, append) => append(event));
 const snapshot = (file) => transaction(file, (entries) => entries);
+function undeliverable(file, entry, outcome) {
+  // Reuse the terminal handled policy event so a pre-upgrade owner also stops
+  // attempting this ID. The explicit outcome never claims input or delivery.
+  const result = { disposition: 'handled', undeliverable: outcome };
+  record(file, { type: 'autopilot', id: entry.id, result });
+  Object.assign(entry, { state: 'handled', autopilot: result, undeliverable: outcome });
+}
 
 function applyPolicy(file, id, options) {
   const entry = transaction(file, (entries, append) => {
@@ -103,7 +112,7 @@ function recipient(entry, call = invoke) {
   try {
     const agent = JSON.parse(call(entry.herdr, ['agent', 'get', entry.to])).result?.agent;
     return { agent, occupant: occupant(agent), error: agent ? undefined : 'recipient binding missing' };
-  } catch (error) { return { error: `${error.code ?? 'UNKNOWN'}: ${error.message}` }; }
+  } catch (error) { return { code: error.code, error: `${error.code ?? 'UNKNOWN'}: ${error.message}` }; }
 }
 function quiet(entry, binding, call = invoke, failed = () => {}) {
   try {
@@ -177,7 +186,7 @@ function dependent(prior, entry, current, lookup) {
   // head. Keep its recipient/alias FIFO without inventing a run from prose or
   // IDs. An ambiguous attempt without a saved occupant still holds globally.
   const priorRun = runKey(prior), currentRun = runKey(entry);
-  return prior.to === entry.to || Boolean(priorRun && priorRun === currentRun) ||
+  return prior.to === entry.to || Boolean(prior.state === 'uncertain' && priorRun && priorRun === currentRun) ||
     prior.state === 'uncertain' && !occupantIdentity(prior.attempt_occupant) ||
     Boolean(current && (sameOccupant(lookup(prior).occupant, current) ||
       prior.state === 'uncertain' && sameOccupant(prior.attempt_occupant, current)));
@@ -191,9 +200,10 @@ export async function drainInbox(file, options = {}) {
   const started = Date.now(), deadline = started + cap, confirmations = new Map(), attempts = new Map();
   const own = () => options.id && snapshot(file).find(entry => entry.id === options.id);
   const result = error => {
-    const entry = own(), delivered = complete(entry);
-    return { delivered, ...(entry?.state === 'handled' ? { handled: true, autopilot: entry.autopilot } : {}),
-      id: options.id, inbox: file, delivery_error: error, queued: !delivered, owner_pid: ownerPid(`${file}.owner.lock`) };
+    const entry = own();
+    return { delivered: delivered(entry), ...(entry?.state === 'handled' ? { handled: true, autopilot: entry.autopilot } : {}),
+      ...(entry?.undeliverable ? { undeliverable: entry.undeliverable } : {}),
+      id: options.id, inbox: file, delivery_error: error, queued: !complete(entry), owner_pid: ownerPid(`${file}.owner.lock`) };
   };
   const retained = async error => {
     if (!options.owner) await resumeInbox(file, options);
@@ -214,7 +224,7 @@ export async function drainInbox(file, options = {}) {
       if (fixtureInboxEnrolled(file)) return result('offline fixture intake is fenced; use its foreground transport owner');
       const entries = snapshot(file).filter(entry => !complete(entry));
       if (!entries.length) return { ...result(), delivered: true, queued: false };
-      const resolved = new Map();
+      const resolved = new Map(), outcome = recipientOutcomes();
       const lookup = entry => {
         const key = JSON.stringify([entry.herdr, entry.to]);
         if (!resolved.has(key)) resolved.set(key, recipient(entry));
@@ -238,6 +248,18 @@ export async function drainInbox(file, options = {}) {
         if (!applyPolicy(file, entry.id, options)) { reason = `notice ${entry.id} policy still running`; continue; }
         Object.assign(entry, snapshot(file).find(candidate => candidate.id === entry.id));
         if (complete(entry)) continue;
+        const disposition = outcome(entry, current);
+        if (disposition?.hold) {
+          confirmations.delete(entry.id);
+          reason = disposition.hold;
+          notify(file, entry, reason);
+          continue;
+        }
+        if (disposition) {
+          undeliverable(file, entry, disposition);
+          confirmations.delete(entry.id);
+          continue;
+        }
         const tried = attempts.get(entry.id);
         if (tried && (tried.count >= (entry.attempts ?? 5) || Date.now() < tried.after)) continue;
         let prior = confirmations.get(entry.id);
@@ -262,6 +284,13 @@ export async function drainInbox(file, options = {}) {
         // all old/new senders use. No wait or confirmation delay holds it.
         if (predecessors.some(prior => dependent(prior, entry, first, candidate => recipient(candidate)))) {
           confirmations.delete(entry.id); continue;
+        }
+        const finalDisposition = recipientOutcomes()(entry, recipient(entry));
+        if (finalDisposition) {
+          confirmations.delete(entry.id);
+          if (finalDisposition.hold) notify(file, entry, finalDisposition.hold);
+          else undeliverable(file, entry, finalDisposition);
+          continue;
         }
         if (entry.notified) {
           const waitedSeconds = (Date.now() - (Date.parse(entry.at) || started)) / 1000;
@@ -351,18 +380,19 @@ export function enqueueSupervisor(to, message, options = {}) {
 
 export async function promptSupervisor(to, message, options = {}) {
   const { id, inbox: file } = enqueueSupervisor(to, message, options);
-  if (fixtureInboxEnrolled(file)) return { delivered: complete(readInbox(file).find(entry => entry.id === id)), queued: !complete(readInbox(file).find(entry => entry.id === id)), id, inbox: file, message };
+  if (fixtureInboxEnrolled(file)) return { delivered: delivered(readInbox(file).find(entry => entry.id === id)), queued: !complete(readInbox(file).find(entry => entry.id === id)), id, inbox: file, message };
   const retrySeconds = seconds(options.retrySeconds, 10, 'retry seconds');
   // Acknowledged ownership precedes input. The worker survives this caller,
   // including a crash between the prompt side effect and its acknowledgement.
-  // Policy is applied by eligible heads, preserving recipient/run ordering.
+  // Policy is applied by eligible heads, preserving recipient ordering.
   const owner = await resumeInbox(file, options);
   // A zero-wait caller hands delivery to the acknowledged owner. Racing that
   // owner with an already-expired drain deadline would create a false alert.
   if (owner && seconds(options.waitSeconds ?? process.env.SUPERVISOR_INPUT_WAIT_SECONDS, 7200, 'SUPERVISOR_INPUT_WAIT_SECONDS') === 0) {
     const entry = snapshot(file).find((candidate) => candidate.id === id);
-    const delivered = complete(entry);
-    return { delivered, ...(entry?.state === 'handled' ? { handled: true, autopilot: entry.autopilot } : {}), id, inbox: file, queued: !delivered, owner_pid: owner, message };
+    return { delivered: delivered(entry), ...(entry?.state === 'handled' ? { handled: true, autopilot: entry.autopilot } : {}),
+      ...(entry?.undeliverable ? { undeliverable: entry.undeliverable } : {}),
+      id, inbox: file, queued: !complete(entry), owner_pid: owner, message };
   }
   const receipt = await drainInbox(file, { ...options, retrySeconds, id });
   const entry = snapshot(file).find((candidate) => candidate.id === id);

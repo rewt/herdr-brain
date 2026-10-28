@@ -302,8 +302,11 @@ test('installed release commands can inspect and switch launchers without Git me
   const f = scratch(t); f.ok(['build', 't1']); f.ok(['build', 't2']);
   const script = path.join(f.release('t1'), 'herdr/release.sh');
   const installed = args => {
-    const r = spawnSync('bash', [script, ...args], { cwd: f.release('t1'), env: { ...f.env, HERDR_MONITOR_REPO: '' }, encoding: 'utf8', timeout: 5000 });
-    assert.equal(r.status, 0, r.stdout + r.stderr); return r;
+    const r = spawnSync('bash', [script, ...args], { cwd: f.release('t1'), env: { ...f.env, HERDR_MONITOR_REPO: '' }, encoding: 'utf8' });
+    const output = `installed ${args.join(' ')}:\n${r.stdout}${r.stderr}`;
+    assert.ifError(r.error);
+    assert.equal(r.signal, null, output);
+    assert.equal(r.status, 0, output); return r;
   };
   assert.equal(fs.existsSync(path.join(f.release('t1'), '.git')), false);
   assert.match(installed(['status']).stdout, /current:.*none/);

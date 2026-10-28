@@ -115,11 +115,24 @@ edits. Names stay opaque; no model/provider catalog or machine settings are need
 
 ## Lifecycle
 
+`lane promote TOPIC --expected-head-from-worktree` self-promotes the invoking
+native worker's claimed lane. It resolves the topic's actual linked worktree,
+checks the active worker/run and claim, and captures its full HEAD once under
+the promotion lock before any preparation or Git effect. It refuses a moved
+tip or required rebase, without recapture, automatic rebase or retry. Rebase a
+behind-main lane explicitly before making a new request. Native identity,
+claim generation, source ownership, STOP/HOLD, branch, clean lane/main and
+fast-forward checks remain in force at integration. The normal landing receipt
+includes the captured expected head and full landed base/head. Under the current
+landing waiver, this remains land-first with no new test, review or report gate.
+
 `lane promote TOPIC --expected-head FULL_COMMIT_HASH` checks an authorized head
 under the promotion lock and refuses tip changes or a required rebase. Queue
 callers use the same check. Add `--if-current-run R-n --org /record` to recheck
 record readiness before integration; the record lock spans that final check and
-fast-forward. See [Promote](../promote/README.md) for the request and retry contract.
+fast-forward. The self-promotion flag cannot be combined with a literal head or
+record-readiness options; external exact-tuple callers keep the literal form.
+See [Promote](../promote/README.md) for the request and retry contract.
 
 Start Herdr in the canonical checkout, then open and dispatch one worktree per task:
 
@@ -427,6 +440,7 @@ receipt keeps its filename-bound tab instead of the project.
 | `lane prepare <topic>` | Run missing setup steps |
 | `lane rebase-check <topic>` | Check whether promotion can rebase the lane onto main (conflicts, or a merge commit it will not flatten) |
 | `lane promote <topic>` | Rebase, validate, and fast-forward local main |
+| `lane promote <topic> --expected-head-from-worktree` | Capture the owning native worker's claimed worktree HEAD under lock and fast-forward without automatic rebase |
 | `lane close <topic>` | Remove and delete or archive a lane |
 | `lane seams [pattern]` | List unfinished work that can be resumed |
 

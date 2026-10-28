@@ -2656,8 +2656,19 @@ async function promoteLocked(topic, root, options) {
   if (!branchExists(branch)) fail(`no such lane branch: ${branch}`);
   const path = worktreeFor(branch);
   if (path === undefined) fail(`lane ${branch} has no worktree; open one before promoting`);
+  let ownGuard = operation => operation();
+  if (options.expectedHeadFromWorktree) {
+    try {
+      const { ownWorktreeGuard } = await import('../promote/own-worktree.mjs');
+      ownGuard = ownWorktreeGuard({ canonical: root, identity: REPO_IDENTITY, workspace: path, topic });
+      // Capture once, inside the promotion lock and before preparation or Git
+      // effects. Every later observation checks this immutable expected value.
+      options = { ...options, expectedHead: git(['rev-parse', 'HEAD'], { cwd: path }) };
+      process.stdout.write(`captured expected head: ${options.expectedHead}\n`);
+    } catch (error) { fail(error.message); }
+  }
   const guard = (operation) => {
-    try { return withPromotionGuard({ canonical: root, identity: REPO_IDENTITY, workspace: path, topic, ...options }, operation); }
+    try { return ownGuard(() => withPromotionGuard({ canonical: root, identity: REPO_IDENTITY, workspace: path, topic, ...options }, operation)); }
     catch (error) { fail(error.message); }
   };
   guard();
@@ -2724,24 +2735,30 @@ async function promoteLocked(topic, root, options) {
   if (!settings.landing_waiver && gate.exit_code !== 0) fail(`validation failed (exit ${gate.exit_code}); nothing merged`);
   // Validation was gated before acquiring the promotion lock. Finish this
   // cheap integration under the lock without waiting on unrelated memory pressure.
-  if (git(["rev-parse", MAIN]) !== mainHead) {
-    fail(`${MAIN} moved during validation; re-run promote`);
-  }
-  requireClean(path, "validated lane worktree");
-  requireClean(root, `canonical ${MAIN} checkout`);
-  if (git(["rev-parse", branch]) !== validatedHead || git(["rev-parse", "HEAD"], { cwd: path }) !== validatedHead ||
-      tryGit(["symbolic-ref", "--quiet", "--short", "HEAD"], { cwd: path }) !== branch ||
-      tryGit(["symbolic-ref", "--quiet", "--short", "HEAD"], { cwd: root }) !== MAIN) {
-    fail("worktree branch or lane tip changed during validation; re-run promote");
-  }
-  guard(() => git(["merge", "--ff-only", validatedHead], { cwd: root }));
+  guard(() => {
+    if (git(["rev-parse", MAIN]) !== mainHead) {
+      throw Error(`${MAIN} moved during validation; re-run promote`);
+    }
+    // Throw through the guard so a refusal releases its record lock normally.
+    for (const [cwd, label] of [[path, 'validated lane worktree'], [root, `canonical ${MAIN} checkout`]]) {
+      if (git(['status', '--porcelain=v1'], { cwd }) !== '') throw Error(`${label} is not clean (${cwd}); commit or stash first`);
+    }
+    if (git(["rev-parse", branch]) !== validatedHead || git(["rev-parse", "HEAD"], { cwd: path }) !== validatedHead ||
+        tryGit(["symbolic-ref", "--quiet", "--short", "HEAD"], { cwd: path }) !== branch ||
+        tryGit(["symbolic-ref", "--quiet", "--short", "HEAD"], { cwd: root }) !== MAIN) {
+      throw Error("worktree branch or lane tip changed during validation; re-run promote");
+    }
+    git(["merge", "--ff-only", validatedHead], { cwd: root });
+  });
   const landedAt=new Date().toISOString();
   // The FF is finished. A receipt failure retains that fact and is reported
   // separately; it never turns source landing into a report/review gate.
   if(process.env.HERDR_ENV==='1')try{
     const { recordOwnLanding } = await import('../lib/landing-receipt.mjs');
     const receipt=recordOwnLanding({canonical:root,workspace:path,base:mainHead,head:validatedHead,landedAt});
-    process.stdout.write(`landing receipt: ${JSON.stringify(receipt)}\n`);
+    process.stdout.write(`landing receipt: ${JSON.stringify(options.expectedHeadFromWorktree
+      ? { ...receipt, expected_head_source: 'worktree', expected_head: options.expectedHead, base: mainHead, head: validatedHead }
+      : receipt)}\n`);
   }catch(error){process.stderr.write(`post-FF landing receipt held: ${error.message}; source is landed, exact record timing UNKNOWN\n`);}
   process.stdout.write(
     `promoted ${branch}: ${MAIN} ${mainHead.slice(0, 7)} -> ${git(["rev-parse", "--short", MAIN])} (fast-forward)\n`,
@@ -2989,14 +3006,19 @@ switch (command) {
     break;
   }
   case "promote": {
-    const usage = 'usage: lane promote <topic> [--expected-head COMMIT] [--if-current-run R-n --org DIR]';
+    const usage = 'usage: lane promote <topic> [--expected-head COMMIT | --expected-head-from-worktree] [--if-current-run R-n --org DIR]';
     if (topic === undefined) fail(usage);
     const options = {};
     for (let index = 0; index < rest.length; index++) {
+      if (rest[index] === '--expected-head-from-worktree' && !options.expectedHeadFromWorktree) {
+        options.expectedHeadFromWorktree = true;
+        continue;
+      }
       const key = { '--expected-head': 'expectedHead', '--if-current-run': 'run', '--org': 'org' }[rest[index]];
       if (!key || options[key] !== undefined || rest[index + 1] === undefined) fail(usage);
       options[key] = rest[++index];
     }
+    if (options.expectedHeadFromWorktree && (options.expectedHead !== undefined || options.run !== undefined || options.org !== undefined)) fail(usage);
     if (options.expectedHead !== undefined && !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u.test(options.expectedHead)) fail(usage);
     if (options.run !== undefined && (!/^R-\d+$/u.test(options.run) || options.expectedHead === undefined || !options.org)) fail(usage);
     if (options.org !== undefined) options.org = realpathSync(resolve(options.org));
@@ -3051,6 +3073,7 @@ switch (command) {
         "  check --gate [--required-tests JSON]\n" +
         "                   plan with the queue's bound test list\n" +
         `  promote <topic>  fast-forward ${MAIN} (clean/rebased; validation or current operator waiver)\n` +
+        "                   --expected-head-from-worktree captures the owning worker's HEAD under lock; no auto-rebase\n" +
         "  ready <topic> [--run R-n]  optionally record the same closeout request as an ingested done report\n" +
         "  close <topic> [--git-only] [--expected-tip COMMIT]  remove worktree; delete merged branch or archive-tag unmerged;\n" +
         "                   mark matching display sessions done after git succeeds\n",

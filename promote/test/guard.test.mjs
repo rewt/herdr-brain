@@ -58,7 +58,7 @@ async function fixture(t, { foreign = false, cohort = 'green-pass' } = {}) {
   const worktree = exec('git', ['rev-parse', '--is-inside-work-tree'], source);
   const inventoryFiles = worktree.status === 0 && worktree.stdout.trim() === 'true'
     ? git(['ls-files', '-z'], source).split('\0') : snapshotFiles(source);
-  const files = inventoryFiles.filter(file => file && file !== '.lane.json' &&
+  const files = inventoryFiles.filter(file => file && !['.lane.json', '.housekeeping.json'].includes(file) &&
     (boundaryInput(file) || BOOTSTRAP_FILES.includes(file)));
   for (const file of files) {
     const target = path.join(repo, file); fs.mkdirSync(path.dirname(target), { recursive: true });
@@ -67,6 +67,7 @@ async function fixture(t, { foreign = false, cohort = 'green-pass' } = {}) {
   // This private project owns its policy: live desks, routes and closeout
   // settings must never enter its configuration or reviewed boundary.
   put('.lane.json', '{"retirement":{"closeout_queue":false}}\n');
+  put('.housekeeping.json', '{"enabled":true}\n');
   put('board/render.mjs', renderer);
   put('docs/guide.md', 'Ordinary documentation outside the reviewed component.\n');
   put('test/board-view.test.mjs', "import assert from 'node:assert/strict';\nimport { render } from '../board/render.mjs';\nassert.ok(render({ memory: null, herdr: 'offline', slot: { state: 'free' }, rows: [] }).includes('Promotion board'));\nconsole.log('# tests 1');\n");
@@ -96,6 +97,7 @@ async function fixture(t, { foreign = false, cohort = 'green-pass' } = {}) {
     project = path.join(root, 'foreign'); git(['clone', '--no-local', '-q', repo, project]); ignore(project);
     git(['config', 'user.name', 'Foreign fixture'], project); git(['config', 'user.email', 'foreign@example.invalid'], project);
     record(['init', path.join(project, '.org')], project);
+    put('.housekeeping.json', '{"enabled":true}\n', project);
   }
   const configure = () => put('.supervisor.json', JSON.stringify({ autopilot: settings }), project); configure();
   const org = path.join(project, '.org'), workspace = path.join(root, 'candidate');
@@ -217,16 +219,17 @@ console.log('ordinary and clean-pass admitted; disabled Git calls=0; green modul
   assert.equal(f.ok(f.exec(process.execPath, [probe])), 'ordinary and clean-pass admitted; disabled Git calls=0; green modules absent');
 });
 
-test('private green fixture never reads or copies the live lane policy', async t => {
-  const livePolicy = path.join(source, '.lane.json');
+test('private green fixture never reads or copies the live lifecycle policies', async t => {
+  const livePolicies = new Set(['.lane.json', '.housekeeping.json'].map(file => path.join(source, file)));
   const originals = new Map(['readFileSync', 'copyFileSync'].map(name => [name, fs[name]]));
   for (const [name, original] of originals) fs[name] = (file, ...args) => {
-    assert.notEqual(file, livePolicy, `fixture ${name} must not consume the live lane policy`);
+    assert.equal(livePolicies.has(file), false, `fixture ${name} must not consume a live lifecycle policy`);
     return original(file, ...args);
   };
   try {
     const f = await fixture(t);
     assert.deepEqual(JSON.parse(fs.readFileSync(path.join(f.repo, '.lane.json'), 'utf8')), { retirement: { closeout_queue: false } });
+    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(f.repo, '.housekeeping.json'), 'utf8')), { enabled: true });
     f.check();
   } finally {
     for (const [name, original] of originals) fs[name] = original;

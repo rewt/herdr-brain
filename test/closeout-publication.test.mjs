@@ -54,7 +54,7 @@ test('an existing empty queue still checks policy before processing a revision',
   const f = setup(t);
   fs.mkdirSync(path.join(f.common, 'closeout/entries'), { recursive: true });
   fs.writeFileSync(path.join(f.repo, '.lane.json'), '{"retirement":{"closeout_queue":"invalid"}}');
-  const added = f.append([{ type: 'run.abandoned', id: 'R-1', note: 'Superseded' }]);
+  const added = f.append([{ type: 'retirement.release', run: 'R-1', item: 'ENG-1', confirmed: true }]);
   assert.throws(() => f.publish(added, true), /closeout policy invalid or unavailable/);
 });
 

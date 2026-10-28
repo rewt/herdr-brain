@@ -24,6 +24,14 @@ identity, birth time, mode and device number; omit size and target timestamps.
 A symlink's own change time remains fenced. Regular files and other devices
 keep their complete version fences. No queue, claim or source race is waived.
 
+`gitProject` only runs `rev-parse` and `worktree list`. Its identity observations
+exclude the index, which these queries do not read. Commit/ref/configuration and
+worktree registration/path fences remain exact. A separate observation key
+ensures any later full Git query in the same plan adds the complete index fence.
+All existing status/source callers default to that full fence; staged changes
+still refuse. This tolerates ordinary index stat-cache refresh during native
+preflight without replaying the native query or weakening cleanliness/FF checks.
+
 The remaining configuration-audit, immutable archive, closeout, recovery,
 retirement, native decision and runtime migration callbacks retain their prior
 effect boundaries. No blanket migration, native replay or adoption is implied.

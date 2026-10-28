@@ -4,7 +4,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {spawnSync} from 'node:child_process';
-import observed from '../lib/record-observation.mjs';
+import observed, {captureReads,observeGit} from '../lib/record-observation.mjs';
+import {gitProject} from '../lib/project.mjs';
 import {initOrg,transact,loadEvents,withLock,prepareRecordGuard,withRecordGuard} from '../lib/store.mjs';
 import {claimRun,fenceOwner} from '../lib/run-owner.mjs';
 import {ownWorktreeGuard} from '../promote/own-worktree.mjs';
@@ -118,6 +119,35 @@ test('native own promotion and landing receipts retain the newest non-abandoned 
   assert.throws(()=>guard(()=>assert.fail('superseded owner')),/one active owning native worker/);
   assert.throws(()=>recordOwnLanding({canonical:f.root,workspace:f.root,base,head,landedAt:new Date().toISOString(),env,call}),/ownership is missing\/ambiguous/);
   assert.equal(loadEvents(f.org).events.filter(e=>e.type==='change.landed').length,1);
+});
+
+test('native own preflight tolerates concurrent index refresh while full source checks still fence staged changes',t=>{
+  const f=fixture(t,{git:true});
+  fs.writeFileSync(path.join(f.root,'index-cache-source'),'unchanged source');f.git(['add','index-cache-source']);f.git(['commit','-qm','Index refresh fixture']);
+  const identity=path.join(f.root,'.git'),head=f.git(['rev-parse','HEAD']),
+    native={name:'worker',pane_id:'pane',workspace_id:'workspace',terminal_id:'term',cwd:f.root,agent_session:{value:'sid'}},
+    env={...process.env,ORG_DIR:f.org,HERDR_ENV:'1',HERDR_PANE_ID:'pane',HERDR_WORKSPACE_ID:'workspace',CODEX_THREAD_ID:'sid'};
+  transact(f.org,()=>({add:[{type:'item.added',id:'ENG-1',kind:'work',role:'engineer',title:'Fixture'},
+    {type:'run.started',id:'R-1',item:'ENG-1',workspace:f.root,meta:{lane:'topic',agent:'worker',pane:'pane',worker_workspace:'workspace',terminal_id:'term',agent_session_id:'sid'}},
+    {type:'run.claimed',run:'R-1',record:f.org,project:identity,owner:{controller:'brain',legacy:false,release:{id:'source',root:f.root,commit:null,identity}}}]}));
+  let calls=0;
+  const index=path.join(identity,'index'),before=fs.readFileSync(index);
+  const guard=ownWorktreeGuard({canonical:f.root,identity,workspace:f.root,topic:'topic',env,call:()=>{
+    calls++;assert.equal(fs.existsSync(f.lock),false);
+    // Same committed bytes, fresh stat cache: ordinary status rewrites index.
+    const when=new Date(Date.now()+calls*1000);fs.utimesSync(path.join(f.root,'index-cache-source'),when,when);
+    assert.equal(f.git(['status','--porcelain=v1']),'');
+    return JSON.stringify({result:{agent:native}});
+  }});
+  guard(()=>assert.equal(fs.existsSync(f.lock),true));assert.equal(calls,2);
+  assert.notDeepEqual(fs.readFileSync(index),before,'fixture produced real index refresh churn');
+  const complete=captureReads(()=>{gitProject(f.root);observeGit(f.root);});
+  const promotion=preparePromotionGuard({canonical:f.root,identity,workspace:f.root,topic:'topic',expectedHead:head});
+  fs.writeFileSync(path.join(f.root,'staged-source'),'new source');f.git(['add','staged-source']);
+  assert.throws(complete.validate,/observation conflict/,'full query upgrades the identity-only read set');
+  assert.throws(()=>promotion.run(()=>assert.fail('staged source changed')),/observation conflict/);
+  const identityOnly=captureReads(()=>gitProject(f.root));f.git(['commit','-qm','Changed committed source']);
+  assert.throws(identityOnly.validate,/observation conflict/,'identity-only queries still fence committed refs');
 });
 test('prepared promotion refuses a late Git ref or STOP without executing FF',t=>{
   const f=fixture(t,{git:true}),head=f.git(['rev-parse','HEAD']),args={canonical:f.root,identity:path.join(f.root,'.git'),workspace:f.root,topic:'topic',expectedHead:head};

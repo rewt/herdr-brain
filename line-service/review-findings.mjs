@@ -10,6 +10,27 @@ const text = value => String(value ?? '').replace(/\s+/g, ' ').trim();
 const digest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const list = value => value == null ? [] : Array.isArray(value) ? value : [value];
 
+// Reference spelling is not finding identity. Body intake removes severity
+// labels, and reviewers may quote inline code or paraphrase a source citation.
+// Keep the original text/key; a citation can resolve only one retained finding.
+const reference = value => {
+  const label = /^\[(major|minor)\]\s*/i.exec(text(value));
+  const content = text(text(value).slice(label?.[0].length ?? 0).replace(/`+/g, ''));
+  return { severity: label?.[1].toLowerCase(), content,
+    location: /^([^\s:]+:\d+(?::\d+)?(?:-\d+(?::\d+)?)?)\s+[-–—]\s+\S/.exec(content)?.[1] };
+};
+
+function referencedFindings(rows, ref) {
+  const values = [...rows.values()];
+  const exact = values.filter(row => row.key === ref || text(row.text) === text(ref));
+  if (exact.length) return exact;
+  const parsed = reference(ref);
+  const candidates = values.filter(row => !parsed.severity || row.severity === parsed.severity);
+  const matching = candidates.filter(row => reference(row.text).content === parsed.content);
+  if (matching.length) return matching;
+  return parsed.location ? candidates.filter(row => reference(row.text).location === parsed.location) : [];
+}
+
 export function reviewFindingKey(review, finding) {
   const target = review.meta.review_target;
   return `review-finding/v1:${digest([review.meta.review_source_item, target.base, target.head,
@@ -133,7 +154,7 @@ export function reviewCorrectionEvents({ state, events, run, review, report, fin
     let keys = proposalRows.get(proposal);
     if (!keys && refs.length) {
       keys = refs.map(ref => {
-        const matches = [...rows.values()].filter(row => row.key === ref || text(row.text) === text(ref));
+        const matches = referencedFindings(rows, ref);
         if (matches.length !== 1) throw Error('correction proposal review_findings reference is missing/ambiguous');
         return matches[0].key;
       });

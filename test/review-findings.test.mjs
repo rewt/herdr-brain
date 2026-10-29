@@ -144,6 +144,53 @@ test('finding intake: body-only findings remain available without structured dec
   }
 });
 
+test('finding intake: the three saved regression reports link their original findings without duplicate items', () => {
+  for (const [id, count] of [['R-1273', 2], ['R-1304', 1], ['R-1307', 2]]) {
+    const bytes = fs.readFileSync(new URL(`./fixtures/review-findings/${id}.md`, import.meta.url), 'utf8');
+    const parsed = readReport(bytes);
+    assert.deepEqual(parsed.errors, []);
+    const before = structuredClone(parsed), events = stamped(seed());
+    const add = intake(events, parsed.report, parsed.body);
+    const findings = [...parsed.body.matchAll(/^\s*- \[Minor\] (.+)$/gm)].map(match => match[1].trim());
+    assert.equal(findings.length, count);
+    assert.deepEqual(add[0].findings.map(row => row.text), findings);
+    assert.equal(items(add).length, 1, 'the explicit proposal owns its findings with no extra corrections');
+    assert.equal(items(add)[0].title, parsed.report.proposals[0].title);
+    assert.equal(bindings(add).length, count);
+    assert.equal(new Set(bindings(add).map(row => row.finding_key)).size, count);
+    assert.deepEqual(new Set(bindings(add).map(row => row.correction_item)), new Set([items(add)[0].id]));
+    assert.deepEqual(intake(stamped([...events, ...add]), parsed.report, parsed.body), []);
+    const next = intake(stamped([...events, ...add, ...review('REV-2', 'R-3')]), parsed.report, parsed.body, 'R-3');
+    assert.equal(items(next).length, 0, 'a second consumer preserves the existing immutable finding owners');
+    assert.deepEqual(parsed, before, 'saved report content and references remain immutable');
+  }
+});
+
+test('finding intake: reference formatting and unique citations preserve finding keys and reject ambiguity', () => {
+  const events = stamped(seed());
+  const proposal = ref => report([{ role: 'engineer', title: 'Repair source', extra: { review_findings: [ref] } }]);
+  const body = `- [Major] ${major}\n- [Minor] ${minor}`;
+  const original = intake(events, report(), body)[0].findings;
+  for (const ref of [`[Major] ${major}`, '[Major] `codec.mjs:41` - Reject invalid `source paths`',
+    'codec.mjs:41 - Paraphrased review finding']) {
+    const add = intake(events, proposal(ref), body);
+    assert.equal(bindings(add)[0].finding_key, original[0].key);
+    assert.equal(items(add).length, 2, 'the unreferenced finding still has its own correction');
+  }
+  const shared = `- [Major] ${major}\n- [Major] codec.mjs:41 - Preserve native claims`;
+  assert.throws(() => intake(events, proposal('codec.mjs:41 - A paraphrase'), shared), /missing\/ambiguous/);
+  assert.equal(bindings(intake(events, proposal(`[Major] ${major}`), shared))[0].finding_key, original[0].key,
+    'an exact reference disambiguates findings at the same location');
+  const severities = `- [Major] ${major}\n- [Minor] ${major}`;
+  assert.throws(() => intake(events, proposal('codec.mjs:41 - A paraphrase'), severities), /missing\/ambiguous/);
+  assert.throws(() => intake(events, proposal(major), severities), /missing\/ambiguous/);
+  const labelled = intake(events, proposal(`[Minor] ${major}`), severities);
+  assert.equal(bindings(labelled)[0].finding.severity, 'minor');
+  assert.throws(() => intake(events, proposal(`[Minor] ${major}`), `- [Major] ${major}`), /missing\/ambiguous/);
+  for (const ref of ['codec.mjs:99 - Missing location', 'unknown finding', 'review-finding/v1:unknown'])
+    assert.throws(() => intake(events, proposal(ref), body), /missing\/ambiguous/);
+});
+
 test('finding intake: an explicitly linked repeat reuses active or closed work without changing UNKNOWN attempts', () => {
   for (const closed of [false, true]) {
     let events = stamped(seed());

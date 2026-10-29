@@ -7,6 +7,8 @@ import {setup,events,selectCurrentCleanup} from './helpers/closeout-fixture.mjs'
 import {disposeStoppedAllocations} from '../lib/closeout-allocations.mjs';
 import {fold} from '../lib/state.mjs';
 import {currentCloseoutEntries} from '../lib/closeout.mjs';
+import {runCloseoutTurn} from '../line-service/closeout-turn.mjs';
+import {gitProject} from '../lib/project.mjs';
 
 function stopped(t,{run=false,occupied=false}={}){
   const f=setup(t,{occupied,merged:true,direct:true,bound:occupied});selectCurrentCleanup(f);
@@ -49,6 +51,59 @@ test('line finalizes only its exact pre-native run and the ordinary closer remov
   const removed=f.drain({keys:[entry.key],retrySafe:true});assert.equal(removed.evaluated[0].completed,true,JSON.stringify(removed));
   assert.equal(fs.existsSync(f.lane),false);assert.deepEqual(fs.readFileSync(f.journal),journal);
   assert.deepEqual(fs.readFileSync(f.eventFile).subarray(0,before.length),before);
+});
+
+test('line wake invokes stopped allocation disposal with a viable original turn allowance',t=>{
+  const f=stopped(t),{directory}=selectCurrentCleanup(f);
+  fs.writeFileSync(path.join(directory,'closeout-turn.json'),JSON.stringify({schema:'line-closeout-turn/v1',identity:f.common,
+    org:f.org,attempt:0,ingest:{},targets:{},turn:3}));
+  let calls=0;
+  const result=runCloseoutTurn({project:gitProject(f.repo),org:f.org,env:f.env,guard:()=>{},measure:()=>{},cli:(_file,args)=>{
+    if(args[0]==='refresh')return '{}';
+    assert.equal(args[0],'allocations');calls++;
+    const deadline=Number(args[args.indexOf('--deadline')+1]);assert.ok(deadline-Date.now()>120000);
+    return JSON.stringify(disposeStoppedAllocations({cwd:f.repo,org:f.org,env:f.env,retirementOptions:f.options,deadline}));
+  }});
+  assert.deepEqual(result.errors,[]);assert.equal(calls,1);assert.equal(fs.existsSync(f.lane),false);
+});
+
+test('stopped allocation resumes only the known partial Git result on a fresh allowance',t=>{
+  const f=stopped(t),realNow=Date.now(),command=f.options.command;let elapsed=0,removals=0;
+  t.mock.method(Date,'now',()=>realNow+elapsed);
+  f.options.command=(exe,args,options)=>{
+    const result=command(exe,args,options);
+    if(exe==='git'&&args[2]==='worktree'&&args[3]==='remove'){elapsed+=175000;removals++;}
+    return result;
+  };
+  assert.equal(f.dispose().results[0].disposition,'kept');assert.equal(fs.existsSync(f.lane),false);
+  assert.ok(f.git(['branch','--list','lane/topic']));
+  const result=f.dispose();assert.equal(result.results[0].disposition,'removed',JSON.stringify(result));
+  assert.equal(f.git(['branch','--list','lane/topic']),'');assert.equal(removals,1);
+});
+
+test('stopped allocation fairness advances past a kept request without replacing it',t=>{
+  const f=stopped(t);fs.writeFileSync(path.join(f.lane,'unsaved'),'keep');
+  const second=f.lane+'-second';f.git(['worktree','add','-qb','lane/second',second,f.head]);
+  const journal=path.join(f.org,'dispatch/z-second.json'),job=structuredClone(f.job);
+  Object.assign(job,{token:'z-second',lane:'second',workspace:second});
+  Object.assign(job.failure.launch_input,{journal,token:'z-second'});
+  fs.writeFileSync(journal,JSON.stringify(job)+'\n');
+  const hash=createHash('sha256').update(fs.readFileSync(journal)).digest('hex');
+  f.append([{type:'dispatch.completed',project:f.common,journal,attempt:job.token,item:'ENG-1',run:null,
+    stage:'start',exit_code:1,native_launch_attempted:false,request_sha256:hash,failure:job.failure}]);
+  assert.equal(f.dispose().results[0].disposition,'kept');
+  assert.equal(f.dispose().results[0].disposition,'removed');assert.equal(fs.existsSync(second),false);
+  assert.equal(fs.readFileSync(path.join(f.lane,'unsaved'),'utf8'),'keep');
+});
+
+test('stopped allocation native refusal is durable and makes no later native observation',t=>{
+  const f=stopped(t),command=f.options.command;let calls=0;
+  f.options.command=(exe,args,options)=>{
+    if(exe===f.job.herdr){calls++;return{status:null,error:Object.assign(Error('operation not permitted'),{code:'EPERM'}),stdout:'',stderr:'EPERM native refusal'};}
+    return command(exe,args,options);
+  };
+  assert.equal(f.dispose().results[0].disposition,'kept');assert.ok(calls>0);const prior=calls;
+  assert.deepEqual(f.dispose().results,[]);assert.equal(calls,prior);assert.ok(fs.existsSync(f.lane));
 });
 
 for(const kind of ['occupied','dirty','changed-head','UNKNOWN-launch','UNKNOWN-Git','live-request','HOLD','claim'])test(`stopped allocation retains ${kind}`,t=>{

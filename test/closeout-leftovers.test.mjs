@@ -11,7 +11,8 @@ function unbound(t,{merged=true,shell=false}={}){
   const f=setup(t,{direct:true,bound:true,merged});selectCurrentCleanup(f);
   fs.writeFileSync(f.eventFile,events(f).filter(e=>e.type!=='run.session_bound').map(e=>JSON.stringify(e)+'\n').join(''));
   f.state.agents=[];
-  if(shell){f.state.info.process_tree=[f.state.info.process_tree[0]];f.state.info.foreground_processes=[{pid:1,name:'zsh'}];}
+  if(shell){f.state.info.process_tree=[f.state.info.process_tree[0]];f.state.info.foreground_processes=[{pid:1,name:'zsh'}];
+    f.state.panes[0].foreground_cwd=f.lane;}
   else{f.state.tabs=[];f.state.panes=[];}
   f.save();f.report();
   const entry=currentCloseoutEntries(f.common,f.org,events(f))[0];assert.deepEqual(entry.panes,[]);

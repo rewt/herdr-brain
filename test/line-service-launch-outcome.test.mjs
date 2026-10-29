@@ -8,8 +8,58 @@ import {watchRun} from '../test-slot/watch.mjs';
 import {originalDispatchOutcome} from '../dispatch/outcome.mjs';
 import {configFixture} from './helpers/config-home-fixture.mjs';
 import {gitProject} from '../lib/project.mjs';
-import {createLineService} from '../line-service/line-service.mjs';
-import {transact} from '../lib/store.mjs';
+import {createLineService,sourceRoot} from '../line-service/line-service.mjs';
+import {transact,loadEvents} from '../lib/store.mjs';
+import {fold} from '../lib/state.mjs';
+
+test('REV-63 detached refusal routes one decision',t=>{
+  for(const kind of ['refusal','success','foreign-attempt']){
+    const f=configFixture(t,{custom:true}),repo=f.cwd,org=f.env.ORG_DIR,common=gitProject(repo).identity;
+    transact(org,()=>({add:[{type:'item.added',id:'ENG-1',role:'engineer',title:'Original detached work'}]}));
+    const journal=path.join(org,'dispatch','original.json'),launches=[],native=[];
+    const command=(exe,args)=>{
+      if(exe==='herdr'){native.push(args);throw Error('no native call is needed to consume original completion');}
+      if(!args[0].endsWith('/dispatch/dispatch.mjs'))return{status:0,stdout:'{}',stderr:''};
+      launches.push(args);
+      if(args[1]==='ENG-1'){
+        fs.mkdirSync(path.dirname(journal),{recursive:true});
+        fs.writeFileSync(journal,JSON.stringify({token:'original',repo,org,common,item:'ENG-1',brief:args[args.indexOf('--brief')+1],
+          stage:'open',run:null,native_launch_attempted:false,completion_protocol:1}));
+        return{status:0,stdout:JSON.stringify({result:'detached',journal,token:'original'}),stderr:''};
+      }
+      return{status:0,stdout:'{"result":"dispatched"}',stderr:''};
+    };
+    const options={repo,org,to:'brain-chat',env:f.env,command,haltAfter:100,maxStarts:1,capacity:()=>({count:0,cap:7}),
+      recordNotice:r=>({id:r.id,state:'record-only'})};
+    const service=createLineService(options),file=path.join(service.directory,'effects.json');
+    fs.mkdirSync(service.directory,{recursive:true});
+    fs.writeFileSync(path.join(service.directory,'installation.json'),JSON.stringify({at:'2026-10-29T00:00:00Z',repo,org,source:sourceRoot,node:process.execPath,
+      file:path.join(service.directory,'service.plist'),target:`gui/${process.getuid()}/dev.herdr.line.${path.basename(service.directory)}`}));
+    service.pass();service.pass();
+    const read=()=>JSON.parse(fs.readFileSync(file)),[key,parent]=Object.entries(read().actions).find(([key])=>key.startsWith('dispatch:ENG-1:'));
+    assert.equal(parent.state,'complete');assert.equal(parent.result.result,'detached');assert.equal(parent.original_outcome.producer.attempt,'original');
+    assert.equal(parent.recorded_dispatch_status,undefined);
+    const original=fs.readFileSync(journal);
+    const [status]=transact(org,()=>({add:[{type:'dispatch.completed',project:common,journal,attempt:kind==='foreign-attempt'?'foreign':'original',
+      item:'ENG-1',run:null,stage:kind==='success'?'complete':'worker',exit_code:kind==='success'?0:1,native_launch_attempted:kind==='success',
+      failure:kind==='success'?null:{code:'EACCES',kind:'fence'},request_sha256:'original-child-terminal-evidence'}]})).added;
+    transact(org,()=>({add:[{type:'item.added',id:'ENG-2',role:'engineer',title:'Independent ready work'}]}));
+    for(let n=0;n<3;n++)createLineService(options).pass();
+    const saved=read(),entry=saved.actions[key],decisions=[...fold(loadEvents(org).events).items.values()].filter(i=>i.meta.uncertain_outcome);
+    assert.deepEqual(entry.result,parent.result,'successful detached parent acknowledgement remains saved');
+    assert.deepEqual(fs.readFileSync(journal),original,'consumer never rewrites the original request');
+    assert.equal(launches.filter(a=>a[1]==='ENG-1').length,1);assert.equal(launches.filter(a=>a[1]==='ENG-2').length,1);assert.deepEqual(native,[]);
+    if(kind==='refusal'){
+      assert.equal(entry.state,'held');assert.deepEqual(entry.failure,{code:'EACCES',kind:'fence'});assert.deepEqual(entry.recorded_dispatch_status,status);
+      assert.equal(decisions.length,1);const check=decisions[0].meta.uncertain_outcome.check;
+      assert.deepEqual(check.status,status);assert.equal(check.subject.journal,journal);assert.equal(check.subject.attempt,'original');
+      assert.deepEqual(check.failure,status.failure);assert.equal(Object.keys(saved.outcome_decisions).length,1);
+    }else{
+      assert.equal(decisions.length,0);assert.equal(entry.state,'complete');assert.equal(entry.failure,undefined);
+      assert.deepEqual(entry.recorded_dispatch_status,kind==='success'?status:undefined);
+    }
+  }
+});
 
 test('retained launch foreground command outlives an elapsed budget and returns its real original result',()=>{
   const r=foregroundCommand(process.execPath,['-e',"setTimeout(()=>process.stdout.write('original complete'),90)"],{encoding:'utf8',timeout:20,env:{...process.env,MONITOR_TEST_SLOT_FROZEN_SECONDS:'0'}});

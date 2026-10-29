@@ -896,7 +896,7 @@ catch (error) {
     fs.mkdirSync(`${journal}.driver`,{recursive:true});const fd=fs.openSync(`${journal}.driver/results.jsonl`,'a',0o600);
     try{fs.writeFileSync(fd,JSON.stringify({at:new Date().toISOString(),journal,stage:job.stage,run:job.run,exit_code:process.exitCode??0,error:job.error??null,code:job.failure?.code??null,native_launch_attempted:job.native_launch_attempted??null})+'\n');fs.fsyncSync(fd);}finally{fs.closeSync(fd);}
   }
-  if(!completionAttempted&&job&&journal&&ownsLock&&(job.stage==='complete'||process.exitCode))try{recordDispatchCompletion({job,journal,exitCode:process.exitCode??0});}catch(error){process.stderr.write(`dispatch: completion status could not be recorded: ${error.message}\n`);process.exitCode??=1;}
+  if(!completionAttempted&&job&&journal&&ownsLock&&(job.stage==='complete'||process.exitCode||job.failure?.code==='DISPATCH_STOPPED'))try{recordDispatchCompletion({job,journal,exitCode:process.exitCode??0});}catch(error){process.stderr.write(`dispatch: completion status could not be recorded: ${error.message}\n`);process.exitCode??=1;}
   if (ownsLock) try { if (fs.readFileSync(lock, 'utf8') === String(process.pid)) fs.unlinkSync(lock); } catch {}
   if (contender) try { fs.unlinkSync(contender); } catch {}
 }

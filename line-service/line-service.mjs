@@ -408,12 +408,22 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       snapshot = current();
       for(const [key,entry]of Object.entries(effects.actions))if(key.startsWith('dispatch:')&&(entry.state!=='complete'||entry.result?.result==='detached'&&entry.original_outcome?.status!=='dispatch-complete')){
         const item=key.split(':')[1];
-        if(entry.recorded_dispatch_status)continue;
         try{
+          let status=entry.recorded_dispatch_status;
           const outcome=entry.original_outcome??originalDispatchOutcome({repo,org,common:project.identity,item,brief:path.join(directory,`${digest(key)}.ask.md`),journal:entry.result?.journal,events:snapshot.events});
           if(!entry.original_outcome){entry.original_outcome=outcome;save();log({action:'dispatch-outcome-readback',key,...outcome});}
-          const status=snapshot.events.findLast(e=>e.type==='dispatch.completed'&&e.project===project.identity&&e.journal===outcome.journal&&e.attempt===outcome.producer?.attempt&&e.item===item);
-          if(status){entry.recorded_dispatch_status=status;save();log({action:'dispatch-linked-status',key,status});}
+          status??=snapshot.events.findLast(e=>e.type==='dispatch.completed'&&e.project===project.identity&&e.journal===outcome.journal&&e.attempt===outcome.producer?.attempt&&e.item===item&&e.run===outcome.run);
+          if(status&&!entry.recorded_dispatch_status){entry.recorded_dispatch_status=status;save();log({action:'dispatch-linked-status',key,status});}
+          if(status&&outcomeFailure(status).kind==='fence'){
+            // The detached parent acknowledged only the original start. Its
+            // child's exact terminal refusal stops that effect, without
+            // changing the saved acknowledgement or issuing another dispatch.
+            entry.failure=status.failure;entry.state='held';entry.error=`Original dispatch stopped: ${status.failure.code}`;save();
+            effects.outcome_decisions??={};
+            effects.outcome_decisions[key]??=queueOutcomeDecision({repo,org,env:childEnv,check:{key,
+              subject:{item,run:status.run,journal:status.journal,attempt:status.attempt},failure:status.failure,status,outcome}});
+            save();stale=true;
+          }
           else if(!outcome.producer&&!['not-started','dispatch-complete'].includes(outcome.status)){
             note(`outcome:${key}`,'Original dispatch completion producer is missing; retain its original attempt for the project supervisor.',{item,journal:outcome.journal??null,outcome});
           }

@@ -205,6 +205,31 @@ test('failed timing record sets preserve STOP during the worker proving wait and
   }
 });
 
+test('REV-63 stopped dispatch publishes completion',async t=>{
+  const f=fixture(t),{pending,held}=await provingWait(f,'worker');
+  const journal=f.jobs()[0],original=JSON.parse(fs.readFileSync(journal));
+  assert.equal(original.completion_protocol,1);assert.equal(original.stage,'worker');
+  assert.equal(fs.readFileSync(journal+'.lock','utf8'),String(pending.child.pid));
+  const stop=path.join(f.repo,'.lane/supervisor/STOP');let result;
+  try{
+    fs.mkdirSync(path.dirname(stop),{recursive:true});fs.writeFileSync(stop,'Operator stop');
+    result=await pending.done;
+  }finally{held.release();await pending.done;}
+  assert.equal(result.status,0,result.stderr);
+  const response=JSON.parse(result.stdout),job=JSON.parse(fs.readFileSync(journal));
+  assert.equal(response.result,'stopped');assert.equal(response.stage,'worker');assert.equal(response.journal,journal);
+  const history=fs.readFileSync(path.join(f.org,'events.jsonl'),'utf8').trim().split('\n').map(JSON.parse);
+  const rows=history.filter(e=>e.type==='dispatch.completed');assert.equal(rows.length,1,result.stderr);
+  const status=rows[0],claim=history.findLast(e=>e.type==='run.claimed'&&e.run===job.run);
+  assert.equal(status.journal,journal);assert.equal(status.attempt,original.token);assert.equal(status.item,f.item);
+  assert.equal(status.project,job.common);assert.equal(status.run,original.run);assert.equal(status.run,claim.run);
+  assert.equal(job.ownership.generation,claim.seq);assert.equal(status.exit_code,0);assert.equal(status.stage,'worker');
+  assert.equal(status.failure.code,'DISPATCH_STOPPED');assert.equal(status.failure.kind,'fence');assert.equal(status.native_launch_attempted,false);
+  assert.equal(f.calls().some(c=>c.type==='lane'&&c.a[0]==='dispatch'),false);assert.equal(promptCalls(f).length,0);
+  assert.equal(f.calls().filter(c=>c.type==='lane'&&c.a[0]==='open').length,1);
+  assert.equal(fs.readFileSync(stop,'utf8'),'Operator stop');assert.equal(fs.existsSync(journal+'.lock'),false);
+});
+
 test('dispatch defaults to its recorded worker while explicit and saved recipients win', t => {
   const f = fixture(t, {noticeRecipient: 'ops-project'}); f.fail('prepare');
   const first = f.start(); assert.equal(first.status, 1);

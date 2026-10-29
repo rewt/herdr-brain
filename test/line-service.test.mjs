@@ -17,6 +17,7 @@ import {haltObservation,completeHaltPass} from '../line-service/halt-repair.mjs'
 import {dispatchInput} from '../line-service/phase1.mjs';
 import {closeoutKey} from '../lib/closeout.mjs';
 import {closeoutWaitId} from '../lib/closeout-status.mjs';
+import {setup as closeoutFixture,events as closeoutEvents,evaluations as closeoutEvaluations} from './helpers/closeout-fixture.mjs';
 
 function fixture(t) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'line-service-'))), repo = path.join(root, 'project'), org = path.join(repo, '.org');
@@ -55,6 +56,48 @@ function fixture(t) {
     haltAfter:100,capacity: () => ({ count: 0, cap: 2 }), recordNotice: data => { notes.push({ to:'supervisor-test',text:data.reason,options:data }); return { id:data.id,state:'record-only' }; }, ...overrides });
   return { repo, org, env, record, git, add, show, calls, refreshes, notes, service, setFailure: value => { fail = value; } };
 }
+
+test('REV-63 session retirement advances to physical cleanup',t=>{
+  for(const refused of [false,true]){
+    const f=closeoutFixture(t,{merged:true}),command=f.options.command;
+    let refusals=0;
+    if(refused)f.options.command=(exe,args,options)=>{
+      if(exe===f.job.herdr&&args[0]==='tab'&&args[1]==='close'){
+        refusals++;return{status:1,stdout:'',stderr:JSON.stringify({error:{code:'EACCES',message:'original native refusal'}})};
+      }
+      return command(exe,args,options);
+    };
+    f.append([{type:'line-service.phase0',id:'bound',project:f.common,repo:f.repo,org:f.org,main:'main',canonical_head:f.head}]);
+    f.report();const [source]=f.append([{type:'item.closed',id:'ENG-1',as:'done',completed_run:'R-1'}]);
+    const target=source.closeout_targets.find(e=>e.signal==='landed'),drains=[];
+    const service=createLineService({repo:f.repo,org:f.org,to:'brain-chat',env:f.env,maxStarts:0,closeoutMeasure:()=>{},
+      recordNotice:d=>({id:d.id,state:'record-only'}),command:(_exe,args)=>{
+        assert.ok(args[0].endsWith('/supervisor/closeout.mjs'));
+        if(args[1]==='refresh')return{status:0,stdout:'{}',stderr:''};
+        assert.equal(args[1],'drain');assert.equal(args.includes('--parallel'),false);
+        const keys=JSON.parse(args[args.indexOf('--keys')+1]),sessionsOnly=args.includes('--sessions-only');
+        const result=f.drain({keys,retrySafe:true,sessionsOnly});drains.push({keys,sessionsOnly,result});
+        return{status:0,stdout:JSON.stringify(result),stderr:''};
+      }});
+    service.pass();
+    const first=closeoutEvaluations(f).findLast(e=>e.key===target.key);
+    if(refused){
+      assert.equal(first.completed,false);assert.equal(first.failure.code,'EACCES');assert.equal(first.sessions_retired,undefined);
+      const calls=f.herdrCalls(),actions=f.read().actions;
+      service.pass();service.pass();assert.equal(refusals,1);assert.deepEqual(f.herdrCalls(),calls);assert.deepEqual(f.read().actions,actions);
+      assert.equal(fs.existsSync(f.lane),true);assert.equal(closeoutEvaluations(f).some(e=>e.key===target.key&&e.completed),false);
+    }else{
+      assert.equal(first.sessions_retired,true,JSON.stringify(drains));assert.equal(first.waiting.next,'physical');
+      assert.equal(fs.existsSync(f.lane),true);
+      service.pass();
+      assert.equal(closeoutEvaluations(f).findLast(e=>e.key===target.key).completed,true,JSON.stringify(drains));
+      assert.equal(fs.existsSync(f.lane),false);
+      const stages=drains.filter(d=>d.keys.includes(target.key));assert.deepEqual(stages.map(d=>d.sessionsOnly),[true,false]);
+      const all=closeoutEvents(f);assert.equal(all.some(e=>e.type==='item.added'&&e.meta?.uncertain_outcome),false);
+      assert.equal(all.some(e=>e.type==='closeout.waiting'&&e.key===target.key&&e.revision!==undefined),false);
+    }
+  }
+});
 
 test('default routing handles known role and narrow task aliases without recasting supervisor or orchestrator work',()=>{
   const route={kind:'codex'},config={routes:{narrow:route},selection_policy:{by_task_class:{'implementation-narrow':'narrow'}}};

@@ -96,6 +96,11 @@ function admissionService(f,extra={}){
   return{calls,pass:()=>{const cwd=process.cwd();process.chdir(f.cwd);try{return service.pass();}finally{process.chdir(cwd);}}};
 }
 const admissionPolicy=(f,policy)=>setConfig('review_admission',JSON.stringify({enabled:true,producer_groups:[],canonical_commits:[],hold_ordinary:true,...policy}),{cwd:f.cwd,env:f.env,who:'review admission fixture'});
+function admissionQueue(f){
+  const cwd=process.cwd(),env={...installedService(f),ORG_ACTOR:'line-service'};process.chdir(f.cwd);
+  try{const mutation=queueReviewMutation({...f.context(),runId:'R-1',head:f.heads[1],base:f.base,env});f.add(mutation.add);return mutation;}
+  finally{process.chdir(cwd);}
+}
 
 test('review admission queues and launches only exact allowlisted producer groups and canonical commits, visibly retaining every exclusion',t=>{
   const f=fixture(t);independentProducer(f);
@@ -119,7 +124,7 @@ test('review admission queues and launches only exact allowlisted producer group
 });
 
 test('review admission holds pre-existing reviews unchanged, then resumes only under the selected policy',t=>{
-  const f=fixture(t),c=f.context(),mutation=queueReviewMutation({...c,runId:'R-1',head:f.heads[1],base:f.base,env:{...installedService(f),ORG_ACTOR:'line-service'}});f.add(mutation.add);
+  const f=fixture(t),mutation=admissionQueue(f);
   const q=f.context().state.items.get(mutation.result.review_item),target=structuredClone(q.meta.review_target),key=target.source_group.key;
   admissionPolicy(f,{});
   const s=admissionService(f);s.pass();s.pass();
@@ -131,7 +136,7 @@ test('review admission holds pre-existing reviews unchanged, then resumes only u
 });
 
 test('review admission retains an existing UNKNOWN launch and legacy review without replacing either attempt',t=>{
-  const f=fixture(t),c=f.context(),mutation=queueReviewMutation({...c,runId:'R-1',head:f.heads[1],base:f.base,env:{...installedService(f),ORG_ACTOR:'line-service'}});f.add(mutation.add);
+  const f=fixture(t),mutation=admissionQueue(f);
   const q=f.context().state.items.get(mutation.result.review_item),target=structuredClone(q.meta.review_target);
   f.add([{type:'item.added',id:'REV-99',role:'reviewer',title:'Old manual review'}]);
   const input=dispatchInput({...f.context(),item:q}),key=`dispatch:${q.id}:${input}`,original={state:'started',owner:'line-service',error:'UNKNOWN original native outcome',receipt:{status:null,stdout:'original evidence'}};

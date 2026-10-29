@@ -544,8 +544,7 @@ test('original REV4-shaped continuation preserves its disjoint PASS peer and zer
     assert.equal(args[0],path.join(sourceRoot,'dispatch/dispatch.mjs'));assert.equal(args[args.indexOf('--retry')+1],f.journal);assert.ok(args.includes('--continue-preflight'));return f.d.dispatch(args.slice(1),{env:{...f.d.env,HERDR_BRAIN_ROOT:fs.realpathSync(sourceRoot)}});
   }});service.pass();
   const c=f.context(),proof=c.events.find(e=>e.type==='review.original-prestart');assert.ok(proof,'legacy product hold is reconsidered on the checked original-scope capability');assert.equal(proof.original_native_launch_attempted,false);assert.equal(c.state.items.get('REV-4').closed,null);assert.equal(c.events.some(e=>e.type==='review.recovery-completed'),false);assert.deepEqual(c.events.find(e=>e.seq===verdict.seq),verdict);
-  assert.equal(calls.filter(a=>a[0]===path.join(sourceRoot,'dispatch/dispatch.mjs')).length,0,'the newly filed decision changes the first admission selection');
-  assert.ok(diagnostics(f).some(r=>r.action==='queue-selection-changed'));assert.deepEqual(fs.readFileSync(f.journal),original);
+  assert.equal(calls.filter(a=>a[0]===path.join(sourceRoot,'dispatch/dispatch.mjs')).length,1,'a missing-producer diagnostic no longer creates a decision that delays the original continuation');
   service.pass();assert.equal(refreshes.length,2);
   assert.equal(calls.filter(a=>a[0]===path.join(sourceRoot,'dispatch/dispatch.mjs')).length,1,JSON.stringify(diagnostics(f)));const archived=JSON.parse(fs.readFileSync(proof.archive.file)),savedOriginal=archived.files.find(f=>f.original===proof.journal);assert.deepEqual(fs.readFileSync(savedOriginal.archive),original);
   const file=f.journal+'.driver/results.jsonl';let terminal;
@@ -707,7 +706,7 @@ test('original worker continuation refuses UNKNOWN native flags changed claim re
   }
 });
 
-test('permanent health and first errors stay diagnostic while one missing-producer decision retains the failed queue attempt',t=>{
+test('permanent health and missing review producers stay diagnostic without spawning a decision or replaying the failed attempt',t=>{
   const f=fixture(t),env=installedService(f);f.add([{type:'item.closed',id:'ENG-1',as:'done'}]);const bytes=fs.readFileSync(path.join(f.org,'events.jsonl'));
   let calls=0,refreshes=0;const service=()=>createLineService({repo:f.cwd,org:f.org,to:'brain-chat',env,haltAfter:100,capacity:()=>{throw Object.assign(Error('decision pool occupied'),{code:'DISPATCH_DECISION_CAP'});},command:(_exe,args)=>{
     if(args[0]===path.join(sourceRoot,'supervisor/closeout.mjs')){assert.deepEqual(args,[path.join(sourceRoot,'supervisor/closeout.mjs'),'refresh','--repo',f.cwd,'--org',f.org]);refreshes++;return{status:0,stdout:'{"created":[]}',stderr:''};}
@@ -715,13 +714,13 @@ test('permanent health and first errors stay diagnostic while one missing-produc
   }});
   for(let n=0;n<5;n++)service().pass();const health=diagnosticHealth(f),rows=diagnostics(f);
   const after=fs.readFileSync(path.join(f.org,'events.jsonl'));assert.deepEqual(after.subarray(0,bytes.length),bytes);
-  const added=after.subarray(bytes.length).toString().trim().split('\n').map(JSON.parse);assert.equal(added.length,2);
-  const kept=added.find(e=>e.type==='closeout.binding-kept'),decision=added.find(e=>e.type==='item.added');
+  const added=after.subarray(bytes.length).toString().trim().split('\n').map(JSON.parse);assert.equal(added.length,1);
+  const kept=added.find(e=>e.type==='closeout.binding-kept');
   assert.equal(kept.identity,f.identity);assert.equal(kept.run,'R-1');assert.equal(kept.item,'ENG-1');assert.equal(kept.completed,false);
   assert.deepEqual(kept.source,{seq:f.context().run.report.seq,type:'report.ingested'});assert.equal(kept.condition.kind,'missing-identity');
   for(const resource of ['session','folder','branch']){assert.equal(kept.resources[resource].status,'kept');assert.equal(kept.resources[resource].owner,'R-1');}
-  assert.deepEqual(decision.meta.uncertain_outcome.check.subject,{item:'ENG-1',effect:`review:ENG-1:${f.heads[1]}`});
-  assert.match(decision.meta.uncertain_outcome.check.defect,/no pending status producer/);
+  assert.equal(added.some(e=>e.type==='item.added'),false);
+  assert.ok(rows.some(r=>r.boundary===`outcome:review:ENG-1:${f.heads[1]}`&&r.scope.failure.kind==='unknown'));
   assert.equal(health.gap_passes,5);assert.equal(health.owed,1);assert.equal(health.owed_commits,2);assert.equal(health.queued,0);
   assert.equal(rows.filter(r=>r.boundary==='review-gap'&&r.inspection_due).length,1);assert.equal(calls,1);assert.equal(refreshes,5);
   const digest=morningDigest({events:f.context().events,diagnostics:rows});assert.ok(digest.review_errors.occurrences>=5);assert.equal(digest.review_health.pass_id,health.pass_id);

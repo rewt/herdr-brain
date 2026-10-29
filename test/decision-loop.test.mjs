@@ -186,7 +186,7 @@ test('decision prompts are read-only typed sessions with no self-landing instruc
 
 // Integration through the actual existing pass lock, record transactions,
 // immutable report bytes and effects journal. Native calls are explicit fixtures.
-function diskFixture(t,{originalOutcome='blocked'}={}){
+function diskFixture(t,{originalOutcome='blocked',captured=true}={}){
   const scratch=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'decision-loop-'))),repo=path.join(scratch,'project'),org=path.join(repo,'.org');fs.mkdirSync(org,{recursive:true});
   t.after(()=>fs.rmSync(scratch,{recursive:true,force:true}));
   fs.writeFileSync(path.join(path.dirname(repo),'.identity-root'),'fixture\n');
@@ -206,6 +206,8 @@ function diskFixture(t,{originalOutcome='blocked'}={}){
     {type:'run.claimed',run:'R-1',record:org,project:identity,owner:owner(identity)},
     {type:'line-service.phase0',id:'boundary',project:identity,repo,org,main:'main',canonical_head:head});
   report('R-1',originalOutcome);add({type:'line.decisions-activated',project:identity,org,subjects:['ENG-1']});
+  // Original captured work remains consumable after automatic creation retires.
+  if(captured){const snapshot=loadRecord(org),request=decisionCandidates({...snapshot,identity,org})[0];queueDecision({repo,org,request,env});}
   const calls=[];
   const native={name:'judge-fixture',pane_id:'w1:p1',workspace_id:'w1',terminal_id:'terminal',agent_session:{value:'session'},cwd:repo};
   const command=(exe,args)=>{calls.push(args);if(exe==='herdr')return{status:0,stdout:JSON.stringify({result:{agent:native}})};return {status:0,stdout:JSON.stringify({result:'detached'})};};
@@ -213,7 +215,7 @@ function diskFixture(t,{originalOutcome='blocked'}={}){
   return{repo,org,identity,env,add,report,calls,native,service,load:()=>loadRecord(org)};
 }
 
-test('the real line creates and dispatches one fresh judge, consumes immutable typed bytes once and dispatches the blocked subject',t=>{
+test('the real line finishes one original captured judge, consumes immutable typed bytes once and dispatches the blocked subject',t=>{
   const f=diskFixture(t);f.service().pass();let {state}=f.load();const item=[...state.items.values()].find(isDecision);assert.ok(item);
   assert.equal(f.calls.filter(args=>args[1]===item.id).length,1);
   const r=item.meta.decision_request;
@@ -225,6 +227,20 @@ test('the real line creates and dispatches one fresh judge, consumes immutable t
   assert.equal(loaded.state.items.get(item.id).closed.as,'done');
   assert.equal(f.calls.filter(args=>args[1]==='ENG-1').length,1,'explicit restart reaches ordinary dispatch exactly once');
   assert.equal(loaded.events.filter(e=>e.type==='decision.consequence').length,0,'detached ack is not actual live consequence proof');
+});
+
+test('retired automatic judgments create no new items or judge starts while independent work remains eligible',t=>{
+  const f=diskFixture(t,{captured:false});
+  f.add({type:'item.added',id:'DEC-1',role:'decision',title:'Old missing review producer',meta:{route:'unblock',uncertain_outcome:{check:{key:'review:ENG-1:head'}}}},
+    {type:'item.added',id:'ARCH-1',role:'architect',title:'Old backlog batch',meta:{route:'unblock',backlog_batch:1}},
+    {type:'item.added',id:'ENG-2',role:'engineer',title:'Independent ready work',meta:{}});
+  const before=f.load().events.length;f.service().pass();f.service().pass();const loaded=f.load();
+  assert.equal(loaded.events.slice(before).filter(e=>e.type==='item.added').length,0);
+  assert.equal(f.calls.filter(a=>a[1]==='DEC-1'||a[1]==='ARCH-1'||a[1]==='ENG-1').length,0);
+  assert.equal(f.calls.filter(a=>a[1]==='ENG-2').length,1);
+  assert.equal(loaded.state.items.get('DEC-1').closed,null);
+  assert.equal(loaded.state.items.get('ARCH-1').closed,null);
+  assert.equal(itemStatus(loaded.state,'ENG-1'),'blocked');
 });
 
 test('exact archived rollback restores absent fields and blocked outcome before downstream work; later writes refuse rollback',t=>{

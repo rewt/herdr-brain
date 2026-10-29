@@ -36,7 +36,8 @@ import {observeReviewProgress,recoverServiceReview} from './review-recovery.mjs'
 import {haltObservation,completeHaltPass} from './halt-repair.mjs';
 import {itemLaunchHold} from '../lib/item-launch-hold.mjs';
 import {queuePolicy,queueClass,queueSelected,orderQueue} from './priority-order.mjs';
-import {isDecision,decisionActivation,decisionRoute,decisionBrief,decisionCandidates,queueDecision,applyDecision,observeDecisionConsequences} from './decisions.mjs';
+import {isDecision,decisionActivation,decisionRoute,decisionBrief,applyDecision,observeDecisionConsequences} from './decisions.mjs';
+import {recordOnlyJudgment} from './decision-policy.mjs';
 import {outcomeFailure} from '../lib/uncertain-outcome.mjs';
 import {queueOutcomeDecision,obsoleteOutcomeDecision} from './outcome-decision.mjs';
 import {registerCloseoutWait,closeoutWait,closeoutWaitState,closeoutNextStage} from '../lib/closeout-status.mjs';
@@ -277,7 +278,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
           const attempt=reviewAttempt(item,{org,identity:project.identity,events:snapshot.events,state:snapshot.state,repo,effects,cache:reviewCache,target,capturedRun:run.id,ignoreService});
           if(attempt){
             effects.review_reference_observed??={};effects.review_reference_observed[key]={owner:'line-service',target,attempt};save();
-            if(attempt.includes('UNKNOWN')){effects.outcome_decisions??={};effects.outcome_decisions[key]??=queueOutcomeDecision({repo,org,env:childEnv,check:{key,subject:{item:item.id,run:run.id,head:target.head},defect:'Typed original review attempt has no linked completion producer in this record.',attempt}});save();}
+            if(attempt.includes('UNKNOWN'))note(`outcome:${key}`,'Original review completion producer is missing; retain its attempt for the project supervisor.',{item:item.id,run:run.id,head:target.head,attempt});
             note(key,attempt,{item:item.id,run:run.id,head:target.head,review:true},false,{action:'review-retained',item:item.id,head:target.head});continue;
           }
           queueConsumer({run,env:childEnv});reviewSteps++;
@@ -360,8 +361,8 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
           if(completed&&landed){completed.source_producer_seq=landed.seq;save();}
         } catch (e) { note(`source-complete:${run.id}`, `T2 source completion needs supervisor judgment: ${e.message}`); }
       }
-      // Mechanical rules/cleanup run first. Judgment is ordinary record work;
-      // all native launches still pass through the admission/effect path below.
+      // Consume original typed answers, but do not manufacture fresh judgment
+      // sessions from blocked work. The owning supervisor answers actual questions.
       snapshot=current();
       if(decisionActivation(snapshot.events,project.identity,org)){
         let decisionSteps=0;
@@ -370,12 +371,6 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
           const run=snapshot.state.runs.get(item.runs.at(-1));if(!run?.report)continue;
           decisionSteps++;
           effect(`decision-apply:${item.id}:${run.id}:${run.report.sha256}`,()=>applyDecision({repo,org,itemId:item.id,env:childEnv,native}));
-        }
-        snapshot=current();
-        for(const request of decisionCandidates({...snapshot,identity:project.identity,org})){
-          if(expired()||decisionSteps>=maxStepsPerStage)break;
-          decisionSteps++;
-          effect(`decision-queue:${request.key}`,()=>queueDecision({repo,org,request,env:childEnv}));
         }
         try{checkpointNotices();observeDecisionConsequences({repo,org,env:childEnv,native});stale=true;}catch(e){note('decision-consequence',e.message);}
       }
@@ -407,7 +402,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
           const status=snapshot.events.findLast(e=>e.type==='dispatch.completed'&&e.project===project.identity&&e.journal===outcome.journal&&e.attempt===outcome.producer?.attempt&&e.item===item);
           if(status){entry.recorded_dispatch_status=status;save();log({action:'dispatch-linked-status',key,status});}
           else if(!outcome.producer&&!['not-started','dispatch-complete'].includes(outcome.status)){
-            effects.outcome_decisions??={};effects.outcome_decisions[key]??=queueOutcomeDecision({repo,org,env:childEnv,check:{key,subject:{item,journal:outcome.journal??null},defect:'Original dispatch has no linked command-completion producer; no launch/file polling fallback.',outcome}});save();
+            note(`outcome:${key}`,'Original dispatch completion producer is missing; retain its original attempt for the project supervisor.',{item,journal:outcome.journal??null,outcome});
           }
         }catch(e){note(key,e.message,{item});}
       }
@@ -441,6 +436,9 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         if(obsoleteDecision(snapshot.state.items.get(item.id))){timings.outcome_decisions_deferred++;continue;}
         const input=dispatchInput({...snapshot,item:snapshot.state.items.get(item.id),org,identity:project.identity});
         if(!input)continue;
+        // A saved request may finish through the original guarded continuation.
+        // No new rule-generated review/dispatch or backlog attempt is admitted.
+        if(recordOnlyJudgment(item)&&!effects.actions[`dispatch:${item.id}:${input}`])continue;
         if(!admissionLogged){log({action:'admission-stage',preceding_work_ms:precedingWork,preceding_budget_exhausted:precedingWork>=passBudgetMs,work_budget_ms:passBudgetMs});admissionLogged=true;}
         if(roleIs(item,'REV')&&cutoff&&isQueueReview(item)&&!index?.heads.includes(item.meta.review_target?.head)&&!snapshot.events.some(e=>e.type==='review.recovery-completed'&&e.item===item.meta.review_source_item&&e.target?.head===item.meta.review_target?.head)){
           try{sourceGit(repo,['merge-base','--is-ancestor',item.meta.review_target.head,cutoff.canonical_head]);timings.historical_review_skipped++;continue;}catch{/* Unlanded/unknown targets are errors, never historical skips. */}
@@ -540,6 +538,9 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         if(key.startsWith('review:')&&entry.failure?.kind!=='fence'){
           const q=[...current().state.items.values()].find(q=>q.meta.review_source_item===key.split(':')[1]&&q.meta.review_target?.head===entry.review_target?.head);
           if(q){entry.recorded_review_status={item:q.id,created_seq:q.created.seq};save();continue;}
+        }
+        if(['review:','dispatch:'].some(prefix=>key.startsWith(prefix))){
+          note(`outcome:${key}`,'The original action needs its project supervisor; retain the failed receipt and current ownership without another decision item.',{item:key.split(':')[1],effect:key,failure:entry.failure??outcomeFailure(entry)});continue;
         }
         effects.outcome_decisions??={};effects.outcome_decisions[key]??=queueOutcomeDecision({repo,org,env:childEnv,check:{key,subject:{item:key.split(':')[1],effect:key},failure:entry.failure??outcomeFailure(entry),receipt:entry.receipt,
           defect:key.startsWith('review:')?'Original review-queue command returned without a linked record item; no pending status producer is available.':undefined}});save();

@@ -1,0 +1,2650 @@
+{
+  "verifier": "R-1258 / lane-decision-chur-c7a295-bce45a",
+  "org": "/Users/rewt/development/rewt/.org",
+  "through": 34341,
+  "at": "2026-10-29T01:54:06.473Z",
+  "event_prefix_sha256": "60a0d0ed6a5aaebbcc02bcc94a97bfe611f6e167ed0294ffe0c3f1fce4ba3672",
+  "decisions": {
+    "total": 327,
+    "classes": {
+      "typed-blocked": 5,
+      "source-complete": 3,
+      "closeout": 274,
+      "dispatch": 19,
+      "review": 25,
+      "owner-selected": 1
+    },
+    "statuses": {
+      "done": 14,
+      "dropped": 235,
+      "ready": 77,
+      "active": 1
+    },
+    "started_runs": 18,
+    "reported_runs": 17,
+    "rows": [
+      {
+        "id": "DEC-1",
+        "class": "typed-blocked",
+        "created": 24488,
+        "status": "done",
+        "runs": [
+          {
+            "id": "R-972",
+            "started": "2026-10-27T19:52:43.929Z",
+            "reported": "2026-10-27T19:57:58.398Z",
+            "outcome": "done",
+            "report_seq": 24546,
+            "action": "reshape"
+          }
+        ]
+      },
+      {
+        "id": "DEC-2",
+        "class": "typed-blocked",
+        "created": 24597,
+        "status": "dropped",
+        "runs": [
+          {
+            "id": "R-975",
+            "started": "2026-10-27T20:08:09.588Z",
+            "reported": "2026-10-27T20:20:29.666Z",
+            "outcome": "done",
+            "report_seq": 24745,
+            "action": "reshape"
+          }
+        ]
+      },
+      {
+        "id": "DEC-3",
+        "class": "typed-blocked",
+        "created": 25072,
+        "status": "dropped",
+        "runs": [
+          {
+            "id": "R-993",
+            "started": "2026-10-27T20:47:47.003Z",
+            "reported": "2026-10-27T20:53:08.107Z",
+            "outcome": "done",
+            "report_seq": 25138,
+            "action": "reshape"
+          }
+        ]
+      },
+      {
+        "id": "DEC-4",
+        "class": "typed-blocked",
+        "created": 25487,
+        "status": "done",
+        "runs": [
+          {
+            "id": "R-1006",
+            "started": "2026-10-27T22:02:27.763Z",
+            "reported": "2026-10-27T22:06:12.484Z",
+            "outcome": "done",
+            "report_seq": 25868,
+            "action": "reshape"
+          }
+        ]
+      },
+      {
+        "id": "DEC-5",
+        "class": "source-complete",
+        "created": 25584,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-6",
+        "class": "source-complete",
+        "created": 25585,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-7",
+        "class": "closeout",
+        "created": 25807,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-8",
+        "class": "closeout",
+        "created": 25808,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-9",
+        "class": "closeout",
+        "created": 25809,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-10",
+        "class": "closeout",
+        "created": 25810,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-11",
+        "class": "closeout",
+        "created": 25811,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-12",
+        "class": "closeout",
+        "created": 25812,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-13",
+        "class": "closeout",
+        "created": 25813,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-14",
+        "class": "closeout",
+        "created": 25814,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-15",
+        "class": "closeout",
+        "created": 25815,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-16",
+        "class": "closeout",
+        "created": 25816,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-17",
+        "class": "closeout",
+        "created": 25817,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-18",
+        "class": "closeout",
+        "created": 25818,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-19",
+        "class": "closeout",
+        "created": 25819,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-20",
+        "class": "closeout",
+        "created": 25820,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-21",
+        "class": "closeout",
+        "created": 25821,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-22",
+        "class": "closeout",
+        "created": 25822,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-23",
+        "class": "closeout",
+        "created": 25823,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-24",
+        "class": "closeout",
+        "created": 25824,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-25",
+        "class": "closeout",
+        "created": 25825,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-26",
+        "class": "closeout",
+        "created": 25826,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-27",
+        "class": "closeout",
+        "created": 25827,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-28",
+        "class": "closeout",
+        "created": 25828,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-29",
+        "class": "closeout",
+        "created": 25829,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-30",
+        "class": "closeout",
+        "created": 25830,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-31",
+        "class": "closeout",
+        "created": 25831,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-32",
+        "class": "closeout",
+        "created": 25832,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-33",
+        "class": "closeout",
+        "created": 25833,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-34",
+        "class": "dispatch",
+        "created": 25835,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-35",
+        "class": "dispatch",
+        "created": 25836,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-36",
+        "class": "dispatch",
+        "created": 25837,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-37",
+        "class": "dispatch",
+        "created": 25838,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-38",
+        "class": "dispatch",
+        "created": 25839,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-39",
+        "class": "dispatch",
+        "created": 25840,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-40",
+        "class": "dispatch",
+        "created": 25841,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-41",
+        "class": "dispatch",
+        "created": 25842,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-42",
+        "class": "dispatch",
+        "created": 25843,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-43",
+        "class": "dispatch",
+        "created": 25844,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-44",
+        "class": "dispatch",
+        "created": 25845,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-45",
+        "class": "dispatch",
+        "created": 25846,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-46",
+        "class": "dispatch",
+        "created": 25847,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-47",
+        "class": "dispatch",
+        "created": 25848,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-48",
+        "class": "dispatch",
+        "created": 25849,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-49",
+        "class": "review",
+        "created": 25850,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-50",
+        "class": "review",
+        "created": 25851,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-51",
+        "class": "review",
+        "created": 25852,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-52",
+        "class": "review",
+        "created": 25853,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-53",
+        "class": "review",
+        "created": 25854,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-54",
+        "class": "review",
+        "created": 25855,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-55",
+        "class": "review",
+        "created": 25856,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-56",
+        "class": "closeout",
+        "created": 25875,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-57",
+        "class": "closeout",
+        "created": 25876,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-58",
+        "class": "closeout",
+        "created": 25877,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-59",
+        "class": "closeout",
+        "created": 25878,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-60",
+        "class": "closeout",
+        "created": 25879,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-61",
+        "class": "closeout",
+        "created": 25880,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-62",
+        "class": "closeout",
+        "created": 25881,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-63",
+        "class": "closeout",
+        "created": 25882,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-64",
+        "class": "closeout",
+        "created": 25883,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-65",
+        "class": "closeout",
+        "created": 25884,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-66",
+        "class": "closeout",
+        "created": 25885,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-67",
+        "class": "closeout",
+        "created": 25886,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-68",
+        "class": "closeout",
+        "created": 25887,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-69",
+        "class": "closeout",
+        "created": 25888,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-70",
+        "class": "closeout",
+        "created": 25889,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-71",
+        "class": "closeout",
+        "created": 25890,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-72",
+        "class": "closeout",
+        "created": 25891,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-73",
+        "class": "closeout",
+        "created": 25892,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-74",
+        "class": "closeout",
+        "created": 25893,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-75",
+        "class": "closeout",
+        "created": 25894,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-76",
+        "class": "closeout",
+        "created": 25895,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-77",
+        "class": "closeout",
+        "created": 25896,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-78",
+        "class": "closeout",
+        "created": 25897,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-79",
+        "class": "closeout",
+        "created": 25898,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-80",
+        "class": "closeout",
+        "created": 25899,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-81",
+        "class": "closeout",
+        "created": 25900,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-82",
+        "class": "closeout",
+        "created": 25901,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-83",
+        "class": "closeout",
+        "created": 25902,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-84",
+        "class": "closeout",
+        "created": 25903,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-85",
+        "class": "closeout",
+        "created": 25904,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-86",
+        "class": "closeout",
+        "created": 25905,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-87",
+        "class": "closeout",
+        "created": 25906,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-88",
+        "class": "closeout",
+        "created": 25907,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-89",
+        "class": "closeout",
+        "created": 25908,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-90",
+        "class": "closeout",
+        "created": 25909,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-91",
+        "class": "closeout",
+        "created": 25910,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-92",
+        "class": "closeout",
+        "created": 25911,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-93",
+        "class": "closeout",
+        "created": 25912,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-94",
+        "class": "closeout",
+        "created": 25913,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-95",
+        "class": "closeout",
+        "created": 25914,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-96",
+        "class": "closeout",
+        "created": 25915,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-97",
+        "class": "closeout",
+        "created": 25916,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-98",
+        "class": "closeout",
+        "created": 25917,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-99",
+        "class": "closeout",
+        "created": 25918,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-100",
+        "class": "closeout",
+        "created": 25919,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-101",
+        "class": "closeout",
+        "created": 25920,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-102",
+        "class": "closeout",
+        "created": 25921,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-103",
+        "class": "closeout",
+        "created": 25922,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-104",
+        "class": "closeout",
+        "created": 25923,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-105",
+        "class": "closeout",
+        "created": 25924,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-106",
+        "class": "closeout",
+        "created": 25925,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-107",
+        "class": "closeout",
+        "created": 25926,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-108",
+        "class": "closeout",
+        "created": 25927,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-109",
+        "class": "closeout",
+        "created": 25928,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-110",
+        "class": "closeout",
+        "created": 25929,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-111",
+        "class": "closeout",
+        "created": 25930,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-112",
+        "class": "closeout",
+        "created": 25931,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-113",
+        "class": "closeout",
+        "created": 25932,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-114",
+        "class": "closeout",
+        "created": 25933,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-115",
+        "class": "closeout",
+        "created": 25934,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-116",
+        "class": "closeout",
+        "created": 25935,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-117",
+        "class": "closeout",
+        "created": 25936,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-118",
+        "class": "closeout",
+        "created": 25937,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-119",
+        "class": "closeout",
+        "created": 25938,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-120",
+        "class": "closeout",
+        "created": 25939,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-121",
+        "class": "closeout",
+        "created": 25940,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-122",
+        "class": "closeout",
+        "created": 25941,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-123",
+        "class": "closeout",
+        "created": 25942,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-124",
+        "class": "closeout",
+        "created": 25943,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-125",
+        "class": "closeout",
+        "created": 25944,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-126",
+        "class": "closeout",
+        "created": 25945,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-127",
+        "class": "closeout",
+        "created": 25946,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-128",
+        "class": "closeout",
+        "created": 25947,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-129",
+        "class": "closeout",
+        "created": 25948,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-130",
+        "class": "closeout",
+        "created": 25949,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-131",
+        "class": "closeout",
+        "created": 25950,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-132",
+        "class": "closeout",
+        "created": 25951,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-133",
+        "class": "closeout",
+        "created": 25952,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-134",
+        "class": "closeout",
+        "created": 25953,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-135",
+        "class": "closeout",
+        "created": 25954,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-136",
+        "class": "closeout",
+        "created": 25955,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-137",
+        "class": "closeout",
+        "created": 25956,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-138",
+        "class": "closeout",
+        "created": 25957,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-139",
+        "class": "closeout",
+        "created": 25958,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-140",
+        "class": "closeout",
+        "created": 25959,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-141",
+        "class": "closeout",
+        "created": 25960,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-142",
+        "class": "closeout",
+        "created": 25961,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-143",
+        "class": "closeout",
+        "created": 25962,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-144",
+        "class": "closeout",
+        "created": 25963,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-145",
+        "class": "closeout",
+        "created": 25964,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-146",
+        "class": "closeout",
+        "created": 25965,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-147",
+        "class": "closeout",
+        "created": 25966,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-148",
+        "class": "closeout",
+        "created": 25967,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-149",
+        "class": "closeout",
+        "created": 25968,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-150",
+        "class": "closeout",
+        "created": 25969,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-151",
+        "class": "closeout",
+        "created": 25970,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-152",
+        "class": "closeout",
+        "created": 25971,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-153",
+        "class": "closeout",
+        "created": 25972,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-154",
+        "class": "closeout",
+        "created": 25973,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-155",
+        "class": "closeout",
+        "created": 25974,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-156",
+        "class": "closeout",
+        "created": 25975,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-157",
+        "class": "closeout",
+        "created": 25976,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-158",
+        "class": "closeout",
+        "created": 25977,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-159",
+        "class": "closeout",
+        "created": 25978,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-160",
+        "class": "closeout",
+        "created": 25979,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-161",
+        "class": "closeout",
+        "created": 25980,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-162",
+        "class": "closeout",
+        "created": 25981,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-163",
+        "class": "closeout",
+        "created": 25982,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-164",
+        "class": "closeout",
+        "created": 25983,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-165",
+        "class": "closeout",
+        "created": 25984,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-166",
+        "class": "closeout",
+        "created": 25985,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-167",
+        "class": "closeout",
+        "created": 25986,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-168",
+        "class": "closeout",
+        "created": 25987,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-169",
+        "class": "closeout",
+        "created": 25988,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-170",
+        "class": "closeout",
+        "created": 25989,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-171",
+        "class": "closeout",
+        "created": 25990,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-172",
+        "class": "closeout",
+        "created": 25991,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-173",
+        "class": "closeout",
+        "created": 25992,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-174",
+        "class": "closeout",
+        "created": 25993,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-175",
+        "class": "closeout",
+        "created": 25994,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-176",
+        "class": "closeout",
+        "created": 25995,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-177",
+        "class": "closeout",
+        "created": 25996,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-178",
+        "class": "closeout",
+        "created": 25997,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-179",
+        "class": "closeout",
+        "created": 25998,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-180",
+        "class": "closeout",
+        "created": 25999,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-181",
+        "class": "closeout",
+        "created": 26000,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-182",
+        "class": "closeout",
+        "created": 26001,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-183",
+        "class": "closeout",
+        "created": 26002,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-184",
+        "class": "closeout",
+        "created": 26003,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-185",
+        "class": "closeout",
+        "created": 26004,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-186",
+        "class": "closeout",
+        "created": 26005,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-187",
+        "class": "closeout",
+        "created": 26006,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-188",
+        "class": "closeout",
+        "created": 26007,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-189",
+        "class": "closeout",
+        "created": 26008,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-190",
+        "class": "closeout",
+        "created": 26009,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-191",
+        "class": "closeout",
+        "created": 26010,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-192",
+        "class": "closeout",
+        "created": 26011,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-193",
+        "class": "closeout",
+        "created": 26012,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-194",
+        "class": "closeout",
+        "created": 26013,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-195",
+        "class": "closeout",
+        "created": 26014,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-196",
+        "class": "closeout",
+        "created": 26015,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-197",
+        "class": "closeout",
+        "created": 26016,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-198",
+        "class": "closeout",
+        "created": 26017,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-199",
+        "class": "closeout",
+        "created": 26018,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-200",
+        "class": "closeout",
+        "created": 26019,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-201",
+        "class": "closeout",
+        "created": 26020,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-202",
+        "class": "closeout",
+        "created": 26021,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-203",
+        "class": "closeout",
+        "created": 26022,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-204",
+        "class": "closeout",
+        "created": 26023,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-205",
+        "class": "closeout",
+        "created": 26024,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-206",
+        "class": "closeout",
+        "created": 26025,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-207",
+        "class": "closeout",
+        "created": 26026,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-208",
+        "class": "closeout",
+        "created": 26027,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-209",
+        "class": "closeout",
+        "created": 26028,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-210",
+        "class": "closeout",
+        "created": 26029,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-211",
+        "class": "closeout",
+        "created": 26030,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-212",
+        "class": "closeout",
+        "created": 26031,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-213",
+        "class": "closeout",
+        "created": 26032,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-214",
+        "class": "closeout",
+        "created": 26033,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-215",
+        "class": "closeout",
+        "created": 26034,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-216",
+        "class": "closeout",
+        "created": 26035,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-217",
+        "class": "closeout",
+        "created": 26036,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-218",
+        "class": "closeout",
+        "created": 26037,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-219",
+        "class": "closeout",
+        "created": 26038,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-220",
+        "class": "closeout",
+        "created": 26039,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-221",
+        "class": "closeout",
+        "created": 26040,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-222",
+        "class": "closeout",
+        "created": 26041,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-223",
+        "class": "closeout",
+        "created": 26042,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-224",
+        "class": "closeout",
+        "created": 26043,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-225",
+        "class": "closeout",
+        "created": 26044,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-226",
+        "class": "closeout",
+        "created": 26045,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-227",
+        "class": "closeout",
+        "created": 26046,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-228",
+        "class": "closeout",
+        "created": 26047,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-229",
+        "class": "closeout",
+        "created": 26048,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-230",
+        "class": "closeout",
+        "created": 26049,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-231",
+        "class": "closeout",
+        "created": 26050,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-232",
+        "class": "closeout",
+        "created": 26051,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-233",
+        "class": "closeout",
+        "created": 26052,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-234",
+        "class": "closeout",
+        "created": 26053,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-235",
+        "class": "closeout",
+        "created": 26054,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-236",
+        "class": "closeout",
+        "created": 26055,
+        "status": "dropped",
+        "runs": []
+      },
+      {
+        "id": "DEC-237",
+        "class": "closeout",
+        "created": 26524,
+        "status": "ready",
+        "runs": []
+      },
+      {
+        "id": "DEC-238",
+        "class": "closeout",
+        "created": 26659,
+        "status": "ready",
+        "runs": []
+      },
+      {
+        "id": "DEC-239",
+        "class": "closeout",
+        "created": 26660,
+        "status": "ready",
+        "runs": []
+      },
+      {
+        "id": "DEC-240",
+        "class": "closeout",
+        "created": 26661,
+        "status": "ready",
+        "runs": []
+      },
+      {
+        "id": "DEC-241",
+        "class": "closeout",
+        "created": 26662,
+        "status": "ready",
+        "runs": []
+      },
+      {
+        "id": "DEC-242",
+        "class": "typed-blocked",
+        "created": 26816,
+        "status": "dropped",
+        "runs": [
+          {
+            "id": "R-1023",
+            "started": "2026-10-28T00:51:12.006Z",
+            "reported": "2026-10-28T00:55:43.006Z",
+            "outcome": "done",
+            "report_seq": 26952,
+            "action": "park"
+          }
+        ]
+      },
+      {
+        "id": "DEC-243",
+        "class": "closeout",
+        "created": 26818,
+        "status": "ready",
+        "runs": []
+      },
+      {
+        "id": "DEC-244",
+        "class": "closeout",
+        "created": 26819,
+        "status": "ready",
+        "runs": []
+      },
+      {
+        "id": "DEC-245",
+        "class": "closeout",
+        "created": 26820,
+        "status": "ready",
+        "runs": []
+      },
+      {
+        "id": "DEC-246",
+        "class": "closeout",
+        "created": 26821,
+        "status": "ready",
+        "runs": []
+      },
+      {
+        "id": "DEC-247",
+        "class": "closeout",
+        "created": 26934,
+        "status": "ready",
+        "runs": []
+      },
+      {
+        "id": "DEC-248",
+        "class": "closeout",
+        "created": 26935,
+        "status": "ready",
+        "runs": []
+      },
+      {
+        "id": "DEC-249",
+        "class": "closeout",
+        "created": 26936,
+        "status": "ready",
+        "runs": []
+      },
+      {
+        "id": "DEC-250",
+        "class": "dispatch",
+        "created": 26939,
+        "status": "done",
+        "runs": [
+          {
+            "id": "R-1033",
+            "started": "2026-10-28T01:15:43.492Z",
+            "reported": "2026-10-28T01:18:17.163Z",
+            "outcome": "done",
+            "report_seq": 27220,
+            "action": null
+          }
+        ]
+      },
+      {
+        "id": "DEC-251",
+        "class": "closeout",
+        "created": 26969,
+        "status": "ready",
+        "runs": []
+      },
+      {
+        "id": "DEC-252",
+        "class": "closeout",
+        "created": 26970,
+        "status": "ready",
+        "runs": []
+      },
+      {
+        "id": "DEC-253",
+        "class": "closeout",
+        "created": 26971,
+        "status": "ready",
+        "runs": []
+      },
+      {
+        "id": "DEC-254",
+        "class": "closeout",
+        "created": 26972,
+        "status": "ready",
+        "runs": []
+      },
+      {
+        "id": "DEC-255",
+        "class": "closeout",
+        "created": 27073,
+        "status": "ready",
+        "runs": []
+      },
+      {
+        "id": "DEC-256",
+        "class": "closeout",
+        "created": 27074,
+        "status": "ready",
+        "runs": []
+      },
+      {
+        "id": "DEC-257",
+        "class": "closeout",
+        "created": 27075,
+        "status": "ready",
+        "runs": []
+      },
+      {
+        "id": "DEC-258",
+        "class": "closeout",
+        "created": 27076,
+        "status": "ready",
+        "runs": []
+      },
+      {
+        "id": "DEC-259",
+        "class": "closeout",
+        "created": 27077,
+        "status": "ready",
+        "runs": []
+      },
+      {
+        "id": "DEC-260",
+        "class": "closeout",
+        "created": 27146,
+        "status": "ready",
+        "runs": []
+      },
+      {
+        "id": "DEC-261",
+        "class": "closeout",
+        "created": 27147,
+        "status": "ready",
+        "runs": []
+      },
+      {
+        "id": "DEC-262",
+        "class": "dispatch",
+        "created": 27344,
+        "status": "done",
+        "runs": [
+          {
+            "id": "R-1036",
+            "started": "2026-10-28T02:20:43.616Z",
+            "reported": "2026-10-28T02:26:05.157Z",
+            "outcome": "done",
+            "report_seq": 27406,
+            "action": null
+          }
+        ]
+      },
+      {
+        "id": "DEC-263",
+        "class": "closeout",
+        "created": 27347,
+        "status": "ready",
+        "runs": []
+      },
+      {
+        "id": "DEC-264",
+        "class": "closeout",
+        "created": 27348,
+        "status": "ready",
+        "runs": []
+      },
+      {
+        "id": "DEC-265",
+        "class": "closeout",
+        "created": 27349,
+        "status": "ready",
+        "runs": []
+      },
+      {
+        "id": "DEC-266",
+        "class": "closeout",
+        "created": 27350,
+        "status": "ready",
+        "runs": []
+      },
+      {
+        "id": "DEC-267",
+        "class": "closeout",
+        "created": 27351,
+        "status": "ready",
+        "runs": []
+      },
+      {
+        "id": "DEC-268",
+        "class": "closeout",
+        "created": 27352,
+        "status": "ready",
+        "runs": []
+      },
+      {
+        "id": "DEC-269",
+        "class": "closeout",
+        "created": 27383,
+        "status": "ready",
+        "runs": []
+      },
+      {
+        "id": "DEC-270",
+        "class": "closeout",
+        "created": 27422,
+        "status": "ready",
+        "runs": []
+      },
+      {
+        "id": "DEC-271",
+        "class": "closeout",
+        "created": 27447,
+        "status": "ready",
+        "runs": []
+      },
+      {
+        "id": "DEC-272",
+        "class": "closeout",
+        "created": 27451,
+        "status": "ready",
+        "runs": []
+      },
+      {
+        "id": "DEC-273",
+        "class": "closeout",
+        "created": 27479,
+        "status": "ready",
+        "runs": []
+      },
+      {
+        "id": "DEC-274",
+        "class": "closeout",
+        "created": 27528,
+        "status": "ready",
+        "runs": []
+      },
+      {
+        "id": "DEC-275",
+        "class": "closeout",
+        "created": 27529,
+        "status": "ready",
+        "runs": []
+      },
+      {
+        "id": "DEC-276",
+        "class": "closeout",
+        "created": 27577,
+        "status": "ready",
+        "runs": []
+      },
+      {
+        "id": "DEC-277",
+        "class": "closeout",
+        "created": 27798,
+        "status": "ready",
+        "runs": []
+      },
+      {
+        "id": "DEC-278",
+        "class": "closeout",
+        "created": 27799,
+        "status": "ready",
+        "runs": []
+      },
+      {
+        "id": "DEC-279",
+        "class": "review",
+        "created": 27910,
+        "status": "ready",
+        "runs": []
+      },
+      {
+        "id": "DEC-280",
+        "class": "review",
+        "created": 28038,
+        "status": "done",
+        "runs": [
+          {
+            "id": "R-1078",
+            "started": "2026-10-28T04:46:32.201Z",
+            "reported": "2026-10-28T05:06:37.255Z",
+            "outcome": "done",
+            "report_seq": 28434,
+            "action": null
+          }
+        ]
+      },
+      {
+        "id": "DEC-281",
+        "class": "review",
+        "created": 28039,
+        "status": "ready",
+        "runs": []
+      },
+      {
+        "id": "DEC-282",
+        "class": "closeout",
+        "created": 28264,
+        "status": "ready",
+        "runs": []
+      },
+      {
+        "id": "DEC-283",
+        "class": "review",
+        "created": 28341,
+        "status": "ready",
+        "runs": []
+      },
+      {
+        "id": "DEC-284",
+        "class": "source-complete",
+        "created": 28382,
+        "status": "done",
+        "runs": [
+          {
+            "id": "R-1086",
+            "started": "2026-10-28T05:15:40.471Z",
+            "reported": "2026-10-28T05:21:56.652Z",
+            "outcome": "done",
+            "report_seq": 28504,
+            "action": null
+          }
+        ]
+      },
+      {
+        "id": "DEC-285",
+        "class": "closeout",
+        "created": 28383,
+        "status": "ready",
+        "runs": []
+      },
+      {
+        "id": "DEC-286",
+        "class": "closeout",
+        "created": 28508,
+        "status": "ready",
+        "runs": []
+      },
+      {
+        "id": "DEC-287",
+        "class": "closeout",
+        "created": 28531,
+        "status": "ready",
+        "runs": []
+      },
+      {
+        "id": "DEC-288",
+        "class": "review",
+        "created": 28660,
+        "status": "ready",
+        "runs": []
+      },
+      {
+        "id": "DEC-289",
+        "class": "closeout",
+        "created": 28727,
+        "status": "ready",
+        "runs": []
+      },
+      {
+        "id": "DEC-290",
+        "class": "review",
+        "created": 29013,
+        "status": "ready",
+        "runs": []
+      },
+      {
+        "id": "DEC-291",
+        "class": "review",
+        "created": 29083,
+        "status": "done",
+        "runs": [
+          {
+            "id": "R-1113",
+            "started": "2026-10-28T11:52:29.074Z",
+            "reported": "2026-10-28T12:05:57.595Z",
+            "outcome": "done",
+            "report_seq": 29103,
+            "action": null
+          }
+        ]
+      },
+      {
+        "id": "DEC-292",
+        "class": "closeout",
+        "created": 29143,
+        "status": "ready",
+        "runs": []
+      },
+      {
+        "id": "DEC-293",
+        "class": "review",
+        "created": 29167,
+        "status": "done",
+        "runs": [
+          {
+            "id": "R-1117",
+            "started": "2026-10-28T12:42:08.659Z",
+            "reported": "2026-10-28T12:48:08.574Z",
+            "outcome": "done",
+            "report_seq": 29192,
+            "action": null
+          }
+        ]
+      },
+      {
+        "id": "DEC-294",
+        "class": "review",
+        "created": 29168,
+        "status": "ready",
+        "runs": []
+      },
+      {
+        "id": "DEC-295",
+        "class": "closeout",
+        "created": 29220,
+        "status": "ready",
+        "runs": []
+      },
+      {
+        "id": "DEC-296",
+        "class": "dispatch",
+        "created": 29390,
+        "status": "done",
+        "runs": [
+          {
+            "id": "R-1128",
+            "started": "2026-10-28T14:47:53.184Z",
+            "reported": "2026-10-28T14:53:37.449Z",
+            "outcome": "done",
+            "report_seq": 29459,
+            "action": null
+          }
+        ]
+      },
+      {
+        "id": "DEC-297",
+        "class": "closeout",
+        "created": 29391,
+        "status": "ready",
+        "runs": []
+      },
+      {
+        "id": "DEC-298",
+        "class": "closeout",
+        "created": 29392,
+        "status": "ready",
+        "runs": []
+      },
+      {
+        "id": "DEC-299",
+        "class": "closeout",
+        "created": 29535,
+        "status": "ready",
+        "runs": []
+      },
+      {
+        "id": "DEC-300",
+        "class": "closeout",
+        "created": 29536,
+        "status": "ready",
+        "runs": []
+      },
+      {
+        "id": "DEC-301",
+        "class": "closeout",
+        "created": 29565,
+        "status": "ready",
+        "runs": []
+      },
+      {
+        "id": "DEC-302",
+        "class": "dispatch",
+        "created": 29566,
+        "status": "done",
+        "runs": [
+          {
+            "id": "R-1133",
+            "started": "2026-10-28T15:48:36.960Z",
+            "reported": "2026-10-28T16:03:13.785Z",
+            "outcome": "done",
+            "report_seq": 29633,
+            "action": null
+          }
+        ]
+      },
+      {
+        "id": "DEC-303",
+        "class": "review",
+        "created": 29629,
+        "status": "done",
+        "runs": [
+          {
+            "id": "R-1135",
+            "started": "2026-10-28T16:17:34.973Z",
+            "reported": "2026-10-28T16:32:40.669Z",
+            "outcome": "done",
+            "report_seq": 29680,
+            "action": null
+          }
+        ]
+      },
+      {
+        "id": "DEC-304",
+        "class": "review",
+        "created": 29630,
+        "status": "ready",
+        "runs": []
+      },
+      {
+        "id": "DEC-305",
+        "class": "closeout",
+        "created": 29641,
+        "status": "ready",
+        "runs": []
+      },
+      {
+        "id": "DEC-306",
+        "class": "closeout",
+        "created": 29692,
+        "status": "ready",
+        "runs": []
+      },
+      {
+        "id": "DEC-307",
+        "class": "closeout",
+        "created": 29693,
+        "status": "ready",
+        "runs": []
+      },
+      {
+        "id": "DEC-308",
+        "class": "owner-selected",
+        "created": 29907,
+        "status": "done",
+        "runs": [
+          {
+            "id": "R-1150",
+            "started": "2026-10-28T17:53:25.557Z",
+            "reported": "2026-10-28T18:26:29.691Z",
+            "outcome": "done",
+            "report_seq": 30298,
+            "action": null
+          }
+        ]
+      },
+      {
+        "id": "DEC-309",
+        "class": "review",
+        "created": 29912,
+        "status": "done",
+        "runs": [
+          {
+            "id": "R-1166",
+            "started": "2026-10-28T18:35:07.667Z",
+            "reported": "2026-10-28T18:51:34.981Z",
+            "outcome": "done",
+            "report_seq": 30549,
+            "action": null
+          }
+        ]
+      },
+      {
+        "id": "DEC-310",
+        "class": "review",
+        "created": 29913,
+        "status": "ready",
+        "runs": []
+      },
+      {
+        "id": "DEC-311",
+        "class": "closeout",
+        "created": 30189,
+        "status": "ready",
+        "runs": []
+      },
+      {
+        "id": "DEC-312",
+        "class": "closeout",
+        "created": 30878,
+        "status": "ready",
+        "runs": []
+      },
+      {
+        "id": "DEC-313",
+        "class": "closeout",
+        "created": 30879,
+        "status": "ready",
+        "runs": []
+      },
+      {
+        "id": "DEC-314",
+        "class": "closeout",
+        "created": 30880,
+        "status": "ready",
+        "runs": []
+      },
+      {
+        "id": "DEC-315",
+        "class": "closeout",
+        "created": 30881,
+        "status": "ready",
+        "runs": []
+      },
+      {
+        "id": "DEC-316",
+        "class": "closeout",
+        "created": 30882,
+        "status": "ready",
+        "runs": []
+      },
+      {
+        "id": "DEC-317",
+        "class": "closeout",
+        "created": 30883,
+        "status": "ready",
+        "runs": []
+      },
+      {
+        "id": "DEC-318",
+        "class": "closeout",
+        "created": 30995,
+        "status": "ready",
+        "runs": []
+      },
+      {
+        "id": "DEC-319",
+        "class": "closeout",
+        "created": 30996,
+        "status": "ready",
+        "runs": []
+      },
+      {
+        "id": "DEC-320",
+        "class": "closeout",
+        "created": 30997,
+        "status": "ready",
+        "runs": []
+      },
+      {
+        "id": "DEC-321",
+        "class": "closeout",
+        "created": 30998,
+        "status": "ready",
+        "runs": []
+      },
+      {
+        "id": "DEC-322",
+        "class": "closeout",
+        "created": 30999,
+        "status": "ready",
+        "runs": []
+      },
+      {
+        "id": "DEC-323",
+        "class": "review",
+        "created": 31250,
+        "status": "ready",
+        "runs": []
+      },
+      {
+        "id": "DEC-324",
+        "class": "review",
+        "created": 31251,
+        "status": "ready",
+        "runs": []
+      },
+      {
+        "id": "DEC-325",
+        "class": "review",
+        "created": 31825,
+        "status": "ready",
+        "runs": []
+      },
+      {
+        "id": "DEC-326",
+        "class": "review",
+        "created": 32057,
+        "status": "active",
+        "runs": [
+          {
+            "id": "R-1218",
+            "started": "2026-10-28T22:37:52.373Z",
+            "reported": null,
+            "outcome": null,
+            "report_seq": null,
+            "action": null
+          }
+        ]
+      },
+      {
+        "id": "DEC-327",
+        "class": "review",
+        "created": 33012,
+        "status": "done",
+        "runs": [
+          {
+            "id": "R-1244",
+            "started": "2026-10-28T23:53:30.844Z",
+            "reported": "2026-10-28T23:58:21.692Z",
+            "outcome": "done",
+            "report_seq": 33585,
+            "action": null
+          }
+        ]
+      }
+    ]
+  },
+  "typed_events": [
+    {
+      "seq": 24555,
+      "type": "decision.applied",
+      "id": "ENG-643",
+      "action": "reshape"
+    },
+    {
+      "seq": 25070,
+      "type": "decision.stale",
+      "id": "ENG-632"
+    },
+    {
+      "seq": 25146,
+      "type": "decision.stale",
+      "id": "ENG-632"
+    },
+    {
+      "seq": 25874,
+      "type": "decision.applied",
+      "id": "ENG-632",
+      "action": "reshape"
+    },
+    {
+      "seq": 26658,
+      "type": "decision.consequence",
+      "id": "ENG-632",
+      "result": "restarted",
+      "success": null
+    },
+    {
+      "seq": 26967,
+      "type": "decision.stale",
+      "id": "ENG-632"
+    }
+  ],
+  "backlog": {
+    "items": 15,
+    "started_runs": 15,
+    "statuses": {
+      "done": 13,
+      "active": 2
+    },
+    "rows": [
+      {
+        "id": "ARCH-43",
+        "batch": 1,
+        "status": "done",
+        "runs": [
+          "R-976"
+        ]
+      },
+      {
+        "id": "ARCH-44",
+        "batch": 2,
+        "status": "done",
+        "runs": [
+          "R-977"
+        ]
+      },
+      {
+        "id": "ARCH-45",
+        "batch": 3,
+        "status": "done",
+        "runs": [
+          "R-978"
+        ]
+      },
+      {
+        "id": "ARCH-46",
+        "batch": 4,
+        "status": "done",
+        "runs": [
+          "R-979"
+        ]
+      },
+      {
+        "id": "ARCH-47",
+        "batch": 5,
+        "status": "done",
+        "runs": [
+          "R-980"
+        ]
+      },
+      {
+        "id": "ARCH-48",
+        "batch": 6,
+        "status": "done",
+        "runs": [
+          "R-981"
+        ]
+      },
+      {
+        "id": "ARCH-49",
+        "batch": 7,
+        "status": "done",
+        "runs": [
+          "R-982"
+        ]
+      },
+      {
+        "id": "ARCH-50",
+        "batch": 8,
+        "status": "done",
+        "runs": [
+          "R-984"
+        ]
+      },
+      {
+        "id": "ARCH-51",
+        "batch": 9,
+        "status": "done",
+        "runs": [
+          "R-985"
+        ]
+      },
+      {
+        "id": "ARCH-52",
+        "batch": 10,
+        "status": "done",
+        "runs": [
+          "R-1158"
+        ]
+      },
+      {
+        "id": "ARCH-53",
+        "batch": 11,
+        "status": "done",
+        "runs": [
+          "R-1159"
+        ]
+      },
+      {
+        "id": "ARCH-54",
+        "batch": 12,
+        "status": "active",
+        "runs": [
+          "R-1160"
+        ]
+      },
+      {
+        "id": "ARCH-55",
+        "batch": 13,
+        "status": "done",
+        "runs": [
+          "R-1161"
+        ]
+      },
+      {
+        "id": "ARCH-56",
+        "batch": 14,
+        "status": "done",
+        "runs": [
+          "R-1162"
+        ]
+      },
+      {
+        "id": "ARCH-57",
+        "batch": 15,
+        "status": "active",
+        "runs": [
+          "R-1163"
+        ]
+      }
+    ]
+  },
+  "limits": [
+    "Reported or closed diagnostic work is not resolved original work.",
+    "No causal time-saving or token/cost estimate is available.",
+    "Historic native ownership and current live acceptance are not re-probed."
+  ]
+}

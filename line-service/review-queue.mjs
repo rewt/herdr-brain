@@ -13,7 +13,7 @@ import { readOwnedRun, requireController, assertOwner } from '../lib/run-owner.m
 import { effectiveWorkerIdentity } from '../lib/worker-identity.mjs';
 import { nativeSender } from '../messages/operator-inbox.mjs';
 import { selectRoute,resolveLaunchRoute } from '../lanes/routes.mjs';
-import { reviewAttempt } from './review.mjs';
+import { reviewAttempt, readServiceJournal } from './review.mjs';
 import { discoverChanges,capturedProducerTarget,publishLandedReviewEvidence } from './phase1.mjs';
 import {producerGroupKey,queueProducerGroup,sameProducerQueue,sameCapturedTarget,capturedReviewCommits} from './review-group.mjs';
 import {originalPrestartProof,reviewPlain,reviewDigest,unstartedReviewProof,unstartedRequest} from './review-resolutions.mjs';
@@ -180,8 +180,13 @@ function validateCanonicalReview({item,state,events,org,repo,allowRun,allowJourn
 
 export function validateQueuedReview({ item, state, events, org, repo, allowRun, allowJournal, journals }) {
   if (!isQueueReview(item) || item.meta.review_round_cap !== 1) throw Error('not a supported single-review queue item');
+  const project = gitProject(repo);
+  // Direct dispatch and its pre-effect rechecks need the same strict current
+  // journal load as service.pass(): corrupt bytes may hide an in-flight intent.
+  // Other journals remain inventory locators requiring readable typed evidence.
+  readServiceJournal(journalFor(org, project.identity));
   if(item.meta.review_source_selector)return validateCanonicalReview({item,state,events,org,repo,allowRun,allowJournal,journals});
-  const project = gitProject(repo);let originalCapture;
+  let originalCapture;
   if(unstartedReviewProof({events,state,org,common:project.identity,item}))originalCapture=item.meta.review_target;
   if(allowJournal&&path.dirname(path.resolve(allowJournal))===path.join(org,'dispatch')){
     const bytes=reviewPlain(allowJournal),job=JSON.parse(bytes),proof=originalPrestartProof({events,org,common:project.identity,journal:allowJournal,job,requestHash:reviewDigest(bytes)});

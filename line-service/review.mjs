@@ -122,9 +122,9 @@ function changeReviewAttempt(item,{org,identity,events,state,repo,effects,target
     return 'existing whole producer/same-change record review';
   }
   for(const id of runs)for(const artifact of state.runs.get(id)?.report?.artifacts??[]){
-    // A producer's explicit current-source review locator is evidence of an
-    // attempt, including outside-org manual receipts. Never probe another
-    // identity to turn unreadability into absence.
+    // Read producer-named review locators, including outside-org manual receipts.
+    // Only readable, typed, subject-bound content is attempt evidence; missing,
+    // unreadable or untyped locators do not establish an attempt.
     if(typeof artifact==='string'&&/review|settle/i.test(artifact)&&/\.json(?:$|[ #])/.test(artifact)&&path.isAbsolute(artifact.split(/[ #]/)[0])){
       const file=artifact.split(/[ #]/)[0],value=reference(file);
       if(typedReviewAttempt(value)&&matches(value,id)&&!producerEvidence(file)&&!archivedReviewFile(resolution,file))return 'same-change source-owner typed review reference UNKNOWN';
@@ -157,7 +157,8 @@ function changeReviewAttempt(item,{org,identity,events,state,repo,effects,target
     if(typedReviewAttempt(value)&&matches(value,hint))return `existing same-change ${dir} attempt/UNKNOWN`;
   }
   for(const entry of entries(path.join(org,'line-service')))if(entry.isDirectory()){
-    // An unreadable or unrecognized journal cannot prove this change is absent.
+    // This inventory scan retains readable same-change intents only. Strict
+    // current-journal loading belongs to service.pass() and queued admission.
     const file=path.join(org,'line-service',entry.name,'effects.json');let saved;try{saved=readServiceJournal(file);}catch{continue;}
     if(file!==ignoreService?.file)references.push(file);
     if(pending(saved?.actions,file))return 'existing same-change service intent/result';

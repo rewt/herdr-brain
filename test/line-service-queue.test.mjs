@@ -84,7 +84,9 @@ for (const directory of ['current', 'foreign']) {
       // opaque locator never substitutes for it or authorizes a native effect.
       const qid = f.create().review_item;
       const queued = f.context(), before = fs.readFileSync(path.join(f.org, 'events.jsonl'));
-      assert.equal(validateQueuedReview({ ...queued, item: queued.state.items.get(qid) }).head, f.head);
+      const validate = () => validateQueuedReview({ ...queued, item: queued.state.items.get(qid) });
+      if (directory === 'current') assert.throws(validate, /absence UNKNOWN/);
+      else assert.equal(validate().head, f.head);
       assert.equal(queued.state.items.get(qid).runs.length, 0);
       assert.deepEqual(fs.readFileSync(path.join(f.org, 'events.jsonl')), before);
       assert.equal(fs.readFileSync(file, 'utf8'), bytes);
@@ -107,6 +109,28 @@ for (const directory of ['current', 'foreign']) {
     });
   }
 }
+
+test('direct queued review dispatch refuses a corrupt current journal before effects', t => {
+  for (const bytes of ['{invalid', '{"actions":null}']) {
+    const f = fixture(t), qid = f.create().review_item;
+    const file = path.join(f.org, 'line-service', createHash('sha256').update(JSON.stringify(f.identity)).digest('hex').slice(0, 20), 'effects.json');
+    fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, bytes);
+    const before = fs.readFileSync(path.join(f.org, 'events.jsonl'));
+    const journals = fs.readdirSync(path.join(f.org, 'dispatch'));
+    const bin = path.join(f.scratch, 'native-bin'), calls = path.join(f.scratch, 'native-calls');
+    fs.mkdirSync(bin);
+    fs.writeFileSync(path.join(bin, 'herdr'), `#!/bin/sh\necho called >> '${calls}'\nexit 1\n`, { mode: 0o755 });
+    const result = f.run([qid, '--org', f.org, '--repo', f.cwd, '--lane', 'review-corrupt', '--route', 'review',
+      '--base', f.head, '--brief', path.join(f.org, 'reports/R-1.md')], { PATH: `${bin}:${f.env.PATH}` }, path.join(root, 'dispatch/dispatch.mjs'));
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /SyntaxError|absence UNKNOWN/);
+    assert.equal(fs.existsSync(calls), false, 'no native input on refusal');
+    assert.deepEqual(fs.readFileSync(path.join(f.org, 'events.jsonl')), before);
+    assert.deepEqual(fs.readdirSync(path.join(f.org, 'dispatch')), journals, 'no replacement dispatch');
+    assert.equal(f.context().state.items.get(qid).runs.length, 0);
+    assert.equal(fs.readFileSync(file, 'utf8'), bytes);
+  }
+});
 
 test('review queue retains malformed and missing individual history journals as failures', t => {
   for(const kind of ['malformed','dangling']){

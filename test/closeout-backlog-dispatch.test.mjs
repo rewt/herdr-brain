@@ -23,6 +23,6 @@ test('unreported backlog retains the exact original dispatch error and missing S
   assert.equal(rows[0].disposition,'dispatch-error-unreported');assert.equal(rows[0].dispatch.native_session_bound,false);
   assert.equal(rows[0].dispatch.error,job.error);assert.equal(rows[0].dispatch.failure.kind,'unknown');
   assert.deepEqual(fs.readFileSync(journal),bytes);assert.deepEqual(f.herdrCalls(),calls);assert.deepEqual(f.read().actions,[]);
-  assert.equal(events(f).some(e=>e.type==='run.abandoned'||e.type==='run.session_bound'),false);
+  assert.equal(events(f).slice(before.length).some(e=>e.type==='run.abandoned'||e.type==='run.session_bound'),false);
   assert.deepEqual(events(f).slice(0,before.length),before);assert.deepEqual(reconcileCloseoutBacklog({...args,events:events(f)}),[]);
 });

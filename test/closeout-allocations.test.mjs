@@ -99,7 +99,7 @@ test('stopped allocation fairness advances past a kept request without replacing
 test('stopped allocation native refusal is durable and makes no later native observation',t=>{
   const f=stopped(t),command=f.options.command;let calls=0;
   f.options.command=(exe,args,options)=>{
-    if(exe===f.job.herdr){calls++;return{status:null,error:Object.assign(Error('operation not permitted'),{code:'EPERM'}),stdout:'',stderr:'EPERM native refusal'};}
+    if(exe===f.options.herdr){calls++;return{status:null,error:Object.assign(Error('operation not permitted'),{code:'EPERM'}),stdout:'',stderr:'EPERM native refusal'};}
     return command(exe,args,options);
   };
   assert.equal(f.dispose().results[0].disposition,'kept');assert.ok(calls>0);const prior=calls;

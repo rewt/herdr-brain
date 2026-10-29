@@ -800,7 +800,12 @@ test('original worker continuation refuses UNKNOWN native flags changed claim re
 
 test('permanent health and missing review producers stay diagnostic without spawning a decision or replaying the failed attempt',t=>{
   const f=fixture(t),env=installedService(f);f.add([{type:'item.closed',id:'ENG-1',as:'done'}]);const bytes=fs.readFileSync(path.join(f.org,'events.jsonl'));
-  let calls=0,refreshes=0;const service=()=>createLineService({repo:f.cwd,org:f.org,to:'brain-chat',env,haltAfter:100,capacity:()=>{throw Object.assign(Error('decision pool occupied'),{code:'DISPATCH_DECISION_CAP'});},command:(_exe,args)=>{
+  let calls=0,refreshes=0,allocations=0;const service=()=>createLineService({repo:f.cwd,org:f.org,to:'brain-chat',env,haltAfter:100,capacity:()=>{throw Object.assign(Error('decision pool occupied'),{code:'DISPATCH_DECISION_CAP'});},command:(_exe,args)=>{
+    if(args[0]===path.join(sourceRoot,'supervisor/closeout.mjs')&&args[1]==='allocations'){
+      assert.deepEqual(args.slice(2,6),['--repo',f.cwd,'--org',f.org]);assert.equal(args[6],'--deadline');
+      const deadline=Number(args[7]);assert.ok(Number.isSafeInteger(deadline)&&deadline>Date.now()&&deadline<=Date.now()+720000);
+      allocations++;return{status:0,stdout:'{}',stderr:''};
+    }
     if(args[0]===path.join(sourceRoot,'supervisor/closeout.mjs')){assertFiniteRefresh(f,args);refreshes++;return{status:0,stdout:'{"created":[]}',stderr:''};}
     calls++;assert.equal(args[1],'queue-review');return{status:1,stdout:'',stderr:'selected helper cannot certify immutable review target'};
   }});
@@ -815,6 +820,7 @@ test('permanent health and missing review producers stay diagnostic without spaw
   assert.ok(rows.some(r=>r.boundary===`outcome:review:ENG-1:${f.heads[1]}`&&r.scope.failure.kind==='unknown'));
   assert.equal(health.gap_passes,5);assert.equal(health.owed,1);assert.equal(health.owed_commits,2);assert.equal(health.queued,0);
   assert.equal(rows.filter(r=>r.boundary==='review-gap'&&r.inspection_due).length,1);assert.equal(calls,1);assert.equal(refreshes,5);
+  assert.equal(allocations,1,'the fourth turn performs its existing finite allocation reconciliation');
   assert.deepEqual(closeoutCheckpoint(f).errors,[],'all five finite refreshes completed without a swallowed fixture refusal');
   const digest=morningDigest({events:f.context().events,diagnostics:rows});assert.ok(digest.review_errors.occurrences>=5);assert.equal(digest.review_health.pass_id,health.pass_id);
   assert.equal(fs.existsSync(path.join(f.org,'supervisor/inbox.log')),false);

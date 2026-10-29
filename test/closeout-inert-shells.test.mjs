@@ -99,6 +99,21 @@ test('a claimed initial-shell receipt accepts the same shell birth changing kern
   f.turn();assert.ok(legacyExitSettlement(f.entry,f.intent,events(f)));assert.deepEqual(f.read().actions,[['tab','close','w:t']]);
 });
 
+test('unrelated native title changes do not invalidate scoped close authority',t=>{
+  const f=fixture(t),command=f.options.command;
+  f.state.workspaces.push({workspace_id:'other'});
+  f.state.panes.push({pane_id:'other:p',tab_id:'other:t',workspace_id:'other',terminal_id:'other-term',terminal_title:'idle'});f.save();
+  let title=0;
+  f.options.command=(exe,args,options)=>{
+    if(exe===f.job.herdr&&args[0]==='pane'&&args[1]==='list'){
+      const s=f.read();s.panes.find(p=>p.pane_id==='other:p').terminal_title='busy '+(++title);fs.writeFileSync(f.file,JSON.stringify(s));
+    }
+    return command(exe,args,options);
+  };
+  f.turn();assert.ok(title>3);assert.ok(legacyExitSettlement(f.entry,f.intent,events(f)));
+  assert.deepEqual(f.read().actions,[['tab','close','w:t']]);
+});
+
 for(const kind of ['child','dirty','terminal'])test(`fresh proof stops ${kind} introduced after close intent`,t=>{
   const f=fixture(t),log=f.options.log;
   f.options.log=row=>{

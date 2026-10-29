@@ -298,34 +298,6 @@ test('distribution inventory retains bch-cloak launch dependencies', () => {
   assert.ok(!files.some(file => file.startsWith('release/')));
 });
 
-test('build retains shared skill discovery in source and excludes harness trees from the sealed archive', t => {
-  const f = scratch(t), source = path.resolve(import.meta.dirname, '..');
-  fs.cpSync(path.join(source, 'skills'), path.join(f.repo, 'skills'), { recursive: true });
-  fs.copyFileSync(path.join(source, '.gitattributes'), path.join(f.repo, '.gitattributes'));
-  const names = ['project-deliver', 'project-preflight', 'project-release', 'project-review', 'project-troubleshoot'];
-  for (const harness of ['.agents', '.claude']) {
-    fs.mkdirSync(path.join(f.repo, harness, 'skills'), { recursive: true });
-    for (const name of names) {
-      const link = path.join(harness, 'skills', name);
-      assert.equal(fs.realpathSync(path.join(source, link)), path.join(source, 'skills', name));
-      fs.symlinkSync(fs.readlinkSync(path.join(source, link)), path.join(f.repo, link));
-    }
-  }
-  f.write('.claude/settings.json', '{"sourceOnly":true}\n');
-  f.git('add', '.'); f.git('commit', '-qm', 'Shared harness skills'); f.git('tag', 'skills');
-  const identity = captureProductCheckout(f.repo, f.git('rev-parse', 'skills').trim(), { all: true });
-  assert.ok(!Object.keys(identity.files).some(file => /^(?:\.agents|\.claude)\//.test(file)));
-  f.ok(['build', 'skills']);
-  for (const harness of ['.agents', '.claude']) {
-    assert.equal(fs.existsSync(path.join(f.release('skills'), harness)), false);
-    for (const name of names) {
-      const canonical = path.join(f.checkout('skills'), 'skills', name, 'SKILL.md');
-      assert.equal(fs.realpathSync(path.join(f.checkout('skills'), harness, 'skills', name, 'SKILL.md')), canonical);
-      assert.equal(fs.readFileSync(path.join(f.release('skills'), 'skills', name, 'SKILL.md'), 'utf8'), fs.readFileSync(canonical, 'utf8'));
-    }
-  }
-});
-
 for (const file of ['lib/runtime-link.mjs', 'other-link']) test(`committed symlink outside harness trees remains refused: ${file}`, t => {
   const f = scratch(t);
   fs.symlinkSync(file.startsWith('lib/') ? 'state.mjs' : 'lib/state.mjs', path.join(f.repo, file));

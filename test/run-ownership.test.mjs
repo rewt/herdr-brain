@@ -22,6 +22,7 @@ import { lookupProcess } from './helpers/processes.mjs';
 import { stopFixtureProcessTree } from './helpers/inbox.mjs';
 import { until } from './helpers/producer-wait.mjs';
 import { tierFiles } from './helpers/tier.mjs';
+import { loadTimeout } from '../lib/deadline.mjs';
 
 const source = path.resolve(import.meta.dirname, '..');
 const node = (f, file, args = [], extra = {}) => f.exec(process.execPath, [path.join(source, file), ...args], f.repo, { ORG_DIR: f.org, ...extra });
@@ -64,7 +65,7 @@ const whileWatcher = (w, t, predicate, description) => until(predicate, {
 });
 const waitForWatcherWait = (f, w, t) => whileWatcher(w, t, () => {
   let text;
-  try { text = fs.readFileSync(path.join(f.root, 'calls'), 'utf8'); }
+  try { text = fs.readFileSync(path.join(f.root, f.env.SETTLE_TEST_CALL_OWNERS ? `calls-${w.child.pid}` : 'calls'), 'utf8'); }
   catch (error) { if (error.code === 'ENOENT') return false; throw error; }
   // appendFileSync opens a new file before writing. Only terminated records
   // are evidence; empty files and an in-flight last row are still pending.
@@ -534,6 +535,9 @@ test('transfer input errors name the expected JSON object and positive integer',
 
 test('explicit own-worker admission permits re-arm but refuses every operation receipt', t => {
   const f = fixture(t), run = f.start({ owned: false });
+  // This is an admission/single-delivery witness, not a two-second native
+  // latency contract. Leave time for the inbox owner's quiet-input checks.
+  f.env.SUPERVISOR_INPUT_WAIT_SECONDS = String(loadTimeout(30_000) / 1000);
   f.record(['set', run, 'terminal_id=own-terminal', 'agent_session_id=own-session']);
   assert.match(claim(f, run).stderr, /RUN_CLAIM_TRANSFER_REFUSED/);
   const queue = queueFor(f.repo);
@@ -588,14 +592,19 @@ test('Brain adoption refuses foreign receipts and unavailable saved releases wit
 
 test('a blocking idle watcher keeps one wait and an unchanged receipt between signals', async t => {
   const f = fixture(t), run = f.start(), herdr = path.join(f.root, 'bin/herdr');
+  f.env.SETTLE_TEST_CALL_OWNERS = '1';
   const report = f.show(run).report_path;
   fs.writeFileSync(herdr, fs.readFileSync(herdr, 'utf8').replace('await new Promise(r=>setTimeout(r,100));out({});', `while(!fs.existsSync(${JSON.stringify(report)}))await new Promise(r=>setTimeout(r,50));out({});`));
   const w = f.concurrent(run, path.join(source, 'watch/watch.mjs'), ['--org', f.org, '--cwd', f.repo, '--start-grace', '0']);
   try {
     await waitForWatcherWait(f, w, t);
-    const file = path.join(f.org, 'watch', `${run}.json`), stat = fs.statSync(file).mtimeMs, count = f.calls().length;
+    // Detached closeout/inbox commands share this fake. Count only transports
+    // launched by the watcher whose idle behavior is under test.
+    const calls = () => f.calls(w.child.pid);
+    assert.equal(calls().filter(a => a[0] === 'agent' && a[1] === 'wait').length, 1);
+    const file = path.join(f.org, 'watch', `${run}.json`), stat = fs.statSync(file).mtimeMs, count = calls().length;
     await new Promise(resolve => setTimeout(resolve, 2300));
-    assert.equal(f.calls().length, count, 'no 1 Hz transport/probe loop');
+    assert.equal(calls().length, count, 'no 1 Hz transport/probe loop');
     assert.equal(fs.statSync(file).mtimeMs, stat, 'no idle receipt rewrites');
     f.report(run); ok(await w.done);
   } finally { await finishWatcher(w); }

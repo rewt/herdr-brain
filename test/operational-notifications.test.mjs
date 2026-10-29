@@ -39,7 +39,7 @@ for(const outcome of ['done','blocked','needs_human','failed'])test(`operational
   assert.equal(f.state().runs.get(job.run).report,null,'the final notice is not ingestion');
   const available=f.events().find(e=>e.type==='report.available'&&e.run===job.run);
   assert.equal(available.sha256,digest(bytes));
-  const before=f.events(),turn=f.turn();assert.deepEqual(turn.errors,[]);assert.equal(turn.ingested,1);
+  const before=f.events(),turn=f.turn();assert.equal(turn.result,'closeout-turn-complete',JSON.stringify(turn));assert.deepEqual(turn.errors,[]);assert.equal(turn.ingested,1);
   assert.equal(f.state().runs.get(job.run).report.outcome,outcome);
   assert.deepEqual(fs.readFileSync(report),bytes);
   assert.deepEqual(f.events().slice(0,before.length),before,'the source notice remains immutable');

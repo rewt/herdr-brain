@@ -38,16 +38,20 @@ export function fixture(t, { source = rootTool, actor = 'settle-test-agent', exe
   env.SUPERVISOR_INPUT_WAIT_SECONDS = '2';
   delete env.NODE_TEST_CONTEXT;
   fs.mkdirSync(env.HOME); fs.mkdirSync(env.XDG_CONFIG_HOME);
-  const watchers = new Map(), queueWorkers = new Map(), observed = new Set(), pending = [], tracker = createProcessTracker();
+  const watchers = new Map(), queueWorkers = new Map(), closeoutWorkers = new Map(), observed = new Set(), pending = [], tracker = createProcessTracker();
   const rememberWatchers = () => {
     const directory = path.join(repo, '.org/dispatch');
     const hasDispatch = fs.existsSync(directory);
-    if (!hasDispatch && !fs.existsSync(path.join(repo, '.git/promote/queue.json'))) return;
+    const hasCloseout = fs.existsSync(path.join(repo, '.git/closeout'));
+    if (!hasDispatch && !hasCloseout && !fs.existsSync(path.join(repo, '.git/promote/queue.json'))) return;
     const current = tracker.snapshot();
     if (!current.ok) throw Error('Cannot confirm fixture watcher ownership');
     const drain = [process.execPath, path.join(source, 'promote/promote.mjs'), '--drain', '--repo', repo].join(' ');
     for (const row of current.value.values()) if (row.command === drain && !/^Z/.test(row.state))
       queueWorkers.set(row.pid, { pid: row.pid, identity: row.identity, command: row.command });
+    const closeout = [process.execPath, path.join(source, 'supervisor/closeout.mjs'), 'drain', '--repo', repo, '--org', path.join(repo, '.org')].join(' ');
+    for (const row of current.value.values()) if (row.command === closeout && !/^Z/.test(row.state))
+      closeoutWorkers.set(row.pid, { pid: row.pid, identity: row.identity, command: row.command, pgid: row.pgid, group: false });
     if (!hasDispatch) return;
     for (const file of fs.readdirSync(directory).filter(x => x.endsWith('.json') && !x.endsWith('.routes.json'))) {
       const job = JSON.parse(fs.readFileSync(path.join(directory, file), 'utf8'));
@@ -99,8 +103,12 @@ export function fixture(t, { source = rootTool, actor = 'settle-test-agent', exe
     await stopFixtureInbox(path.join(repo, '.org/supervisor/inbox.log'), {
       script: path.join(source, 'supervisor/prompt-supervisor.mjs'), tracker,
     });
-    // A just-terminated watcher can still finish a scratch log write. Retry
-    // transient removal races briefly; cleanup remains bounded and owned here.
+    // Review release and correction callbacks can wake a detached closer.
+    // Re-scan after all senders are gone, then reap its exact owned tree before
+    // removing Git: retrying rmdir cannot establish that writers have stopped.
+    rememberWatchers();
+    for (const entry of closeoutWorkers.values()) await stopFixtureProcessTree(entry, { tracker, ownerGroup: entry.pgid,
+      description: `settle closeout ${entry.pid}` });
     fs.rmSync(root, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
     cleaned = true;
   };
@@ -160,7 +168,10 @@ export function fixture(t, { source = rootTool, actor = 'settle-test-agent', exe
     assert.equal(saved.review_policy.round, 1);
     return retry(id, [...args, '--fix-findings']);
   };
-  const calls = () => fs.existsSync(path.join(root, 'calls')) ? fs.readFileSync(path.join(root, 'calls'), 'utf8').trim().split('\n').map(JSON.parse) : [];
+  const calls = (parent) => {
+    const file = path.join(root, parent === undefined ? 'calls' : `calls-${parent}`);
+    return fs.existsSync(file) ? fs.readFileSync(file, 'utf8').split('\n').slice(0, -1).map(JSON.parse) : [];
+  };
   const concurrent = (id, executable = path.join(source, 'settle/settle.mjs'), args = ['--brief', brief], { scenario = false } = {}) => {
     const child = (scenario ? spawnScenarioChild : spawnChild)(t, process.execPath, [executable, id, ...args], { cwd: repo, env });
     const done = waitForExit(child).then(result => { rememberWatchers(); return result; });
@@ -201,6 +212,7 @@ const liveAgents=()=>Object.values(agents).filter(agent=>{
  return !owner.ok||!!(owner.value&&owner.value.identity===agent.client_owner.identity&&!/^Z/.test(owner.value.state));
 });
 fs.appendFileSync(path.join(root,'calls'),JSON.stringify(args)+'\\n');
+if(process.env.SETTLE_TEST_CALL_OWNERS)fs.appendFileSync(path.join(root,'calls-'+process.ppid),JSON.stringify(args)+'\\n');
 const ws={workspace_id:'w-lane',label:'topic',worktree:{checkout_path:cwd,is_linked_worktree:true,repo_key:path.join(repo,'.git'),repo_root:repo}};
 if(args[0]==='workspace'&&args[1]==='list') out({workspaces:[ws,{workspace_id:'w-parent',label:'project',worktree:{checkout_path:repo,is_linked_worktree:false,repo_key:path.join(repo,'.git'),repo_root:repo}}]});
 else if(args[0]==='worktree'&&args[1]==='list') out({source:{repo_key:path.join(repo,'.git'),repo_root:repo,source_checkout_path:repo},worktrees:[{path:cwd,branch:'lane/topic',open_workspace_id:'w-lane'},{path:repo,branch:'main',open_workspace_id:'w-parent'}]});

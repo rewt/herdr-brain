@@ -104,7 +104,7 @@ for (const standalone of [false, true]) test(`settle intake accepts a ${standalo
   assert.equal(settled.result, 'escalate'); assert.match(settled.reason, /Worker reported blocked/);
   const job = receipt({ org }, run);
   assert.equal(job.reviewRoute, route); assert.equal(job.fixRoute, 'engineer'); assert.equal(job.main, 'main');
-  assert.equal(job.timeout, 12); assert.equal(job.reuse, false, 'project desk object replaces identity defaults');
+  assert.equal(job.timeout, 12); assert.equal(Object.hasOwn(job, 'reuse'), false, 'retired reuse is not saved in new jobs');
   assert.equal(readConfigJSON(job.routeConfig).routes[route].model, 'selected-desk-model');
   const next = start();
   config.settle.review_route = 'unknown-hand-edit'; fs.writeFileSync(lane, JSON.stringify(config));
@@ -210,6 +210,6 @@ test('CLI desk overrides are consumed by settle without adopting routes or losin
   }
   assert.equal(result(settled).result, 'promotable');
   const job = receipt(f, run);
-  assert.equal(job.reviewRoute, 'review-codex'); assert.equal(job.fixRoute, 'engineer-xhigh'); assert.equal(job.timeout, 15); assert.equal(job.reuse, false); assert.equal(job.to, 'project-supervisor');
+  assert.equal(job.reviewRoute, 'review-codex'); assert.equal(job.fixRoute, 'engineer-xhigh'); assert.equal(job.timeout, 15); assert.equal(Object.hasOwn(job, 'reuse'), false); assert.equal(job.to, 'project-supervisor');
   assert.equal(job.reviewPolicy.cap, 2); assert.equal(job.reviewPolicy.source, 'project');
 });

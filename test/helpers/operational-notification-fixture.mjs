@@ -28,7 +28,9 @@ export function notificationFixture(t, {startFail=false,topic='topic'}={}) {
   fs.writeFileSync(path.join(f.repo,'.git/info/exclude'),'.org/\n.lane/\n.lane.json\n');
   fs.writeFileSync(path.join(f.repo,'.lane.json'),JSON.stringify({main:'main',
     routes:{engineer:{kind:'codex'},reviewer:{kind:'codex'}},
-    dispatch:{max_sessions:4,max_unlanded:8},retirement:{line_service_cleanup:false}}));
+    // The test explicitly invokes each finite turn. A report-available wake
+    // must not start a second turn against that same scratch checkpoint.
+    dispatch:{max_sessions:4,max_unlanded:8},retirement:{closeout_queue:false,line_service_cleanup:false}}));
   const native=writeFakeHerdr({...f,bin},{lanePath:lane,branch:`lane/${topic}`,startFail});
   // Preserve the dispatch fixture's owned watcher PID receipts and teardown.
   fs.writeFileSync(path.join(bin,'lane'),`#!${process.execPath}\nimport {spawnSync} from 'node:child_process';\nconst r=spawnSync(process.execPath,[${JSON.stringify(path.join(source,'lanes/lane.mjs'))},...process.argv.slice(2)],{stdio:'inherit'});process.exit(r.status??1);\n`,{mode:0o755});

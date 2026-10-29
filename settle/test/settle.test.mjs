@@ -297,7 +297,7 @@ test('discovered project settings override parent settle values and inherit a no
   const saved = journal(f, run);
   assert.equal(saved.main, 'develop'); assert.equal(saved.mainHead, f.git(['rev-parse', 'develop']));
   assert.equal(saved.reviewRoute, 'review'); assert.equal(saved.fixRoute, 'engineer-xhigh');
-  assert.equal(saved.reuse, false, 'repository settle object replaces the parent object');
+  assert.equal(Object.hasOwn(saved, 'reuse'), false, 'retired parent reuse is not inherited or saved');
   assert.equal(saved.timeout, 25); assert.equal(saved.to, 'configured-supervisor');
   assert.equal(r.review.route, 'review'); assert.equal(f.show(r.fix.run).meta.route, 'engineer-xhigh');
 });
@@ -309,10 +309,13 @@ test('explicit configuration selects one layer and command flags override settle
     review_route: 'review', fix_route: 'engineer-max', reuse: false, timeout: 23, to: 'configured-supervisor' } }));
   f.env.LANE_CONFIG = file;
   const run = f.start(); f.report(run, 'blocked');
-  assert.equal(result(f.settle(run, ['--review-route', 'review-max', '--fix-route', 'engineer-xhigh', '--reuse', '--timeout', '7', '--to', 'flag-supervisor'])).result, 'escalate');
+  const refused = f.settle(run, ['--reuse']);
+  assert.equal(refused.status, 1); assert.match(refused.stderr, /REUSE_REMOVED/);
+  assert.equal(fs.existsSync(path.join(f.org, 'settle', `${run}.json`)), false, 'retired reuse refuses before intake');
+  assert.equal(result(f.settle(run, ['--review-route', 'review-max', '--fix-route', 'engineer-xhigh', '--timeout', '7', '--to', 'flag-supervisor'])).result, 'escalate');
   const saved = journal(f, run);
   assert.equal(saved.reviewRoute, 'review-max'); assert.equal(saved.fixRoute, 'engineer-xhigh');
-  assert.equal(saved.reuse, true); assert.equal(saved.timeout, 7); assert.equal(saved.to, 'flag-supervisor');
+  assert.equal(Object.hasOwn(saved, 'reuse'), false); assert.equal(saved.timeout, 7); assert.equal(saved.to, 'flag-supervisor');
 });
 test('an item dropped or blocked during NEEDS-WORK review cannot launch a correction', (t) => {
   for (const change of ['drop', 'block']) {

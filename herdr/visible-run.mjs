@@ -23,6 +23,9 @@ const git = (repo, ...args) => execFileSync('git', ['--no-optional-locks', '-C',
 async function herdr(args) {
   if (process.env.HERDR_ENV !== '1') throw Error('the progress view requires a Herdr-managed caller');
   const { stdout } = await execute(process.env.HERDR_BIN_PATH || 'herdr', args, { timeout: 5000, maxBuffer: 1024 * 1024 });
+  // These native input/title commands acknowledge success with exit 0 and no
+  // body on some Herdr versions. Never replay their already-completed effect.
+  if (!stdout.trim() && ['pane run', 'tab rename'].includes(args.slice(0, 2).join(' '))) return {};
   const reply = JSON.parse(stdout);
   if (reply.error || !reply.result) throw Error(`Herdr refused ${args.slice(0, 2).join(' ')}: ${stdout.trim()}`);
   return reply.result;

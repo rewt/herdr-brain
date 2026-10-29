@@ -30,6 +30,7 @@ if(a[0]==='workspace')result={workspaces:[{workspace_id:'parent',label:'untruste
 {workspace_id:'wrong',label:'Herdr Brain',worktree:{repo_key:'/foreign/.git'}}]};
 if(process.env.FOREIGN)result={workspaces:[{workspace_id:'wrong',label:'Herdr Brain',worktree:{repo_key:'/foreign/.git'}}]};
 if(a[0]==='tab'&&a[1]==='create')result={tab:{tab_id:'parent:t9',workspace_id:'parent'},root_pane:{pane_id:'parent:p9',tab_id:'parent:t9',workspace_id:process.env.WRONG_PANE?'foreign':'parent'}};
+if((a[0]==='pane'&&a[1]==='run')||(a[0]==='tab'&&a[1]==='rename'))process.exit(0);
 console.log(JSON.stringify({result}));
 `, { mode: 0o755 });
   const env = { ...process.env, HERDR_ENV: '1', HERDR_BIN_PATH: cli, HERDR_WORKSPACE_ID: 'wrong' };
@@ -105,6 +106,7 @@ test('Herdr release builds wrap once, retain the real gate/live behavior and cle
   copyProduct(fileURLToPath(new URL('../', import.meta.url)), f.repo);
   fs.writeFileSync(path.join(f.repo, '.lane.validation.json'), JSON.stringify({ release: 'node fixture-gate.mjs', timeout_seconds: 0 }));
   fs.writeFileSync(path.join(f.repo, 'fixture-gate.mjs'), `import fs from 'node:fs';if(process.env.HERDR_RELEASE_VISIBLE_CHILD)process.exit(99);fs.appendFileSync(${JSON.stringify(counts)},'gate\\n');console.log('offline suite progress');`);
+  fs.mkdirSync(path.join(f.repo, 'acceptance'), { recursive: true });
   fs.writeFileSync(path.join(f.repo, 'acceptance/run.mjs'), `import fs from 'node:fs';import {execFileSync} from 'node:child_process';if(process.env.HERDR_RELEASE_VISIBLE_CHILD)process.exit(99);fs.appendFileSync(${JSON.stringify(counts)},'live\\n');console.log('live progress');fs.writeFileSync(process.argv[process.argv.indexOf('--summary-file')+1],JSON.stringify({ready:true,candidateCommit:execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim(),counts:{PASS:1,FAIL:0,PENDING:0,SKIP:0}}));`);
   f.git('add', '.'); f.git('commit', '-qm', 'synthetic release'); f.git('tag', 'visible-fixture');
   const env = releaseEnvironment(f.env, { HERDR_BIN_PATH: f.env.HERDR_BIN_PATH, HERDR_MONITOR_REPO: f.repo,

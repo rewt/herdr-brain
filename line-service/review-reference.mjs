@@ -39,7 +39,7 @@ function observation({repo,org,runId,head,base}){
   const d=discoverChanges({events,state,repo:c.repo,org:c.org,identity:c.identity}),choices=d.changes.filter(change=>change.run.id===runId&&(!head||change.target.head===head));
   if(head&&(choices.length!==1||base!==choices[0].target.base))throw Error('exact landed source target is missing/ambiguous: '+d.holds.filter(h=>h.run===runId).map(h=>h.reason).join('; '));
   const ownerRoot=identityRootAt(c.identity),files=referenceFiles(c.org,run).map(file=>{
-    if(!ownerRoot||!file.startsWith(ownerRoot+path.sep))return{file,error:'foreign reference stays UNKNOWN; no cross-identity read'};
+    if(file!==path.resolve(file)||!ownerRoot||!file.startsWith(ownerRoot+path.sep))return{file,error:'foreign reference stays UNKNOWN; no cross-identity read'};
     try{const bytes=reviewPlain(file),value=JSON.parse(bytes);return{file,sha256:hash(bytes),typed:typedReviewAttempt(value),value};}catch(e){return{file,error:e.message};}
   });
   return{c,events,state,run,choices,files,holds:d.holds.filter(h=>h.run===runId)};
@@ -52,7 +52,7 @@ export function resolveReviewReference({repo,org,runId,resolution,decisionSeq,id
   if(role!=='supervisor'||!/^[-a-zA-Z0-9_]{1,80}$/.test(id??'')||!Number.isSafeInteger(decisionSeq))throw Error('reference disposition requires owning supervisor mode, stable id and scoped decision');
   if(!env.HERDR_BRAIN_ROOT||fs.realpathSync(env.HERDR_BRAIN_ROOT)!==root)throw Error('reference disposition requires matching actual source');
   const c=lineContext(repo,org),ownerRoot=identityRootAt(c.identity);
-  const inside=file=>{if(typeof file!=='string'||!path.isAbsolute(file)||!ownerRoot||!file.startsWith(ownerRoot+path.sep))throw Error('review reference cannot read another identity');return file;};
+  const inside=file=>{if(typeof file!=='string'||!path.isAbsolute(file)||file!==path.resolve(file)||!ownerRoot||!file.startsWith(ownerRoot+path.sep))throw Error('review reference cannot read another identity');return file;};
   resolution=inside(resolution);const inputBytes=reviewPlain(resolution),input=JSON.parse(inputBytes);inside(input.reference);
   if(input.run!==runId||![input.head,input.base].every(v=>/^[a-f0-9]{40}(?:[a-f0-9]{24})?$/.test(v??'')))throw Error('reference disposition needs the exact source run/head/base');
   const bundle=bundleRelease(root),source=()=>bundleRelease(root).commit?checkBundle(root,{verifyFiles:true}).commit:git(root,['rev-parse','HEAD']);

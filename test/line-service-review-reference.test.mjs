@@ -86,7 +86,7 @@ for(const disposition of ['mapped-review','superseded'])test(`${disposition} bin
   assert.equal([...next.state.items.values()].filter(i=>i.role==='reviewer').length,1);
 });
 
-for(const kind of ['unknown','started','worker','verdict','refused','wrong-head','wrong-base','foreign','hold','ancestor-hold','stop','wrong-supervisor','claim','decision','hash','ambiguous-scope','occupied'])test(`reference disposition refuses ${kind} and preserves the original`,t=>{
+for(const kind of ['unknown','started','worker','verdict','refused','wrong-head','wrong-base','contradictory-head','contradictory-base','foreign','foreign-dot','hold','ancestor-hold','stop','wrong-supervisor','claim','decision','hash','ambiguous-scope','occupied'])test(`reference disposition refuses ${kind} and preserves the original`,t=>{
   const f=fixture(t),value={run:'R-1',head:f.head,base:f.base,stage:'worker',native_launch_attempted:false};let options={};
   if(kind==='unknown')delete value.native_launch_attempted;
   if(kind==='started')value.native_launch_attempted=true;
@@ -95,8 +95,11 @@ for(const kind of ['unknown','started','worker','verdict','refused','wrong-head'
   if(kind==='refused')value.error='EPERM native refusal';
   if(kind==='wrong-head')value.head=f.base;
   if(kind==='wrong-base')value.base=f.head;
+  if(kind==='contradictory-head')value.deliveryRange={head:f.base,base:f.base};
+  if(kind==='contradictory-base')value.deliveryRange={head:f.head,base:f.head};
   f.prepare(value);
   if(kind==='foreign')options.resolution='/another-owner/input.json';
+  if(kind==='foreign-dot')options.resolution=f.ownerRoot+'/../another-owner/input.json';
   if(kind==='hold')f.add([{type:'item.updated',id:'ENG-1',fields:{meta:{hold:true}}}]);
   if(kind==='ancestor-hold')f.add([{type:'item.added',id:'G-1',kind:'goal',meta:{hold:true}},{type:'item.updated',id:'ENG-1',fields:{parent:'G-1'}}]);
   if(kind==='stop')fs.writeFileSync(path.join(f.directory,'STOP'),'stop');

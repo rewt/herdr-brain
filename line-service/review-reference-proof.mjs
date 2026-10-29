@@ -11,9 +11,9 @@ export function referenceProof({events,state,repo,org,item,run,target,input}){
   const bytes=reviewPlain(input.reference),value=JSON.parse(bytes);
   if(hash(bytes)!==input.reference_sha256)throw Error('original review reference bytes changed');
   capturedRange({repo,target});captureEvidence(target);
-  const head=value.head??value.deliveryRange?.head??value.review_target?.head;
-  const base=value.base??value.deliveryRange?.base??value.review_target?.base;
-  if(head!==target.head||base&&base!==target.base)throw Error('reference needs one exact landed head/base; scope is UNKNOWN or contradictory');
+  const heads=[value.head,value.deliveryRange?.head,value.review_target?.head,value.reviewed_head,value.commit].filter(v=>v!=null);
+  const bases=[value.base,value.deliveryRange?.base,value.review_target?.base].filter(v=>v!=null);
+  if(!heads.length||heads.some(h=>h!==target.head)||bases.some(b=>b!==target.base))throw Error('reference needs one exact landed head/base; scope is UNKNOWN or contradictory');
   if(input.disposition==='needs-review'){
     // A missing launch flag or missing process is not positive zero-native proof.
     // Only a serialized pre-native barrier may enter ordinary queue admission.

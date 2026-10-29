@@ -189,7 +189,7 @@ test('cleanup tail historical discovery keeps unsafe scopes and binds reported d
     assert.deepEqual(entry.panes,[]);
     const drained=f.drain({keys:[entry.key]});
     assert.equal(drained.evaluated[0].completed,false);
-    assert.match(drained.evaluated[0].reason,/native occupant|unknown|identity/);
+    assert.equal(drained.evaluated[0].reason,'unbound allocation still has a native occupant; original session remains unknown');
     assert.equal(fs.existsSync(f.lane),true);assert.deepEqual(f.read().actions,[],'missing identity grants no native effect');
   }
   for(const kind of ['dirty','unlanded']){

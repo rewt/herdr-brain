@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {closeoutWaitState,registerCloseoutWait,linkedCloseoutStatuses,nativeCloseoutWait,closeoutProducer,closeoutNextStage,closeoutCommandNotStarted} from '../lib/closeout-status.mjs';
 import {closeoutRevision,bindCloseoutSources,unresolvedCloseoutEffect} from '../lib/closeout.mjs';
-import {outcomeFailure,uncertainOutcomeDoctrine} from '../lib/uncertain-outcome.mjs';
+import {outcomeFailure} from '../lib/uncertain-outcome.mjs';
 import {originalDispatchOutcome} from '../dispatch/outcome.mjs';
 import {recordDispatchCompletion} from '../dispatch/completion.mjs';
 import {configFixture} from './helpers/config-home-fixture.mjs';
@@ -104,13 +104,22 @@ test('producer linked typed failures and positive no-execution never infer nativ
   assert.equal(loadEvents(org).events.filter(e=>e.type==='dispatch.completed').length,1);
 });
 
-test('producer linked missing-producer decision deduplicates through normal owned queue without blocking independent work',t=>{
+test('producer linked missing-producer diagnostics no longer create judgment items or change old evidence',t=>{
   const f=configFixture(t,{custom:true}),repo=f.cwd,org=f.env.ORG_DIR,identity=gitProject(repo).identity,directory=serviceDirectory(org,identity);
   fs.mkdirSync(directory,{recursive:true});fs.writeFileSync(path.join(directory,'installation.json'),JSON.stringify({at:'2026-10-27T00:00:00Z',repo,org,source:sourceRoot,node:process.execPath,file:path.join(directory,'service.plist'),target:`gui/${process.getuid()}/dev.herdr.line.${path.basename(directory)}`}));
   transact(org,()=>({add:[{type:'item.added',id:'ENG-1',role:'engineer',title:'Original subject'}]}));
   const env={...f.env};delete env.HERDR_ENV;delete env.HERDR_PANE_ID;
-  const release=noticeLock(path.join(directory,'pass.lock')),check={key:'original',subject:{item:'ENG-1',head:'captured'},defect:'Runtime completion transport absent'};
-  try{const a=queueOutcomeDecision({repo,org,env,check});assert.deepEqual(queueOutcomeDecision({repo,org,env,check}),a);const state=fold(loadEvents(org).events);assert.equal(state.items.get(a.item).role,'decision');assert.equal(state.links.length,0);assert.ok(state.items.get(a.item).accept[0].includes(uncertainOutcomeDoctrine));}finally{release();}
+  const release=noticeLock(path.join(directory,'pass.lock')),check={key:'closeout:original',subject:{item:'ENG-1',head:'captured'},defect:'Runtime completion transport absent'};
+  const before=fs.readFileSync(path.join(org,'events.jsonl'));
+  try{
+    const a=queueOutcomeDecision({repo,org,env,check});assert.equal(a.record_only,true);
+    assert.deepEqual(queueOutcomeDecision({repo,org,env,check}),a);
+    assert.deepEqual(fs.readFileSync(path.join(org,'events.jsonl')),before);
+    transact(org,()=>({add:[{type:'item.added',id:'DEC-1',kind:'work',role:'decision',title:'Original captured defect',meta:{uncertain_outcome:{key:a.key,check}}}]}));
+    const captured=fs.readFileSync(path.join(org,'events.jsonl'));
+    assert.deepEqual(queueOutcomeDecision({repo,org,env,check}),{item:'DEC-1',key:a.key});
+    assert.deepEqual(fs.readFileSync(path.join(org,'events.jsonl')),captured);
+  }finally{release();}
 });
 
 test('producer linked completed pass health remains diagnostic with no bulk record telemetry',t=>{

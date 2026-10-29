@@ -550,7 +550,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         pending=statuses.filter(row=>!['complete','classified'].includes(row.status)).map(row=>row.wait);
       log({ action: 'pass-complete', starts,unknown_open:pending.length,unknown_oldest_min:pending.length?Math.max(0,...pending.map(w=>(Date.parse(now())-Date.parse(w.at))/60000)):0,
         unknown_settled:statuses.filter(row=>row.status==='complete').length,
-        classified_retained:statuses.filter(row=>row.status==='classified').length,unknown_escalated:Object.keys(effects.outcome_decisions??{}).length,
+        classified_retained:statuses.filter(row=>row.status==='classified').length,unknown_escalated:Object.values(effects.outcome_decisions??{}).filter(row=>row.item).length,
         timing: { ...timings, duration_ms, other_scan_and_guard_ms: Math.max(0, duration_ms - timings.effect_command_ms - timings.record_snapshot_ms) } });
       return { result: 'pass-complete', directory };
     } finally { try{checkpointNotices?.();}finally{try{heartbeat('finished');}finally{release();}} }

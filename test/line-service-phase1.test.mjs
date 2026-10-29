@@ -1137,6 +1137,30 @@ test('phase1 pending pre-effect closeout source handoff continues its original k
   assert.equal(successors.length,1,'only one fresh successor runs inside the original handoff allowance');
 });
 
+test('closeout respects the pass budget and retains its finite ceiling',t=>{
+  for(const [passBudgetMs,budgetMs]of [[1000,1000],[180000,180000],[480000,180000],[undefined,180000]]){
+    const f=fixture(t),policy=JSON.parse(fs.readFileSync(path.join(f.cwd,'.lane.json')));
+    policy.retirement={closeout_queue:true};fs.writeFileSync(path.join(f.cwd,'.lane.json'),JSON.stringify(policy));
+    const added=transact(f.org,events=>bindCloseoutSources({cwd:f.cwd,org:f.org,events,env:f.env,mutation:{add:[{type:'item.closed',id:'ENG-1',as:'done',completed_run:'R-1'}]}})).added;
+    publishCloseoutEvents({cwd:f.cwd,org:f.org,added,start:false,env:f.env});
+    const key=added[0].closeout_targets.find(t=>t.signal==='landed').key,calls=[];let clock=0,started;
+    const service=createLineService({repo:f.cwd,org:f.org,to:'brain-chat',env:f.env,passBudgetMs,workClock:()=>clock,closeoutMeasure:()=>{},
+      command:(_exe,args)=>{
+        calls.push(args);
+        assert.equal(args[0],path.join(sourceRoot,'supervisor/closeout.mjs'));
+        assert.equal(args[1],'drain');assert.deepEqual(JSON.parse(args[args.indexOf('--keys')+1]),[key]);
+        const deadline=Number(args[args.indexOf('--deadline')+1]);
+        assert.ok(Number.isSafeInteger(deadline)&&deadline>=started+budgetMs-1&&deadline<=Date.now()+budgetMs,
+          `passBudgetMs=${passBudgetMs} must grant ${budgetMs} ms`);
+        clock=budgetMs;
+        return{status:0,stdout:JSON.stringify({evaluated:[{key,completed:true}]}),stderr:''};
+      }});
+    started=Date.now();const result=service.closeout();
+    assert.equal(result.result,'closeout-turn-complete');assert.equal(result.steps,1);assert.deepEqual(result.errors,[]);
+    assert.equal(calls.length,1,'no further drain or refresh starts once the selected allowance is spent');
+  }
+});
+
 test('useful admission proceeds after unrelated productive cleanup exceeds its work budget while a fresh STOP still prevents launch',t=>{
   for(const stopped of [false,true]){
     const f=fixture(t),policy=JSON.parse(fs.readFileSync(path.join(f.cwd,'.lane.json')));policy.retirement={closeout_queue:true};fs.writeFileSync(path.join(f.cwd,'.lane.json'),JSON.stringify(policy));

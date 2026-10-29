@@ -163,7 +163,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
     if (reported && !run.report) throw Error('report not ingested');
     return { ...snapshot, run, item };
   };
-  const closeout=()=>runCloseoutTurn({project,org,env:childEnv,cli,guard:observe,maxSteps:maxStepsPerStage,budgetMs:CLOSEOUT_TURN_BUDGET_MS,clock:workClock,
+  const closeout=()=>runCloseoutTurn({project,org,env:childEnv,cli,guard:observe,maxSteps:maxStepsPerStage,budgetMs:Math.min(CLOSEOUT_TURN_BUDGET_MS,passBudgetMs),clock:workClock,
     ...(closeoutMeasure?{measure:closeoutMeasure}:{})});
   function pass() {
     try { closeout(); } catch(error) { log({action:'closeout-held',reason:error.message}); }

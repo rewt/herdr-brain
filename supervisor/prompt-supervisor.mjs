@@ -316,6 +316,13 @@ export async function drainInbox(file, options = {}) {
         } catch (error) {
           const refused = ['agent_blocked', 'agent_not_found'].includes(error.code);
           reason = `notice ${entry.id}: ${error.code ?? 'UNKNOWN'}: ${error.message}`;
+          if (refused && entry.recipient_role === 'project-supervisor') {
+            // Absence observed before input is pending. A refused input is a
+            // stopped effect: retain its original attempt, never auto-resend it.
+            record(file, { type: 'attempt-error', id: entry.id, error: reason, may_have_delivered: false });
+            undeliverable(file, entry, { reason: 'native-refused', native_code: error.code, native_error: reason });
+            continue;
+          }
           record(file, { type: refused ? 'retry' : 'attempt-error', id: entry.id,
             error: reason, may_have_delivered: !refused });
           entry.state = refused ? 'pending' : 'uncertain';
@@ -346,6 +353,8 @@ export function enqueueSupervisor(to, message, options = {}) {
   const id = options.id ?? randomUUID();
   const ordering = correlation(options.correlation);
   const project = noticeProject(file, options);
+  if (options.projectSupervisor !== undefined && typeof options.projectSupervisor !== 'boolean')
+    throw new Error('projectSupervisor must be a boolean');
   if (ordering && project && (ordering.record !== project.org || ordering.project !== project.identity))
     throw new Error('notice correlation differs from actual project/record binding');
   if (typeof id !== 'string' || !id || /\s|[\x00-\x1f\x7f]/.test(id)) throw new Error('notice id must be nonempty without whitespace or control characters');
@@ -360,6 +369,8 @@ export function enqueueSupervisor(to, message, options = {}) {
     const prior = entries.find((entry) => entry.id === id);
     if (prior) {
       if (prior.to !== to || prior.message !== message) throw new Error(`notice ${id} has different content or target`);
+      if (options.projectSupervisor !== undefined && options.projectSupervisor !== (prior.recipient_role === 'project-supervisor'))
+        throw new Error(`notice ${id} has different recipient role`);
       if (ordering && prior.correlation && runKey({ correlation: ordering }) !== runKey(prior) ||
           options.herdr !== undefined && prior.herdr !== options.herdr)
         throw new Error(`notice ${id} has different correlation or transport`);
@@ -367,7 +378,9 @@ export function enqueueSupervisor(to, message, options = {}) {
       // Never rewrite an already journalled notice to invent independence.
       return;
     }
-    append({ type: 'notice', id, to, message, correlation: ordering, project, owner: 'supervisor-inbox', herdr: options.herdr ?? 'herdr', attempts, retrySeconds,
+    append({ type: 'notice', id, to, message, correlation: ordering, project,
+      ...(options.projectSupervisor ? { recipient_role: 'project-supervisor' } : {}),
+      owner: 'supervisor-inbox', herdr: options.herdr ?? 'herdr', attempts, retrySeconds,
       title: options.title ?? 'Supervisor notice queued', sound: options.sound ?? 'request' });
   }, options.lockOptions);
   return { id, inbox: file };
@@ -484,6 +497,7 @@ async function main() {
     inbox: { type: 'string' }, org: { type: 'string' }, herdr: { type: 'string' }, id: { type: 'string' }, run: { type: 'string' },
     drain: { type: 'boolean' }, resolve: { type: 'string' }, sent: { type: 'boolean' }, resend: { type: 'boolean' },
     'owner-worker': { type: 'boolean' }, settings: { type: 'string' },
+    'project-supervisor': { type: 'boolean' },
     'handle-pending-line': { type: 'boolean' },
   } });
   if (opt['handle-pending-line']) {
@@ -505,9 +519,9 @@ async function main() {
     if (Boolean(opt.sent) === Boolean(opt.resend)) throw new Error('--resolve ID needs exactly one of --sent or --resend');
     resolveNotice(file, opt.resolve, opt.sent); return;
   }
-  if (!opt.drain && positionals.length !== 2) throw new Error('usage: prompt-supervisor.mjs TARGET MESSAGE [--inbox FILE] [--id ID] | --drain');
-  const result = opt.drain ? await drainInbox(file) : await promptSupervisor(...positionals, { ...opt, inbox: file });
+  if (!opt.drain && positionals.length !== 2) throw new Error('usage: prompt-supervisor.mjs TARGET MESSAGE [--org DIR] [--id ID] [--project-supervisor] | --drain');
+  const result = opt.drain ? await drainInbox(file) : await promptSupervisor(...positionals, { ...opt, projectSupervisor: opt['project-supervisor'], inbox: file });
   process.stdout.write(JSON.stringify(result) + '\n');
-  if (!result.delivered) process.exitCode = /uncertain/.test(result.delivery_error ?? '') ? 1 : 3;
+  if (!result.delivered) process.exitCode = result.undeliverable?.reason === 'native-refused' || /uncertain/.test(result.delivery_error ?? '') ? 1 : 3;
 }
 if (isMain(import.meta.url)) main().catch((error) => { console.error(`prompt-supervisor: ${error.message}`); process.exitCode = 1; });

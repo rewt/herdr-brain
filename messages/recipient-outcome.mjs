@@ -10,7 +10,10 @@ import { effectiveWorkerIdentity } from '../lib/worker-identity.mjs';
 export function recipientOutcomes() {
   const records = new Map();
   return (entry, binding) => {
-    if (binding.code === 'agent_not_found') return { reason: 'recipient-absent', native_error: binding.error };
+    // A named supervisor is a role across session recycles. Missing native
+    // binding grants no input, but does not retire its durable exception.
+    if (binding.code === 'agent_not_found') return entry.recipient_role === 'project-supervisor'
+      ? null : { reason: 'recipient-absent', native_error: binding.error };
     if (!binding.agent || !entry.project) return null;
     const project = entry.project, key = JSON.stringify(project);
     if (!records.has(key)) {

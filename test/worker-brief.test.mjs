@@ -48,6 +48,11 @@ for (const [project, address] of [['/brain', 'supervisor-herdr'], ['/bch', 'supe
   assert.doesNotMatch(brief, /actual-native-worker/);
   assert.match(prompt, /watcher targets actual-native-worker/);
   assert.match(prompt, /Use --to actual-native-worker/);
+  assert.ok(prompt.includes(`'/node20' '/brain/supervisor/prompt-supervisor.mjs' '${address}'`));
+  assert.ok(prompt.includes("'--org' '/record' '--run' 'R-1' '--id' 'R-1:exception:STABLE_ID' '--project-supervisor'"));
+  assert.match(prompt, /SUPERVISOR_INPUT_WAIT_SECONDS=0/);
+  assert.match(prompt, /Do not use a direct herdr agent prompt for exceptions/);
+  assert.match(prompt, /do not replace or replay refused\/uncertain attempts/);
   assert.match(prompt, /Premise: required fields reach worker context; attempt: initial implementation/);
   assert.doesNotMatch(brief, /# Under the current land-first waiver/);
   assert.match(prompt, /single record queue-review path/);

@@ -13,6 +13,16 @@ The [operator record inbox](#operator-record-inbox) is a foreground record comma
 using the existing native inbox. The supervisor inbox and identity-desk helper
 remain the delivery owners. Node built-ins only.
 
+Worker exceptions use the brief's pinned source command for
+[`supervisor/prompt-supervisor.mjs`](../supervisor/README.md) with
+`--project-supervisor`, the recorded project address and one stable notice ID.
+It appends to the existing `ORG/supervisor/inbox.log` before native input and
+keeps missing supervisor bindings pending across a recycle. Retain an item/run
+note and the actual receipt too. Do not use direct `herdr agent prompt`, resend
+refused/uncertain input, change an existing callback or substitute operator
+`messages send` for this internal path. The existing inbox owner and native
+quiet/identity gates still own delivery.
+
 The optional shadow writer and staged turn-hook delivery transport were retired
 by ENG-934. No new shadow notice/body copy, hook enrollment, nudge or hook claim
 is produced. Existing record envelopes, notices, unresolved claims and historical

@@ -56,3 +56,8 @@ the brief: plain headline, what happened, action, then one Details line for code
 Routine status stays in the record. Only a genuinely pending question explicitly
 reserved in the record uses its existing one-time operator push. Actual exceptions
 go to the PROJECT SUPERVISOR; no operator-pane typing or borrowed identity.
+Use the owning brief's durable inbox command before exception input, and retain
+the item/run note and actual receipt. Brain's `--project-supervisor` mode keeps
+missing bindings pending under one stable ID across a supervisor recycle; it
+does not retry refused input or replay uncertain attempts. Never replace it with
+a direct prompt, change a saved callback, or assume another project's command.

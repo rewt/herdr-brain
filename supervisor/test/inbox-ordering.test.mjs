@@ -11,6 +11,7 @@ import { drainInbox, enqueueSupervisor, readInbox, resolveNotice, resumeInbox } 
 import { noticeLock } from '../notice-lock.mjs';
 import { loadTimeout } from '../../lib/deadline.mjs';
 import { initOrg, transact } from '../../lib/store.mjs';
+import { waitForInboxIdle } from '../../test/helpers/inbox.mjs';
 
 const empty = fs.readFileSync(new URL('./fixtures/claude-empty.ansi', import.meta.url), 'utf8');
 const typed = fs.readFileSync(new URL('./fixtures/claude-typed.ansi', import.meta.url), 'utf8');
@@ -44,6 +45,7 @@ if(args[0]==='agent'&&args[1]==='get') {
 } else if(args[0]==='agent'&&args[1]==='prompt') {
  const mode=modes[args[2]];
  if(mode==='refused') fail('agent_blocked','fixture pre-input refusal');
+ if(mode==='missing-on-prompt') fail('agent_not_found','fixture supervisor disappeared at input');
  if(mode==='negative') {console.log(JSON.stringify({error:{code:'NATIVE_DENIED',message:'fixture negative acknowledgement'}}));process.exit(0);}
  const fd=fs.openSync(file('in-input'),'wx');
  fs.appendFileSync(file('sent'),JSON.stringify(args)+'\\n');
@@ -110,6 +112,94 @@ test('absent recipients become durably undeliverable without input, rerouting or
   assert.equal((await f.drain('gone')).delivered, false);
   assert.equal(fs.readFileSync(f.inbox, 'utf8'), bytes);
   assert.equal(f.sent().length, 1);
+});
+
+test('supervisor exceptions survive absence and deliver once to the returned quiet binding while independent work progresses', async t => {
+  const f = fixture(t), options = { projectSupervisor: true };
+  f.write('targets', { B: f.target('B') });
+  f.add('exception', 'A', 'R-1', options); f.add('independent', 'B', 'R-1');
+  assert.equal((await f.drain('independent')).delivered, true);
+  const pending = await f.drain('exception', { waitSeconds: 0 });
+  assert.equal(pending.delivered, false); assert.equal(pending.queued, true);
+  assert.equal(f.state('exception'), 'pending'); assert.equal(pending.undeliverable, undefined);
+  assert.deepEqual(f.sent().map(args => args[2]), ['B']);
+  assert.equal(f.calls().some(args => args[1] === 'prompt' && args[2] === 'A'), false);
+  f.add('exception', 'A', 'R-1', options);
+  assert.equal(readInbox(f.inbox).filter(e => e.id === 'exception').length, 1);
+  assert.throws(() => f.add('exception', 'A', 'R-1', { projectSupervisor: false }), /different recipient role/);
+  assert.throws(() => f.add('independent', 'B', 'R-1', options), /different recipient role/);
+  const returned = { ...f.target('A'), pane_id: 'fake:returned', terminal_id: 'new-terminal', agent_session: { value: 'new-session' } };
+  f.write('targets', { A: returned, B: f.target('B') }); f.write('modes', { A: 'typed' });
+  assert.equal((await f.drain('exception', { waitSeconds: 0 })).queued, true);
+  assert.equal(f.calls().some(args => args[1] === 'prompt' && args[2] === 'A'), false);
+  f.write('modes', {});
+  assert.equal((await f.drain('exception')).delivered, true);
+  assert.deepEqual(f.sent().filter(args => args[2] === 'A').map(args => args[3]), ['exception notice-id=exception']);
+  const rows = fs.readFileSync(f.inbox, 'utf8').trim().split('\n').map(JSON.parse);
+  assert.equal(rows.filter(e => e.id === 'exception' && e.type === 'sending').length, 1);
+  assert.ok(rows.find(e => e.id === 'exception' && e.type === 'sending').occupant.includes('new-session'));
+  const bytes = fs.readFileSync(f.inbox, 'utf8');
+  f.add('exception', 'A', 'R-1', options); await f.drain('exception');
+  assert.equal(fs.readFileSync(f.inbox, 'utf8'), bytes);
+});
+
+test('supervisor exception CLI retains the source notice after its caller exits and the existing owner delivers on return', async t => {
+  const f = fixture(t), record = recordedRecipient(f);
+  f.write('targets', {});
+  const child = spawnChild(t, process.execPath, [fileURLToPath(new URL('../prompt-supervisor.mjs', import.meta.url)),
+    'A', '[worker-exception] run=R-1 item=ENG-1 retained exception', '--org', record.org, '--run', 'R-1',
+    '--inbox', f.inbox, '--herdr', f.herdr, '--id', 'R-1:exception:cli', '--project-supervisor'], {
+    cwd: f.root, env: { ...process.env, ORG_DIR: record.org, SUPERVISOR_INPUT_WAIT_SECONDS: '0',
+      SUPERVISOR_INPUT_CONFIRM_SECONDS: '.02', SUPERVISOR_INPUT_POLL_SECONDS: '.01' },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  let stdout = '', stderr = '';
+  child.stdout.on('data', b => { stdout += b; }); child.stderr.on('data', b => { stderr += b; });
+  try {
+    const status = await waitForExit(child);
+    assert.equal(status.code, 3, stderr);
+    const receipt = JSON.parse(stdout);
+    assert.equal(receipt.delivered, false); assert.equal(receipt.queued, true); assert.ok(receipt.owner_pid);
+    assert.equal(readInbox(f.inbox)[0].recipient_role, 'project-supervisor');
+    assert.deepEqual(f.sent(), []);
+  } finally {
+    f.write('targets', { A: f.target('A') });
+    await waitForInboxIdle(f.inbox);
+  }
+  assert.equal(f.state('R-1:exception:cli'), 'sent');
+  assert.equal(f.sent().length, 1);
+  assert.match(f.sent()[0][3], /notice-id=R-1:exception:cli$/);
+});
+
+for (const mode of ['refused', 'missing-on-prompt']) test(`supervisor exception ${mode} stops the original input effect without retry or a replacement ID`, async t => {
+  const f = fixture(t); f.write('modes', { A: mode });
+  f.add('exception', 'A', 'R-1', { projectSupervisor: true });
+  const receipt = await f.drain('exception');
+  assert.equal(receipt.delivered, false); assert.equal(receipt.queued, false);
+  assert.equal(receipt.undeliverable.reason, 'native-refused');
+  assert.equal(receipt.undeliverable.native_code, mode === 'refused' ? 'agent_blocked' : 'agent_not_found');
+  assert.deepEqual(f.sent(), []);
+  f.write('modes', {}); f.add('exception', 'A', 'R-1', { projectSupervisor: true });
+  await f.drain('exception');
+  assert.equal(f.calls().filter(args => args[1] === 'prompt').length, 1);
+  const rows = fs.readFileSync(f.inbox, 'utf8').trim().split('\n').map(JSON.parse);
+  assert.equal(rows.filter(e => e.id === 'exception' && e.type === 'notice').length, 1);
+  assert.equal(rows.some(e => e.id === 'exception' && ['retry', 'sent'].includes(e.type)), false);
+  assert.ok(rows.some(e => e.id === 'exception' && e.type === 'attempt-error' && e.may_have_delivered === false));
+});
+
+test('supervisor exception uncertainty survives absence and reappearance without replay while an independent recipient progresses', async t => {
+  const f = fixture(t); f.write('modes', { A: 'lost-ack' });
+  f.add('uncertain', 'A', 'R-1', { projectSupervisor: true });
+  await f.drain('uncertain', { waitSeconds: .2 });
+  assert.equal(f.state('uncertain'), 'uncertain');
+  f.write('targets', { B: f.target('B') }); f.write('modes', {});
+  f.add('successor', 'A', 'R-2', { projectSupervisor: true }); f.add('independent', 'B', 'R-3');
+  assert.equal((await f.drain('independent')).delivered, true);
+  f.write('targets', { A: { ...f.target('A'), terminal_id: 'replacement' }, B: f.target('B') });
+  await f.drain('successor', { waitSeconds: .1 });
+  assert.deepEqual(readInbox(f.inbox).map(e => e.state), ['uncertain', 'pending', 'sent']);
+  assert.equal(f.calls().filter(args => args[1] === 'prompt' && args[2] === 'A').length, 1);
 });
 
 function recordedRecipient(f, terminal) {

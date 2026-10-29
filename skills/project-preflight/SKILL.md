@@ -43,3 +43,8 @@ Resolve routine implementation choices yourself. Route actual unsafe, native,
 identity, ownership, reserved or failed exceptions to the recorded PROJECT
 SUPERVISOR. A native refusal stops that effect; preserve it and continue
 independent work without changing executor or identity.
+Use the owning brief's durable native-inbox entry before input for exceptions,
+and retain the exception in the item/run record. Do not substitute a direct
+prompt. For Brain, the brief supplies the source command with
+`--project-supervisor`, one stable notice ID and the actual project address;
+missing bindings remain pending, while refused/uncertain attempts cannot replay.

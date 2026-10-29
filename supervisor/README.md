@@ -662,10 +662,24 @@ Stable watch/promotion IDs adopt existing notices
 on retries, including final watch notices after a process restart.
 
 ```sh
-node supervisor/prompt-supervisor.mjs supervisor-herdr 'NOTICE' --org /record --id stable-notice-id
+SUPERVISOR_INPUT_WAIT_SECONDS=0 node supervisor/prompt-supervisor.mjs supervisor-herdr '[worker-exception] run=R-123 item=ENG-123 EXPLANATION; evidence=PATH; held-action=ACTION' --org /record --run R-123 --id R-123:exception:stable-id --project-supervisor
 node supervisor/prompt-supervisor.mjs worker-name 'NOTICE' --org /record --run R-123 --id stable-notice-id
 node supervisor/prompt-supervisor.mjs --org /record --drain
 ```
+
+Workers use their brief's pinned runtime/source command and recorded PROJECT
+SUPERVISOR address with `--project-supervisor` **before any native input**, then
+retain the exception on the owning item/run too. A direct `herdr agent prompt`
+bypasses durable intake and must not be used for exceptions. The mode records
+`recipient_role: project-supervisor` on the original notice. An absent named
+supervisor stays pending until the existing inbox owner can resolve its returned
+native binding and pass the quiet gate; a new session need not reuse the old
+pane/session. This mode grants no identity, authority, lifecycle or reserved
+operator permission. It changes no watcher, saved callback or delivery owner.
+`SUPERVISOR_INPUT_WAIT_SECONDS=0` returns promptly after the existing owner
+acknowledges intake; exit 3 with `queued: true, delivered: false` means retained,
+not delivered. Preserve the JSON receipt and one stable ID. Changing a notice's
+explicit recipient mode on a retry refuses; omitting it adopts its original mode.
 
 Every prompt ends with `notice-id=ID`. The journal records that same ID and
 complete delivered text before the attempt and after its acknowledgement.
@@ -681,7 +695,7 @@ Correlation retains its uncertain-attempt recovery scope; it is not an implicit
 cross-recipient dependency for unattempted input. Saved callers adopt existing
 metadata without rewriting it.
 
-A definite native `agent_not_found`, or an exactly bound worker whose owning
+A definite native `agent_not_found` for an ordinary recipient, or an exactly bound worker whose owning
 record has an ingested report or abandonment, finishes pending delivery as
 **undeliverable**. The journal retains the notice, target, reason and available
 native/record evidence in `autopilot.result.undeliverable`, using the existing
@@ -692,6 +706,16 @@ later reappears. Native `done` means idle, not a finished run. Missing/changed
 record identity, ambiguous lookup failures and unknown native status stay held.
 An open continuation sharing the exact native session remains deliverable.
 Lifecycle checks never resolve uncertain attempts or bypass their dependencies.
+
+For `--project-supervisor`, absence observed by lookup before input is pending.
+An actual `agent prompt` refusal (`agent_blocked` or `agent_not_found`) instead
+stops that notice as `undeliverable.reason: native-refused`, retaining the original
+intent and error without automatic retry, a replacement ID or an alternate target.
+A lost/unknown acknowledgement remains uncertain and requires the existing
+inspected recovery; a supervisor returning does not clear it. This change does
+not reinterpret or replay historical handled, refused or uncertain attempts.
+Already running owners retain their loaded code until their normal exit; do not
+restart them or change saved runtimes to activate new source.
 
 Live aliases resolving to the same native occupant share ordering. The same
 global drain lock serializes input even across processes, with fresh alias and

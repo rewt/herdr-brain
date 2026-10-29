@@ -44,7 +44,10 @@ do not grant authority or replace the guarded project tools.
 - Replies, status and milestones go to the owning item/run record as notes or the
   report. Routine notices go to the line and recorded owner through existing
   callbacks, never to a chat. Exceptions go to the PROJECT SUPERVISOR at its
-  recorded address. A native refusal
+  recorded address, using the brief's durable supervisor-inbox command before
+  native input (`--project-supervisor`); record the exception on the item/run too.
+  Never send exceptions with a direct `herdr agent prompt`. Missing supervisor
+  bindings stay pending under the original notice ID. A native input refusal
   stops that effect: preserve it, no retry/alternate executor/identity substitution.
   Other independent work continues.
 - Operator messages use the owning record's messages send: plain headline,

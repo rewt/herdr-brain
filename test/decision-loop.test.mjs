@@ -208,16 +208,17 @@ function diskFixture(t,{originalOutcome='blocked',captured=true}={}){
     {type:'line-service.phase0',id:'boundary',project:identity,repo,org,main:'main',canonical_head:head});
   report('R-1',originalOutcome);add({type:'line.decisions-activated',project:identity,org,subjects:['ENG-1']});
   // Original captured work remains consumable after automatic creation retires.
-  if(captured){
+  const captureOriginal=()=>{
     const release=noticeLock(path.join(directory,'pass.lock'),{recover:false});
     try{const snapshot=loadRecord(org),request=decisionCandidates({...snapshot,identity,org})[0];queueDecision({repo,org,request,env});}
     finally{release();}
-  }
+  };
+  if(captured)captureOriginal();
   const calls=[];
   const native={name:'judge-fixture',pane_id:'w1:p1',workspace_id:'w1',terminal_id:'terminal',agent_session:{value:'session'},cwd:repo};
   const command=(exe,args)=>{calls.push(args);if(exe==='herdr')return{status:0,stdout:JSON.stringify({result:{agent:native}})};return {status:0,stdout:JSON.stringify({result:'detached'})};};
   const service=(overrides={})=>createLineService({repo,org,to:'supervisor-test',env,command,capacity:()=>({count:0,cap:4}),haltAfter:100,...overrides});
-  return{repo,org,identity,env,add,report,calls,native,service,load:()=>loadRecord(org)};
+  return{repo,org,identity,env,add,report,calls,native,service,captureOriginal,load:()=>loadRecord(org)};
 }
 
 test('the real line finishes one original captured judge, consumes immutable typed bytes once and dispatches the blocked subject',t=>{
@@ -277,11 +278,12 @@ test('a real native refusal is preserved by the existing effects journal and nev
 });
 
 test('supersede rollback preserves a successor promotion guard after exact dependency transfer',t=>{
-  const f=diskFixture(t);
+  const f=diskFixture(t,{captured:false});
   f.add({type:'item.added',id:'ENG-2',role:'engineer',title:'Exact successor',meta:{}},
     {type:'item.added',id:'ENG-3',role:'engineer',title:'Unfinished dependent',meta:{}},
     {type:'link.added',blocker:'ENG-1',blocked:'ENG-3'},
     {type:'run.started',id:'R-3',item:'ENG-2',workspace:f.repo,meta:{}});
+  f.captureOriginal();
   f.service().pass();const item=[...f.load().state.items.values()].find(isDecision),request=item.meta.decision_request;
   f.add({type:'run.started',id:'R-2',item:item.id,workspace:f.repo,meta:{agent:'judge-fixture',pane:'w1:p1',worker_workspace:'w1',terminal_id:'terminal',agent_session_id:'session',harness:'codex'}},
     {type:'run.claimed',run:'R-2',record:f.org,project:f.identity,owner:owner(f.identity)});

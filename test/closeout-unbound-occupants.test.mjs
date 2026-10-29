@@ -29,6 +29,37 @@ test('stopped unbound allocation ignores an unrelated unnamed occupant and keeps
   assert.equal(events(f).some(e=>e.type==='run.session_bound'||e.type==='cleanup.bound'),false);
 });
 
+test('stopped unbound allocation retains an unnamed agent in a lane subdirectory from another workspace',t=>{
+  const f=stoppedUnbound(t);
+  fs.mkdirSync(path.join(f.lane,'nested','work'),{recursive:true});
+  f.state.agents[0].cwd=path.join(f.lane,'nested','work');f.save();
+  const occupants=structuredClone(f.state.agents),before=fs.readFileSync(f.eventFile);
+  const row=f.drain().evaluated[0];
+  assert.equal(row.completed,false);assert.match(row.reason,/still has a native occupant/);
+  assert.equal(fs.existsSync(f.lane),true);assert.notEqual(f.git(['branch','--list','lane/topic']),'');
+  assert.deepEqual(f.read().agents,occupants);assert.deepEqual(f.read().actions,[]);
+  assert.deepEqual(fs.readFileSync(f.eventFile).subarray(0,before.length),before);
+  assert.equal(effects(f).some(e=>e.action==='agent-exit-requested'),false);
+});
+
+test('stopped unbound allocation ignores an unnamed agent in a sibling sharing the lane prefix',t=>{
+  const f=stoppedUnbound(t),sibling=f.lane+'-other';
+  fs.mkdirSync(sibling);f.state.agents[0].cwd=sibling;f.save();
+  const occupants=structuredClone(f.state.agents),row=f.drain().evaluated[0];
+  assert.equal(row.completed,true,JSON.stringify(row));assert.equal(fs.existsSync(f.lane),false);
+  assert.equal(fs.existsSync(sibling),true);assert.deepEqual(f.read().agents,occupants);
+});
+
+for(const field of ['cwd','foreground_cwd'])test(`stopped unbound allocation retains a pane with ${field} in a lane subdirectory`,t=>{
+  const f=stoppedUnbound(t),cwd=path.join(f.lane,'nested');fs.mkdirSync(cwd);
+  f.state.tabs=[{tab_id:'w:t',workspace_id:'w'}];
+  f.state.panes=[{pane_id:'w:p',tab_id:'w:t',workspace_id:'w',[field]:cwd}];f.save();
+  const panes=structuredClone(f.state.panes),row=f.drain().evaluated[0];
+  assert.equal(row.completed,false);assert.match(row.reason,/unproven native pane/);
+  assert.equal(fs.existsSync(f.lane),true);assert.deepEqual(f.read().panes,panes);
+  assert.deepEqual(f.read().actions,[]);
+});
+
 for(const kind of ['occupant','dirty','UNKNOWN','refusal','claim','HOLD'])test(`stopped unbound allocation with an unrelated unnamed agent retains ${kind}`,t=>{
   const f=stoppedUnbound(t);
   if(kind==='occupant'){f.state.agents[0].cwd=f.lane;f.save();}

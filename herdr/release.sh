@@ -18,6 +18,15 @@ LEGACY_PLIST=${HERDR_MONITOR_PLIST-$HOME/Library/LaunchAgents/com.rewt.herdr-bra
 REAL_PLIST="$(eval echo "~$(id -un)")/Library/LaunchAgents/com.rewt.herdr-brain.plist"
 LAUNCHERS="org:bin/org.mjs record:bin/org.mjs lane:lanes/lane.mjs"
 TOOLS="$(cd "$(dirname "$0")" && pwd -P)/releases.mjs"
+# Presentation only: execution starts before the progress tab connects. The
+# child clears this private marker before validation or live acceptance runs.
+if [ "${HERDR_ENV:-}" = 1 ] && [ "${HERDR_RELEASE_VISIBLE_CHILD:-}" != 1 ] &&
+   { [ "${1:-}" = build ] || [ "${1:-}" = ship ]; } && [ $# -ge 2 ]; then
+  visible_repo=${REPO:-$(git -C "$(dirname "$0")" rev-parse --show-toplevel)}
+  HERDR_RELEASE_VISIBLE_CHILD=1 exec node "$(dirname "$TOOLS")/visible-run.mjs" run \
+    --repo "$visible_repo" --label "Release $2" -- bash "$0" "$@"
+fi
+unset HERDR_RELEASE_VISIBLE_CHILD
 die() { echo "release: $*" >&2; exit 1; }
 say() { echo "release: $*"; }
 valid_tag() {

@@ -22,6 +22,34 @@ Agents release with `ship`. Activation moves the retired Brain watch LaunchAgent
 (`~/Library/LaunchAgents/com.rewt.herdr-brain.plist`) aside after stopping it, so no
 manual step precedes the first release.
 
+Builds and ships launched inside Herdr automatically add a background
+`Release TAG · running` tab under the **canonical project workspace**, including
+when the caller is a lane or a detached process with inherited Herdr context.
+The tab follows the full build log (offline suites and optional live acceptance),
+then keeps the output and a `passed`, `failed` or `interrupted` title. It uses the
+existing workspace; no Git worktree, agent, extra gate or suite is created.
+The release still executes once in its original process cwd and isolated checkout.
+Its command starts before the display connects. Missing Herdr context, a closed
+canonical workspace or a native refusal leaves execution and its result intact;
+display errors are retained without retrying or targeting another pane.
+
+For standalone full-suite or live-check commands, the release coordinator can use
+the same foreground wrapper (the existing authorization and release policy apply):
+
+```sh
+node herdr/visible-run.mjs run --repo /canonical/herdr-brain --label 'Full suite' -- npm test
+node herdr/visible-run.mjs run --repo /canonical/herdr-brain --label 'Live checks' -- node acceptance/run.mjs --candidate /candidate/checkout --source /canonical/herdr-brain
+```
+
+Run from the intended command cwd; `--repo` selects only the display's parent.
+Labels and inherited workspace IDs never select a foreign project. Log, actual
+command exit/signal and display attachment details stay in
+`GIT_COMMON_DIR/visible-runs/run-*`. The view only reads those files. Closing it
+does not stop the command; loss of the producer without a result displays
+`result unknown`. These presentation files never replace validation receipts,
+change release readiness, replay an existing attempt or attach to a running build.
+Outside Herdr, releases keep their original output path and behavior.
+
 Build copies exactly `git archive TAG` into `releases/TAG.partial`, runs
 the `release` command and its `timeout_seconds` (and optional
 `idle_timeout_seconds`) from the snapshot's `.lane.validation.json`, falling back

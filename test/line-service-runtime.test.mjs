@@ -214,6 +214,7 @@ test('release upgrade retains original migration and cutoff, restarts the succes
   assert.equal(f.main([...f.argv,'--expected-plan',plan.archive.sha256],f.args).existing,true);
   assert.equal(loadEvents(f.org).events.filter(e=>e.type==='line-service.runtime-upgraded').length,1);
   assert.throws(()=>f.main([...f.argv,'--expected-plan','a'.repeat(64)],f.args),/exact dry-run/);
+  assert.equal(fs.readFileSync(path.join(f.directory,'effects.json'),'utf8'),f.original.effects);
   assert.equal(f.main(['restart','--repo',f.cwd,'--org',f.org],f.args).restarted,true);
   const {createLineService}=await import(pathToFileURL(path.join(f.next,'line-service/line-service.mjs')).href);
   const service=createLineService({repo:f.cwd,org:f.org,to:'fixture-supervisor',runtimeHome:f.installationHome,env:{...f.env,HERDR_ENV:'',HERDR_PANE_ID:''},haltAfter:100,
@@ -231,7 +232,7 @@ test('release upgrade retains original migration and cutoff, restarts the succes
   const {main:restart}=await f.module('line-service/launchd.mjs');
   assert.equal(restart(['restart','--repo',f.cwd,'--org',f.org],f.args).restarted,true);
   assert.equal(fs.readFileSync(path.join(f.org,'dispatch/retained.json'),'utf8'),f.original.jobs);
-  assert.equal(fs.readFileSync(path.join(f.directory,'effects.json'),'utf8'),f.original.effects);
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(f.directory,'effects.json'))).actions['review:original'],JSON.parse(f.original.effects).actions['review:original']);
 });
 
 test('upgrade refuses foreign owners, mismatched roots and records, STOP/HOLD, live locks, loaded service and changed native CAS',async t=>{

@@ -11,8 +11,8 @@ import {fold} from '../lib/state.mjs';
 import {retirementLock} from '../lib/retire-lock.mjs';
 import {requireController,readOwnedRun} from '../lib/run-owner-guard.mjs';
 import {currentCloseoutEntries,closeoutEvaluations,closeoutEvaluation,closeoutRevision,
-  scheduleLineCloseouts,directCloseoutObservation,publishCloseoutEvents,lineServiceOwnsCleanup,unpublishedCloseoutSources} from '../lib/closeout.mjs';
-import {closeoutNextStage,closeoutWait,closeoutWaitState} from '../lib/closeout-status.mjs';
+  scheduleLineCloseouts,directCloseoutObservation,publishCloseoutEvents,lineServiceOwnsCleanup,unpublishedCloseoutSources,actionableCloseout} from '../lib/closeout.mjs';
+import {closeoutNextStage,closeoutWait,closeoutWaitState,unresolvedGitRemoval} from '../lib/closeout-status.mjs';
 import {recordCloseoutTurn} from './closeout-measurement.mjs';
 import {missingCloseoutBinding} from '../lib/closeout-facts.mjs';
 import {reconcileCloseoutBacklog} from '../lib/closeout-backlog.mjs';
@@ -121,6 +121,9 @@ function closeoutTurn({project,org,cli,guard,env=process.env,maxSteps=8,budgetMs
     for(const entry of entries)if(entry.reportCloseout){const prior=closeoutEvaluation(entry,observed.events);if(prior)evaluations.set(entry.key,prior);else evaluations.delete(entry.key);}
     const eligible=entries.filter(entry=>{
       if(entry.project!==project.canonical||entry.org!==org)return false;
+      // Match the executor's admission before spending a finite step. Legacy
+      // bindings and interrupted Git commands need their original evidence.
+      if(!actionableCloseout(entry,observed.events)||unresolvedGitRemoval(entry,observed.events))return false;
       const prior=evaluations.get(entry.key);if(prior?.completed)return false;
       if(!prior)return true;
       if(directCloseoutObservation(entry,prior,observed.events))return true;

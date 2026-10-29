@@ -13,6 +13,9 @@ Ingestion retains its 15-second sub-budget. Exit is deferred before its intent
 if the remaining turn cannot cover the original exit observation.
 
 Fairness now spans direct report targets and legacy physical continuations.
+Selection skips legacy bindings that the guarded executor cannot admit and
+interrupted Git commands whose original result is unknown; those retain their
+typed exceptions instead of spending every turn on empty drains.
 Original-binding refresh has a finite 15-second allowance, including priority
 every fourth turn, so continuously eligible direct keeps cannot starve it.
 Neither scheduling change grants effect authority; the existing executor

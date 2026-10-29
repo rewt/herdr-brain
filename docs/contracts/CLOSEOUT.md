@@ -35,6 +35,29 @@ actual live proof, seal/activation and consumer readback remain coordinator work
 
 The following sections retain the legacy queue compatibility contract.
 
+## Pre-fix exit absence settlements (ENG-931)
+
+The line may observe the seven pre-`1beac8c2` exit-identity attempts through
+`lib/closeout-legacy-exits.mjs`. Admission requires their exact immutable
+`closer-imports/v1` graph digest, original source/native target, and linked
+UNKNOWN failure with the old identity-change diagnostic and no post-exit
+snapshot. A different producer, diagnostic, identity, or native refusal keeps.
+
+One fresh guarded complete global pane and agent inventory must show the
+original pane and terminal absent everywhere, no moved original agent/session,
+and no agent in the lane. A surviving terminal keeps even when its agent row
+has disappeared. The line appends `closeout.exit-settled` with schema
+`legacy-exit-settlement/v1`, the original intent ID/sequence, qualifying evidence,
+current inventory and code binding. Its disposition is `allocation-absent` and
+its historical command outcome remains `UNKNOWN`. It sends no input, repeats
+no close, and invents no exit or claim-release receipt. Original bytes remain.
+
+That typed settlement completes only the allocation-disposition wait. The next
+finite line pass uses the existing folder/branch executor with fresh native,
+source, claim, Git, preservation and STOP/HOLD guards. Unsaved folders stay;
+clean unlanded folders can go while their exact branches stay. This bridge
+grants no permission to observe or replay other UNKNOWN commands.
+
 ## Never-sent closeout intents (ENG-812)
 
 A native intent with an uncertain sent outcome still requires the original

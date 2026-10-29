@@ -66,8 +66,8 @@ for(const kind of ['ordinary-unknown','unknown-git','refused'])test(`backlog ret
   assert.deepEqual(f.herdrCalls(),calls);assert.deepEqual(f.read().actions,[]);
 });
 
-test('original completion between selection and evaluation reaches observation-only reconciliation',t=>{
-  const f=fixture(t),original=events(f),rmdir=fs.rmdirSync;
+for(const vacant of [false,true])test(`original completion between selection and evaluation reaches observation-only ${vacant?'absence':'exit'} reconciliation`,t=>{
+  const f=fixture(t,{vacant}),original=events(f),rmdir=fs.rmdirSync;
   let completed=false;
   // Publish the original producer's receipt immediately after selection releases
   // queue.lock, while the drain still holds its retirement ownership lock.
@@ -86,7 +86,8 @@ test('original completion between selection and evaluation reaches observation-o
   const result=f.drain({keys:[f.entry.key],retrySafe:true});hook.mock.restore();
   assert.equal(completed,true);assert.equal(result.evaluated.length,1);
   const [row]=result.evaluated;
-  assert.equal(row.reason,'original native outcome reconciled; fresh drain required');
+  assert.equal(row.reason,vacant?'original allocation absence observed; fresh drain required':
+    'original native outcome reconciled; fresh drain required');
   assert.equal(typeof row.stages.exit_reconciliation_ms,'number');
   assert.equal(row.completed,false);assert.equal(unresolvedCloseoutEffect(f.entry,events(f)),undefined);
   assert.ok(fs.existsSync(f.lane),'observation-only reconciliation leaves physical cleanup for a fresh drain');

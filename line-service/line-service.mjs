@@ -40,7 +40,7 @@ import {isDecision,decisionActivation,decisionRoute,decisionBrief,decisionCandid
 import {outcomeFailure} from '../lib/uncertain-outcome.mjs';
 import {queueOutcomeDecision,obsoleteOutcomeDecision} from './outcome-decision.mjs';
 import {registerCloseoutWait,closeoutWait,closeoutWaitState,closeoutNextStage} from '../lib/closeout-status.mjs';
-import {runCloseoutTurn} from './closeout-turn.mjs';
+import {runCloseoutTurn,CLOSEOUT_TURN_BUDGET_MS} from './closeout-turn.mjs';
 import {transact} from '../lib/store.mjs';
 export { reviewAttempt } from './review.mjs';
 
@@ -159,7 +159,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
     if (reported && !run.report) throw Error('report not ingested');
     return { ...snapshot, run, item };
   };
-  const closeout=()=>runCloseoutTurn({project,org,env:childEnv,cli,guard:observe,maxSteps:maxStepsPerStage,budgetMs:Math.min(45000,passBudgetMs),clock:workClock,
+  const closeout=()=>runCloseoutTurn({project,org,env:childEnv,cli,guard:observe,maxSteps:maxStepsPerStage,budgetMs:CLOSEOUT_TURN_BUDGET_MS,clock:workClock,
     ...(closeoutMeasure?{measure:closeoutMeasure}:{})});
   function pass() {
     try { closeout(); } catch(error) { log({action:'closeout-held',reason:error.message}); }
@@ -544,9 +544,12 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         effects.outcome_decisions??={};effects.outcome_decisions[key]??=queueOutcomeDecision({repo,org,env:childEnv,check:{key,subject:{item:key.split(':')[1],effect:key},failure:entry.failure??outcomeFailure(entry),receipt:entry.receipt,
           defect:key.startsWith('review:')?'Original review-queue command returned without a linked record item; no pending status producer is available.':undefined}});save();
       }catch(e){note(key,e.message);}
-      const finalEvents=current().events,waits=finalEvents.filter(e=>e.type==='closeout.waiting'&&e.identity===project.identity),pending=waits.filter(w=>closeoutWaitState(w,finalEvents)!=='complete');
+      const finalEvents=current().events,waits=finalEvents.filter(e=>e.type==='closeout.waiting'&&e.identity===project.identity),
+        statuses=waits.map(w=>({wait:w,status:closeoutWaitState(w,finalEvents)})),
+        pending=statuses.filter(row=>!['complete','classified'].includes(row.status)).map(row=>row.wait);
       log({ action: 'pass-complete', starts,unknown_open:pending.length,unknown_oldest_min:pending.length?Math.max(0,...pending.map(w=>(Date.parse(now())-Date.parse(w.at))/60000)):0,
-        unknown_settled:waits.length-pending.length,unknown_escalated:Object.keys(effects.outcome_decisions??{}).length,
+        unknown_settled:statuses.filter(row=>row.status==='complete').length,
+        classified_retained:statuses.filter(row=>row.status==='classified').length,unknown_escalated:Object.keys(effects.outcome_decisions??{}).length,
         timing: { ...timings, duration_ms, other_scan_and_guard_ms: Math.max(0, duration_ms - timings.effect_command_ms - timings.record_snapshot_ms) } });
       return { result: 'pass-complete', directory };
     } finally { try{checkpointNotices?.();}finally{try{heartbeat('finished');}finally{release();}} }

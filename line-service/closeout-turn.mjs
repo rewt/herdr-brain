@@ -15,8 +15,12 @@ import {currentCloseoutEntries,closeoutEvaluations,closeoutEvaluation,closeoutRe
 import {closeoutNextStage,closeoutWait,closeoutWaitState} from '../lib/closeout-status.mjs';
 import {recordCloseoutTurn} from './closeout-measurement.mjs';
 import {missingCloseoutBinding} from '../lib/closeout-facts.mjs';
+import {reconcileCloseoutBacklog} from '../lib/closeout-backlog.mjs';
 
 export const closeoutServiceDirectory=(org,common)=>path.join(org,'line-service',createHash('sha256').update(JSON.stringify(common)).digest('hex').slice(0,20));
+// Includes the existing inventory-sized Git removal allowance (often >60s),
+// native exit and fresh preservation/identity reads. Still one finite owner.
+export const CLOSEOUT_TURN_BUDGET_MS=180000;
 export function runCloseoutTurn(options) {
   const clock=options.clock??(()=>performance.now()),now=options.now??(()=>Date.now()),started=clock();
   let successor=false,contended=false;
@@ -27,7 +31,7 @@ export function runCloseoutTurn(options) {
     // it retains every original native intent and re-runs all mutation guards.
     if(error.code!=='CLOSEOUT_CODE_CHANGED')throw error;
     if(options.handoff===false)return{result:'closeout-code-handoff-pending',reason:'bounded fresh successor also changed; original obligations retained',old:error.binding,current:error.current};
-    const remaining=(options.budgetMs??45000)-(clock()-started);
+    const remaining=(options.budgetMs??CLOSEOUT_TURN_BUDGET_MS)-(clock()-started);
     if(remaining<=0)return{result:'closeout-code-handoff-pending',reason:'original finite allowance spent',old:error.binding,current:error.current};
     const reply=options.cli('line-service/closeout.mjs',['--once','--repo',options.project.canonical,'--org',options.org,
       '--no-handoff','--deadline',String(Math.floor(now()+Math.max(1,remaining)))]);
@@ -44,7 +48,7 @@ function measureTurn({project,org,env=process.env,now=()=>Date.now(),measure=rec
   catch(error){try{fs.appendFileSync(path.join(closeoutServiceDirectory(org,project.identity),'closeout.log'),JSON.stringify({action:'closeout-measurement-failed',
     at:new Date(now()).toISOString(),reason:error.message})+'\n',{mode:0o600});}catch{/* Diagnostics cannot alter the turn result. */}}
 }
-function closeoutTurn({project,org,cli,guard,env=process.env,maxSteps=8,budgetMs=45000,
+function closeoutTurn({project,org,cli,guard,env=process.env,maxSteps=8,budgetMs=CLOSEOUT_TURN_BUDGET_MS,
   clock=()=>performance.now(),now=()=>Date.now(),fault=()=>{}}) {
   const directory=closeoutServiceDirectory(org,project.identity),file=path.join(directory,'closeout-turn.json');
   fs.mkdirSync(directory,{recursive:true});
@@ -64,7 +68,7 @@ function closeoutTurn({project,org,cli,guard,env=process.env,maxSteps=8,budgetMs
     const pending=[...observed.state.runs.values()].filter(r=>!r.report&&!r.abandoned&&r.report_path&&fs.existsSync(r.report_path))
       .sort((a,b)=>(state.ingest[a.id]??0)-(state.ingest[b.id]??0)||a.started.seq-b.started.seq);
     for(const run of pending){
-      if(expired()||clock()-started>=budgetMs/3||ingested>=maxSteps)break;
+      if(expired()||clock()-started>=Math.min(15000,budgetMs/3)||ingested>=maxSteps)break;
       state.ingest[run.id]=++state.attempt;state.pending={stage:'ingest',run:run.id};save();fault('before-ingest');
       try{
         const current=read(),r=current.state.runs.get(run.id),item=current.state.items.get(r?.item);
@@ -80,6 +84,7 @@ function closeoutTurn({project,org,cli,guard,env=process.env,maxSteps=8,budgetMs
       ingested++;delete state.pending;save();
     }
     observed=read();
+    const backlog=reconcileCloseoutBacklog({project,org,events:observed.events,guard:()=>{guard();code.verify();}});
     // Re-publish exact committed envelopes only. No re-binding a namesake.
     const sources=unpublishedCloseoutSources(project.identity,org,observed.events);
     if(sources.length)publishCloseoutEvents({cwd:project.canonical,org,env,added:sources,start:false});
@@ -99,6 +104,18 @@ function closeoutTurn({project,org,cli,guard,env=process.env,maxSteps=8,budgetMs
     }
     if(missing.length)planTransaction(org,current=>({add:missing.filter(row=>!current.some(e=>e.type===row.type&&e.key===row.key&&e.identity===row.identity))}),{actor:'finite missing-binding observation',replaySafe:true});
     fault('after-publication');
+    let refreshed=false;
+    const refresh=()=>{
+      if(expired()||!lineServiceOwnsCleanup(project,org))return;
+      refreshed=true;
+      try{guard();cli('supervisor/closeout.mjs',['refresh','--repo',project.canonical,'--org',org,
+        '--deadline',String(Math.floor(now()+Math.min(15000,budgetMs-(clock()-started))))]);}
+      catch(error){if(error.code==='CLOSEOUT_CODE_CHANGED')throw error;errors.push({stage:'refresh',reason:error.message});}
+    };
+    // Periodic priority also covers turns whose effects consume every second.
+    // This is the same finite owner, not another executor or background loop.
+    state.turn=(state.turn??0)+1;
+    if(state.turn%4===0){refresh();observed=read();}
     const entries=currentCloseoutEntries(project.identity,org,observed.events,{onInvalid:()=>{}}),
       rows=closeoutEvaluations(project.identity,org,observed.events),evaluations=new Map(rows.map(e=>[e.key,e]));
     for(const entry of entries)if(entry.reportCloseout){const prior=closeoutEvaluation(entry,observed.events);if(prior)evaluations.set(entry.key,prior);else evaluations.delete(entry.key);}
@@ -128,13 +145,9 @@ function closeoutTurn({project,org,cli,guard,env=process.env,maxSteps=8,budgetMs
       }catch(error){if(error.code==='CLOSEOUT_CODE_CHANGED')throw error;errors.push({key:entry.key,stage:'closeout',reason:error.message});}
       steps++;delete state.pending;save();
     }
-    // Bound effects precede potentially slow legacy inventory/repair. Missing
-    // bindings already have a first typed disposition; fresh bindings join the
-    // next finite wake. A backlog refresh cannot consume every closeout turn.
-    if(steps===0&&!expired()&&lineServiceOwnsCleanup(project,org)){
-      try{guard();cli('supervisor/closeout.mjs',['refresh','--repo',project.canonical,'--org',org]);}
-      catch(error){if(error.code==='CLOSEOUT_CODE_CHANGED')throw error;errors.push({stage:'refresh',reason:error.message});}
-    }
+    // Reserve a bounded original-binding refresh even while direct keeps stay
+    // eligible. Otherwise the old backlog can never acquire its first target.
+    if(!refreshed)refresh();
     // One grouped diagnostic, deduplicated by unchanged scope/reason. Counting
     // kept turns never re-invokes or reads an unresolved native effect.
     const final=read(),latest=new Map(closeoutEvaluations(project.identity,org,final.events).map(e=>[e.key,e]));
@@ -160,6 +173,6 @@ function closeoutTurn({project,org,cli,guard,env=process.env,maxSteps=8,budgetMs
     state.completed_at=new Date(now()).toISOString();state.errors=errors;state.continuation={
       ingest:Math.max(0,pending.length-ingested),closeout:Math.max(0,scheduled.length-steps),reconcile_committed_sources:true};
     save();fault('before-ack');
-    return{result:'closeout-turn-complete',ingested,steps,errors,continuation:state.continuation};
+    return{result:'closeout-turn-complete',ingested,steps,backlog_classified:backlog.length,errors,continuation:state.continuation};
   }finally{release();}
 }

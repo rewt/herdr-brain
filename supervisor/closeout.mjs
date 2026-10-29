@@ -26,7 +26,9 @@ export async function closeoutMain(argv = process.argv.slice(2)) {
   let result;
   if(command==='refresh'&&positionals.length===1){
     const {refreshCloseouts}=await import('../lib/closeout-consumer.mjs');
-    result=refreshCloseouts({cwd,org,loadedCode});
+    const deadline=values.deadline===undefined?Date.now()+45000:Number(values.deadline);
+    if(!Number.isSafeInteger(deadline)||deadline<0)throw Error('invalid finite refresh deadline');
+    result=refreshCloseouts({cwd,org,loadedCode,deadline});
   }
   else if (command === 'packet' && positionals.length === 1) {
     const { prepareCloseoutPacket } = await import('../lib/closeout-packet.mjs');

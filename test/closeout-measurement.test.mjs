@@ -329,6 +329,29 @@ test('three thousand members over thirty thousand events reuse immutable evidenc
   fs.appendFileSync(audit,'torn');const torn=fs.readFileSync(audit);assert.throws(()=>recordCloseoutTurn(call),/incomplete measurement audit tail/);assert.deepEqual(fs.readFileSync(audit),torn);
 });
 
+test('pane binding correction ignores missing identifiers and preserves real native matches',()=>{
+  for(const inventory of ['agents','panes'])for(const pane of [undefined,null,'']){
+    const f=fixture();
+    f.events.find(e=>e.type==='run.updated').meta={pane};
+    f.inventory[inventory]=[{pane_id:pane}];
+    const doc=f.measure({now:8000000});
+    assert.equal(doc.aggregate.counts.open_over_2h,0,`${inventory}: absent pane ${String(pane)}`);
+    assert.ok(doc.cohort[0].failures.includes('allocation-inventory-unknown'));
+  }
+  for(const [inventory,binding,row] of [
+    ['agents',{pane:'w1:p1'},{pane_id:'w1:p1'}],
+    ['panes',{pane:'w1:p1'},{pane_id:'w1:p1'}],
+    ['agents',{terminal_id:'term-1'},{terminal_id:'term-1'}],
+    ['panes',{terminal_id:'term-1'},{terminal_id:'term-1'}],
+    ['agents',{agent_session_id:'session-1'},{agent_session:{value:'session-1'}}],
+  ]){
+    const f=fixture();
+    f.events.find(e=>e.type==='run.updated').meta=binding;
+    f.inventory[inventory]=[row];
+    assert.equal(f.measure({now:8000000}).aggregate.counts.open_over_2h,1,`${inventory}: ${JSON.stringify(binding)}`);
+  }
+});
+
 test('absent pane bindings, ref mismatches and vanished processes retain exact inventory truth',()=>{
   const f=fixture();f.events.find(e=>e.type==='run.updated').meta={};f.inventory.agents=[{name:'unrelated'}];f.inventory.panes=[{}];
   assert.equal(f.measure({now:8000000}).aggregate.counts.open_over_2h,0);

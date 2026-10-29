@@ -142,6 +142,17 @@ test('BCH partial identity rechecks moved native sessions before Git disposal',t
   assert.equal(fs.existsSync(f.lane),true);assert.equal(effects(f).some(e=>e.action==='git-removal-started'),false);
 });
 
+test('BCH recovery reopens only the unchanged pre-effect partial-identity hold',t=>{
+  const f=partial(t),original=currentCloseoutEntries(f.common,f.org,events(f))[0];
+  const first=f.drain({keys:[original.key],retrySafe:true}).evaluated[0];
+  assert.equal(first.reason,'unbound allocation original worker/claim changed; keep');
+  const before=events(f);assert.equal(f.refresh().created.length,1);
+  const target=currentCloseoutEntries(f.common,f.org,events(f))[0];
+  assert.equal(f.drain({keys:[target.key],retrySafe:true}).evaluated[0].completed,true);
+  assert.deepEqual(events(f).slice(0,before.length),before);assert.equal(fs.existsSync(f.lane),false);
+  assert.equal(effects(f).some(e=>e.action==='agent-exit-requested'),false);
+});
+
 test('BCH retirement still completes after preservation exceeds the old three minute allowance',t=>{
   const f=setup(t,{occupied:false,direct:true,merged:true});selectCurrentCleanup(f);f.report();
   const target=currentCloseoutEntries(f.common,f.org,events(f))[0],realNow=Date.now(),log=f.options.log;let elapsed=0;

@@ -8,7 +8,7 @@ import {bindCloseoutSources,currentCloseoutEntries,unresolvedCloseoutEffect} fro
 import {closeoutNextStage} from '../lib/closeout-status.mjs';
 import {runCloseoutTurn} from '../line-service/closeout-turn.mjs';
 import {refreshCloseouts} from '../lib/closeout-consumer.mjs';
-import {closeoutCondition,preEffectCloseout} from '../lib/closeout-facts.mjs';
+import {closeoutCondition,preEffectCloseout,recordedCloseoutRefusal} from '../lib/closeout-facts.mjs';
 import {sealRemovalInputs} from '../lib/retire-local.mjs';
 import {acquireLock} from '../lanes/promotion-lock.mjs';
 import {setup,events,evaluations,effects,selectCurrentCleanup} from './helpers/closeout-fixture.mjs';
@@ -125,12 +125,43 @@ for(const obstruction of ['cwd','lock'])test(`pre-effect ${obstruction} release 
   assert.equal(drain(f).evaluated[0].completed,true);assert.equal(fs.existsSync(f.lane),false);
 });
 
+test('new refusal facts require structured fences even when reasons quote permission errors',()=>{
+  const target={run:'R-1',common:'/git',key:'target',source:{seq:1,type:'cleanup.bound'}};
+  for(const text of ['EPERM','EACCES','native refusal','Permission denied','operation not permitted','original native refusal']){
+    const reason=`removal preflight input changed: /project/${text}; prepare and observe again; lane kept`;
+    for(const failure of [undefined,{kind:'unknown',code:'OUTCOME_UNKNOWN'}]){
+      const condition=closeoutCondition(target,{reason,failure},[]);
+      assert.equal(condition.kind,'pre-effect-change',reason);
+      const row={type:'closeout.evaluated',identity:target.common,key:target.key,source:target.source,completed:false,reason,failure,condition};
+      assert.equal(recordedCloseoutRefusal(target,[row]),undefined,reason);
+      assert.equal(preEffectCloseout(target,row,[row]),true,reason);
+      assert.equal(closeoutCondition(target,{reason,failure},[],{uncertain:true}).kind,'uncertain-invocation',reason);
+    }
+    assert.equal(closeoutCondition(target,{reason,failure:{kind:'fence',code:'NATIVE_REFUSAL'}},[]).kind,'native-refusal',reason);
+  }
+});
+
+test('successful adapter results quoting permission errors do not create a refusal or stop cleanup',t=>{
+  const f=setup(t,{direct:true,bound:true});f.report();const log=f.options.log;
+  // Add diagnostic prose to the returned result after its exact completion was
+  // journaled. It cannot override that receipt or invent a structured refusal.
+  f.options.log=row=>{log(row);if(row.action==='closed'&&row.tab_id)row.why='No native refusal: not EPERM, EACCES, Permission denied or operation not permitted';};
+  const row=drain(f).evaluated[0];assert.equal(row.completed,true,JSON.stringify(row));
+  assert.equal(row.condition,undefined);assert.equal(row.failure,undefined);
+  assert.equal(row.resources.session.status,'closed');assert.equal(row.resources.folder.status,'removed');
+  assert.equal(row.resources.branch.status,'retained');assert.equal(f.git(['rev-parse','lane/topic']),f.head);
+  assert.equal(recordedCloseoutRefusal(entry(f),events(f)),undefined);
+  const before=events(f),actions=f.read().actions;drain(f);
+  assert.deepEqual(events(f),before);assert.deepEqual(f.read().actions,actions);
+});
+
 test('structured native refusal and historical ambiguity stay held without new reads or erased evidence',t=>{
-  for(const legacy of [false,true]){
+  for(const legacy of [false,'untyped','typed']){
     const f=setup(t,{direct:true,bound:true});f.report();const e=entry(f);
     f.append([{type:'closeout.evaluated',key:e.key,identity:f.common,run:e.run,item:e.item,source:e.source,revision:e.source.seq,
       completed:false,reason:legacy?'original native refusal remains held; explicit owner clearing evidence required':'native command refused',
-      ...(!legacy?{failure:{code:'NATIVE_REFUSAL',kind:'fence'}}:{})}]);
+      ...(!legacy?{failure:{code:'NATIVE_REFUSAL',kind:'fence'}}:{}),
+      ...(legacy==='typed'?{condition:{kind:'legacy-refusal',resources:['session']}}:{})}]);
     const before=events(f),calls=f.herdrCalls();assert.deepEqual(drain(f).evaluated,[]);assert.deepEqual(f.herdrCalls(),calls);
     assert.deepEqual(events(f).slice(0,before.length),before);assert.equal(fs.existsSync(f.lane),true);
   }

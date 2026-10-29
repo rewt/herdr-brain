@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { configFixture } from './helpers/config-home-fixture.mjs';
 import { releaseEnvironment } from './helpers/release-environment.mjs';
 import { configGitEnv } from '../lib/config-home.mjs';
@@ -56,6 +56,28 @@ test('manifest capability follows the target policy reader and preserves both ac
   assert.equal(Object.hasOwn(withoutReader, 'config_home'), false);
   assert.ok(withoutReader.files['lib/config-home.mjs']);
   checkRelease(home, 'snapshot', { verifyFiles: true });
+});
+
+test('an older shell inventory refuses a newer home pin; invoking the accepted root admits dispatch without replay',async t=>{
+  const f=configFixture(t);
+  await f.adopt();
+  execFileSync(process.execPath,[tooling,'pin',f.installationHome,f.cwd,'compatible'],{cwd:f.cwd,env:f.env,stdio:['ignore','pipe','pipe']});
+  const older=f.release('older-tools'),inventory=path.join(older,'lib/product-files.mjs');
+  // Reproduce d993883a63's inventory rule: the three later ENG-864 assets
+  // exist in the selected bundle but are absent from the caller's recipe.
+  const original=fs.readFileSync(inventory,'utf8');
+  const reduced=original.replace(/\.\.\.\['r1176', 'sol-research', 'claude-research'\]\.map\(id => `docs\/evidence\/ENG-864\/\$\{id\}\.json`\)/,"...[]");
+  assert.notEqual(reduced,original);fs.writeFileSync(inventory,reduced);
+  const run=root=>spawnSync('bash',[path.join(root,'herdr/release.sh'),'exec','dispatch/dispatch.mjs','--repo',f.cwd,'--help'],{
+    cwd:f.cwd,env:{...f.env,HERDR_MONITOR_HOME:path.join(f.scratch,'wrong-installation')},encoding:'utf8'});
+  const refused=run(older);assert.notEqual(refused.status,0);assert.match(refused.stderr,/incomplete release compatible: inventory/);
+  const accepted=run(f.bundle);assert.equal(accepted.status,0,accepted.stderr);assert.match(accepted.stdout,/Usage: node dispatch\/dispatch.mjs/);
+  const manifestFile=path.join(f.bundle,'.release-manifest.json'),before=fs.readFileSync(manifestFile);
+  // Selecting the correct verifier retains integrity checks; a removed
+  // manifest entry cannot become a successful help/dispatch invocation.
+  const drift=JSON.parse(before);delete drift.files['lib/state.mjs'];fs.writeFileSync(manifestFile,JSON.stringify(drift));
+  const damaged=run(f.bundle);assert.notEqual(damaged.status,0);assert.match(damaged.stderr,/inventory/);
+  fs.writeFileSync(manifestFile,before);
 });
 
 function archiveSnapshot(f, ref, id) {

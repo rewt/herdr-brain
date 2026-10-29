@@ -139,6 +139,20 @@ planning any new action. No global-current or development-source fallback is
 used. The Node executable must equal the original recorded installation and
 execute Node20.19.4; it is retained rather than upgraded.
 
+An original install can retain `phase: "uncertain-or-refused"`: `install` writes
+that phase when its one `launchctl bootstrap` throws or returns nonzero.
+`restart` records its own uncertainty in `controls.jsonl`; it does not rewrite
+the installation phase. Do not edit that receipt or replay the install.
+Migration accepts the original uncertain install only with all the same guards,
+including positive native absence and this service's unchanged STOP. Its
+immutable migration archive records a `line-stopped-installation/v1` observation,
+and the same record transaction appends `line-service.stopped-installation-verified`
+before the migration completion. The original phase/error remain preserved;
+this proves the stopped state, never claims the refused bootstrap succeeded.
+Dry-run still writes nothing. `starting`, other phases and partial/UNKNOWN
+migrations remain refused. This recovery must be present in the accepted release
+**before the project's one migration**; a7b9b37dcd does not contain it.
+
 The only plist change is the controller entry point in `ProgramArguments[1]`.
 Label, project/record, recipient, Node, Herdr executable, socket, PATH, interval
 and log paths remain the saved values. The installation retains its original
@@ -175,6 +189,23 @@ future controller effects rather than silently rebinding a saved controller.
 Observe the first real pass's source, queue, capacity and effects using existing
 receipts. Offline controls simulate launchctl in disposable projects and are
 not a BCH restart or live acceptance receipt.
+
+Use that accepted immutable root for shell adapters as well:
+
+```sh
+bash "$ACCEPTED_ROOT/herdr/release.sh" exec dispatch/dispatch.mjs --repo /OWN/CANONICAL --help
+# For new authorized work, replace --help with that work's original arguments.
+```
+
+The shell uses the adjacent `herdr/releases.mjs`, even when the project pin
+selects a different release. The d993883a63 verifier rejects a7b9b37dcd with
+`incomplete release ...: inventory`: its caller-side inventory lacks the three
+`docs/evidence/ENG-864/{r1176,sol-research,claude-research}.json` assets. The
+a7b9b37dcd verifier includes them and accepts the same unchanged bundle. Changing
+PATH, cwd or `HERDR_MONITOR_HOME` does not update an explicitly selected old
+script's verifier. Use the accepted root's script and retain full verification;
+do not alter a manifest, remove assets or retry an UNKNOWN dispatch. `--help`
+is a read-only launcher check, not evidence that a live dispatch completed.
 
 Focused producer selection for this change: `node test/helpers/run.mjs
 test/line-service-runtime.test.mjs` and the existing `launchd uses` control in

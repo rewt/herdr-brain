@@ -11,13 +11,14 @@ import {lineDirectory} from '../line-service/cutoff.mjs';
 import {launchPlist} from '../line-service/plist.mjs';
 import {noticeLock} from '../supervisor/notice-lock.mjs';
 
-async function fixture(t){
+async function fixture(t,{phase='installed'}={}){
   const f=configFixture(t,{custom:true}),org=f.env.ORG_DIR,identity=gitProject(f.cwd).identity,directory=lineDirectory(org,identity);
   fs.writeFileSync(path.join(f.cwd,'.herdr-release.json'),'{"release":"compatible"}\n');f.git('add','.herdr-release.json');f.git('commit','-qm','Accept fixture release');
   fs.mkdirSync(directory,{recursive:true});
   const file=path.join(directory,'service.plist'),stop=path.join(directory,'STOP'),installationFile=path.join(directory,'installation.json');
   const source=path.join(f.scratch,'retained-development-source'); // Deliberately absent: no mutable development dependency.
-  const installation={at:'2026-10-27T00:00:00Z',target:`gui/${process.getuid()}/dev.herdr.line.${path.basename(directory)}`,repo:f.cwd,org,source:source+path.sep,node:process.execPath,file,phase:'installed'};
+  const installation={at:'2026-10-27T00:00:00Z',target:`gui/${process.getuid()}/dev.herdr.line.${path.basename(directory)}`,repo:f.cwd,org,source:source+path.sep,node:process.execPath,file,phase,
+    ...(phase==='uncertain-or-refused'?{error:'Bootstrap failed: 5: Input/output error'}:{})};
   fs.writeFileSync(installationFile,JSON.stringify(installation)+'\n');
   fs.writeFileSync(file,launchPlist({label:`dev.herdr.line.${path.basename(directory)}`,repo:f.cwd,org,to:'fixture-supervisor',herdr:'/saved/bin/herdr',socket:'/saved/native.sock',directory,
     node:process.execPath,source,interval:47,searchPath:'/saved/bin:/usr/bin:/bin'}));
@@ -100,6 +101,47 @@ test('migration refuses loaded, occupied, foreign, held, dirty and drifted bindi
   fs.writeFileSync(f.file,initial);
   fs.writeFileSync(f.installationFile,JSON.stringify({...f.installation,node:'/changed/node'}));assert.throws(()=>f.migrate(),/installation binding/);
   fs.writeFileSync(f.installationFile,f.original.installation);unchanged(f);
+});
+
+test('stopped uncertain install migrates with an append-only observation and preserves its original refused effect',async t=>{
+  const f=await fixture(t,{phase:'uncertain-or-refused'}),before=fs.readdirSync(f.directory).sort();
+  const plan=f.migrate({dryRun:true});unchanged(f);assert.deepEqual(fs.readdirSync(f.directory).sort(),before);
+  const result=f.migrate({expectedPlan:plan.archive.sha256}),archive=JSON.parse(fs.readFileSync(result.archive.file));
+  const saved=JSON.parse(fs.readFileSync(f.installationFile));
+  assert.equal(saved.phase,'uncertain-or-refused');assert.equal(saved.error,f.installation.error);
+  assert.equal(archive.before.installation,f.original.installation);
+  const observed=loadEvents(f.org).events.filter(e=>e.type==='line-service.stopped-installation-verified');
+  assert.equal(observed.length,1);assert.equal(observed[0].observation.schema,'line-stopped-installation/v1');
+  assert.equal(observed[0].observation.service.loaded,false);assert.match(observed[0].observation.service.native,/Could not find service/);
+  assert.equal(observed[0].observation.bootstrap_replayed,false);assert.equal(observed[0].archive.sha256,result.archive.sha256);
+  assert.deepEqual(observed[0].observation,archive.stopped_installation);
+  assert.equal(fs.readFileSync(f.stop,'utf8'),f.original.stop);
+  assert.equal(fs.readFileSync(path.join(f.org,'dispatch/retained.json'),'utf8'),f.original.jobs);
+  assert.equal(fs.readFileSync(path.join(f.directory,'effects.json'),'utf8'),f.original.effects);
+  const {installedContext}=await f.module('line-service/cutoff.mjs');assert.equal(installedContext(f.cwd,f.org).installation.phase,'uncertain-or-refused');
+  const events=fs.readFileSync(path.join(f.org,'events.jsonl'),'utf8');assert.equal(f.migrate().existing,true);
+  assert.equal(fs.readFileSync(path.join(f.org,'events.jsonl'),'utf8'),events);
+  assert.equal(f.calls.some(c=>c.args[0]==='bootstrap'||c.args[0]==='bootout'),false);
+});
+
+test('uncertain install still requires positive absence, STOP, exact original phase and final observation CAS',async t=>{
+  const f=await fixture(t,{phase:'uncertain-or-refused'});
+  f.setLoaded(true);assert.throws(()=>f.migrate(),/remains loaded/);f.setLoaded(false);unchanged(f);
+  const command=(exe,args,options)=>args[0]==='print'?{status:1,stderr:'Permission denied'}:f.args.command(exe,args,options);
+  assert.throws(()=>f.migrate({command}),/Permission denied/);unchanged(f);
+  fs.unlinkSync(f.stop);assert.throws(()=>f.migrate(),/ENOENT|own STOP/);fs.writeFileSync(f.stop,f.original.stop);
+  fs.writeFileSync(f.installationFile,JSON.stringify({...f.installation,phase:'starting'}));
+  assert.throws(()=>f.migrate(),/installation binding/);fs.writeFileSync(f.installationFile,f.original.installation);unchanged(f);
+  let prints=0;
+  const changed=(exe,args,options)=>{
+    const result=f.args.command(exe,args,options);
+    if(args[0]==='print'&&++prints===2)fs.appendFileSync(f.installationFile,' ');
+    return result;
+  };
+  assert.throws(()=>f.migrate({command:changed}),/CAS changed/);
+  assert.equal(fs.existsSync(path.join(f.directory,'migrations')),false);
+  assert.equal(loadEvents(f.org).events.some(e=>e.type==='line-service.stopped-installation-verified'),false);
+  assert.equal(f.calls.some(c=>c.args[0]==='bootstrap'||c.args[0]==='bootout'),false);
 });
 
 test('migration rejects missing acceptance, changed payload and a different project pin',async t=>{

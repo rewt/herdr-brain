@@ -62,12 +62,13 @@ export function migrateRuntime({repo,org,id,dryRun=false,expectedPlan,cwd=proces
     const main=loadDiscoveredRoutes({cwd:c.repo,env}).config.main??'main';
     if(git(c.repo,['symbolic-ref','--short','HEAD'])!==main||git(c.repo,['status','--porcelain=v1','--untracked-files=all']))throw Error('migration requires clean canonical main');
     const head=git(c.repo,['rev-parse','HEAD']),runtime=acceptedRuntime(c.repo,{home});
-    if(inspectService(target,c.repo,command).loaded)throw Error('service remains loaded; retain STOP and finish its supported stop');
-    return{head,runtime,stop_sha256:digest(stopBytes)};
+    const service=inspectService(target,c.repo,command);
+    if(service.loaded)throw Error('service remains loaded; retain STOP and finish its supported stop');
+    return{head,runtime,stop_sha256:digest(stopBytes),service};
   };
   const snapshot=initial(),loaded=loadEvents(c.org);if(loaded.tornTail)throw Error('incomplete record prevents service migration');
   const savedBytes=readPlainFile(installationFile),saved=JSON.parse(savedBytes),plistBytes=readPlainFile(file);
-  if(saved.repo!==c.repo||saved.org!==c.org||saved.file!==file||saved.target!==target||saved.node!==process.execPath||saved.phase!=='installed'||!path.isAbsolute(saved.source??''))throw Error('saved installation binding differs; retain it');
+  if(saved.repo!==c.repo||saved.org!==c.org||saved.file!==file||saved.target!==target||saved.node!==process.execPath||!['installed','uncertain-or-refused'].includes(saved.phase)||!path.isAbsolute(saved.source??''))throw Error('saved installation binding differs; retain it');
   const prior=loaded.events.filter(e=>e.type==='line-service.runtime-migrated'&&e.project===c.identity&&e.org===c.org);
   if(prior.length){
     serviceCutoff(loaded.events,c);
@@ -86,8 +87,15 @@ export function migrateRuntime({repo,org,id,dryRun=false,expectedPlan,cwd=proces
       !/^[a-f0-9]{40}(?:[a-f0-9]{24})?$/.test(cutover.canonical_head??'')||cutover.main!==git(c.repo,['symbolic-ref','--short','HEAD']))throw Error('original cutover binding differs; preserve it');
   git(c.repo,['merge-base','--is-ancestor',cutover.canonical_head,snapshot.head]);
   const nextPlist=replacementPlist(c,saved,command),after={...saved,source:runtimeRoot,runtime:snapshot.runtime};
+  // Observe the stopped state, never complete or replay the refused bootstrap.
+  // Keep its original phase/error in both the archive and migrated installation.
+  const stoppedInstallation=saved.phase==='uncertain-or-refused'?{
+    schema:'line-stopped-installation/v1',phase:saved.phase,installation_sha256:digest(savedBytes),
+    target,service:snapshot.service,stop_sha256:snapshot.stop_sha256,bootstrap_replayed:false,
+  }:null;
   const archive={schema:'line-runtime-migration/v1',id,repo:c.repo,org:c.org,identity:c.identity,source:runtimeRoot,previous_source:cutover.source,
     owner,canonical_head:snapshot.head,stop_sha256:snapshot.stop_sha256,cutover,runtime:snapshot.runtime,
+    ...(stoppedInstallation?{stopped_installation:stoppedInstallation}:{}),
     before:{installation:savedBytes,plist:plistBytes},after:{installation:JSON.stringify(after),plist:nextPlist}};
   const bytes=json(archive),ref={id,file:archiveFile,sha256:digest(bytes)},nextInstallation=json({...after,migration:ref});
   const locks=[path.join(c.directory,'control.lock'),path.join(c.directory,'pass.lock'),path.join(c.identity,'lane-promote.lock')];
@@ -114,7 +122,9 @@ export function migrateRuntime({repo,org,id,dryRun=false,expectedPlan,cwd=proces
           fault('intent');
           writeFileAtomic(file,nextPlist,0o600);fault('plist');
           writeFileAtomic(installationFile,nextInstallation,0o600);fault('installation');
-          return{add:[{type:'line-service.runtime-migrated',id,project:c.identity,repo:c.repo,org:c.org,source:runtimeRoot,previous_source:cutover.source,
+          const observed=stoppedInstallation?[{type:'line-service.stopped-installation-verified',id,project:c.identity,repo:c.repo,org:c.org,
+            observation:stoppedInstallation,archive:{file:ref.file,sha256:ref.sha256},native_caller:owner.native,runtime_started:false}]:[];
+          return{add:[...observed,{type:'line-service.runtime-migrated',id,project:c.identity,repo:c.repo,org:c.org,source:runtimeRoot,previous_source:cutover.source,
             cutover_seq:cutover.seq,cutover_id:cutover.id,runtime:snapshot.runtime,archive:{file:ref.file,sha256:ref.sha256},native_caller:owner.native,runtime_started:false}],result:{migrated:true,id,target,archive:ref,runtime:snapshot.runtime,stopped:true,runtime_started:false}};
         },{actor:owner.native.name,strictTail:true,lockOptions:{recover:false}});
         return result.result;

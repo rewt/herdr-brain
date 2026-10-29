@@ -171,15 +171,64 @@ const reasonCases = [
   ['lane branch history is unavailable and no recorded terminal chain', null],
   ['promotion queue cleanup pending; retry through queue', 'UNKNOWN'],
 ];
+function plannerReasonLiterals(source) {
+  // Keep strings/templates opaque: punctuation in wording or interpolation is
+  // not expression syntax. Comments likewise cannot invent a reason site.
+  const tokens = source.match(/\/\*[\s\S]*?\*\/|\/\/[^\n]*|'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"|`(?:[^`\\]|\\.)*`|\?\?=|\?\.|\?\?|===|==|=>|[\w$]+|[^\s]/g)
+    ?.filter(token => !token.startsWith('//') && !token.startsWith('/*')) ?? [];
+  const emitted = [];
+  for (let i = 0; i < tokens.length; i++) {
+    const assignment = tokens[i] === 'reason' && ['=', '??='].includes(tokens[i + 1]);
+    if (tokens[i] !== 'return' && !assignment) continue;
+    const start = i + (assignment ? 2 : 1);
+    // Returned records contain display labels and release reasons, which have
+    // their own census below; only reason-valued expressions belong here.
+    if (tokens[start] === '{') continue;
+    let depth = 0, literalBranch = true;
+    const questions = [];
+    for (let j = start; j < tokens.length; j++) {
+      const token = tokens[j];
+      if (depth === 0 && [';', ',', ')', ']', '}'].includes(token)) break;
+      if (/^['"`]/.test(token)) {
+        if (literalBranch) emitted.push(token.slice(1, -1));
+        literalBranch = false;
+      } else if (token === '?') {
+        questions.push(depth); literalBranch = true;
+      } else if (token === ':' && questions.at(-1) === depth) {
+        questions.pop(); literalBranch = true;
+      } else if (['(', '[', '{'].includes(token)) {
+        depth++;
+        if (token !== '(') literalBranch = false;
+      } else {
+        if ([')', ']', '}'].includes(token)) depth--;
+        literalBranch = false;
+      }
+    }
+  }
+  return emitted;
+}
+
 test('every planner reason expression is enumerated and mapped; source drift fails', () => {
+  for (const expression of [
+    "return a.b ? 'first' : 'second';",
+    'return a?.b && check(c) ? "first" : `second`;',
+    "return outer ? (inner ? 'first' : 'second') : 'third';",
+    "return outer ? 'first' : inner ? 'second' : 'third';",
+    "reason = a.b ? 'first' : 'second';",
+    "reason ??= outer ? inner ? 'first' : 'second' : 'third';",
+    "return ({ flag: 'condition only' }).flag ? ('first') : ('second');",
+    "return a /* ? 'comment only' : 'comment only' */ ? 'first' : 'second';",
+  ]) {
+    const expected = expression.includes('third') ? ['first', 'second', 'third'] : ['first', 'second'];
+    assert.deepEqual(plannerReasonLiterals(expression), expected, expression);
+  }
+  assert.deepEqual(plannerReasonLiterals("return { decision: ready ? 'keep' : 'release' };"), []);
+  assert.deepEqual(plannerReasonLiterals('return `wording ${flag ? "inside" : "template"}`;'), ['wording ${flag ? "inside" : "template"}']);
   const source = fs.readFileSync(new URL('../lib/retire.mjs', import.meta.url), 'utf8');
   // Native exit observations return state labels, rather than planner reasons.
   const reasons = source.replace(source.slice(source.indexOf('function exitOccupantState'), source.indexOf('const exitObservation')), '');
   const policy = reasons.slice(0, reasons.indexOf('// One executor')) + reasons.slice(reasons.indexOf('export function laneRemovalReason'));
-  const emitted = [...policy.matchAll(/\b(?:return|reason\s*(?:\?\?=|=))\s*('(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`)/g)].map(m => m[1].slice(1, -1));
-  // Conditional returns emit either literal; inventory both identity guards.
-  const conditional = /\breturn\s+\w+\s*\?\s*('(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`)\s*:\s*('(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`)/g;
-  emitted.push(...[...policy.matchAll(conditional)].flatMap(m => m.slice(1).map(value => value.slice(1, -1))));
+  const emitted = plannerReasonLiterals(policy);
   assert.deepEqual([...new Set(emitted)].sort(), reasonCases.map(([expression]) => expression).sort());
   const s = fixture(); item(s).closed = null; s.references.push({ kind: 'host-check', job: 'job', owner: 'owner' });
   for (const [expression, expected, sample = expression] of reasonCases) {

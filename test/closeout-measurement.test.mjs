@@ -329,6 +329,43 @@ test('three thousand members over thirty thousand events reuse immutable evidenc
   fs.appendFileSync(audit,'torn');const torn=fs.readFileSync(audit);assert.throws(()=>recordCloseoutTurn(call),/incomplete measurement audit tail/);assert.deepEqual(fs.readFileSync(audit),torn);
 });
 
+for(const status of ['retained','deleted'])test(`branch-inventory: ${status} requires both a linked receipt and consistent live refs`,()=>{
+  const setup=()=>{
+    const f=fixture();
+    f.resources.branch.status=status;
+    f.effects[2].outcome.action=status==='retained'?'branch-kept':'branch-removed';
+    f.inventory.branches=status==='retained'?[{branch:'lane/work',head:'head'}]:[];
+    return f;
+  };
+  // Ref spelling is normalized on each side; unrelated refs prove neither
+  // retention nor disappearance of this allocation's branch.
+  for(const targetPrefix of ['', 'refs/heads/'])for(const inventoryPrefix of ['', 'refs/heads/']){
+    const f=setup();f.report.closeout_targets[0].branch=targetPrefix+'lane/work';
+    f.inventory.branches=f.inventory.branches.map(ref=>({...ref,branch:inventoryPrefix+ref.branch}));
+    f.inventory.branches.push({branch:inventoryPrefix+'lane/other',head:'head'});
+    assert.equal(f.measure().green,true,`${status}: ${targetPrefix}, ${inventoryPrefix}`);
+  }
+  const cases=[
+    ['missing inventory',f=>{delete f.inventory.branches;}],
+    ['missing target ref',f=>{delete f.report.closeout_targets[0].branch;}],
+    ['contradictory live ref',f=>{f.inventory.branches=status==='retained'?[]:[{branch:'refs/heads/lane/work',head:'head'}];}],
+    ['missing receipt',f=>{delete f.resources.branch.receipt;}],
+    ['unlinked receipt',f=>{f.resources.branch.receipt.effect='unknown-effect';}],
+    ['wrong receipt action',f=>{f.effects[2].outcome.action=status==='retained'?'branch-removed':'branch-kept';}]
+  ];
+  if(status==='retained')cases.push(
+    ['moved head',f=>{f.inventory.branches[0].head='foreign-head';}],
+    ['unrelated ref only',f=>{f.inventory.branches[0].branch='lane/other';}]
+  );
+  for(const [name,change] of cases){
+    const f=setup();change(f);const doc=f.measure(),row=doc.cohort[0];
+    assert.equal(doc.green,false,name);
+    assert.equal(doc.aggregate.denominator,1,name);
+    assert.ok(row.failures.includes('branch-inventory-unproven'),name);
+    assert.ok(row.failures.includes('resource-proof-incomplete'),name);
+  }
+});
+
 test('absent pane bindings, ref mismatches and vanished processes retain exact inventory truth',()=>{
   const f=fixture();f.events.find(e=>e.type==='run.updated').meta={};f.inventory.agents=[{name:'unrelated'}];f.inventory.panes=[{}];
   assert.equal(f.measure({now:8000000}).aggregate.counts.open_over_2h,0);

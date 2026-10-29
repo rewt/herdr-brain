@@ -17,6 +17,10 @@ import { validatePolicy } from '../lib/config-policy.mjs';
 cliHelp(import.meta.url, 'Usage: node herdr/releases.mjs manifest ROOT [SUMMARY] | install HOME BIN | pin HOME PROJECT TAG | unpin HOME PROJECT | attest HOME TAG SUMMARY | pin-status HOME PROJECT [--json] | exec HOME ENTRY [ARGS...] | run ENTRY [ARGS...]');
 
 const [action, home, target, ...rest] = process.argv.slice(2);
+function requireExecRuntime() {
+  const root=fileURLToPath(new URL('../',import.meta.url)),version=readPlainFile(path.join(root,'.nvmrc')).trim();
+  if(process.version!==`v${version}`)throw Error(`release exec requires Node ${version}; running ${process.version} at ${process.execPath}; prepend the pinned Node directory to PATH before invoking release.sh`);
+}
 try {
   if (action === 'freeze-validation') {
     const { freezeReleaseValidation } = await import('./validation-admission.mjs');
@@ -146,8 +150,12 @@ try {
       if (status.admissionError) console.log(`admission refused: ${status.admissionError}`);
       console.log(`current: ${status.current ?? 'none'}`);
     }
-  } else if (action === 'exec') process.exitCode = runRelease(target, rest, { home });
+  } else if (action === 'exec') {
+    requireExecRuntime();
+    process.exitCode = runRelease(target, rest, { home });
+  }
   else if (action === 'run') {
+    requireExecRuntime();
     const root = fileURLToPath(new URL('../', import.meta.url));
     const installedHome = fs.existsSync(path.join(root, '.release-commit')) ? path.dirname(path.dirname(root)) : releaseHome();
     process.exitCode = runRelease(home, target === undefined ? [] : [target, ...rest], { home: installedHome, fallbackRoot: root });

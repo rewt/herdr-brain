@@ -193,7 +193,7 @@ not a BCH restart or live acceptance receipt.
 Use that accepted immutable root for shell adapters as well:
 
 ```sh
-bash "$ACCEPTED_ROOT/herdr/release.sh" exec dispatch/dispatch.mjs --repo /OWN/CANONICAL --help
+PATH="$(dirname "$NODE"):$PATH" bash "$ACCEPTED_ROOT/herdr/release.sh" exec dispatch/dispatch.mjs --repo /OWN/CANONICAL --help
 # For new authorized work, replace --help with that work's original arguments.
 ```
 
@@ -206,6 +206,14 @@ PATH, cwd or `HERDR_MONITOR_HOME` does not update an explicitly selected old
 script's verifier. Use the accepted root's script and retain full verification;
 do not alter a manifest, remove assets or retry an UNKNOWN dispatch. `--help`
 is a read-only launcher check, not evidence that a live dispatch completed.
+New tooling includes the invoking root and pinned script path in this inventory
+refusal; it never automatically hands off to another toolchain after failure.
+The already shipped d993883a63 script retains its original error. Shell `exec`
+uses `node` from PATH, and its entry child uses that Node's `process.execPath`.
+New tooling checks its own `.nvmrc` before selection/execution and refuses any
+other version, including Node22. Prepend the saved Node20.19.4 directory as above;
+the command neither discovers an alternative interpreter nor changes a saved
+runtime or pin.
 
 Focused producer selection for this change: `node test/helpers/run.mjs
 test/line-service-runtime.test.mjs` and the existing `launchd uses` control in

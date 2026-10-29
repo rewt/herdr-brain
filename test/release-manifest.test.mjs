@@ -68,10 +68,19 @@ test('an older shell inventory refuses a newer home pin; invoking the accepted r
   const original=fs.readFileSync(inventory,'utf8');
   const reduced=original.replace(/\.\.\.\['r1176', 'sol-research', 'claude-research'\]\.map\(id => `docs\/evidence\/ENG-864\/\$\{id\}\.json`\)/,"...[]");
   assert.notEqual(reduced,original);fs.writeFileSync(inventory,reduced);
+  const env={...f.env,PATH:path.dirname(process.execPath)+path.delimiter+f.env.PATH,HERDR_MONITOR_HOME:path.join(f.scratch,'wrong-installation')};
   const run=root=>spawnSync('bash',[path.join(root,'herdr/release.sh'),'exec','dispatch/dispatch.mjs','--repo',f.cwd,'--help'],{
-    cwd:f.cwd,env:{...f.env,HERDR_MONITOR_HOME:path.join(f.scratch,'wrong-installation')},encoding:'utf8'});
+    cwd:f.cwd,env,encoding:'utf8'});
   const refused=run(older);assert.notEqual(refused.status,0);assert.match(refused.stderr,/incomplete release compatible: inventory/);
+  assert.ok(refused.stderr.includes(`invoking tools ${older}`));assert.ok(refused.stderr.includes(`use the pinned release.sh at ${f.bundle}/herdr/release.sh`));
   const accepted=run(f.bundle);assert.equal(accepted.status,0,accepted.stderr);assert.match(accepted.stdout,/Usage: node dispatch\/dispatch.mjs/);
+  // Simulate the reported PATH Node version before the tooling module loads;
+  // no dependency on a second host Node installation and no dispatch effect.
+  const preload=path.join(f.scratch,'node22.mjs');fs.writeFileSync(preload,"Object.defineProperty(process,'version',{value:'v22.22.3'});\n");
+  for(const args of [['run','dispatch/dispatch.mjs','--help'],['exec',f.installationHome,'dispatch/dispatch.mjs','--help']]){
+    const wrongNode=spawnSync(process.execPath,['--import',preload,path.join(f.bundle,'herdr/releases.mjs'),...args],{cwd:f.cwd,env,encoding:'utf8'});
+    assert.notEqual(wrongNode.status,0);assert.equal(wrongNode.stdout,'');assert.match(wrongNode.stderr,/requires Node 20\.19\.4; running v22\.22\.3/);
+  }
   const manifestFile=path.join(f.bundle,'.release-manifest.json'),before=fs.readFileSync(manifestFile);
   // Selecting the correct verifier retains integrity checks; a removed
   // manifest entry cannot become a successful help/dispatch invocation.

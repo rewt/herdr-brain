@@ -156,6 +156,8 @@ const reasonCases = [
   ['agent kind has no declared exit command', 'UNKNOWN'],
   ['open recorded run uses lane', 'ACTIVE'],
   ['occupied lane; retire panes before removing the worktree', 'UNKNOWN'],
+  ['physical cleanup requires complete native vacancy evidence', 'UNKNOWN'],
+  ['physical cleanup original native target remains or moved; keep', 'UNKNOWN'],
   ['unknown or mismatched registered lane identity', 'UNKNOWN'],
   ['lane worktree is not clean', null],
   ['lane tip is not integrated in main', null],

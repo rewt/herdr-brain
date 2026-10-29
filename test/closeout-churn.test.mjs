@@ -93,7 +93,8 @@ test('slow original-evidence refresh cannot run ahead of a bound eligible closeo
 test('a finite allowance records partial folder progress then recovers its exact branch separately',t=>{
   const f=fixture(t),target=currentCloseoutEntries(f.common,f.org,events(f))[0],log=f.options.log;let now=Date.now(),charged=false;
   t.mock.method(Date,'now',()=>now);
-  f.options.log=row=>{log(row);if(!charged&&row.action==='worktree-removed'){charged=true;now+=170000;}};
+  // Leave too little of the current turn for branch removal after the folder.
+  f.options.log=row=>{log(row);if(!charged&&row.action==='worktree-removed'){charged=true;now+=CLOSEOUT_TURN_BUDGET_MS-10000;}};
   const drain=()=>f.drain({keys:[target.key],retrySafe:true,retirementOptions:{...f.options,deadline:now+CLOSEOUT_TURN_BUDGET_MS}});
   const first=drain().evaluated[0];assert.equal(first.completed,false);assert.equal(first.condition.kind,'pre-effect-budget');
   assert.equal(first.resources.folder.status,'removed');assert.equal(first.resources.branch.status,'kept');

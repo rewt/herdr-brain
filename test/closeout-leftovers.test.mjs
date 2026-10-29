@@ -65,7 +65,8 @@ test('a late target receives a fresh finite removal allowance on the next turn',
     cli:(_file,argv)=>{
       if(argv[0]==='refresh')return '{}';
       const allowance=Number(argv[argv.indexOf('--deadline')+1])-(1000000+clock);
-      seen.push({key:JSON.parse(argv[argv.indexOf('--keys')+1])[0],allowance});clock+=164000;
+      // Preserve a short tail that cannot admit another target in this turn.
+      seen.push({key:JSON.parse(argv[argv.indexOf('--keys')+1])[0],allowance});clock+=CLOSEOUT_TURN_BUDGET_MS-16000;
       return '{"evaluated":[]}';
     }};
   const first=runCloseoutTurn(args);assert.equal(first.steps,1);assert.equal(first.continuation.closeout,1);

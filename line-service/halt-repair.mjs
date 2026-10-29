@@ -20,7 +20,7 @@ const repair=item=>item?.meta?.halt_repair===1;
 // dependencies have closed. Only normal admission's current input is work an
 // idle diagnosis can help; this observation never clears an original attempt.
 const readyItems=({state,events,org,identity})=>[...state.items.values()].filter(i=>i.kind!=='goal'&&queueSelected(i)&&!repair(i)&&!roleIs(i,'REV')&&
-  !itemLaunchHold(state,i.id)&&!['security','funds-and-chain','publish','delete-data','licensing','priorities'].includes(i.meta.category)&&
+  !itemLaunchHold(state,i.id,events)&&!['security','funds-and-chain','publish','delete-data','licensing','priorities'].includes(i.meta.category)&&
   dispatchInput({state,events,item:i,org,identity}));
 const held=i=>[i.id,i.meta.hold??null,i.meta.held??null,i.meta.reserved??null,i.meta.operator_reserved??null,i.meta.category??null];
 

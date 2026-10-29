@@ -432,6 +432,9 @@ test('permanent index counts unclaimed commits and own unreported landings and s
 
 test('supplemental coverage keeps pending and verdict scopes immutable and excludes interleaved independent source',t=>{
   const f=fixture(t);partialReview(f,'REV-1203',{head:f.heads[1],base:f.heads[0],run:'R-3403',verdict:'PASS'});partialReview(f,'REV-1204',{head:f.heads[0],base:f.base,run:'R-3404'});
+  // Corrections inherit producer references, but are not prior review captures.
+  f.add([{type:'item.added',id:'ENG-9001',role:'engineer',title:'Owned correction',parent:'REV-1203',from_run:'R-3403',meta:{review_fix_of:`ENG-1:${f.heads[1]}`,review_source_item:'ENG-1',review_source_run:'R-1',queue_selected:true}}]);
+  const correction=structuredClone(f.context().state.items.get('ENG-9001'));
   const original=[...f.context().state.items.values()].filter(q=>q.role==='reviewer').map(q=>structuredClone(q)),foreign=independentProducer(f);
   f.git(['merge','--ff-only',foreign]);const later=[];
   for(const n of [3,4]){fs.writeFileSync(path.join(f.workspace,`later-${n}`),String(n));f.git(['add','.']);f.git(['commit','-qm',`Later ${n}`]);later.push(f.git(['rev-parse','HEAD']));}
@@ -440,7 +443,7 @@ test('supplemental coverage keeps pending and verdict scopes immutable and exclu
   try{
     const changes=discoverChanges({...f.context(),pendingOnly:true}).changes.filter(c=>c.run.id==='R-1');assert.equal(changes.length,1);assert.deepEqual(capturedReviewCommits(changes[0].target),later);assert.equal(changes[0].target.base,foreign);
     const r=queueReviewMutation({...f.context(),runId:'R-1',head:later[1],env});f.add(r.add);const c=f.context(),q=c.state.items.get(r.result.review_item);assert.deepEqual(validateQueuedReview({...c,item:q}),q.meta.review_target);
-    for(const old of original)assert.deepEqual(c.state.items.get(old.id),old);assert.equal(c.events.filter(e=>e.type==='change.reviewed').length,1);assert.equal(queueReviewMutation({...c,runId:'R-1',head:later[1],env}).add.length,0);
+    for(const old of original)assert.deepEqual(c.state.items.get(old.id),old);assert.deepEqual(c.state.items.get('ENG-9001'),correction);assert.equal(c.events.filter(e=>e.type==='change.reviewed').length,1);assert.equal(queueReviewMutation({...c,runId:'R-1',head:later[1],env}).add.length,0);
     const health=reviewHealth({...c,index:canonicalReviewIndex(c)});assert.equal(health.done_commits,1);assert.ok(!health.coverage_gaps.some(g=>later.includes(g.head)));assert.ok(health.coverage_gaps.some(g=>g.head===foreign));
     fs.mkdirSync(path.join(f.org,'settle'),{recursive:true});fs.writeFileSync(path.join(f.org,'settle/unknown.json'),JSON.stringify({run:'R-1',head:later[1],qualification:'UNKNOWN'}));assert.throws(()=>validateQueuedReview({...c,item:q}),/UNKNOWN|attempt/);
   }finally{process.chdir(before);}

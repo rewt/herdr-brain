@@ -124,7 +124,7 @@ export function queueReviewMutation({ state, events, org, repo, runId, head, bas
     }
   };
   if (!deferCommit) verifyProducer();
-  const archived=new Set(bound.authorization?.archived_review_items??[]),key = `${item.id}:${target.head}`,group=producerGroupKey(item.id,run.id,target.reportHash),existing = [...state.items.values()].filter(q => !archived.has(q.id)&&(sameProducerQueue(q,item.id,run.id)||q.meta.review_key===key)&&!disjointCapture({repo,target,peer:q.meta.review_target}));
+  const archived=new Set(bound.authorization?.archived_review_items??[]),key = `${item.id}:${target.head}`,group=producerGroupKey(item.id,run.id,target.reportHash),existing = [...state.items.values()].filter(q => roleIs(q,'REV')&&!archived.has(q.id)&&(sameProducerQueue(q,item.id,run.id)||q.meta.review_key===key)&&!disjointCapture({repo,target,peer:q.meta.review_target}));
   if (existing.length) {
     if (existing.length !== 1 || !isQueueReview(existing[0]) || queueProducerGroup(existing[0])!==group || !sameCapturedTarget(existing[0].meta.review_target,target)) throw Error('whole producer review already retained with different/partial/UNKNOWN capture; preserve attempts, verdicts and cap1');
     return { add: [], ...(deferCommit ? { commit: validate => { verifyProducer(); validate(); } } : {}), result: { result: 'review_queued', review_item: existing[0].id, source_item: item.id, head: target.head, existing: true } };
@@ -191,7 +191,7 @@ export function validateQueuedReview({ item, state, events, org, repo, allowRun,
   openBoundary(org, project.canonical, project.identity);
   if(!same(item.meta.review_cutover,bound.cutoff))throw Error('review queue boundary differs from its actual landed target; retain exact evidence');
   if(bound.authorization&&item.meta.review_recovery_id!==bound.authorization.id)throw Error('archived review item cannot consume the one replacement');
-  const archived=new Set(bound.authorization?.archived_review_items??[]),peers=[...state.items.values()].filter(q=>q.id!==item.id&&!archived.has(q.id)&&sameProducerQueue(q,bound.item.id,bound.run.id)&&!disjointCapture({repo:project.canonical,target:bound.target,peer:q.meta.review_target}));
+  const archived=new Set(bound.authorization?.archived_review_items??[]),peers=[...state.items.values()].filter(q=>roleIs(q,'REV')&&q.id!==item.id&&!archived.has(q.id)&&sameProducerQueue(q,bound.item.id,bound.run.id)&&!disjointCapture({repo:project.canonical,target:bound.target,peer:q.meta.review_target}));
   if(peers.length){
     if(!bound.capturedOriginal)throw Error('another record entry retains this whole producer review; no duplicate native launch, cancellation or retarget');
     const captured=new Set(capturedReviewCommits(bound.target));for(const peer of peers){capturedProducerTarget({repo:project.canonical,target:peer.meta.review_target,whole:bound.whole});if(capturedReviewCommits(peer.meta.review_target).some(h=>captured.has(h)))throw Error('overlapping/UNKNOWN original review scope retained; no duplicate launch');}

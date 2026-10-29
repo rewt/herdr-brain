@@ -197,6 +197,51 @@ test('standing outcome selection does not launch a child of a held or reserved a
   f.service().pass();assert.deepEqual(f.calls.map(c=>c.args[1]),[ready]);
   f.record(['set',parent,'meta.hold=false','meta.operator_reserved=true']);f.service().pass();assert.ok(!f.calls.some(c=>c.args[1]===child));
 });
+
+function selectedFormalCorrection(f) {
+  const head=f.git(['rev-parse','HEAD']),key=`ENG-9000:${head}`,finding='review-finding/v1:admission-major';
+  transact(f.org,()=>({add:[
+    {type:'item.added',id:'ENG-9000',role:'engineer',title:'Original source'},
+    {type:'run.started',id:'R-9000',item:'ENG-9000',workspace:f.repo},
+    {type:'report.ingested',run:'R-9000',sha256:'author-report',report:{outcome:'done'}},
+    {type:'item.closed',id:'ENG-9000',as:'done'},
+    {type:'item.added',id:'REV-9000',role:'reviewer',title:'Completed review',meta:{review_key:key,review_source_item:'ENG-9000',review_source_run:'R-9000',review_target:{base:head,head},review_round_cap:1}},
+    {type:'run.started',id:'R-9001',item:'REV-9000',workspace:f.repo},
+    {type:'report.ingested',run:'R-9001',sha256:'review-report',report:{outcome:'done'}},
+    {type:'item.added',id:'ENG-9001',role:'engineer',title:'Selected formal correction',parent:'REV-9000',from_run:'R-9001',meta:{queue_selected:true,review_fix_of:key,review_source_item:'ENG-9000',review_source_run:'R-9000',review_finding_keys:[finding]}},
+    {type:'review.finding-linked',correction_item:'ENG-9001',finding_key:finding,finding:{severity:'major',text:'exact correction'},review_item:'REV-9000',review_run:'R-9001',source_item:'ENG-9000',head,base:head},
+    {type:'item.added',id:'ENG-9002',role:'engineer',title:'Unrelated review child',parent:'REV-9000',from_run:'R-9001',meta:{queue_selected:true}},
+    {type:'item.closed',id:'REV-9000',as:'done'},
+  ]}));
+  return {head,finding};
+}
+
+test('line admission dispatches a selected formal correction beneath its completed review and observes it as eligible engineering',t=>{
+  const f=fixture(t),{head}=selectedFormalCorrection(f),events=loadEvents(f.org).events,state=fold(events);
+  const observation=haltObservation({state,events,org:f.org,identity:gitProject(f.repo).identity,config:{}});
+  assert.deepEqual(observation.ready,['ENG-9001'],'idle diagnosis uses the same typed correction exemption');
+  f.service().pass();f.service().pass();
+  assert.deepEqual(f.calls.map(c=>c.args[1]),['ENG-9001'],'one ordinary dispatch, with unrelated review children still held');
+  const args=f.calls[0].args;
+  assert.equal(args[args.indexOf('--base')+1],head);
+  assert.match(fs.readFileSync(args[args.indexOf('--brief')+1],'utf8'),/exact correction/);
+  const after=loadEvents(f.org).events;
+  assert.deepEqual(after.slice(0,events.length),events,'original evidence remains immutable');
+  assert.equal(fold(after).items.get('REV-9000').closed.as,'done');
+});
+
+test('line admission rechecks the formal finding at its fresh effect boundary',t=>{
+  const f=fixture(t),{head,finding}=selectedFormalCorrection(f);let changed=false;
+  f.service({capacity:()=>{
+    if(!changed){changed=true;transact(f.org,()=>({add:[{type:'review.finding-linked',correction_item:'ENG-9002',finding_key:finding,review_item:'REV-9000',review_run:'R-9001',source_item:'ENG-9000',head,base:head}]}));}
+    return {count:0,cap:2};
+  }}).pass();
+  assert.equal(changed,true,'the correction reached ordinary capacity admission');
+  assert.deepEqual(f.calls,[],'changed typed linkage refuses before native dispatch');
+  const actions=JSON.parse(fs.readFileSync(path.join(f.service().directory,'effects.json'))).actions;
+  assert.ok(Object.entries(actions).some(([key,value])=>key.startsWith('dispatch:ENG-9001:')&&value.state==='held'&&/readiness/.test(value.error)));
+});
+
 for(const change of ['standing order','candidate class','inherited class','selection'])test(`admission defers ${change} changed during capacity without spending an effect`,t=>{
   const f=fixture(t),goal=f.record(['add','Standing outcomes','--goal']).split(' ')[0];
   f.record(['set',goal,'meta.queue_order=["stable","rehearsal"]','meta.queue_class=rehearsal']);

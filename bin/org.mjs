@@ -30,6 +30,7 @@ import { completeBatchCommand } from '../lib/completion.mjs';
 import { releasesCommand } from '../lib/release-record.mjs';
 import { handoffsCommand } from '../lib/handoffs-command.mjs';
 import { protectRecordMutation } from '../lib/record-guard.mjs';
+import { operatorAnswerRelay } from '../lib/operator-answer-relay.mjs';
 import {
   approxTokens, describeEvent, itemJson, renderBrief, renderLog, renderShowItem, renderShowRun,
   renderSnapshot, renderStatus, statusJson, truncate, renderLessons,
@@ -70,6 +71,7 @@ Questions for the operator
           [--on-yes T] [--on-no T] [--memo PATH] [--blocks ID]... [--priority N] [--wait]
                                           a role=human item; --wait always requires an operator answer
   record answer <ID> yes|no|"<text>" [--note WHY] [--overrule]
+          [--relay-operator --source WHERE --said-at ISO_TIME]  bound chat, priorities only
                                           a "no" keeps the work it blocks blocked
   record set <ID> key=value...            edit an item (title role capability priority parent
                                           budget.<key> meta.<key>) or add run metadata; start
@@ -200,7 +202,8 @@ function mutate(ctx, fn, authority) {
   // nested configuration audits also revoke replay permission in the store.
   // Message preparation includes its fresh native sender observation. It may
   // precede acquisition, but a record/file race must never replay that lookup.
-  const replaySafe = process.argv[2] !== 'messages' && !process.env.ORG_GUARD_OVERRIDE;
+  const replaySafe = process.argv[2] !== 'messages' &&
+    !(process.argv[2] === 'answer' && process.argv.includes('--relay-operator')) && !process.env.ORG_GUARD_OVERRIDE;
   const transaction = planned.has(process.argv[2]) ? planTransaction : transact;
   const res = transaction(ctx.dir, (events, state) => {
     return bindCloseoutSources({ org: ctx.dir, events, mutation: protectRecordMutation({ org: ctx.dir, events, state, mutation: fn(state, events), command: process.argv[2], ...authority }) });
@@ -528,17 +531,24 @@ function ask(argv) {
 }
 
 function answer(argv) {
-  const { values, positionals } = args(argv, { note: { type: 'string' }, overrule: { type: 'boolean' } },
+  const { values, positionals } = args(argv, { note: { type: 'string' }, overrule: { type: 'boolean' },
+    'relay-operator': { type: 'boolean' }, source: { type: 'string' }, 'said-at': { type: 'string' } },
     { min: 2, usage: 'record answer <ID> yes|no|"<text>" [--note WHY] [--overrule]' });
   const [id, ...words] = positionals;
-  const { answer: reply, rest } = parseReply(words.join(' '));
+  const verbatim = words.join(' ');
+  const { answer: reply, rest } = parseReply(verbatim);
   if (!reply) throw new UserError('an answer is required: yes, no or a short text');
+  if (!values['relay-operator'] && (values.source !== undefined || values['said-at'] !== undefined))
+    throw new UserError('--source and --said-at require --relay-operator');
   const { actor } = writer();
   const note = [rest, values.note?.replace(/\s+/g, ' ').trim()].filter(Boolean).join('; ') || null;
-  const { result } = mutate(openOrg(), (s) => {
+  const ctx = openOrg();
+  const { result } = mutate(ctx, (s) => {
     const item = requireItem(s, id);
     if (item.role !== 'human') throw new UserError(`${id} is not a question (only role=human items are answered)`);
-    if (item.meta.category === 'priorities' && actor !== 'human') throw new UserError('priority questions wait for the operator');
+    if (values['relay-operator'] && (item.meta.category !== 'priorities' || item.meta.operator_reserved || item.meta.reserved))
+      throw new UserError('operator answer relay is limited to non-reserved priority questions');
+    if (item.meta.category === 'priorities' && actor !== 'human' && !values['relay-operator']) throw new UserError('priority questions wait for the operator');
     if (item.meta.operator_reserved && actor !== 'human') throw new UserError('release questions are reserved for the operator');
     if (item.meta.operator_reserved && !['yes', 'no'].includes(reply)) throw new UserError('release questions require a yes or no answer; start the reply with yes or no and put any explanation after it or in --note');
     const answered = item.closed && item.meta.answer != null;
@@ -550,11 +560,15 @@ function answer(argv) {
       throw new UserError(`${id} is already answered ${item.meta.answer}; an overrule must change the answer`);
     }
     if (!values.overrule && item.closed) throw new UserError(`${id} is closed (${item.closed.as}); reopen it first`);
+    const relay = values['relay-operator'] ? operatorAnswerRelay({ org: ctx.dir, actor, verbatim,
+      source: values.source, saidAt: values['said-at'], now: ctx.now }) : null;
+    const attribution = relay ? `Operator reply relayed by ${actor}, said at ${relay.said_at}, source ${relay.source}: ${JSON.stringify(verbatim)}` : null;
     const events = [];
     if (item.closed) events.push({ type: 'item.reopened', id, note: 'reopened to overrule its answer' });
     events.push(
-      { type: 'note.added', id, text: [`Answered ${reply}${values.overrule ? ` (overruling ${item.meta.answer})` : ''}`, note].filter(Boolean).join(': '), decision: true, kind: 'answer' },
-      { type: 'item.updated', id, fields: { meta: { answer: reply, answered_by: actor, ...(values.overrule ? { overruled: true } : {}) } } },
+      { type: 'note.added', id, text: [`Answered ${reply}${values.overrule ? ` (overruling ${item.meta.answer})` : ''}`, note, attribution].filter(Boolean).join(': '), decision: true, kind: 'answer' },
+      { type: 'item.updated', id, fields: { meta: { answer: reply, answered_by: relay ? 'human' : actor,
+        ...(relay || item.meta.answer_relay ? { answer_relay: relay } : {}), ...(values.overrule ? { overruled: true } : {}) } } },
       { type: 'item.closed', id, as: 'done', note },
     );
     return { add: events, result: { dependents: blockedBy(s, id) } };

@@ -40,3 +40,6 @@ parseable and ignored. Historical release events and `record releases` remain
 readable. Current releases are plain tagged snapshots with an offline gate.
 See [lanes](../lanes/README.md), [supervisor](../supervisor/README.md) and
 [validation tiers](validation-tiers.md).
+
+An explicitly bound operator chat can [relay priority answers](operator-answer-relay.md)
+with the operator's exact words and source context; reserved decisions keep their existing path.

@@ -12,7 +12,7 @@ Closeout and source-completion decision generation/admission are unchanged while
 ENG-931's proof runs. This source change does not restart services, edit a runtime
 or pin, activate a release or adopt anything in another project.
 
-## Answer a real question in the existing supervisor session
+## Answer a real question through an engineering decision session
 
 The worker first reads available item intent, acceptance and standing decisions.
 If information is still missing, send ONE question through the existing PROJECT
@@ -20,17 +20,23 @@ SUPERVISOR inbox: item/run, exact question, relevant evidence, recommendation,
 affected action and authority boundary. Keep its stable inbox ID and preserve
 UNKNOWN delivery or native refusal. No decision item or separate backlog judge.
 
-The supervisor reads the full owning intent and current record. Its reply states
-the answer, authority reference, evidence, limits and falsifying observation.
-Record the decision note on the existing subject and reply through the existing
-worker inbox. The requesting owner freshly checks claim/source/native/HOLD/STOP
-before acting. The reply is agent-authored, never an actual human answer.
+The supervisor routes a bounded private, reversible question, with its
+recommendation and the full owning intent and current record, to an
+engineering decision session.
+Within recorded delegation, the engineering decision session decides on the
+operator's behalf and records the choice, reason and authority on the owning item.
+Its reply includes evidence, limits and a falsifying observation and returns
+through the existing worker inbox. The requesting owner freshly checks
+claim/source/native/HOLD/STOP before acting. The reply is agent-authored, never
+an actual human answer or new permission.
 
 Apply [decision routing](../supervisor/DECISION-ROUTING.md). Existing delegation
 can answer routine technical questions. Missing facts remain unknown. A new
-technical contract needs the authorized T2 delegate. Reserved effects require
-the actual operator and existing once-only named reserved-question path. No
-reply clears a native refusal, identity conflict, dependency or HOLD. Only the
+technical contract needs the authorized T2 delegate. Outward or irreversible effects
+(public publication, funds, exposing or rotating real secrets, adoption) and any
+disagreement with the supervisor recommendation go to the actual operator through
+the existing reserved once-only named-question path. No reply clears a native
+refusal, identity conflict, dependency or HOLD. Only the
 dependent action waits. Unanswered questions never expire into consent.
 
 For example, a question about rerunning the full suite can be answered from the
@@ -38,8 +44,9 @@ focused-check direction, naming the affected check. Permission to release cannot
 come from general technical delegation. An UNKNOWN original launch needs its
 actual owner, never a replacement. A missing receipt is owner reconciliation.
 
-This adapts bounded user-answering research to the already recorded project
-supervisor. It adds guidance for future workers, not a resolver/model service or
+This adapts bounded user-answering research to the recorded engineering decision
+session, with the project supervisor supplying routing and its recommendation.
+It adds guidance for future workers, not a resolver/model service or
 proof of live overnight success. See [measurement and dated sources](../docs/reports/ENG-936/decision.md).
 
 ## Historical captured decision contract

@@ -69,11 +69,12 @@ test('finite refresh gives a finished unbound allocation its first physical targ
   assert.deepEqual(fs.readFileSync(f.eventFile).subarray(0,before.length),before);
 });
 
-function stopped(t,{unprompted=false}={}){
+function stopped(t,{unprompted=false,session='session'}={}){
   const f=setup(t,{direct:true,bound:false,occupied:unprompted,merged:true});selectCurrentCleanup(f);
   const journal=path.join(f.org,'dispatch/attempt.json');fs.mkdirSync(path.dirname(journal),{recursive:true});
   const meta={lane:'topic',dispatch_journal:journal,dispatch_attempt:'attempt',dispatch_project:f.common,dispatch_record:f.org};
-  const worker=unprompted?{agentName:'worker',pane:'w:p',workspaceId:'w',agentSessionId:'session',terminalId:'term',cwd:f.lane}:null;
+  const worker=unprompted?{agentName:'worker',pane:'w:p',workspaceId:'w',agentSessionId:session,terminalId:'term',cwd:f.lane}:null;
+  if(unprompted&&!session){f.state.agents[0].agent_session=null;f.save();}
   fs.writeFileSync(f.eventFile,JSON.stringify({type:'item.added',id:'ENG-1',role:'engineer',seq:1,at:'2026-01-01T00:00:00Z'})+'\n');
   if(unprompted)f.append([{type:'run.started',id:'R-1',item:'ENG-1',workspace:f.lane,meta},
     {type:'run.claimed',run:'R-1',record:f.org,project:f.common,owner:{controller:'brain',legacy:false,release:{id:'source',root:process.cwd(),commit:null,identity:f.common}}},
@@ -108,6 +109,20 @@ test('a failed original dispatcher at watch abandons its verified unprompted wor
   assert.deepEqual(fs.readFileSync(f.eventFile).subarray(0,before.length),before);
 });
 
+// R-1347 shape: Codex has no native session until its first prompt, and the
+// prompt-boundary guard refused delivery, so stage stays 'prompt'.
+test('a never-prompted Codex worker without a native session is finalized once with its typed receipt',t=>{
+  const f=stopped(t,{unprompted:true,session:null});
+  Object.assign(f.job,{stage:'prompt',error:'dispatch launch input changed: item/ancestor G-1 is closed/held/reserved'});
+  f.job.failure={code:'DISPATCH_INPUT_CHANGED',kind:'unknown',stage:'prompt',native_launch_attempted:true};f.complete();
+  const result=f.dispose();assert.equal(result.results[0].disposition,'NOT_PROMPTED',JSON.stringify(result));
+  const receipt=events(f).find(e=>e.type==='dispatch.allocation-finalized');assert.equal(receipt.proof.session,null);
+  assert.ok(fold(events(f)).runs.get('R-1').abandoned);assert.deepEqual(f.dispose().results,[]);
+});
+test('a session-less unprompted worker that gained a native session is retained',t=>{
+  const f=stopped(t,{unprompted:true,session:null});f.state.agents[0].agent_session={value:'later'};f.save();
+  f.dispose();assert.equal(fold(events(f)).runs.get('R-1').abandoned,null);assert.ok(fs.existsSync(f.lane));
+});
 for(const kind of ['launch-UNKNOWN','prompting','binding','working','birth','dirty','refusal','claim','request-live','HOLD'])test(`unprompted finality retains ${kind}`,t=>{
   const f=stopped(t,{unprompted:true});
   if(kind==='launch-UNKNOWN'){f.job.stage='launching';delete f.job.worker;delete f.job.launchProcess;f.job.failure.stage='launching';f.complete();}

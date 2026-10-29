@@ -34,6 +34,30 @@ export function resolvedDispatchInput({events,org,common,item,input}){
   const rows=events.filter(e=>e.type==='dispatch.not-started'&&e.project===common&&e.org===org&&e.item===item&&e.input===input);
   if(!rows.length)return input;if(rows.length!==1)throw Error('original dispatch input has ambiguous disposition');resolvedNotStarted({events,org,common,journal:rows[0].journal});return`${input}:resolved-${rows[0].seq}`;
 }
+// The line already removed this exact pre-native original allocation. Its
+// request, effect and receipts stay history and its launch guard still refuses
+// it; only the ordinary input moves past it once. Ambiguous or changed
+// evidence keeps the original input, so admission retains that attempt.
+export function finalizedDispatchInput({events,org,common,item,input}){
+  for(const seen=new Set();;){
+    const rows=events.filter(e=>e.type==='closeout.allocation-effect'&&e.identity===common&&e.item===item&&e.outcome?.action==='lane-removed'&&!seen.has(e.journal));
+    if(!rows.length||!org||!common)return input;
+    const final=[];
+    for(const e of rows){
+      seen.add(e.journal);
+      let bytes,job;try{bytes=plain(e.journal);job=JSON.parse(bytes);}catch{return input;}
+      if(job.lineInput!==input)continue;
+      const done=events.find(d=>d.seq===e.source?.seq&&d.type==='dispatch.completed'&&d.journal===e.journal);
+      if(sha(bytes)!==e.request_sha256||job.item!==item||job.common!==common||job.org!==org||path.basename(e.journal)!==`${job.token}.json`||
+          job.run||job.worker||job.launchProcess||job.sessionBinding||job.native_launch_attempted!==false||
+          !done||done.attempt!==job.token||done.run!==null||done.native_launch_attempted!==false||done.request_sha256!==e.request_sha256||
+          events.some(x=>x.type==='run.started'&&(x.meta?.dispatch_journal===e.journal||x.meta?.dispatch_attempt===job.token)))return input;
+      final.push(e);
+    }
+    if(final.length!==1)return input;
+    input=`${input}:final-${final[0].seq}`;
+  }
+}
 export function resolveNotStarted({repo,org,journal,disposition,decisionSeq,id,changedSource,role,cwd=process.cwd(),env=process.env,call=invokeHerdr,requestLock=lockRequest}){
   if(role!=='supervisor'||!/^[-a-zA-Z0-9_]{1,80}$/.test(id??'')||!Number.isSafeInteger(decisionSeq)||!/^[a-f0-9]{40}$/.test(changedSource??''))throw Error('not-started resolution needs supervisor mode, scoped decision, stable id and exact changed source');
   const project=gitProject(repo);repo=project.canonical;org=fs.realpathSync(org);

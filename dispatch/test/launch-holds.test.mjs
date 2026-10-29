@@ -83,6 +83,8 @@ test('the last prompt boundary catches an ancestor hold during the visible-scree
   assert.equal(effects(f).length,1);assert.equal(promptCalls(f).length,0);
   const job=JSON.parse(fs.readFileSync(f.jobs()[0]));
   assert.equal(job.failure.launch_input.subject,ids.ancestor);assert.ok(job.watcher.pid);
+  // A guard refusal before delivery is positively unprompted, never UNKNOWN.
+  assert.equal(job.stage,'prompt');assert.equal(job.failure.stage,'prompt');assert.equal(job.sessionBinding,undefined);
 });
 
 test('unrelated record holds and routine evidence do not invalidate the admitted original prompt',t=>{

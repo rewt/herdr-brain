@@ -8,11 +8,13 @@ import {configFixture} from './helpers/config-home-fixture.mjs';
 import {gitProject} from '../lib/project.mjs';
 import {transact,loadEvents} from '../lib/store.mjs';
 import {fold} from '../lib/state.mjs';
-import {resolveNotStarted,resolvedNotStarted} from '../dispatch/not-started.mjs';
+import {resolveNotStarted,resolvedNotStarted,finalizedDispatchInput} from '../dispatch/not-started.mjs';
 import {lockRequest} from '../dispatch/request-lock.mjs';
 import {checkSessionCap} from '../dispatch/session-cap.mjs';
 import {dispatchInput} from '../line-service/phase1.mjs';
 import {createLineService,serviceDirectory} from '../line-service/line-service.mjs';
+import {checkDispatchEligibility} from '../dispatch/launch-guard.mjs';
+import {createHash} from 'node:crypto';
 const source=fs.realpathSync(fileURLToPath(new URL('../',import.meta.url)));
 const sourceGit=args=>execFileSync('git',['-C',source,...args],{encoding:'utf8'}).trim();
 function fixture(t){
@@ -58,4 +60,37 @@ test('not-started request serialization recovers positive ESRCH only and preserv
 test('not-started native refusal remains stopped despite an elapsed-only disposition',t=>{
   const f=fixture(t);fs.writeFileSync(f.journal,JSON.stringify({...f.job,error:'EPERM native refusal'}));
   assert.throws(()=>resolveNotStarted(f.args),/native refusal\/ownership guard/);assert.equal(loadEvents(f.org).events.some(e=>e.type==='dispatch.resolution-intent'||e.type==='dispatch.not-started'),false);
+});
+// ENG-950/951 shape: a held pre-native original whose allocation the line
+// already removed. Admission moves past it once; the original stays history.
+function finalized(t,{kind}={}){
+  const f=fixture(t),input=f.key.slice('dispatch:ENG-1:'.length),job={...f.job,stage:'start',native_launch_attempted:false,lineInput:input,workspace:f.lane,
+    error:'dispatch launch input changed: item/ancestor ENG-1 is closed/held/reserved',failure:{code:'DISPATCH_INPUT_CHANGED',kind:'unknown',stage:'start',native_launch_attempted:false}};
+  if(kind==='native')Object.assign(job,{native_launch_attempted:true});
+  fs.writeFileSync(f.journal,JSON.stringify(job));const request_sha256=createHash('sha256').update(fs.readFileSync(f.journal)).digest('hex');
+  fs.writeFileSync(f.effectsFile,JSON.stringify({identity:f.common,org:f.org,actions:{[f.key]:{state:'complete',result:{result:'detached',journal:f.journal,run:null,item:'ENG-1'}}},notices:{}}));
+  const done=transact(f.org,()=>({add:[{type:'dispatch.completed',project:f.common,journal:f.journal,attempt:job.token,item:'ENG-1',run:null,stage:'start',exit_code:1,native_launch_attempted:job.native_launch_attempted,failure:job.failure,request_sha256}]})).added[0];
+  const effect=action=>({type:'closeout.allocation-effect',key:'k',identity:f.common,journal:f.journal,request_sha256,item:'ENG-1',source:{seq:done.seq,type:'dispatch.completed'},outcome:{action}});
+  transact(f.org,()=>({add:['lane-preflight','worktree-removed','branch-removed',...(kind==='partial'?[]:['lane-removed'])].map(effect)}));
+  if(kind==='bytes')fs.writeFileSync(f.journal,JSON.stringify({...job,note:'changed'}));
+  if(kind==='started')transact(f.org,()=>({add:[{type:'run.started',id:'R-9',item:'ENG-1',meta:{dispatch_journal:f.journal,dispatch_attempt:job.token}}]}));
+  return{...f,input,job};
+}
+test('a finalized pre-native original allocation admits one fresh attempt and keeps its request, effect and guard',t=>{
+  const f=finalized(t),jobBytes=fs.readFileSync(f.journal),removed=loadEvents(f.org).events.findLast(e=>e.outcome?.action==='lane-removed');
+  assert.equal(dispatchInput(f.context()),`${f.input}:final-${removed.seq}`);
+  assert.throws(()=>checkDispatchEligibility(f.job,f.journal),/final disposition; retain its original request/);
+  let starts=0;const service=createLineService({repo:f.cwd,org:f.org,to:'brain-chat',env:f.env,capacity:()=>({count:0,cap:1}),recordNotice:r=>({id:r.id}),command:(_exe,args)=>{
+    if(args[0].endsWith('/dispatch/dispatch.mjs')){starts++;assert.ok(args.includes('--detach'));assert.equal(args.includes('--retry'),false);const journal=path.join(f.org,'dispatch/fresh.json');fs.writeFileSync(journal,JSON.stringify({token:'fresh',repo:f.cwd,org:f.org,common:f.common,item:'ENG-1',stage:'open',native_launch_attempted:false}));return{status:0,stdout:JSON.stringify({result:'detached',journal}),stderr:''};}
+    return{status:0,stdout:'{}',stderr:''};}});
+  transact(f.org,()=>({add:[{type:'item.updated',id:'ENG-1',fields:{meta:{hold:true}}}]}));service.pass();assert.equal(starts,0,'current holds still govern the fresh attempt');
+  transact(f.org,()=>({add:[{type:'item.updated',id:'ENG-1',fields:{meta:{hold:false}}}]}));service.pass();service.pass();assert.equal(starts,1);
+  const actions=JSON.parse(fs.readFileSync(f.effectsFile)).actions;assert.equal(actions[f.key].result.journal,f.journal);assert.ok(actions[`dispatch:ENG-1:${f.input}:final-${removed.seq}`]);
+  assert.deepEqual(fs.readFileSync(f.journal),jobBytes);
+});
+test('admission retains the original input without positive final pre-native evidence',t=>{
+  for(const kind of ['partial','native','bytes','started']){
+    const f=finalized(t,{kind}),events=loadEvents(f.org).events;
+    assert.equal(finalizedDispatchInput({events,org:f.org,common:f.common,item:'ENG-1',input:f.input}),f.input,kind);
+  }
 });

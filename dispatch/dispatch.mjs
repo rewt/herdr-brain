@@ -827,10 +827,12 @@ async function main() {
       }
       if (job.reuse) checkReuseOccupant(json(record(['show', job.reuse, '--json'])), job.run);
       const prompt = workPrompt(run);
-      prepareSessionBinding(run);
-      job.stage = 'prompting'; save();
+      // A guard refusal here proves the prompt was never sent; keep stage
+      // 'prompt' so the line can positively finalize the unprompted worker.
       checkReviewContinuationNative();
       checkStop({boundary:'prompt'});
+      prepareSessionBinding(run);
+      job.stage = 'prompting'; save();
       herdr(['agent', 'prompt', job.worker.agentName, prompt]);
       job.stage = 'complete'; save();
       note(`prompt sent; worker ${job.worker.agentName} and watcher ${job.watcher.pid} started`);

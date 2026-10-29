@@ -16,6 +16,10 @@
 #include <libproc.h>
 #include <mach/message.h>
 struct identity { uint8_t uuid[16]; uint64_t unique, parent; int32_t version; uint32_t r2; uint64_t r3, r4; };
+static pid_t parent_of(pid_t pid) {
+  struct proc_bsdinfo info;
+  return proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, sizeof(info)) == sizeof(info) ? (pid_t)info.pbi_ppid : -1;
+}
 static int signal_member(pid_t pid, int sig) {
   struct identity id;
   struct proc_bsdinfo info;
@@ -47,6 +51,15 @@ static int sweep(int sig) {
 #else
 #include <dirent.h>
 #include <sys/syscall.h>
+static pid_t parent_of(pid_t pid) {
+  char file[64], line[4096];
+  snprintf(file, sizeof(file), "/proc/%ld/stat", (long)pid);
+  FILE *input = fopen(file, "r");
+  if (!input) return -1;
+  char *read = fgets(line, sizeof(line), input); fclose(input);
+  char *end = read ? strrchr(line, ')') : NULL, state; long parent;
+  return end && sscanf(end + 1, " %c %ld", &state, &parent) == 2 ? (pid_t)parent : -1;
+}
 static int sweep(int sig) {
   DIR *directory = opendir("/proc");
   if (!directory) return -1;
@@ -87,11 +100,11 @@ int main(int argc, char **argv) {
   // Zero is productive execution without an elapsed deadline. A nonzero value
   // is supplied only by the explicit negative-control faultExpiryMs input.
   if (*end || duration > INT32_MAX) return 125;
-  unsigned long cleanup_duration = strtoul(argv[2], &end, 10);
-  if (*end || cleanup_duration > INT32_MAX) return 125;
-  (void)cleanup_duration; // Retained argv compatibility; cleanup follows observation.
+  unsigned long caller = strtoul(argv[2], &end, 10);
+  if (*end || caller <= 1 || caller > INT32_MAX) return 125;
   uint64_t deadline = milliseconds() + duration;
   pid_t parent = getppid();
+  if (parent_of(parent) != (pid_t)caller) return 125;
   signal(SIGTERM, interrupted); signal(SIGINT, interrupted); signal(SIGHUP, interrupted);
   pid_t child = fork(); if (child < 0) return 125;
   if (!child) {
@@ -107,7 +120,9 @@ int main(int argc, char **argv) {
     pid_t result = waitpid(child, &status, WNOHANG);
     if (result == child) { complete = 1; break; }
     if (result < 0) { if (errno == EINTR) continue; stopped = SIGTERM; break; }
-    if (getppid() != parent) stopped = SIGHUP;
+    // script can outlive the killed Node caller while an interactive job keeps
+    // its terminal open. Its reparenting must also end this owned session.
+    if (getppid() != parent || parent_of(parent) != (pid_t)caller) stopped = SIGHUP;
     if (stopped || (duration && milliseconds() >= deadline)) { expired = !stopped; break; }
     pause_scan();
   }

@@ -173,7 +173,9 @@ const reasonCases = [
 ];
 test('every planner reason expression is enumerated and mapped; source drift fails', () => {
   const source = fs.readFileSync(new URL('../lib/retire.mjs', import.meta.url), 'utf8');
-  const policy = source.slice(0, source.indexOf('// One executor')) + source.slice(source.indexOf('export function laneRemovalReason'));
+  // Native exit observations return state labels, rather than planner reasons.
+  const reasons = source.replace(source.slice(source.indexOf('function exitOccupantState'), source.indexOf('const exitObservation')), '');
+  const policy = reasons.slice(0, reasons.indexOf('// One executor')) + reasons.slice(reasons.indexOf('export function laneRemovalReason'));
   const emitted = [...policy.matchAll(/\b(?:return|reason\s*(?:\?\?=|=))\s*('(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`)/g)].map(m => m[1].slice(1, -1));
   // Conditional returns emit either literal; inventory both identity guards.
   const conditional = /\breturn\s+\w+\s*\?\s*('(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`)\s*:\s*('(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`)/g;

@@ -126,7 +126,10 @@ test('cleanup tail publishes every final report and abandonment without closing 
 function historicalTail(t,{kind='eligible'}={}){
   const f=setup(t,{merged:true}),raw=events(f);
   const meta=raw.find(e=>e.type==='run.started').meta;
-  if(kind==='unknown')delete meta.agent_session_id;
+  if(kind==='unknown'){
+    delete meta.agent_session_id;
+    for(const e of raw)if(e.type==='run.updated'&&e.id==='R-1'&&e.meta)delete e.meta.agent_session_id;
+  }
   fs.writeFileSync(f.eventFile,raw.map(e=>JSON.stringify(e)+'\n').join(''));
   transact(f.org,()=>({add:[{type:'report.ingested',run:'R-1',report:{outcome:'blocked',summary:'old final allocation'},sha256:'old'}]}));
   if(kind==='refused'){
@@ -200,7 +203,7 @@ test('cleanup refresh binds an abandoned kept lane once',t=>{
   const lane=fs.realpathSync(f.lane),refresh=()=>refreshCloseouts({cwd:f.repo,org:f.org,env:f.env,retirementOptions:f.options});
   const bound=()=>events(f).filter(e=>e.type==='cleanup.bound'&&e.run==='R-1'&&e.closeout_targets.some(t=>t.cwd===lane));
   const first=refresh();assert.equal(first.created.length,1,JSON.stringify(first));
-  const entry=readCloseoutEntries(f.common).find(e=>e.key===first.created[0]),revision=closeoutRevision(entry,events(f));
+  const entry=currentCloseoutEntries(f.common,f.org,events(f)).find(e=>e.key===first.created[0]),revision=closeoutRevision(entry,events(f));
   for(let pass=0;pass<3;pass++){
     const again=refresh();assert.deepEqual(again.created,[],`pass ${pass}: ${JSON.stringify(again)}`);
     assert.equal(bound().length,1,`pass ${pass}`);assert.equal(closeoutRevision(entry,events(f)),revision,`pass ${pass}`);

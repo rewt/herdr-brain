@@ -49,7 +49,7 @@ export function runPTY(binary, args, options = {}) {
     faultExpiryMs = 0, timeout: legacyTimeout, ...nativeOptions } = options;
   if (!Number.isSafeInteger(faultExpiryMs) || faultExpiryMs < 0 || faultExpiryMs > 2147483647) throw Error('invalid PTY fault-expiry control');
   const owner = nativeOwner(ownerSource);
-  const transport = ptyCommand(owner, [String(faultExpiryMs), '0', binary, ...args], { exec: true });
+  const transport = ptyCommand(owner, [String(faultExpiryMs), String(process.pid), binary, ...args], { exec: true });
   // A legacy timeout is accepted as compatibility metadata, never an execution
   // cutoff. Only the explicitly named negative-control input injects expiry.
   void legacyTimeout;

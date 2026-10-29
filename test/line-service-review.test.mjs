@@ -45,7 +45,7 @@ function fixture(t, { admission = false } = {}) {
   const calls = [], refreshes = [], notices = [];
   const service = options => createLineService({ repo, org, to: 'test-supervisor', env, command: (exe, args) => {
     if (args[0] === path.join(sourceRoot, 'supervisor/closeout.mjs')) {
-      assert.deepEqual(args, [path.join(sourceRoot, 'supervisor/closeout.mjs'), 'refresh', '--repo', repo, '--org', org]);
+      assert.deepEqual(args.slice(0,6), [path.join(sourceRoot, 'supervisor/closeout.mjs'), 'refresh', '--repo', repo, '--org', org]);assert.equal(args[6],'--deadline');assert.ok(Number.isSafeInteger(Number(args[7])));
       refreshes.push({ exe, args }); return { status: 0, stdout: '{"created":[]}', stderr: '' };
     }
     calls.push({ exe, args }); return { status: 0, stdout: JSON.stringify({ result: 'review_pending', item: 'ENG-1', run: 'R-1', head: args[args.indexOf('--head') + 1] }), stderr: '' };

@@ -89,10 +89,10 @@ for (const mode of ['fresh', 'inherited', 'explicit']) test(`shadow isolation su
   assert.equal(fs.existsSync(path.join(f.home, '.local/state/herdr-brain/logs')), false);
 });
 
-test('watch, request and promotion suites mirror fixtures without writing default state roots', t => {
+test('watch, request and promotion fixtures leave retired shadow roots absent', t => {
   const f = shadowFixture(t);
   const files = ['watch/test/watch.test.mjs', 'supervisor/test/request.test.mjs', 'promote/test/promote.test.mjs'];
-  const pattern = '^(a valid report is checked and delivered without Herdr being present|a delivered identity request mirrors its marked non-Git desk on the supervisor path|idle supervisor receives a default queued promotion notice without a false alert)$';
+  const pattern = '^(a valid report is checked and delivered without Herdr being present|identity requests do not create a second notice journal|idle supervisor receives a default queued promotion notice without a false alert)$';
   const code = `
     import {spawnSync} from 'node:child_process';
     delete process.env.BRAIN_SHADOW_ROOT; delete process.env.NODE_TEST_CONTEXT;
@@ -109,20 +109,7 @@ test('watch, request and promotion suites mirror fixtures without writing defaul
   assert.equal(result.status, 0, result.stdout + result.stderr);
   assert.match(result.stdout, /# pass 3\b/);
   assert.equal(fs.existsSync(path.join(f.home, '.local/state/herdr-brain/logs')), false, 'suite notices must never reach the default home state root');
-  const entries = [];
-  function journals(directory) {
-    for (const name of fs.readdirSync(directory)) {
-      const file = path.join(directory, name);
-      if (fs.statSync(file).isDirectory()) journals(file);
-      else if (name === 'shadow.jsonl') entries.push(...fs.readFileSync(file, 'utf8').trim().split('\n').map(JSON.parse));
-    }
-  }
-  journals(path.join(f.offline, 'shadow'));
-  // This watcher resolves its project from the product checkout's Git;
-  // request and promotion fixtures supply their own project identities.
-  if (hasGitCheckout) assert.ok(entries.some(entry => entry.payload?.legacy?.id === 'watch:R-7:final'), 'pre-existing watcher fixture actually mirrored');
-  assert.ok(entries.some(entry => entry.payload?.kind === 'request' && entry.shadow.path === 'supervisor'), 'real request helper actually mirrored');
-  assert.ok(entries.some(entry => entry.payload?.legacy?.id.startsWith('promote:')), 'pre-existing promotion fixture actually mirrored');
+  assert.equal(fs.existsSync(path.join(f.offline, 'shadow')), false);
 });
 
 test('offline boundary shields an inherited operator CLI, socket and pane IDs, but permits fixture fakes', t => {

@@ -69,6 +69,7 @@ async function fixture(t, { foreign = false, cohort = 'green-pass' } = {}) {
   const inventoryFiles = worktree.status === 0 && worktree.stdout.trim() === 'true'
     ? git(['ls-files', '-z'], source).split('\0') : snapshotFiles(source);
   const files = inventoryFiles.filter(file => file && !['.lane.json', '.housekeeping.json'].includes(file) &&
+    !['.agents', '.claude'].includes(file.split('/')[0]) &&
     (boundaryInput(file) || BOOTSTRAP_FILES.includes(file)));
   for (const file of files) {
     const target = path.join(repo, file); fs.mkdirSync(path.dirname(target), { recursive: true });

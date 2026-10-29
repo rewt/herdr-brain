@@ -179,7 +179,7 @@ test('phase1 deadline retry retains the original pending native exit without eva
 
 test('phase1 lost exit reply stays unresolved after named retries without native readback or resend',t=>{
   const f=setup(t,{merged:true});f.report();const rows=f.append([{type:'item.closed',id:'ENG-1',as:'done',completed_run:'R-1'}]),entry={...rows[0].closeout_targets.find(t=>t.signal==='landed'),source:{seq:rows[0].seq,type:'item.closed'}},base=f.options.command;
-  const now=Date.now,deadline=now()+60000;
+  const now=Date.now,deadline=now()+180000;
   f.options.command=(exe,args,opt)=>{const result=base(exe,args,opt);if(exe===f.job.herdr&&args[0]==='agent'&&args[1]==='prompt'){Date.now=()=>deadline;return{...result,status:1,stderr:'lost exit acknowledgement'};}return result;};
   let first;try{first=f.drain({keys:[entry.key],retirementOptions:{...f.options,deadline}});}finally{Date.now=now;}
   assert.equal(first.evaluated[0].completed,false);assert.deepEqual(f.read().actions,[['agent','prompt','worker','/quit']]);
@@ -209,7 +209,7 @@ test('phase1 unresolved exit retains live replaced and refused evidence without 
 test('continuity service retains a lost tab close outcome without native readback or invented completion',t=>{
   const f=setup(t,{merged:true});f.report();f.append([{type:'line-service.phase0',id:'bound',project:f.common,repo:f.repo,org:f.org,main:'main',canonical_head:f.head}]);
   const rows=f.append([{type:'item.closed',id:'ENG-1',as:'done',completed_run:'R-1'}]),entry={...rows[0].closeout_targets.find(t=>t.signal==='landed'),source:{seq:rows[0].seq,type:'item.closed'}},base=f.options.command;
-  const now=Date.now,deadline=now()+60000;
+  const now=Date.now,deadline=now()+180000;
   let lost=false;f.options.command=(exe,args,opt)=>{const result=base(exe,args,opt);if(!lost&&exe===f.job.herdr&&args[0]==='tab'&&args[1]==='close'){lost=true;Date.now=()=>deadline;return{...result,status:1,stderr:'lost tab-close acknowledgement'};}return result;};
   const drains=[],service=createLineService({repo:f.repo,org:f.org,to:'brain-chat',env:f.env,maxStarts:0,recordNotice:d=>({id:d.id,state:'record-only'}),command:(_exe,args)=>{
     assert.equal(args[0],path.join(sourceRoot,'supervisor/closeout.mjs'));assert.ok(args.includes('--retry-safe'));

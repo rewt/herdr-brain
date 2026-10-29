@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import {spawnSync} from 'node:child_process';
-import {runCloseoutTurn} from '../line-service/closeout-turn.mjs';
+import {runCloseoutTurn,CLOSEOUT_TURN_BUDGET_MS} from '../line-service/closeout-turn.mjs';
 import {gitProject} from '../lib/project.mjs';
 import {currentCloseoutEntries,publishCloseoutEvents,unpublishedCloseoutSources,readCloseoutEntries} from '../lib/closeout.mjs';
 import {refreshCloseouts} from '../lib/closeout-consumer.mjs';
@@ -22,7 +22,7 @@ test('source churn joins one immediate fresh turn after releasing locks and clos
       handoffs++;assert.ok(argv.includes('--no-handoff'));
       assert.equal(censuses,0,'obsolete census cannot consume the successor allowance');
       for(const lock of [path.join(f.directory,'closeout-turn.lock'),path.join(f.org,'lock'),path.join(f.common,'closeout/consumer.lock')])assert.equal(fs.existsSync(lock),false,lock);
-      assert.ok(Number(argv[argv.indexOf('--deadline')+1])<=Date.now()+45000);
+      assert.ok(Number(argv[argv.indexOf('--deadline')+1])<=Date.now()+CLOSEOUT_TURN_BUDGET_MS);
       assert.ok(Number.isSafeInteger(Number(argv[argv.indexOf('--deadline')+1])));
       return JSON.stringify(runCloseoutTurn({...args,handoff:false}));
     }
@@ -81,19 +81,20 @@ test('missing binding cannot replace an original UNKNOWN allocation or read its 
 });
 
 test('slow original-evidence refresh cannot run ahead of a bound eligible closeout',t=>{
-  const f=fixture(t);let refreshes=0;
+  const f=fixture(t);let refreshes=0,drained=false;
   const result=runCloseoutTurn({project:f.project,org:f.org,env:f.env,guard:()=>{},measure:()=>{},maxSteps:1,cli:(_file,argv)=>{
-    if(argv[0]==='refresh'){refreshes++;throw Error('slow legacy inventory must not precede eligible effects');}
+    if(argv[0]==='refresh'){refreshes++;assert.equal(drained,true);return '{}';}
+    drained=true;
     return JSON.stringify(f.drain({keys:JSON.parse(argv[argv.indexOf('--keys')+1]),retrySafe:true}));
   }});
-  assert.equal(result.steps,1);assert.equal(refreshes,0);assert.equal(fs.existsSync(f.lane),false);
+  assert.equal(result.steps,1);assert.equal(refreshes,1);assert.equal(fs.existsSync(f.lane),false);
 });
 
-test('a finite 45-second allowance records partial folder progress then recovers its exact branch separately',t=>{
+test('a finite allowance records partial folder progress then recovers its exact branch separately',t=>{
   const f=fixture(t),target=currentCloseoutEntries(f.common,f.org,events(f))[0],log=f.options.log;let now=Date.now(),charged=false;
   t.mock.method(Date,'now',()=>now);
-  f.options.log=row=>{log(row);if(!charged&&row.action==='worktree-removed'){charged=true;now+=20000;}};
-  const drain=()=>f.drain({keys:[target.key],retrySafe:true,retirementOptions:{...f.options,deadline:now+45000}});
+  f.options.log=row=>{log(row);if(!charged&&row.action==='worktree-removed'){charged=true;now+=170000;}};
+  const drain=()=>f.drain({keys:[target.key],retrySafe:true,retirementOptions:{...f.options,deadline:now+CLOSEOUT_TURN_BUDGET_MS}});
   const first=drain().evaluated[0];assert.equal(first.completed,false);assert.equal(first.condition.kind,'pre-effect-budget');
   assert.equal(first.resources.folder.status,'removed');assert.equal(first.resources.branch.status,'kept');
   assert.equal(f.git(['rev-parse','refs/heads/lane/topic']),f.head);assert.equal(fs.existsSync(f.lane),false);

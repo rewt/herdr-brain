@@ -13,6 +13,7 @@ import {fold} from '../../lib/state.mjs';
 import {gitProject} from '../../lib/project.mjs';
 import {createLineService, serviceDirectory} from '../../line-service/line-service.mjs';
 import {runCloseoutTurn} from '../../line-service/closeout-turn.mjs';
+import {stopOwnedInbox} from './inbox.mjs';
 
 const source=fs.realpathSync(fileURLToPath(new URL('../../',import.meta.url)));
 
@@ -20,7 +21,8 @@ const source=fs.realpathSync(fileURLToPath(new URL('../../',import.meta.url)));
 // watcher are fake: lane open/dispatch, Git, record, foreground watcher and line
 // consumers execute product code. No service installation or live socket exists.
 export function notificationFixture(t, {startFail=false,topic='topic'}={}) {
-  const f=dispatchFixture(t),bin=path.join(f.root,'bin'),lane=path.join(f.root,`lane-${topic}`);
+  const f=dispatchFixture(t,{beforeRemove:()=>stopOwnedInbox(path.join(f.org,'supervisor/inbox.log'),{
+    script:path.join(source,'supervisor/prompt-supervisor.mjs')})}),bin=path.join(f.root,'bin'),lane=path.join(f.root,`lane-${topic}`);
   setSessionEnvironment(t,{HERDR_MONITOR_FLEET:f.env.HERDR_MONITOR_FLEET});
   Object.assign(f.env,{HERDR_BRAIN_ROOT:source,LANE_WORKTREE_ROOT:f.root,
     MONITOR_SUPERVISOR_AGENT:'supervisor-test',HERDR_TEST_SCRATCH_ROOTS:'[]'});

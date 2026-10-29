@@ -38,7 +38,7 @@ function fixture(t,{cutoff=true,before=[]}={}) {
   const calls=[],refreshes=[];
   const service=options=>createLineService({repo:f.cwd,org,to:'brain-chat',env,capacity:()=>({cap:7,count:0}),command:(_exe,args)=>{
     if(args[0]===path.join(developmentRoot,'supervisor/closeout.mjs')){
-      assert.deepEqual(args,[path.join(developmentRoot,'supervisor/closeout.mjs'),'refresh','--repo',f.cwd,'--org',org]);
+      assert.deepEqual(args.slice(0,6),[path.join(developmentRoot,'supervisor/closeout.mjs'),'refresh','--repo',f.cwd,'--org',org]);assert.equal(args[6],'--deadline');assert.ok(Number.isSafeInteger(Number(args[7])));
       refreshes.push(args);return {status:0,stdout:'{"created":[]}',stderr:''};
     }
     calls.push(args);return {status:0,stdout:'{"result":"fixture"}',stderr:''};

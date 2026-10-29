@@ -131,9 +131,10 @@ for(const kind of ['finished-separate','active','reused-lane','reused-session'])
   f.append([{type:'run.started',id:'R-2',item:'ENG-1',workspace:kind==='reused-lane'?f.lane:f.lane+'-later',meta},
     ...(kind==='active'?[]:[{type:'report.ingested',run:'R-2',report:{outcome:'done'},sha256:'later'}])]);
   f.turn();f.turn();
-  assert.equal(fs.existsSync(f.lane),kind!=='finished-separate');
+  const separate=kind==='finished-separate'||kind==='active';
+  assert.equal(fs.existsSync(f.lane),!separate);
   assert.deepEqual(f.read().actions,[]);
-  if(kind!=='finished-separate')assert.equal(events(f).some(e=>e.type==='closeout.exit-settled'),false);
+  if(!separate)assert.equal(events(f).some(e=>e.type==='closeout.exit-settled'),false);
 });
 
 for(const kind of ['original-terminal','moved-terminal','lane-agent','moved-session','incomplete'])test(`legacy absence keeps ${kind} without sending native input`,t=>{

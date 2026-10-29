@@ -1086,7 +1086,7 @@ test('cleanup runs before slow review work and a fresh STOP still prevents the r
       }});
     const result=service.pass();if(stopped)assert.match(result.held,/STOP/);
     assert.equal(calls.filter(a=>a[1]==='drain'&&JSON.parse(a[a.indexOf('--keys')+1]).includes(key)).length,1);
-    assert.equal(calls.filter(a=>a[1]==='refresh').length,0,'bound work precedes legacy refresh');
+    assert.equal(calls.filter(a=>a[1]==='refresh').length,stopped?0:1,'refresh follows the bound work while STOP fences it');
     assert.equal(calls.filter(a=>a[1]==='queue-review').length,stopped?0:1);
     if(!stopped)assert.ok(calls.findIndex(a=>a[1]==='drain')<calls.findIndex(a=>a[1]==='queue-review'),'slow review cannot consume the prior closeout turn');
   }
@@ -1103,7 +1103,7 @@ test('phase1 service retains an unknown exit intent and raises one grouped alarm
     {type:'closeout.evaluated',key:target.key,identity:f.identity,run:'R-1',source,completed:false,revision:source.seq,reason:CLOSEOUT_EXIT_PENDING}]);
   const original=f.context().events.filter(e=>e.type==='closeout.effect'||e.type==='closeout.evaluated');
   const calls=[],refreshes=[],service=createLineService({repo:f.cwd,org:f.org,to:'brain-chat',env,capacity:()=>({count:0,cap:4}),recordNotice:data=>({id:data.id,state:'record-only'}),command:(_exe,args)=>{
-    if(args[0]===path.join(sourceRoot,'supervisor/closeout.mjs')){assert.deepEqual(args,[path.join(sourceRoot,'supervisor/closeout.mjs'),'refresh','--repo',f.cwd,'--org',f.org]);refreshes.push(args);return{status:0,stdout:'{"created":[]}',stderr:''};}
+    if(args[0]===path.join(sourceRoot,'supervisor/closeout.mjs')){assert.deepEqual(args.slice(0,6),[path.join(sourceRoot,'supervisor/closeout.mjs'),'refresh','--repo',f.cwd,'--org',f.org]);assert.equal(args[6],'--deadline');assert.ok(Number.isSafeInteger(Number(args[7])));refreshes.push(args);return{status:0,stdout:'{"created":[]}',stderr:''};}
     calls.push(args);
     return{status:0,stdout:'{}',stderr:''};
   }});

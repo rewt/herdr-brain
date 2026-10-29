@@ -598,7 +598,7 @@ esac`);
   }
 });
 
-test('watch shadow uses the checked review verdict and scope while preserving the final tag', async t => {
+test('watch retains final tags without recreating retired shadow writes', async t => {
   for (const [suffix, extra, route] of [['1', 'verdict: PASS', 'triage'], ['2', 'verdict: NEEDS-WORK', 'supervisor'], ['3', 'review_scope: deferred', 'supervisor'], ['4', 'verdict:\n  toString: inert-data', 'unknown']]) {
     const run = `R-99${suffix}`, f = watcherFixture(run);
     cleanWatcherFixture(t, f.root);
@@ -615,18 +615,7 @@ esac`);
       BRAIN_SHADOW_ROOT: root, BRAIN_IDENTITY: 'example' } });
     const done = await waitForExit(child); assert.equal(done.code, 0, done.stderr);
     const text = reportNotice({ run, item: 'ENG-9', outcome: 'done', headline: 'The report arrived', report: f.report });
-    await t.test(`shadow mirror for ${run}`, async t => {
-      if (!hasGitCheckout) {
-        t.skip('release snapshots have no product .git entry; shadow mirroring requires a Git identity');
-        return;
-      }
-      const directory = stateDirectory({ root, identity: 'example', commonDir: gitProject().identity });
-      const { entries } = await readJournal(directory);
-      assert.equal(entries.length, 1, done.stderr); assert.equal(entries[0].shadow.path, route);
-      assert.equal(entries[0].payload.evidence.validated, true);
-      assert.equal(entries[0].run, run); assert.equal(entries[0].payload.refs[0].orgRef, fs.realpathSync(path.join(f.root, '.org')));
-      assert.equal(fs.readFileSync(entries[0].payload.body_ref.path, 'utf8'), text);
-    });
+    assert.equal(fs.existsSync(root), false, 'retired shadow writer must stay absent');
     assert.ok(fs.readFileSync(f.calls, 'utf8').includes(`agent prompt supervisor-test ${text} notice-id=watch:${run}:final`));
   }
 });

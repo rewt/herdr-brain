@@ -69,8 +69,7 @@ export async function supervisorCase(candidate, { load, execute = spawnSync,
     receipts.push({ fresh_policy: freshPolicy, history_policy: historyPolicy });
 
     f.commit('wrong\n'); f.report(run);
-    const watched = f.exec(process.execPath, [path.join(candidate, 'watch/watch.mjs'), run, '--org', f.org, '--to', 'supervisor-test', '--start-grace', '0']);
-    assert.equal(watched.status, 0, watched.stderr);
+    await until(() => watchNotice(run), 'the dispatched watcher delivered the original final notice', 10000);
     assert.ok(watchNotice(run), 'actual watch delivered the original final notice');
     let handled = command(['handle', '--notice', watchNotice(run), '--role', 'supervisor', '--brief', path.join(f.root, 'ask with spaces.md'), '--to', 'supervisor-test']);
     if (handled.code === 'REVIEW_CAP_REACHED') {

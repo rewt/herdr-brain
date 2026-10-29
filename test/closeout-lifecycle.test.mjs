@@ -444,7 +444,7 @@ test('legacy housekeeping ownership stays held without a linked transfer complet
   retryCloseout({ cwd: f.repo, org: f.org, topic: 'topic', why: 'legacy retirement stopped and inspected; adopted runtime restarted', start: false });
   assert.deepEqual(f.drain().evaluated, []);
   assert.equal(fs.existsSync(f.lane), true); assert.deepEqual(f.read().actions, []);
-  assert.ok(evaluations(f).every(e => !e.completed && e.waiting.defect && !e.waiting.producers.length));
+  assert.ok(evaluations(f).every(e => !e.completed && e.condition.kind==='contention' && !e.waiting.producers.length));
 });
 
 test('source publication recovery retains the original binding when the old worktree name has been recreated', t => {

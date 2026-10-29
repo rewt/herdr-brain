@@ -96,7 +96,8 @@
     {
       "id": "brain.log/v1",
       "version": 1,
-      "writer": "logs/journal.mjs (shadow writer retired; messages/journal.mjs retains the historical reader)",
+      "writer": "logs/journal.mjs",
+      "historicalReader": "messages/journal.mjs (shadow writer retired)",
       "location": "<journal-partition>/{segment-N,shadow}.jsonl",
       "rule": "additive",
       "probe": "log"

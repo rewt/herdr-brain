@@ -43,7 +43,7 @@ function fixture(t) {
   let fail;
   const command = (exe, args, options) => {
     if (args[0] === path.join(sourceRoot, 'supervisor/closeout.mjs')) {
-      assert.deepEqual(args, [path.join(sourceRoot, 'supervisor/closeout.mjs'), 'refresh', '--repo', repo, '--org', org]);
+      assert.deepEqual(args.slice(0,6), [path.join(sourceRoot, 'supervisor/closeout.mjs'), 'refresh', '--repo', repo, '--org', org]);assert.equal(args[6],'--deadline');assert.ok(Number.isSafeInteger(Number(args[7])));
       refreshes.push({ exe, args, options });
       return { status: 0, stdout: '{"created":[]}', stderr: '' };
     }

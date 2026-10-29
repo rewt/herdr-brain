@@ -7,6 +7,7 @@ import {fixture} from './dispatch-fixture.mjs';
 import {preflightContinuation,initialCapacityRefusal,implementationChangeOutcome} from '../preflight.mjs';
 import {createHash} from 'node:crypto';
 import {loadEvents} from '../../lib/store.mjs';
+import {loadTimeout} from '../../lib/deadline.mjs';
 
 function phase1Fixture(t,options={}){
   const f=fixture(t,{noticeRecipient:'supervisor-herdr',...options}),file=path.join(f.repo,'.lane.json'),config=JSON.parse(fs.readFileSync(file));
@@ -113,17 +114,16 @@ test('retirement barrier continuation needs matching original zero-native termin
 });
 
 test('retirement lock clears through the same detached request and normal native dispatch without replacing original evidence',async t=>{
-  const f=phase1Fixture(t),common=f.git(['rev-parse','--path-format=absolute','--git-common-dir']),lock=path.join(common,'retirement/owner.lock'),lane=path.join(f.root,'bin/lane');
-  // Inject the completed barrier at prepare, then model its still-held lock.
-  // Preseeding it would spend the real allocation wait before this fixture runs.
-  fs.writeFileSync(lane,fs.readFileSync(lane,'utf8').replace("console.error('injected '+fail)",`console.error(${JSON.stringify(`locked: ${lock}; owner is live or unknown`)})`));
-  f.fail('prepare');const first=f.start(['--detach']);assert.equal(first.status,0,first.stderr);
-  const {journal}=JSON.parse(first.stdout),terminal=await driverResult(journal),job=JSON.parse(fs.readFileSync(journal)),launch=fs.readFileSync(journal+'.driver/launch.json');
+  const f=phase1Fixture(t),common=f.git(['rev-parse','--path-format=absolute','--git-common-dir']),lock=path.join(common,'retirement/owner.lock');
+  fs.mkdirSync(lock,{recursive:true});
+  const first=f.start(['--detach']);assert.equal(first.status,0,first.stderr);
+  // The actual retirement owner guard waits loadTimeout(60000) before its
+  // terminal refusal; the receipt reader must outlive that production wait.
+  const {journal}=JSON.parse(first.stdout),terminal=await driverResult(journal,{limit:loadTimeout(90000)}),job=JSON.parse(fs.readFileSync(journal)),launch=fs.readFileSync(journal+'.driver/launch.json');
   assert.equal(terminal.native_launch_attempted,false);assert.equal(terminal.code,'OUTCOME_UNKNOWN');
   const args=()=>({journal,repo:f.repo,org:f.org,common,root:job.release.root,events:loadEvents(f.org).events});
-  fs.mkdirSync(lock,{recursive:true});
   assert.equal(preflightContinuation(args()),null,'retirement ownership is never reclaimed by admission');
-  fs.rmdirSync(lock);f.fail('');assert.equal(preflightContinuation(args()).outcome.kind,'retirement-lock-cleared');
+  fs.rmdirSync(lock);assert.equal(preflightContinuation(args()).outcome.kind,'retirement-lock-cleared');
   const resumed=f.dispatch(['--retry',journal,'--continue-preflight']);assert.equal(resumed.status,0,resumed.stderr);assert.equal(JSON.parse(resumed.stdout).journal,journal);
   const completed=await driverResult(journal,{count:2});assert.equal(completed.exit_code,0,JSON.stringify(completed));assert.equal(completed.stage,'complete');
   assert.deepEqual(fs.readFileSync(journal+'.driver/launch.json'),launch);assert.equal(f.jobs().length,1);

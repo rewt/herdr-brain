@@ -13,6 +13,7 @@ import { buildManifest, boundaryInput, BOOTSTRAP_FILES, activationNote, recorded
 import { GREEN_CONTRACTS } from '../../supervisor/green-pass.mjs';
 import { renderer } from '../../supervisor/test/green-fixture.mjs';
 import { fixtureFleet } from '../../test/helpers/offline-herdr.mjs';
+import { isolateSessionEnvironment } from '../../test/helpers/session-environment.mjs';
 import { spawnScenarioChild, waitForExit } from '../../test/helpers/child.mjs';
 import { stopOwnedInbox } from '../../test/helpers/inbox.mjs';
 import { loadTimeout } from '../../lib/deadline.mjs';
@@ -55,6 +56,7 @@ function snapshotFiles(root, relative = '') {
 async function fixture(t, { foreign = false, cohort = 'green-pass' } = {}) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'promotion-green-guard-')));
   fixtureFleet(t, root);
+  isolateSessionEnvironment(t, root);
   const repo = path.join(root, 'brain'); fs.mkdirSync(repo);
   const env = { ...healthyMemoryEnvironment({ ...fixtureEnvironment(), NODE_OPTIONS: `--import=${JSON.stringify(loader)}` }),
     GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1', SUPERVISOR_INPUT_WAIT_SECONDS: '0' };

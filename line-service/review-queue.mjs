@@ -221,7 +221,18 @@ function validateQueueHistory({item,state,events,org,common,allowRun,allowJourna
     }else if(allowRun||allowJournal)throw Error('never-started continuation needs its one normal dispatch reservation');
   }
   if(item.runs.some(id=>id!==allowRun&&id!==proof?.original_run))throw Error('queued review already has a run; no replacement/re-review');
-  journals??=fs.readdirSync(path.join(org,'dispatch')).filter(f=>f.endsWith('.json')&&!f.endsWith('.routes.json')).map(f=>({...JSON.parse(reviewPlain(path.join(org,'dispatch',f))),journal:path.join(org,'dispatch',f)}));
+  if(journals==null){
+    const directory=path.join(org,'dispatch');let names;
+    try{names=fs.readdirSync(directory);}
+    catch(error){
+      // A fresh record has no dispatch history yet. Only absence of this
+      // directory is empty history; redirected, unreadable or corrupt history
+      // must retain its real error, including missing individual journal files.
+      if(error.code!=='ENOENT'||fs.lstatSync(directory,{throwIfNoEntry:false})||!fs.statSync(org).isDirectory())throw error;
+      names=[];
+    }
+    journals=names.filter(f=>f.endsWith('.json')&&!f.endsWith('.routes.json')).map(f=>({...JSON.parse(reviewPlain(path.join(directory,f))),journal:path.join(directory,f)}));
+  }
   if(journals.some(j=>j.item===item.id&&!(proof&&j.journal===proof.journal&&j.run===proof.original_run)&&j.journal!==allowJournal&&(!allowRun||j.run!==allowRun)))throw Error('queued review has existing/ambiguous saved dispatch; retain it');
 }
 

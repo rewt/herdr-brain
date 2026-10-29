@@ -29,6 +29,11 @@ test('every registry format row and machine inventory entry agree in both direct
     assert.ok(f.version && f.writer && f.location, `${f.id}: required version/writer/location`);
     assert.ok(['additive', 'closed'].includes(f.rule));
     assert.ok(Boolean(f.probe) !== Boolean(f.notCovered), `${f.id}: probe or named gap`);
+    if(f.retired){
+      assert.equal(f.writer,'retired');
+      assert.ok(fs.statSync(new URL('../'+f.historicalReader,import.meta.url)).isFile(),`${f.id}: historical reader exists`);
+      continue;
+    }
     for (const module of f.writer.split('; ')) {
       if (module.startsWith('external ')) continue;
       assert.ok(fs.statSync(new URL('../' + module, import.meta.url)).isFile(), `${f.id}: writer exists`);

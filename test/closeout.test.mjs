@@ -174,13 +174,23 @@ test('cleanup tail explicit abandonment permits only a guarded content-released 
 
 test('cleanup tail historical discovery keeps unsafe scopes and binds reported dirty and unlanded allocations',async t=>{
   const {refreshCloseouts}=await import('../lib/closeout-consumer.mjs');
-  for(const kind of ['working','reused','foreign','unknown','refused','uncertain']){
+  for(const kind of ['working','reused','foreign','refused','uncertain']){
     const f=historicalTail(t,{kind}),bytes=fs.readFileSync(f.eventFile),result=refreshCloseouts({cwd:f.repo,org:f.org,env:f.env,retirementOptions:f.options});
     assert.deepEqual(result.created,[],`${kind}: ${JSON.stringify(result)}`);
     assert.deepEqual(fs.readFileSync(f.eventFile).subarray(0,bytes.length),bytes,'original evidence stays immutable');
     const kept=events(f).filter(e=>e.type==='closeout.kept');assert.equal(kept.length,1,kind);assert.equal(kept[0].run,'R-1');assert.equal(kept[0].cwd,f.lane);
     const recorded=fs.readFileSync(f.eventFile);refreshCloseouts({cwd:f.repo,org:f.org,env:f.env,retirementOptions:f.options});
     assert.deepEqual(fs.readFileSync(f.eventFile),recorded,'the kept outcome is deduplicated');assert.deepEqual(f.read().actions,[]);
+  }
+  {
+    const f=historicalTail(t,{kind:'unknown'}),result=refreshCloseouts({cwd:f.repo,org:f.org,env:f.env,retirementOptions:f.options});
+    assert.equal(result.created.length,1,'a missing SID permits only an unbound physical-disposition target');
+    const entry=currentCloseoutEntries(f.common,f.org,events(f)).find(e=>e.key===result.created[0]);
+    assert.deepEqual(entry.panes,[]);
+    const drained=f.drain({keys:[entry.key]});
+    assert.equal(drained.evaluated[0].completed,false);
+    assert.match(drained.evaluated[0].reason,/native occupant|unknown|identity/);
+    assert.equal(fs.existsSync(f.lane),true);assert.deepEqual(f.read().actions,[],'missing identity grants no native effect');
   }
   for(const kind of ['dirty','unlanded']){
     const f=historicalTail(t,{kind}),result=refreshCloseouts({cwd:f.repo,org:f.org,env:f.env,retirementOptions:f.options});

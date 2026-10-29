@@ -97,7 +97,7 @@
       "id": "brain.log/v1",
       "version": 1,
       "writer": "logs/journal.mjs",
-      "historicalReader": "messages/journal.mjs (shadow writer retired)",
+      "historicalReader": "messages/journal.mjs",
       "location": "<journal-partition>/{segment-N,shadow}.jsonl",
       "rule": "additive",
       "probe": "log"
@@ -113,7 +113,9 @@
     {
       "id": "hook-pull/v1",
       "version": 1,
-      "writer": "retired; historical receipt reader in messages/hook-pull.mjs",
+      "writer": "retired",
+      "retired": true,
+      "historicalReader": "messages/hook-pull.mjs",
       "location": "<fixture-receiver>/transport.jsonl receipt.transport",
       "rule": "additive",
       "probe": "transport"
@@ -470,7 +472,9 @@
     {
       "id": "brain.hook-session/v1",
       "version": 1,
-      "writer": "retired; issued descriptor reader in messages/hook-pull.mjs",
+      "writer": "retired",
+      "retired": true,
+      "historicalReader": "messages/hook-pull.mjs",
       "location": "<common>/sessions/hook-pull/*/session.json",
       "rule": "additive",
       "notCovered": "Retired private opt-in launch descriptor; existing bytes remain readable, no new descriptor or hook launch is produced."

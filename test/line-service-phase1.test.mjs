@@ -545,7 +545,7 @@ function originalPartialFixture(t){
 
 test('original REV4-shaped continuation preserves its disjoint PASS peer and zero-native journal then uses one same-request native launch without replacement',async t=>{
   const f=originalPartialFixture(t),before=f.context(),original=fs.readFileSync(f.journal),verdict=before.events.find(e=>e.type==='change.reviewed'),calls=[],refreshes=[];
-  const service=createLineService({repo:f.cwd,org:f.org,to:'brain-chat',env:f.env,maxStarts:1,capacity:()=>({cap:3,count:0}),recordNotice:d=>({id:d.id,state:'record-only'}),command:(exe,args)=>{
+  const service=createLineService({repo:f.cwd,org:f.org,to:'brain-chat',env:f.env,maxStarts:1,capacity:()=>({cap:1,count:calls.some(a=>a[0]===path.join(sourceRoot,'dispatch/dispatch.mjs'))?1:0}),recordNotice:d=>({id:d.id,state:'record-only'}),command:(exe,args)=>{
     if(args[0]===path.join(sourceRoot,'supervisor/closeout.mjs')){assertFiniteRefresh(f,args);refreshes.push(args);return{status:0,stdout:'{"created":[]}',stderr:''};}
     calls.push(args);if(exe==='herdr')return{status:0,stdout:'{"result":{"agents":[]}}',stderr:''};
     assert.equal(args[0],path.join(sourceRoot,'dispatch/dispatch.mjs'));assert.equal(args[args.indexOf('--retry')+1],f.journal);assert.ok(args.includes('--continue-preflight'));return f.d.dispatch(args.slice(1),{env:{...f.d.env,HERDR_BRAIN_ROOT:fs.realpathSync(sourceRoot)}});

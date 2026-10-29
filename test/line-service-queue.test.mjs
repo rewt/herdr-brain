@@ -108,6 +108,18 @@ for (const directory of ['current', 'foreign']) {
   }
 }
 
+test('review queue retains malformed and missing individual history journals as failures', t => {
+  for(const kind of ['malformed','dangling']){
+    const f=fixture(t),qid=f.create().review_item,c=f.context(),file=path.join(f.org,'dispatch/invalid.json');
+    if(kind==='malformed')fs.writeFileSync(file,'{invalid');
+    else fs.symlinkSync(path.join(f.scratch,'missing-journal'),file);
+    const before=fs.readFileSync(path.join(f.org,'events.jsonl'));
+    assert.throws(()=>validateQueuedReview({...c,item:c.state.items.get(qid)}),kind==='malformed'?SyntaxError:/redirected review evidence/);
+    assert.deepEqual(fs.readFileSync(path.join(f.org,'events.jsonl')),before);
+    assert.equal(fs.lstatSync(file).isSymbolicLink(),kind==='dangling');
+  }
+});
+
 test('review queue atomically creates one landed tuple item across concurrent create and replay', async t => {
   const f = fixture(t), args = [entry, 'queue-review', 'R-1', '--head', f.head, '--base', f.base];
   f.git(['reset','--hard',f.base]); const unlanded=f.run(['queue-review','R-1']); assert.notEqual(unlanded.status,0); assert.match(unlanded.stderr,/not actually landed/); f.git(['merge','--ff-only',f.head]);

@@ -100,7 +100,7 @@ function rememberProcesses(root, org, realWatch, receipts) {
       '--controller', BRAIN_CONTROLLER, '--org', org, '--to', job.to, '--cwd', job.repo, '--log', path.join(org, 'dispatch', `${job.run}.watch.log`)].join(' ') : fakeCommand);
   }
 }
-function fixture(t, { realWatch = false, preload, noticeRecipient = '', timingFailure = false, timingRecord = timingFailure, lateSession = '', project, sourceEntry = false, beforeRemove = async () => {} } = {}) {
+function fixture(t, { realWatch = false, preload, noticeRecipient = '', timingFailure = false, timingRecord = timingFailure, lateSession = '', project, sourceEntry = false } = {}) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'dispatch-test-')));
   const repo = project?.cwd ?? path.join(root, 'repo'), org = project?.env.ORG_DIR ?? path.join(root, 'org'), bin = path.join(root, 'bin');
   // Adopted source entry points select the installed release. Use the fixture's
@@ -120,11 +120,9 @@ function fixture(t, { realWatch = false, preload, noticeRecipient = '', timingFa
   for(const key of Object.keys(env)) if(key.startsWith('GIT_CONFIG_') && !['GIT_CONFIG_GLOBAL','GIT_CONFIG_NOSYSTEM'].includes(key)) delete env[key];
   const receipts = createReceiptTracker();
   // Install cleanup before setup or any assertion can fail.
-  t.after(async()=>{
-    rememberProcesses(root, org, realWatch, receipts);
-    receipts.cleanup();
-    await beforeRemove();
-    fs.rmSync(root,{recursive:true,force:true,maxRetries:3,retryDelay:100});
+  t.after(()=>{
+    try { rememberProcesses(root, org, realWatch, receipts); }
+    finally { receipts.cleanup(); fs.rmSync(root,{recursive:true,force:true}); }
   });
   const exec=(cmd,args,cwd=repo,overrides={},options={})=>{
     const result=spawnSync(cmd,args,{cwd,env:{...env,...overrides},encoding:'utf8',...options});

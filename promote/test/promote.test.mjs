@@ -15,7 +15,6 @@ import { resolveGateProfile } from '../gate-profile.mjs';
 import { readInbox, resolveNotice } from '../../supervisor/prompt-supervisor.mjs';
 import { stopOwnedInbox } from '../../test/helpers/inbox.mjs';
 import { writeFileAtomic } from '../../lib/files.mjs';
-import { stateDirectory, readJournal } from '../../messages/journal.mjs';
 import { validateSlotPath } from '../../test-slot/paths.mjs';
 import { watchPromotionLock } from '../../test/helpers/promotion-lock.mjs';
 
@@ -266,12 +265,7 @@ test('busy supervisor does not hold completed queue accounting by default', asyn
   assert.equal(f.messages().length, 0, 'busy input receives no prompt');
   const id = 'promote:' + launched.jobs[0].id;
   assert.equal(readInbox(result.inbox).filter(entry => entry.id === id).length, 1, 'one durable notice owns delivery');
-  const directory = stateDirectory({ root: f.env.BRAIN_SHADOW_ROOT, identity: 'example', commonDir: fs.realpathSync(path.join(f.repo, '.git')) });
-  await f.until(() => { try { return fs.readFileSync(path.join(directory, 'shadow.jsonl'), 'utf8').endsWith('\n'); } catch { return false; } }, { producer: f.inboxProducer(result.inbox) });
-  const shadow = (await readJournal(directory)).entries[0];
-  assert.equal(shadow.payload.legacy.id, id); assert.equal(shadow.shadow.path, 'triage');
-  assert.deepEqual(shadow.payload.evidence, { channel: 'promote-queue', validated: true, outcome: 'promoted' });
-  assert.equal(fs.readFileSync(shadow.payload.body_ref.path, 'utf8'), readInbox(result.inbox)[0].message);
+  assert.equal(fs.existsSync(f.env.BRAIN_SHADOW_ROOT), false, 'retired shadow writer must not block the original notice owner');
   // Span several former short owner windows while input remains genuinely busy.
   await delay((Number(f.env.SUPERVISOR_INPUT_CONFIRM_SECONDS) + 1) * 2200);
   const events = fs.readFileSync(result.inbox, 'utf8').trim().split('\n').map(JSON.parse);

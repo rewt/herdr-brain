@@ -131,12 +131,8 @@ for (const kind of ['pending', 'native', 'manual', 'decision', 'unknown', 'legac
     if(kind==='native'){
       const state=fold(fs.readFileSync(path.join(f.org,'events.jsonl'),'utf8').trim().split('\n').map(JSON.parse));
       const decisions=[...state.items.values()].filter(i=>i.meta.uncertain_outcome);
-      assert.equal(decisions.length,1);const decision=decisions[0];
-      assert.deepEqual(decision.meta.uncertain_outcome.check.subject,{item:'ENG-1',run:'R-1',head:f.head});
-      assert.match(decision.meta.uncertain_outcome.check.defect,/Typed original review attempt has no linked completion producer/);
-      assert.equal(f.calls.length,1);
-      assert.equal(f.calls[0].args[0],path.join(sourceRoot,'dispatch/dispatch.mjs'));
-      assert.equal(f.calls[0].args[1],decision.id,'only the missing-producer decision dispatches');
+      assert.equal(decisions.length,0,'missing original producers stay with the supervisor without an automatic judgment item');
+      assert.equal(f.calls.length,0);
       assert.equal(f.calls.filter(c=>c.args[1]==='queue-review').length,0,'the native attempt never gets a replacement');
     }else assert.equal(f.calls.length, unbound ? 1 : 0, kind);
     if (unbound) {
@@ -200,10 +196,12 @@ test('producer linked review references require readable typed evidence and pres
   const unrelated=f.commit(2);fs.writeFileSync(file,JSON.stringify({run:'R-other',head:unrelated,native_launch_attempted:true}));assert.equal(attempt(),null,'positive attempt retains only its captured subject');
 });
 
-test('producer linked failed review-queue command without a recorded item becomes one decision and never replays',t=>{
+test('producer linked failed review-queue command retains its supervisor diagnostic and never replays',t=>{
   const f=fixture(t),s=f.service({command:(exe,args)=>{f.calls.push({exe,args});return args[1]==='queue-review'?{status:1,stdout:'',stderr:'record command returned without an item'}:{status:0,stdout:'{}',stderr:''};}});
   s.pass();s.pass();assert.equal(f.calls.filter(c=>c.args[1]==='queue-review').length,1);
   const state=fold(fs.readFileSync(path.join(f.org,'events.jsonl'),'utf8').trim().split('\n').map(JSON.parse));
-  const decisions=[...state.items.values()].filter(i=>i.meta.uncertain_outcome);assert.equal(decisions.length,1);assert.match(decisions[0].meta.uncertain_outcome.check.defect,/no pending status producer/);
+  const decisions=[...state.items.values()].filter(i=>i.meta.uncertain_outcome);assert.equal(decisions.length,0);
+  const journal=JSON.parse(fs.readFileSync(path.join(s.directory,'effects.json')));
+  assert.ok(Object.values(journal.record_notices).some(n=>/project supervisor/.test(n.reason)));
   assert.equal(state.links.length,0,'the failed queue subject cannot block independent work');
 });

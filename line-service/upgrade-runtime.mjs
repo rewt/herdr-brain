@@ -55,7 +55,7 @@ export function upgradeRuntime({repo,org,id,fromRoot,targetRoot,rollback=false,d
   };
   const snapshot=initial(),loaded=loadEvents(c.org);if(loaded.tornTail)throw Error('incomplete record prevents service upgrade');
   const savedBytes=readPlainFile(installationFile),saved=JSON.parse(savedBytes),plistBytes=readPlainFile(file);
-  if(saved.repo!==c.repo||saved.org!==c.org||saved.file!==file||saved.target!==target||saved.node!==process.execPath||saved.phase!=='installed'||!saved.migration)throw Error('saved migrated installation binding differs; retain it');
+  if(saved.repo!==c.repo||saved.org!==c.org||saved.file!==file||saved.target!==target||saved.node!==process.execPath||!['installed','uncertain-or-refused'].includes(saved.phase)||!saved.migration)throw Error('saved migrated installation binding differs; retain it');
   const history=events=>{
     const cutovers=events.filter(e=>e.type==='line-service.cutover'&&e.project===c.identity&&e.org===c.org);
     if(cutovers.length!==1||cutovers[0].repo!==c.repo||cutovers[0].main!==git(c.repo,['symbolic-ref','--short','HEAD']))throw Error('original service cutover binding differs');

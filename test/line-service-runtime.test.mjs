@@ -184,8 +184,8 @@ test('accepted migrated release supports guarded restart and a real offline pass
   fs.appendFileSync(g.file,'\n');assert.throws(()=>installedContext(g.cwd,g.org),/drifted/);
 });
 
-async function successor(t){
-  const f=await fixture(t);f.migrate();
+async function successor(t,options){
+  const f=await fixture(t,options);f.migrate();
   const migrated={installation:fs.readFileSync(f.installationFile,'utf8'),plist:fs.readFileSync(f.file,'utf8'),events:loadEvents(f.org).events};
   const next=f.release('successor',{commit:'2'.repeat(40)});
   const pin=id=>{fs.writeFileSync(path.join(f.cwd,'.herdr-release.json'),JSON.stringify({release:id})+'\n');f.git('add','.herdr-release.json');f.git('commit','-qm','Select '+id);};
@@ -199,6 +199,18 @@ async function successor(t){
 function retained(f){
   return {installation:fs.readFileSync(f.installationFile,'utf8'),plist:fs.readFileSync(f.file,'utf8'),stop:fs.readFileSync(f.stop,'utf8'),events:fs.readFileSync(path.join(f.org,'events.jsonl'),'utf8')};
 }
+
+test('upgrade preserves a verified stopped uncertain installation and its original bootstrap refusal',async t=>{
+  const f=await successor(t,{phase:'uncertain-or-refused'}),before=JSON.parse(f.migrated.installation);
+  const observed=loadEvents(f.org).events.find(e=>e.type==='line-service.stopped-installation-verified');
+  const result=f.upgrade(),saved=JSON.parse(fs.readFileSync(f.installationFile));
+  assert.equal(saved.phase,before.phase);assert.equal(saved.error,before.error);assert.deepEqual(saved.migration,before.migration);
+  assert.equal(result.runtime_started,false);assert.ok(fs.existsSync(f.stop));
+  const {installedContext}=await import(pathToFileURL(path.join(f.next,'line-service/cutoff.mjs')).href);
+  assert.equal(installedContext(f.cwd,f.org).installation.source,f.next);
+  assert.deepEqual(loadEvents(f.org).events.find(e=>e.type==='line-service.stopped-installation-verified'),observed);
+  assert.equal(f.calls.some(c=>['bootstrap','bootout'].includes(c.args[0])),false);
+});
 
 test('release upgrade retains original migration and cutoff, restarts the successor and rolls back through the same guarded path',async t=>{
   const f=await successor(t),before=retained(f),files=fs.readdirSync(f.directory).sort(),plan=f.plan();

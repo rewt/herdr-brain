@@ -34,7 +34,7 @@ import {canonical} from '../messages/schema.mjs';
 import {nativeCloseoutWait,closeoutWaitState} from '../lib/closeout-status.mjs';
 
 const hash=b=>createHash('sha256').update(b).digest('hex');
-function fixture(t,{reported=true}={}){
+function fixture(t,{reported=true,role='engineer'}={}){
   const f=configFixture(t,{custom:true}),org=f.env.ORG_DIR,identity=gitProject(f.cwd).identity,base=f.git('rev-parse','HEAD');
   const directory=serviceDirectory(org,identity),workspace=path.join(f.scratch,'source-lane');
   f.git('worktree','add','-qb','lane/source',workspace);
@@ -46,7 +46,7 @@ function fixture(t,{reported=true}={}){
   const report=`---\nrun: R-1\noutcome: done\nsummary: Actual committed build.\nartifacts:\n${heads.map(h=>`  - "Commit: ${h}"`).join('\n')}\n---\n`,file=path.join(org,'reports/R-1.md');fs.writeFileSync(file,report);
   const events=[{type:'line-service.cutover',id:'old-service',project:identity,repo:f.cwd,org,source:sourceRoot,main:'main',canonical_head:base},
     {type:'line-service.phase0',id:'phase0',project:identity,repo:f.cwd,org,source:sourceRoot,main:'main',canonical_head:base,cutoff_at:'2026-10-26T23:55:00.000Z'},
-    {type:'item.added',id:'ENG-1',title:'Build',role:'engineer'},
+    {type:'item.added',id:'ENG-1',title:'Build',role},
     {type:'run.started',id:'R-1',item:'ENG-1',workspace,report_path:path.join(org,'runs/R-1/report.md'),meta:{lane:'source',dispatch_project:identity,dispatch_journal:dispatch,dispatch_attempt:'source'}},
     {type:'run.claimed',run:'R-1',record:org,project:identity,owner:{controller:'brain',legacy:false,release:{id:'source',root:sourceRoot,commit:null,identity:gitProject(sourceRoot).identity}}}];
   if(reported)events.push({type:'report.ingested',run:'R-1',item:'ENG-1',file:'reports/R-1.md',sha256:hash(report),report:{run:'R-1',outcome:'done',summary:'Actual source',artifacts:heads.map(h=>`Commit: ${h}`),extra:{},blockers:[],proposals:[]}});
@@ -240,13 +240,19 @@ test('phase1 intended boundary preserves old cutover and unknown adoption-time f
   fs.unlinkSync(path.join(directory,'STOP'));assert.throws(()=>establishCutover(args),/own STOP/);
 });
 
-test('phase1 post-FF producer facts bind actual source ownership and keep the real landing time once',t=>{
-  const f=fixture(t),actor=structuredClone(f.observation.agents[0]);actor.cwd=f.workspace;
+for(const role of ['engineer','architect','researcher','reviewer'])test(`phase1 post-FF producer facts bind ${role} source ownership and keep the real landing time once`,t=>{
+  const f=fixture(t,{role}),actor=structuredClone(f.observation.agents[0]);actor.cwd=f.workspace;
   f.add([{type:'run.updated',id:'R-1',meta:{agent:actor.name,pane:actor.pane_id,worker_workspace:actor.workspace_id,terminal_id:actor.terminal_id,agent_session_id:actor.agent_session.value}}]);
   const env={...f.env,HERDR_ENV:'1',HERDR_PANE_ID:actor.pane_id,HERDR_WORKSPACE_ID:actor.workspace_id,CODEX_THREAD_ID:actor.agent_session.value};
   const args={canonical:f.cwd,workspace:f.workspace,base:f.base,head:f.heads[1],landedAt:'2026-10-27T01:30:00Z',env,call:()=>JSON.stringify({result:{agent:actor}})};
+  assert.throws(()=>recordOwnLanding({...args,call:()=>JSON.stringify({result:{agent:{...actor,terminal_id:'foreign-terminal'}}})}),/ownership is missing\/ambiguous/);
+  assert.equal(f.context().events.some(e=>e.type==='change.landed'),false);
   assert.equal(recordOwnLanding(args).changes.length,2);assert.equal(recordOwnLanding(args).changes.length,0);
-  assert.equal(f.context().events.find(e=>e.type==='change.landed').landed_at,args.landedAt);
+  const landed=f.context().events.filter(e=>e.type==='change.landed');
+  assert.deepEqual(landed.map(e=>({item:e.item,run:e.run,base:e.base,head:e.head,landing_tip:e.landing_tip,previous_main:e.previous_main,landed_at:e.landed_at,producer:e.producer})),f.heads.map((head,i)=>({
+    item:'ENG-1',run:'R-1',base:i?f.heads[i-1]:f.base,head,landing_tip:f.heads[1],previous_main:f.base,landed_at:args.landedAt,
+    producer:{agent:actor.name,pane:actor.pane_id,terminal:actor.terminal_id,session:actor.agent_session.value,ownership_generation:f.context().run.owner_generation}
+  })));
   assert.throws(()=>recordOwnLanding({...args,head:f.base}),/CAS/);
 });
 
@@ -254,15 +260,15 @@ test('phase1 post-FF landing attributes a same-session continuation to its one o
   const f=fixture(t),actor=structuredClone(f.observation.agents[0]);actor.cwd=f.workspace;
   const meta={agent:actor.name,pane:actor.pane_id,worker_workspace:actor.workspace_id,terminal_id:actor.terminal_id,agent_session_id:actor.agent_session.value};
   const {type,record,project,owner}=f.context().events.find(e=>e.type==='run.claimed'),claim=run=>({type,run,record,project,owner});
-  f.add([{type:'run.updated',id:'R-1',meta},{type:'item.added',id:'ENG-2',title:'Continuation',role:'engineer'},
-    {type:'run.started',id:'R-2',item:'ENG-2',workspace:f.workspace,meta:{lane:'source',...meta}},claim('R-2'),
-    {type:'item.added',id:'ENG-3',title:'Second open owner',role:'engineer'},{type:'run.started',id:'R-3',item:'ENG-3',workspace:f.workspace,meta:{lane:'source',...meta}},claim('R-3')]);
+  f.add([{type:'run.updated',id:'R-1',meta},{type:'item.added',id:'ARCH-2',title:'Continuation',role:'architect'},
+    {type:'run.started',id:'R-2',item:'ARCH-2',workspace:f.workspace,meta:{lane:'source',...meta}},claim('R-2'),
+    {type:'item.added',id:'REV-3',title:'Second open owner',role:'reviewer'},{type:'run.started',id:'R-3',item:'REV-3',workspace:f.workspace,meta:{lane:'source',...meta}},claim('R-3')]);
   const env={...f.env,HERDR_ENV:'1',HERDR_PANE_ID:actor.pane_id,HERDR_WORKSPACE_ID:actor.workspace_id,CODEX_THREAD_ID:actor.agent_session.value};
   const args={canonical:f.cwd,workspace:f.workspace,base:f.base,head:f.heads[1],landedAt:'2026-10-27T01:30:00Z',env,call:()=>JSON.stringify({result:{agent:actor}})};
   assert.throws(()=>recordOwnLanding(args),/ambiguous/,'two open runs on one native tuple stay ambiguous');
   assert.equal(f.context().events.some(e=>e.type==='change.landed'),false);
   f.add([{type:'run.abandoned',id:'R-3',note:'not the landing owner'}]);
-  const landed=recordOwnLanding(args).changes;assert.equal(landed.length,2);assert.ok(landed.every(c=>c.run==='R-2'&&c.item==='ENG-2'),JSON.stringify(landed));
+  const landed=recordOwnLanding(args).changes;assert.equal(landed.length,2);assert.ok(landed.every(c=>c.run==='R-2'&&c.item==='ARCH-2'),JSON.stringify(landed));
   assert.equal(f.context().events.filter(e=>e.type==='change.landed').every(e=>e.run==='R-2'&&e.landed_at===args.landedAt),true,'the reported predecessor is never bound and no time is invented');
 });
 

@@ -66,7 +66,7 @@ export function referenceProof({events,state,repo,org,item,run,target,input,obse
   if(input.disposition==='needs-review'){
     if(producer){
       const worker=effectiveWorkerIdentity(state.runs.get(run),state),review=value.review;
-      const queueFlags=[...['queueAttempted','queueMutation'].filter(k=>Object.hasOwn(value,k)).map(k=>value[k]),
+      const queueFlags=[...['queueAttempted','queueMutation','queueCommandAttempted','parallelReviewStarted','waitedForVerdict'].filter(k=>Object.hasOwn(value,k)).map(k=>value[k]),
         ...['queueAttempted','queueCommandAttempted','parallelReviewStarted','waitedForVerdict'].filter(k=>review&&Object.hasOwn(review,k)).map(k=>review[k])];
       if(input.review_item!=null||![value.run,value.source_run].filter(v=>v!=null).length||
         [value.run,value.source_run].some(v=>v!=null&&v!==run)||[value.item,value.source_item].some(v=>v!=null&&v!==item)||
@@ -76,7 +76,7 @@ export function referenceProof({events,state,repo,org,item,run,target,input,obse
         Object.hasOwn(value,'native_launch_attempted')&&value.native_launch_attempted!==false||
         ['reviewer','launchProcess','sessionBinding','watcher','verdict','qualification','native_qualification','review_item','review_run','agent','pane','terminal','session','pid','reviewer_session','reviewer_pane'].some(k=>value[k]!=null||review&&typeof review==='object'&&review[k]!=null)||
         review!=null&&typeof review!=='string'&&(typeof review!=='object'||Array.isArray(review))||
-        review?.worker!=null||review?.native_launch_attempted!=null||
+        review?.worker!=null||review?.item!=null||review?.run!=null||review?.native_launch_attempted!=null||
         review?.cap!=null&&review.cap!==1||review?.reviewerSuites!=null&&review.reviewerSuites!==0||
         value.error!=null)throw Error('producer handoff queue outcome remains UNKNOWN/started/refused; retain the original reference');
       if(value.queueAttempted===false&&value.queueMutation===false)return{kind:'producer-queue-not-attempted',reference_sha256:hash(bytes)};

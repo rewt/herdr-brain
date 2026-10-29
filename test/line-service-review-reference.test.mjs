@@ -104,6 +104,19 @@ test('producer metadata variants corroborate record proof without treating depen
   }
 });
 
+test('producer handoff metadata cannot hide explicit review links or top-level queue attempts',t=>{
+  const f=fixture(t);
+  // The ordinary metadata remains a valid positive control for this added guard.
+  f.prepare(producerHandoff(f,'ownedScope.head'));resolveReviewReference(f.args());
+  for(const mutation of [
+    {review:{item:'REV-existing'}},{review:{run:'R-review-existing'}},
+    {queueCommandAttempted:true},{parallelReviewStarted:true},{waitedForVerdict:true},
+  ]){
+    const value={...producerHandoff(f),...mutation};f.prepare(value);
+    const c=f.context();assert.throws(()=>referenceProof({...c,item:'ENG-1',run:'R-1',input:f.input()}),/UNKNOWN\/started\/refused/);
+  }
+});
+
 const handoffRefusals={
   'queue proof':[
     v=>v.queueAttempted=true,v=>v.queueMutation=true,v=>v.queueAttempted='false',

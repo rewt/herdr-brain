@@ -3,7 +3,7 @@ import fs from 'node:fs/promises';
 import { constants } from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { ShadowJournal } from '../messages/journal.mjs';
+import { JournalScope } from '../messages/journal.mjs';
 import { canonical, digest, parseJSON, validateEvent } from '../messages/schema.mjs';
 import { detect, observation } from './rules.mjs';
 
@@ -18,9 +18,8 @@ const privateFile = stat => { if (!stat.isFile() || stat.mode & 0o077) throw Err
 
 export class LogJournal {
   constructor(options) {
-    // Reuse both the resolver and its repeated private-path checks, without
-    // changing shadow.jsonl or the stage 7 format.
-    this.scope = new ShadowJournal(options);
+    // Reuse the private partition checks; old shadow.jsonl stays read-only.
+    this.scope = new JournalScope(options);
     const env = options.env ?? process.env;
     this.locationOptions = { identity: options.identity, commonDir: options.commonDir, root: options.root,
       env: { HOME: env.HOME, BRAIN_SHADOW_ROOT: env.BRAIN_SHADOW_ROOT } };
@@ -90,7 +89,7 @@ export class LogJournal {
   }
   async read() {
     // Resolution is read-only, and also refuses replaced storage components.
-    const check = new ShadowJournal(this.locationOptions);
+    const check = new JournalScope(this.locationOptions);
     if (check.directory !== this.directory) throw Error('log partition changed');
     let names;
     try { names = (await this.io.readdir(this.directory)).filter(n => /^segment-\d{16}\.jsonl$/.test(n)).sort(); }

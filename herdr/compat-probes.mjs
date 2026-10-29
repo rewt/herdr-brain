@@ -399,16 +399,23 @@ const probes = {
           kind: 'request', refs: [], reply_to: null, priority: 'normal', reply_by: null, summary: 'Compatibility fixture', body_ref: null, decision_ref: null } };
       await receiver.accept(event, { sender: 'launch', recipient });
       const session = { root: directory, recipient, consumer: 'worker', cwd: directory, kind: 'claude', rendering: 'plain' };
-      const output = JSON.parse(await (await load('messages/hook-pull.mjs')).hookOutput({ session_id: 'native-fixture', cwd: directory, hook_event_name: 'Stop' }, session));
-      assert.equal(output.decision, 'block');
-      save({ session }, [path.join(directory, 'transport.jsonl')], 'fixture receiver enrollment, acceptance and hook claim; no harness launched');
+      // Preserve the v1 receipt reader witness after retiring the hook writer.
+      await receiver.transaction((state, append) => {
+        const entry = state.entries[0];
+        append({ type: 'receipt', acceptance: entry.acceptance, receipt: {
+          state: 'delivered', eventId: event.eventId, recipient, acceptance: entry.acceptance,
+          transport: 'hook-pull/v1', consumer: session.consumer, session: 'native-fixture', hook: 'Stop',
+          reason: 'historical fixture: processing unknown',
+        } });
+      });
+      save({ session }, [path.join(directory, 'transport.jsonl')], 'fixture receiver enrollment, acceptance and historical hook receipt; retired writer is not exercised');
     },
     async read() {
       const receiver = new (await load('messages/receiver.mjs')).Receiver({ root: directory });
       const entries = receiver.state().entries;
       assert.equal(entries.length, 1); assert.equal(entries[0].receipts.at(-1).transport, 'hook-pull/v1');
       assert.deepEqual((await load('messages/hook-pull.mjs')).hookHandoff(state().session).claimedIds, ['compat-message']);
-      console.log('OLD receiver fold and hook handoff read NEW claim without replay');
+      console.log('OLD receiver fold and hook handoff read historical claim without replay');
     },
   },
   'initial-shell': {

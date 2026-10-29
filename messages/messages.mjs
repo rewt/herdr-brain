@@ -2,7 +2,7 @@
 import { parseArgs, isMain } from '../lib/cli-help.mjs';
 import { gitProject } from '../lib/project.mjs';
 import { stateDirectory, readJournal, report } from './journal.mjs';
-import { identityAt } from './mirror.mjs';
+import { identityAt } from './identity.mjs';
 import fs from 'node:fs/promises';
 import { transportStatus } from './receiver.mjs';
 import { SupervisorTransfer } from './transfer.mjs';

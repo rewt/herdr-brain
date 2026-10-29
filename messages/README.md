@@ -10,15 +10,14 @@ into quiet pane w3PD:p4 without explicit operator confirmation. This instruction
 does not change the native inbox adapter described below.
 
 The [operator record inbox](#operator-record-inbox) is a foreground record command
-using the existing native inbox. The staged shadow and offline fixture modules
-described below retain their original boundaries.
+using the existing native inbox. The supervisor inbox and identity-desk helper
+remain the delivery owners. Node built-ins only.
 
-ARCH-33 stage 7 implements the adopted RES-3 report, sections 4 and 7, locked at
-`a28bf36d`. Node built-ins only. This module records **what would happen**; it
-does not send, acknowledge, route, schedule, call a model, start a service, or
-transfer delivery ownership. The existing supervisor inbox and identity-desk
-helper remain the delivery owners. No file in another identity is written.
-Nothing here appends `.org/events.jsonl` or changes derived record status.
+The optional shadow writer and staged turn-hook delivery transport were retired
+by ENG-934. No new shadow notice/body copy, hook enrollment, nudge or hook claim
+is produced. Existing record envelopes, notices, unresolved claims and historical
+bytes are preserved. The schema, classifier and private partition checks remain
+shared with the foreground logs module; historical shadow reports stay readable.
 
 ## Envelope and validation
 
@@ -51,41 +50,12 @@ never evaluate, interpolate into a shell, or promote their prose to instructions
 Unknown event types and bounded unknown fields stay inert and visible. No
 pending-thread, decision-authority or cross-identity authentication is claimed.
 
-## Mirrors and classification
+## Historical classification
 
-`supervisor/prompt-supervisor.mjs::enqueueSupervisor` schedules one best-effort
-observation **after** its original inbox transaction releases its lock. It uses
-the original notice's time, ID and durable ordinal. This covers watcher notices
-rendered by `watch/notice.mjs`, `watch/watch.mjs`, promotion queue notices and
-other inbox callers. Watch supplies validated outcome/verdict/deferred-scope
-evidence; promotion supplies its actual outcome. No notice renderer, text, tags,
-quiet gates, autopilot policy or uncertain-delivery behavior changes.
-
-`supervisor/request.mjs` schedules an observation only after its existing prompt
-succeeds. Its UUID is generated once per invocation (the legacy helper has no
-durable request ID); repeating a command is a new request. Uncertain/refused
-delivery is still held for inspection by that helper, never retried by messages/.
-
-Mirrors use `eventId = legacy:<sha256(source)>:<existing-id>`, producer channel,
-source-derived epoch and the original inbox ordinal. A desk invocation uses its
-UUID-derived epoch and sequence 1. Exact legacy text is retained as a private,
-content-addressed body; no transcript, environment dump or terminal buffer is
-collected. Producer redaction remains the producer's responsibility.
-
-`legacy-shadow:<hash>` role bindings are **observational keys**, explicitly
-marked `unverified-legacy-binding`. They do not claim enrolled or authenticated
-occupants and can never be used to deliver. Identity comes from `BRAIN_IDENTITY`
-or an ancestor `.identity-root`; the sender's project identity comes from the
-existing inbox binding or read-only Git discovery, never a workspace label.
-An identity-desk recipient uses the canonical identity root supplied by the
-request helper (`~/development/<identity>`, carrying a regular `.identity-root`
-marker) as its observational `projectRef`. This directory need not be a Git
-checkout. Explicit requests to a marked desk classify on the supervisor path.
-If the target directory or marker is missing/unreadable, or the marker is not a
-regular file, a `legacy.message.unresolved` observation preserves the intended
-target with path `unknown` and `wouldWake: null`; no recipient scope is guessed.
-The marker is a local scope hint, not authentication or an enrolled binding.
-Enrolled authority/recipient validation belongs to stage 8.
+`classify.mjs` remains the foreground logs classifier and historical shadow
+reader contract. It grants no delivery authority. Prior `legacy-shadow:<hash>`
+role bindings remain observational, unverified keys. Neither a marker nor a
+journal entry proves the identity of a native occupant.
 
 | Path | Classification only |
 | --- | --- |
@@ -101,14 +71,6 @@ wake count**. Future triage batches may cover many entries with one wake.
 or authentication. A tag alone never establishes PASS or an unsupported-role
 skip. Deferred review scope remains distinct from deferred promotion tests.
 
-No delivery code awaits mirror work. Shadow filesystem/Git operations
-have no lock waits or shadow retry loop; in-process shadow writes serialize
-among themselves. Synchronous throws, asynchronous failures and even diagnostic
-callback errors are contained. Failures emit a local `message shadow:` stderr
-diagnostic, never a supervisor notice; the original text and result remain intact.
-Observation is best-effort, not durable transport: process exit/crash/contention
-can miss a mirror. There is no guaranteed capture count or automatic backfill.
-
 ## Journal and report
 
 Default partition:
@@ -119,31 +81,17 @@ canonical checkout. The `root` library option (or report's `--root`) wins over
 `BRAIN_SHADOW_ROOT`, which wins over this default. Only an unmarked project
 falls back to `~/.local/state/herdr-brain/logs`, for example with `BRAIN_IDENTITY`
 set. Setting `BRAIN_IDENTITY` changes the logical identity, not marker discovery
-for storage. Mirrors and `shadow-report` share the same root resolver, so a
-report needs no root override to find default observations. No existing journal
-is migrated or deleted.
+for storage. `shadow-report` retains the original resolver, so historical
+observations need no root override. No existing journal is migrated or deleted.
 
 Symlinked markers and identity-root directories are refused. Existing storage
 components from the selected root through the partition must be private real
 directories; the default also checks `.herdr-brain` before descending into it.
-Newly created directories are 0700; bodies, journal and exclusive writer lock are
-0600. Nonprivate files/directories and symlink journal targets are refused.
-The journal is always named `shadow.jsonl`, separate from record storage.
-
-One immediate exclusive `writer.lock` per partition guards rebuild, comparison,
-append and fsync. There is no separate mutable dedup index. Identical retries
-return the original cursor and append a `shadow.disposition: duplicate`
-observation. Changed content under either key appends a `conflict` observation
-and rejects acceptance. Only `accepted` observations enter kind/path/wake counts;
-attempt records remain available for duplicate/conflict analysis. Classification
-is stored with its version/reason. Cursors order shadow observations, not record
-events or semantic actions. Bodies may remain after a failed append.
-
-Reads tolerate an incomplete final line and report its byte count/digest; they
-never hide corrupt middle lines. Appends refuse a torn tail and preserve every
-byte. After a crash, inspect ownership before removing a stale writer lock;
-archive evidence and explicitly repair/rotate the tail before more writes.
-No automatic truncation, lock stealing, retention or deletion is implemented.
+`JournalScope` supplies only location and private-directory checks for the logs
+writer. It has no shadow append method. `shadow.jsonl` and its body archives are
+historical input, separate from record storage. Reads refuse symlink/nonprivate
+files, report incomplete final lines by byte count/digest, and reject corrupt
+middle lines. No lock removal, repair, truncation, retention or deletion is added.
 
 ```sh
 node messages/messages.mjs shadow-report --identity rewt --json
@@ -155,19 +103,18 @@ contains accepted counts by kind/path, yes/no/unknown would-wake totals,
 duplicate/conflict attempt counts and sorted IDs, unknown IDs, and torn-tail
 evidence. `--since` filters **receivedAt**, including attempts, while deduplication
 always uses the complete journal. This is an offline replay baseline; it does
-not choose or launch a triage model. `flushShadow()` is for tests/explicit offline
-inspection; delivery callers never invoke it.
+not choose or launch a triage model. No mirror callbacks or flush API remain.
 
 ## Compatibility mapping (all section 7.8 channels)
 
 | Channel | Envelope mapping and boundary |
 | --- | --- |
 | Claude `SendMessage` | Future common adapter publishes typed envelope with actual sender and explicit recipient. Native free text remains outside these guarantees; preserve native holds/refusals. Never duplicate a send through two edges or use a model-waking edge for control kinds. No native adapter is installed here. |
-| Herdr direct prompts | Future envelope delivery owner alone uses the existing quiet/occupant gates for either harness. Work dispatch retains its inspected uncertain-prompt recovery and authorized reuse. The opt-in stage-8 hook-pull adapter below serves only Brain-launched non-human workers/reviewers; no wrapper or direct-prompt daemon is added. |
+| Herdr direct prompts | Future envelope delivery owner alone uses the existing quiet/occupant gates for either harness. Work dispatch retains its inspected uncertain-prompt recovery and authorized reuse. The staged hook-pull writer is retired; no wrapper or direct-prompt daemon is added. |
 | Pasted chat relays | Actual relayer as from; original question/decision in a scoped body; correlation/reply_to for answers; separately verified origin and decision_ref. Untyped relay stays unknown, never fyi by inference. A claimed operator origin is not authentication. |
-| `[org-report]`, `[watch-*]`, `[promote-queue]`, literal `[watch]` | Preserve tags/text byte-for-byte. Attach original notice ID/source and org-qualified refs out of band, validated report/review evidence for classification. Brain-owned paths are mirrored here; BCH literal watch is documentation only. |
+| `[org-report]`, `[watch-*]`, `[promote-queue]`, literal `[watch]` | Preserve tags/text byte-for-byte. Attach original notice ID/source and org-qualified refs out of band, validated report/review evidence for classification. No new shadow projection is written; existing owned notices retain their original transport. |
 | BCH `[auto-review]` and legacy `.msg` outbox | BCH-owned: **no BCH files or daemon are touched**. Future read-only mirror maps stable file identity/digest before original-owner removal/ack. Keep unsupported-role distinct from deferred scope and other skips. Its text delivery log is not Brain JSONL. Preserve PAUSED/backoff; never implicitly start a second daemon. |
-| Identity desks | Existing `request.mjs <identity> <text>` retained. Stage 7 resolves the recipient scope from the canonical directory carrying `.identity-root`; a missing marker stays unresolved. Canonically enrolled desk bindings and correlated responses belong to future transport. Receiving identity owns its record, files, lanes and reviews. Current helper still owns readiness, delivery and uncertainty. |
+| Identity desks | Existing `request.mjs <identity> <text>` retained. The receiving identity remains responsible for its own record and native binding. Canonically enrolled desk bindings and correlated responses belong to future transport. Receiving identity owns its record, files, lanes and reviews. Current helper still owns readiness, delivery and uncertainty. |
 | Coordinator memos | Scoped body_ref plus decision_ref (record, sequence, author/delegation) and bounded recipients. Verify independently supplied hash/origin; a newly computed hash authenticates nobody. Retain permitted bytes before future transport acceptance. |
 | Slot locks, tickets, wait files | Hold/release/ack describe advisory intent for resource+epoch+issuer+hold_id; preserve the owner-bound real lock and ticket protocol. Messages neither grant admission nor prove cleanup. Release tombstones and scope enforcement are future stage 9, not a shadow effect. |
 | Record notes | Reference canonical org/item/run/decision sequence as evidence. Material dispositions still use the existing record CLI; record notes are not inbox deliveries. No transport events, routine ack notes or stored status are added to events.jsonl. |
@@ -180,8 +127,8 @@ identity, tool or transport to perform the refused action; take it to the
 operator through an already permitted path and continue independent work.
 
 Stages 8–10 must fence/watermark and reconcile in-flight IDs before changing a
-delivery owner. Shadow data cannot authorize such a transfer. To reverse stage
-7, disable mirror calls and preserve its journal; existing delivery stays intact.
+delivery owner. Shadow data cannot authorize such a transfer. The shadow writer is retired; its journal remains preserved and existing
+delivery stays intact.
 
 ## Stage 8: offline receiver and swappable transport
 
@@ -350,127 +297,32 @@ or removing a stale fixture lock. A crash after intent without a result holds
 uncertain even if no input happened. No compaction, expiration, automatic repair,
 retention deletion, alternate-transport retry or live importer is installed.
 
-## Hook-pull transport (opt-in, no live enablement)
+## Retired hook-pull transport
 
-`hook-pull.mjs` is the foreground Stop/UserPromptSubmit adapter. The receiver
-still enforces its stage-8 **fixture-only mutation boundary**. This change does
-not enroll live recipients, fence a live inbox, start a service, or enable hooks
-in this project. A future authorized adoption must supply a live receiver and
-trusted recipient enrollment; flipping the launch option alone is not delivery
-activation. The legacy adapter and its notice text are unchanged.
+Lane worker/reviewer launches no longer read `.hook-pull.json` or issue hook
+settings/descriptors. The Codex template, hook nudge, launch adapter and receiver
+`claimNext` writer are removed. Ordinary native arguments and current owned
+callback delivery retain their original owners. No saved runtime, pin, hook trust
+or long-lived session is edited.
 
-A project's owner can opt Claude launches in with its canonical checkout's
-`.hook-pull.json` containing `{"enabled":true,"rendering":"plain"}`. Absence or
-`enabled:false` leaves native argv unchanged, including installed lane/settle
-consumers. Parent/identity/machine config cannot enable it. Dispatch workers and
-lane reviewers share the lane launch owner. Human-typed A2 standard supervisor
-and chat slots never receive hooks, including when the project opts in.
-The configuration is read from the canonical checkout even for linked lanes.
-Unavailable project discovery leaves argv unchanged; enabled configuration errors
-are raised before creating any workspace or tab.
-No config is added to this repository by this change.
+`hook-pull.mjs` remains a read-only compatibility entry for issued descriptors.
+Saved Stop/UserPromptSubmit invocations are silent and inert. Explicit inspection
+still works:
 
-Each enabled Claude launch generates private `session.json` and
-`claude-settings.json` files in
-`<canonical Git common directory>/sessions/hook-pull/<launch UUID>/` and appends
-`--settings <absolute settings path>`. Both hook commands reference the absolute
-product script and absolute session descriptor with shell quoting. Existing
-explicit `--settings` is refused rather than silently replaced. The descriptor
-contains the exact recipient address (identity from the effective launch
-`ORG_ACTOR`, matching the record writer, or its `human` default; Git common
-directory only in `projectRef`), consumer launch token, checkout, rendering,
-and default receiver location `<common>/sessions/receiver`. The receiver's
-trusted enrollment must match this address and consumer; an envelope cannot
-supply its own enrollment. Runtime files are retained for handoff/inspection,
-with no automatic cleanup. Tests use private disposable roots only.
-
-On Stop, `stop_hook_active` prevents continuation loops. Otherwise one oldest
-pending addressed message is claimed under the receiver's existing writer and
-delivery locks. A concurrent Stop/nudge cannot claim the same acceptance twice.
-The hook verifies retained body/memo bytes and constructs all JSON before the
-single `delivered` receipt append, then returns `{decision:"block",reason:...}`.
-The receipt includes event ID, consumer, native session ID, hook event and the
-`hook-pull/v1` transport. Acceptance deduplication and producer tuples are
-unchanged. Leading controls are rule-consumed in the same transaction until a
-renderable message or the end of the eligible inbox; fences, refused/uncertain holds and
-transport-pinned inspected retries are respected.
-
-UserPromptSubmit acts only when the prompt is **exactly** `inbox`. It returns a
-single claimed message as `hookSpecificOutput.additionalContext`, or an explicit
-`inbox empty` context requesting `INBOX-EMPTY`. Duplicate nudges are harmless.
-Other prompts, hook events and mismatched checkouts produce no output. Errors
-(missing enrollment, lock contention, invalid input, corrupt retained bytes or
-rendering failure) fail open without output or a claim. As with the existing
-journal, a torn write or an fsync error needs inspection; a process/output crash
-**after** committing a claim leaves a durable handoff, never an automatic replay.
-
-The default plain rendering includes stable IDs, sender, references, body/memo
-text and `decision_ref`. `rendering:"teammate"` wraps escaped text in a Claude-only
-`<teammate-message teammate_id="..." summary="...">` rendering. Neither rendering
-carries authority; recipients check decisions through the record. No code writes
-Claude's internal teammate mailbox. Binary bodies which cannot decode as UTF-8
-fail open for inspection.
-
-`hook-nudge.mjs:nudgeHookSession` sends only the fixed word `inbox` through
-`offerQuiet`'s exact name/pane/terminal/native-session/workspace/checkout checks.
-Every composer read requests `--lines 14 --format ansi`, including the final
-read immediately preceding input. Busy, drafted, changed and unknown panes stay
-pending. Chat/operator and standard supervisor conversation panes are never
-nudged: use pull-only status (or the existing notification path). The caller
-must supply its trusted session descriptor and freshly resolved physical binding.
-The nudge is only a wake hint: a Herdr acknowledgement or lost nudge reply is
-**not** a message delivery receipt and never changes the receiver's pending work.
-There remains a screen-read-to-nudge race, but payload text is never typed.
-
-At every session handoff boundary, use
-`node messages/hook-pull.mjs handoff --session /absolute/session.json` and include
-its claimed-but-unprocessed IDs. `persistHandoff({...,hookSession})` incorporates
-both that Markdown and the IDs in the hashed `unresolvedMessageIds` metadata.
-Use the existing enrolled `Receiver.consume` after processing exposure to clear
-those IDs. Claims never assert understanding or authorized effects. A replacement
-must retain the IDs and inspect them; it must not reset/re-enqueue claims as new
-messages. The hook receipt/native session remains available after a crash.
-
-### Codex trust finding (0.163.0, offline)
-
-Read-only evidence from the installed 0.163.0 binary includes `HookStateToml`,
-`trusted_hash`, `sourcePath`, `currentHash`, `trustStatus`, "normalized hook
-identity should serialize to TOML", and the new/changed-hooks review prompt.
-The actual owner-trusted scratch project's entries at `~/.codex/config.toml`
-lines 250–254 are keyed as:
-
-```
-[hooks.state."/absolute/scratch/.codex/hooks.json:user_prompt_submit:0:0"]
-trusted_hash = "sha256:..."
-[hooks.state."/absolute/scratch/.codex/hooks.json:stop:0:0"]
-trusted_hash = "sha256:..."
+```sh
+node messages/hook-pull.mjs handoff --session /absolute/session.json
 ```
 
-Thus persisted trust is scoped by absolute source path, event and positional
-indexes, with a hash as a second condition. **Inference:** copying an identical
-committed `.codex/hooks.json` into a fresh lane changes the source key and needs
-fresh trust. Binary strings do not establish the exact hash preimage or a
-supported stable-project alias across worktrees; no trust inheritance is assumed.
-Trusting the canonical project once cannot be promised to cover future lanes.
+The handoff reader retains exact committed-but-unprocessed IDs until the existing
+explicit `Receiver.consume` records exposure. `persistHandoff({...,hookSession})`
+continues including them in its hashed metadata. Inspection never re-enqueues,
+retries, repairs, acknowledges or resets an old claim. Invalid explicit inspection
+fails visibly; old hook invocations never claim pending work.
 
-Codex hook execution is implemented and offline-tested, with a non-installed
-`messages/codex-hooks.template.json`, but **Codex launch integration is disabled**.
-Codex argv and today's quiet-gated content delivery remain unchanged even when
-the Claude project opt-in is enabled. No `.codex/hooks.json` is installed or
-committed at the project root, no review dialog is accepted, no trust state is
-copied, and no trust-bypass flag is used. Existing hook-review refusal remains.
+Lifecycle reset/reconstruction, manual settle-watch and retirement drivers remain
+unchanged during the closeout proof. Their consumer migration and removal must
+be scheduled after that proof, preserving saved attempts and native ownership.
 
-**The supplied template is single-session only.** Both commands pin one enrolled
-descriptor; it is not a shared configuration for concurrent or replacement
-sessions. Per-launch descriptor resolution is required before multi-session
-Codex adoption. Codex launch integration remains disabled.
-
-Minimal proposed owner step for one future explicitly authorized session in a stable checkout:
-review the two commands in the template, materialize them with absolute product
-and enrolled session paths in that project's committed `.codex/hooks.json`, then
-have its owner review and trust those two entries in Codex's native review UI.
-A changed source/path/entry needs owner review again. This is a proposal, not an
-instruction to enable lanes; per-worktree trust remains a separate adoption issue.
 # Operator record inbox
 
 `record messages` is a foreground record command. It does not activate the

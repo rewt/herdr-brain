@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { ShadowJournal } from '../messages/journal.mjs';
+import { HistoricalShadow } from './helpers/historical-messages.mjs';
 import { shadowInput, recordInput, replay } from '../logs/inputs.mjs';
 import { measure, selectEntries, render, coalesce } from '../logs/view.mjs';
 import { LogJournal } from '../logs/journal.mjs';
@@ -32,7 +32,7 @@ function recordFixture(f) {
 }
 
 test('foreground replay reads accepted shadow entries and selected folded record fields; stable counts-only JSON', async t => {
-  const f = logFixture(t), shadowRoot = path.join(f.root, 'shadow'), shadow = new ShadowJournal({ ...f.scope, root: shadowRoot });
+  const f = logFixture(t), shadowRoot = path.join(f.root, 'shadow'), shadow = new HistoricalShadow({ ...f.scope, root: shadowRoot });
   const q = f.message(1, { channel: 'operational', outcome: 'progress' }); q.payload.kind = 'question';
   await shadow.append(q); await shadow.append(q);
   await assert.rejects(shadow.append({ ...q, payload: { ...q.payload, summary: 'Conflicting synthetic input' } }), /conflicting/);
@@ -106,7 +106,7 @@ test('run.updated mirrors allowlisted timing metadata once and preserves missing
 
 
 test('replay reports source loss once without changing a torn input or following body paths', async t => {
-  const f = logFixture(t), shadowRoot = path.join(f.root, 'shadow'), shadow = new ShadowJournal({ ...f.scope, root: shadowRoot });
+  const f = logFixture(t), shadowRoot = path.join(f.root, 'shadow'), shadow = new HistoricalShadow({ ...f.scope, root: shadowRoot });
   const message = f.message(1, { channel: 'operational', outcome: 'progress' });
   message.payload.body_ref = { path: '/unreadable/must-not-open', bytes: 4, sha256: 'b'.repeat(64), mediaType: 'text/plain' };
   await shadow.append(message);

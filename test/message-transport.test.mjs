@@ -10,12 +10,11 @@ import { quietTransport } from '../messages/transport.mjs';
 import { SupervisorTransfer } from '../messages/transfer.mjs';
 import { enqueueSupervisor, promptSupervisor, drainInbox, resumeInbox, readInbox } from '../supervisor/prompt-supervisor.mjs';
 import { noticeLock } from '../supervisor/notice-lock.mjs';
-import { flushShadow } from '../messages/mirror.mjs';
 
 const screen = (harness, kind = 'empty') => fs.readFileSync(new URL(`../supervisor/test/fixtures/${harness}-${kind}.ansi`, import.meta.url), 'utf8');
 async function fixture(t, harness = 'codex') {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'brain-transport-')));
-  t.after(async () => { await flushShadow(); fs.rmSync(root, { recursive: true, force: true }); });
+  t.after(async () => { fs.rmSync(root, { recursive: true, force: true }); });
   fs.writeFileSync(path.join(root, 'FIXTURE'), 'brain.transport-fixture/v1\n', { mode: 0o600 });
   const commonDir = path.join(root, '.git'); fs.mkdirSync(commonDir);
   const supervisor = { identity: 'example', projectRef: commonDir, role: { name: 'project-supervisor', bindingRef: 'supervisor-enrollment' } };

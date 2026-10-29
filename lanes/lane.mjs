@@ -28,7 +28,6 @@ import { homeProject, policyLocation } from '../lib/config-home.mjs';
 import { homePolicyLayers, readPolicyFile, readProjectPolicy, validateLane } from '../lib/config-policy.mjs';
 import { resolveArchive, validateArchive } from '../lib/archive.mjs';
 import { hookReviewDialog, codexProfile } from '../dispatch/hook-review.mjs';
-import { hookLaunchArguments } from '../messages/hook-session.mjs';
 import { execFileSync, spawnSync } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
 import {
@@ -1247,11 +1246,6 @@ async function dispatch(topic, promptText, options = {}) {
     if (resolved.kind === "codex") agentArgs.push("-c", `model_reasoning_effort=${resolved.effort}`);
     else agentArgs.push("--effort", resolved.effort);
   }
-  agentArgs = hookLaunchArguments({ cwd: path, kind: resolved.kind,
-    role: IS_REVIEW_COMMAND ? 'reviewer' : 'worker', args: agentArgs,
-    env: { ...process.env, ...Object.fromEntries(resolved.env.map(pair => {
-      const at = pair.indexOf('='); return [pair.slice(0, at), pair.slice(at + 1)];
-    })) } });
 
   let registryPath;
   try {

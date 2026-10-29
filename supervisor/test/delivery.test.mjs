@@ -12,7 +12,6 @@ import { spawnChild, waitForExit } from '../../test/helpers/child.mjs';
 import { registerProcess, killProcess } from '../../test/helpers/processes.mjs';
 import { ownerPid } from '../notice-lock.mjs';
 import { fileURLToPath } from 'node:url';
-import { flushShadow } from '../../messages/mirror.mjs';
 
 process.env.ORG_ACTOR = 'supervisor-delivery-test';
 const fixtureText = (name) => fs.readFileSync(new URL(`./fixtures/${name}.ansi`, import.meta.url), 'utf8');
@@ -231,14 +230,12 @@ test('torn inbox tails fail closed and preserve their bytes', async (t) => {
   assert.equal(fs.readFileSync(f.inbox, 'utf8'), '{"type":"notice"');
   assert.deepEqual(f.calls(), []);
 });
-test('a mirror failure cannot change the quiet-gated prompt bytes or delivery result', async t => {
+test('retired mirror options leave quiet-gated prompt bytes and delivery unchanged', async t => {
   const f = fixture(t); f.clear();
   const text = '[watch-blocked] run=R-9 item=ENG-3 worker=worker state=blocked report=/tmp/report.md';
-  let failure;
-  const result = await promptSupervisor('supervisor', text, { ...f.options, id: 'shadow-failure',
-    mirror: () => Promise.reject(Error('injected mirror failure')), shadow: { onError: error => { failure = error.message; } } });
-  await flushShadow();
-  assert.equal(failure, 'injected mirror failure'); assert.equal(result.delivered, true);
-  assert.deepEqual(f.transmitted(), [`${text} notice-id=shadow-failure`]);
+  const result = await promptSupervisor('supervisor', text, { ...f.options, id: 'without-shadow',
+    mirror: () => { throw Error('retired mirror must not run'); } });
+  assert.equal(result.delivered, true);
+  assert.deepEqual(f.transmitted(), [`${text} notice-id=without-shadow`]);
   assert.equal(readInbox(f.inbox)[0].message, text);
 });

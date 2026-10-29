@@ -21,6 +21,7 @@ import { parseEvent } from '../messages/schema.mjs';
 import { LogJournal } from '../logs/journal.mjs';
 import { Receiver, addressKey, readTransport, foldTransport } from '../messages/receiver.mjs';
 import { hookHandoff } from '../messages/hook-pull.mjs';
+import { historicalHookClaim } from './helpers/historical-messages.mjs';
 import { readDeclaredReferences } from '../lib/retire-runtime.mjs';
 import { explainMiss, readReceiptDeclaration } from '../lanes/exact-validation.mjs';
 
@@ -286,7 +287,7 @@ const contracts = [
     write(file, { ...records[0], schema: 'brain.transport/v999' }); assert.throws(() => readTransport(f.root), /corrupt transport/);
   }],
   ['hook-pull/v1', ['messages/receiver.mjs', 'messages/hook-pull.mjs'], async (f, root) => {
-    const writer = await load(root, 'messages/receiver.mjs'), hook = await load(root, 'messages/hook-pull.mjs');
+    const writer = await load(root, 'messages/receiver.mjs');
     const common = path.join(f.root, '.git');
     const sender = { identity: 'fixture', projectRef: common, role: { name: 'supervisor', bindingRef: 'launch' } };
     const address = { identity: 'fixture', projectRef: common, session: { uid: 'worker', incarnation: 'one' } }, recipient = addressKey(address);
@@ -298,8 +299,7 @@ const contracts = [
         kind: 'request', refs: [], reply_to: null, priority: 'normal', reply_by: null, summary: 'Contract fixture', body_ref: null, decision_ref: null } };
     await receiver.accept(event, { sender: 'launch', recipient });
     const session = { root: f.root, recipient, consumer: 'worker', cwd: f.root, kind: 'claude', rendering: 'plain' };
-    const output = JSON.parse(await hook.hookOutput({ session_id: 'native', cwd: f.root, hook_event_name: 'Stop', ...extra }, session));
-    assert.equal(output.decision, 'block'); assert.match(output.reason, /Contract fixture/);
+    await historicalHookClaim(receiver, event.eventId, session);
     const current = new Receiver({ root: f.root });
     const receipt = current.state().entries[0].receipts.at(-1); assert.equal(receipt.transport, 'hook-pull/v1');
     assert.deepEqual(hookHandoff(session).claimedIds, [event.eventId]);

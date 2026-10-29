@@ -1,6 +1,0 @@
-{
-  "hooks": {
-    "Stop": [{ "hooks": [{ "type": "command", "command": "node /ABSOLUTE/PRODUCT/messages/hook-pull.mjs --session /ABSOLUTE/SESSION/session.json", "timeout": 10 }] }],
-    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "node /ABSOLUTE/PRODUCT/messages/hook-pull.mjs --session /ABSOLUTE/SESSION/session.json", "timeout": 10 }] }]
-  }
-}

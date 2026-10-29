@@ -2,8 +2,8 @@ import fs from 'node:fs/promises';
 import { constants, lstatSync, realpathSync } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { canonical, digest, parseJSON, validateEvent, MAX_EVENT_BYTES } from './schema.mjs';
-import { classify, PATHS } from './classify.mjs';
+import { digest, parseJSON, validateEvent, MAX_EVENT_BYTES } from './schema.mjs';
+import { PATHS } from './classify.mjs';
 
 export function identityRootAt(commonDir) {
   for (let directory = commonDir; ; directory = path.dirname(directory)) {
@@ -57,11 +57,6 @@ export async function privateDirectory(directory) {
   if (!stat.isDirectory() || stat.isSymbolicLink() || (stat.mode & 0o077)) throw Error(`shadow directory is not private: ${directory}`);
   return fs.realpath(directory);
 }
-const producerKey = event => canonical([event.producer.id, event.producer.epoch, event.producer.sequence]);
-function content(event) {
-  const { cursor, receivedAt, stream, shadow, ...input } = event;
-  return canonical(input);
-}
 export async function readJournal(directory) {
   let bytes, handle;
   try {
@@ -87,7 +82,8 @@ export async function readJournal(directory) {
   return { entries, tornTail: tail.length ? { bytes: tail.length, sha256: digest(tail) } : null };
 }
 
-export class ShadowJournal {
+// Shared private partition checks; historical shadow data is read-only.
+export class JournalScope {
   constructor({ identity, commonDir, root, env }) {
     this.identity = identity; this.commonDir = commonDir;
     Object.assign(this, partitionLocation({ identity, commonDir, root, env }));
@@ -96,45 +92,7 @@ export class ShadowJournal {
     privatePath(this.storageRoot, this.directory);
     return privateDirectory(this.directory);
   }
-  async append(input) {
-    // Take an immutable JSON snapshot before any asynchronous filesystem work.
-    validateEvent(input);
-    const event = JSON.parse(canonical(input));
-    if (event.identity !== this.identity || event.project.commonDir !== this.commonDir) throw Error('shadow partition scope mismatch');
-    if (event.cursor || event.receivedAt || event.stream || event.shadow) throw Error('shadow writer owns cursor, receivedAt, stream and classification');
-    const directory = await this.prepareDirectory();
-    if (await fs.realpath(this.commonDir) !== this.commonDir) throw Error('noncanonical project commonDir');
-    // Fail immediately on contention. Shadow work never waits on delivery or
-    // steals an unknown/stale lock. Inspect a crash-left lock before removal.
-    const lockFile = path.join(directory, 'writer.lock');
-    let lock;
-    try { lock = await fs.open(lockFile, 'wx', 0o600); }
-    catch (error) { if (error.code === 'EEXIST') throw Error('shadow writer locked; mirror skipped'); throw error; }
-    try {
-      await lock.writeFile(JSON.stringify({ pid: process.pid, at: new Date().toISOString() }) + '\n');
-      const { entries, tornTail } = await readJournal(directory);
-      if (tornTail) throw Error('torn shadow tail preserved; explicit repair/rotation required before append');
-      const accepted = entries.filter(entry => entry.shadow.disposition === 'accepted');
-      const prior = accepted.find(entry => entry.eventId === event.eventId || producerKey(entry) === producerKey(event));
-      const disposition = !prior ? 'accepted' : prior.eventId === event.eventId && content(prior) === content(event) ? 'duplicate' : 'conflict';
-      const entry = { ...event, stream: `${this.identity}/${digest(this.commonDir)}`,
-        cursor: { epoch: 'shadow-1', sequence: entries.length + 1 }, receivedAt: new Date().toISOString(),
-        shadow: { ...classify(event), disposition, ...(prior ? { originalCursor: prior.cursor, originalEventId: prior.eventId } : {}) } };
-      const { shadow, ...storedEvent } = entry;
-      validateEvent(storedEvent);
-      const handle = await fs.open(path.join(directory, 'shadow.jsonl'), constants.O_WRONLY | constants.O_APPEND | constants.O_CREAT | constants.O_NOFOLLOW, 0o600);
-      try {
-        const stat = await handle.stat();
-        if (!stat.isFile() || (stat.mode & 0o077)) throw Error('shadow journal is not a private regular file');
-        await handle.writeFile(JSON.stringify(entry) + '\n'); await handle.sync();
-      } finally { await handle.close(); }
-      // Persist directory entries too, before reporting shadow acceptance.
-      const dir = await fs.open(directory, 'r');
-      try { await dir.sync(); } finally { await dir.close(); }
-      if (disposition === 'conflict') throw Error(`conflicting shadow event id or producer key: ${event.eventId}`);
-      return { disposition, cursor: prior?.cursor ?? entry.cursor, entry };
-    } finally { await lock.close(); await fs.unlink(lockFile); }
-  }
+
 }
 
 export function report({ entries, tornTail }, { since } = {}) {

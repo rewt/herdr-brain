@@ -6,13 +6,10 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { request } from '../request.mjs';
-import { flushShadow } from '../../messages/mirror.mjs';
-import { readJournal, stateDirectory } from '../../messages/journal.mjs';
 
 function fixture(t, existing = false, status = 'idle') {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'identity-request-'));
   t.after(async () => {
-    await flushShadow();
     assert.equal(fs.existsSync(path.join(root, '.local/state/herdr-brain/logs')), false, 'request fixtures must not use the default home shadow root');
     fs.rmSync(root, { recursive: true, force: true });
   });
@@ -48,24 +45,6 @@ test('identity requests reuse a live desk and deliver literal request text', asy
   assert.deepEqual(f.calls().map(a => a.slice(0, 2).join(' ')), ['agent list', 'agent get', 'agent prompt']);
   assert.deepEqual(f.calls().at(-1), ['agent', 'prompt', 'desk-bastian', text]);
   assert.equal(fs.existsSync(path.join(f.root, 'bad')), false);
-});
-test('a delivered identity request mirrors its marked non-Git desk on the supervisor path', async t => {
-  const f = fixture(t, true), desk = path.join(f.root, 'development/bastian');
-  fs.mkdirSync(desk, { recursive: true }); fs.writeFileSync(path.join(desk, '.identity-root'), '');
-  const commonDir = path.join(f.root, 'sender.git'); fs.mkdirSync(commonDir);
-  const text = 'What: review. Why: unblock. Done: reply. Evidence: /tmp/request.';
-  await request(['bastian', text], { ...f, shadow: { commonDir, identity: 'example' } });
-  await flushShadow();
-  const directory = stateDirectory({ root: f.env.BRAIN_SHADOW_ROOT, commonDir: fs.realpathSync(commonDir), identity: 'example' });
-  const { entries } = await readJournal(directory);
-  assert.equal(entries.length, 1); const entry = entries[0];
-  assert.equal(entry.type, 'session.message.v1'); assert.equal(entry.payload.kind, 'request');
-  assert.equal(entry.shadow.path, 'supervisor'); assert.equal(entry.shadow.wouldWake, true);
-  assert.equal(entry.payload.to[0].projectRef, fs.realpathSync(desk));
-  assert.equal(entry.payload.to[0].identity, 'bastian');
-  assert.deepEqual(f.calls().at(-1), ['agent', 'prompt', 'desk-bastian', text]);
-  assert.equal(fs.readFileSync(entry.payload.body_ref.path, 'utf8'), text);
-  assert.equal(fs.existsSync(path.join(desk, '.git')), false);
 });
 test('a missing desk creates an unfocused identity workspace and starts native Codex before prompting', async t => {
   const f = fixture(t);
@@ -121,15 +100,12 @@ test('identity traversal and empty requests fail before contacting Herdr', async
     await assert.rejects(request(args, f), /usage/);
   assert.throws(() => f.calls(), /ENOENT/);
 });
-test('a failed or pending desk mirror leaves successful literal delivery byte-identical', async t => {
-  const f = fixture(t, true), text = 'Please inspect; $(touch never-run)\nKeep the exact text.';
-  let release, observed;
-  const sent = await request(['bastian', text], { ...f, mirror: entry => { observed = entry; return new Promise(resolve => { release = resolve; }); } });
-  assert.equal(sent.desk, 'desk-bastian');
+test('identity requests do not create a second notice journal', async t => {
+  const f = fixture(t, true), text = 'Please inspect this exact request.';
+  const root = path.join(f.root, 'shadow');
+  await request(['bastian', text], { ...f, shadow: { root },
+    mirror: () => { throw Error('retired mirror must not run'); } });
+  await new Promise(resolve => setImmediate(resolve));
   assert.deepEqual(f.calls().at(-1), ['agent', 'prompt', 'desk-bastian', text]);
-  assert.equal(observed.message, text); release(); await flushShadow();
-  let failure;
-  await request(['bastian', text], { ...f, mirror: () => { throw Error('mirror disk failure'); }, shadow: { onError: error => { failure = error.message; } } });
-  await flushShadow(); assert.equal(failure, 'mirror disk failure');
-  assert.deepEqual(f.calls().at(-1), ['agent', 'prompt', 'desk-bastian', text]);
+  assert.equal(fs.existsSync(root), false);
 });

@@ -2,7 +2,9 @@
 
 ARCH-33 stage 5, offline first slice. Node built-ins only. This module reuses
 `messages/schema.mjs`, `messages/classify.mjs` and the private partition resolver
-in `messages/journal.mjs`. It adds no model, daemon, background loop, socket,
+(`JournalScope`) in `messages/journal.mjs`, and read-only identity discovery in
+`messages/identity.mjs`. The optional shadow writer is retired; `--from-shadow`
+reads preserved historical bytes. It adds no model, daemon, background loop, socket,
 Herdr subscription, session, delivery path or record mutation. `brain/` remains
 the separate foreground lesson digest. Existing notice text and delivery owners
 are unchanged.

@@ -13,7 +13,6 @@ import { findOrgDir } from '../lib/store.mjs';
 import { noticeLock, ownerPid } from './notice-lock.mjs';
 import { composerEmpty } from './composer.mjs';
 import { autopilotNotice } from './autopilot.mjs';
-import { bestEffort, mirrorNotice } from '../messages/mirror.mjs';
 import { invokeHerdr as invoke } from './herdr-edge.mjs';
 import { fixtureInboxEnrolled } from '../messages/fixture.mjs';
 import { inboxPath, readInbox } from '../messages/inbox-read.mjs';
@@ -357,7 +356,6 @@ export function enqueueSupervisor(to, message, options = {}) {
   seconds(options.waitSeconds ?? process.env.SUPERVISOR_INPUT_WAIT_SECONDS, 7200, 'SUPERVISOR_INPUT_WAIT_SECONDS');
   seconds(options.confirmSeconds ?? process.env.SUPERVISOR_INPUT_CONFIRM_SECONDS, 3, 'SUPERVISOR_INPUT_CONFIRM_SECONDS');
   seconds(options.pollSeconds ?? process.env.SUPERVISOR_INPUT_POLL_SECONDS, 10, 'SUPERVISOR_INPUT_POLL_SECONDS');
-  let observed, sequence;
   transaction(file, (entries, append) => {
     const prior = entries.find((entry) => entry.id === id);
     if (prior) {
@@ -367,14 +365,11 @@ export function enqueueSupervisor(to, message, options = {}) {
         throw new Error(`notice ${id} has different correlation or transport`);
       // Old callers adopt new metadata; new callers adopt legacy barriers.
       // Never rewrite an already journalled notice to invent independence.
-      observed = prior; sequence = entries.indexOf(prior) + 1;
       return;
     }
-    observed = append({ type: 'notice', id, to, message, correlation: ordering, project, owner: 'supervisor-inbox', herdr: options.herdr ?? 'herdr', attempts, retrySeconds,
+    append({ type: 'notice', id, to, message, correlation: ordering, project, owner: 'supervisor-inbox', herdr: options.herdr ?? 'herdr', attempts, retrySeconds,
       title: options.title ?? 'Supervisor notice queued', sound: options.sound ?? 'request' });
-    sequence = entries.length + 1;
   }, options.lockOptions);
-  bestEffort(() => (options.mirror ?? mirrorNotice)({ ...observed, sequence, inbox: file, cwd: options.cwd, evidence: options.shadowEvidence }, options.shadow), options.shadow);
   return { id, inbox: file };
 }
 

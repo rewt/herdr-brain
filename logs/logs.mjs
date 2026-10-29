@@ -3,7 +3,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { parseArgs, isMain } from '../lib/cli-help.mjs';
 import { gitProject } from '../lib/project.mjs';
-import { identityAt } from '../messages/mirror.mjs';
+import { identityAt } from '../messages/identity.mjs';
 import { LogJournal } from './journal.mjs';
 import { shadowInput, recordInput, replay } from './inputs.mjs';
 import { measure, selectEntries, render, coalesce } from './view.mjs';

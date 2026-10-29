@@ -35,6 +35,8 @@ export function checkDispatchEligibility(job, journal, {boundary='launch'}={}) {
     release:job.release,observed_seq:events.at(-1)?.seq??0};
   const refuse=(reason,subject=job.item)=>changed(reason,{...input,subject});
   if(tornTail)refuse('incomplete record input');
+  if(events.some(e=>e.journal===journal&&(e.type==='dispatch.allocation-finalized'||e.type==='closeout.allocation-effect')))
+    refuse('original stopped allocation has entered final disposition; retain its original request');
   const item=state.items.get(job.item),hold=itemLaunchHold(state,job.item,events);
   if(hold)refuse(hold.reason,hold.subject);
   if(job.resumeSession && [...state.runs.values()].some(r=>r.id!==job.run&&!r.report&&!r.abandoned&&

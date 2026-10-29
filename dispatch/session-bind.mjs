@@ -8,7 +8,7 @@ export function nativeProcess(agent, info, readOwner) {
   const fg = info?.foreground_processes;
   if (!Array.isArray(fg) || fg.length !== 1 || fg[0].pid === info.shell_pid ||
       (fg[0].name !== agent.agent && path.basename(fg[0].argv0 ?? '') !== agent.agent))
-    throw Error('native foreground process is unavailable or ambiguous');
+    throw Object.assign(Error('native foreground process is unavailable or ambiguous'), { code: 'NATIVE_FOREGROUND_UNAVAILABLE' });
   const pid = fg[0].pid;
   return { pid, identity: ownerIdentity(pid, readOwner) };
 }
@@ -41,6 +41,13 @@ export async function observeSessionBinding({ job, save, observe, record, qualif
     try { seen = observe(); }
     catch (error) {
       const expired = now() >= Date.parse(b.deadline) || monotonic() - started >= end;
+      // Native process-info can briefly expose the login shell while the
+      // original agent changes foreground groups. This is no continuity proof.
+      // Wait only inside the original delivery window; refusals still stop.
+      if (!expired && error.code === 'NATIVE_FOREGROUND_UNAVAILABLE') {
+        await pause(Math.max(0, Math.min(250, Date.parse(b.deadline) - now(), end - (monotonic() - started))));
+        continue;
+      }
       finish('unbound', expired ? 'native session observation deadline expired' :
         `native session observation failed: ${error.message}`);
       return;

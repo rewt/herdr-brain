@@ -21,6 +21,7 @@ export const closeoutServiceDirectory=(org,common)=>path.join(org,'line-service'
 // Includes the existing inventory-sized Git removal allowance (often >60s),
 // native exit and fresh preservation/identity reads. Still one finite owner.
 export const CLOSEOUT_TURN_BUDGET_MS=180000;
+export const CLOSEOUT_MIN_STEP_BUDGET_MS=120000;
 export function runCloseoutTurn(options) {
   const clock=options.clock??(()=>performance.now()),now=options.now??(()=>Date.now()),started=clock();
   let successor=false,contended=false;
@@ -115,6 +116,11 @@ function closeoutTurn({project,org,cli,guard,env=process.env,maxSteps=8,budgetMs
     // Periodic priority also covers turns whose effects consume every second.
     // This is the same finite owner, not another executor or background loop.
     state.turn=(state.turn??0)+1;
+    if(state.turn%4===0&&!expired()){
+      try{guard();state.allocations=JSON.parse(cli('supervisor/closeout.mjs',['allocations','--repo',project.canonical,'--org',org,
+        '--deadline',String(Math.floor(now()+Math.max(1,budgetMs-(clock()-started))))]));}
+      catch(error){if(error.code==='CLOSEOUT_CODE_CHANGED')throw error;errors.push({stage:'allocations',reason:error.message});}
+    }
     if(state.turn%4===0){refresh();observed=read();}
     const entries=currentCloseoutEntries(project.identity,org,observed.events,{onInvalid:()=>{}}),
       rows=closeoutEvaluations(project.identity,org,observed.events),evaluations=new Map(rows.map(e=>[e.key,e]));
@@ -134,6 +140,10 @@ function closeoutTurn({project,org,cli,guard,env=process.env,maxSteps=8,budgetMs
     const scheduled=scheduleLineCloseouts(eligible,rows,{batch:true,attempts:state.targets});
     for(const {entry,sessionsOnly}of scheduled){
       if(expired()||steps>=maxSteps)break;
+      // Do not spend the final seconds repeating a removal preflight that
+      // cannot fit its own inventory allowance. Fairness gives this target a
+      // fresh finite turn, rather than shrinking every target to the tail.
+      if(budgetMs-(clock()-started)<Math.min(budgetMs,CLOSEOUT_MIN_STEP_BUDGET_MS))break;
       // Checkpoint before dispatch: crashes cannot keep selecting the oldest
       // kept target ahead of its independent peers. Native UNKNOWN stays owned
       // by the closer's exact original intent, never this scheduling checkpoint.

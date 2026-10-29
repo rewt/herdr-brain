@@ -19,12 +19,18 @@ export async function closeoutMain(argv = process.argv.slice(2)) {
     return;
   }
   // Bind both identities before importing any queue/consumer/retirement code.
-  const loadedCode = ['drain','refresh'].includes(command) ? captureCloseoutLaunch(gitProject(cwd)) : undefined;
+  const loadedCode = ['drain','refresh','allocations'].includes(command) ? captureCloseoutLaunch(gitProject(cwd)) : undefined;
   const { findOrgDir, loadEvents } = await import('../lib/store.mjs');
   const { readCloseoutEntries, retryCloseout, publishCloseoutEvents, endReviewFollowup } = await import('../lib/closeout.mjs');
   const org = values.org ?? findOrgDir({ cwd });
   let result;
-  if(command==='refresh'&&positionals.length===1){
+  if(command==='allocations'&&positionals.length===1){
+    const {disposeStoppedAllocations}=await import('../lib/closeout-allocations.mjs');
+    const deadline=Number(values.deadline);
+    if(!Number.isSafeInteger(deadline)||deadline<0)throw Error('invalid finite allocation deadline');
+    result=disposeStoppedAllocations({cwd,org,loadedCode,deadline});
+  }
+  else if(command==='refresh'&&positionals.length===1){
     const {refreshCloseouts}=await import('../lib/closeout-consumer.mjs');
     const deadline=values.deadline===undefined?Date.now()+45000:Number(values.deadline);
     if(!Number.isSafeInteger(deadline)||deadline<0)throw Error('invalid finite refresh deadline');

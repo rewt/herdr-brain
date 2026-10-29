@@ -41,10 +41,13 @@ inside Brain without a second copy. A project session can also read the canonica
 absolute skill path explicitly. The package is local source, not a published
 marketplace or an immutable product release.
 
-For cross-project discovery on this machine, use the existing personal convention:
-one link per skill under `~/.agents/skills`, with a matching link under
-`~/.claude/skills`. Point at the **canonical landed** `herdr-brain/skills/NAME`
-directory, never at a disposable worktree or a held/unlanded commit. Inspect all
+For cross-project discovery on this machine, put one link per skill under
+`~/.agents/skills` for Codex and `$CLAUDE_CONFIG_DIR/skills` for Claude. The `ai`
+wrapper selects Claude's config directory per persona; the personal persona used
+by Brain and BCH reads `~/.claude-personal/skills`. Use the active persona's
+directory rather than assuming `~/.claude/skills`. Point at the **canonical
+landed** `herdr-brain/skills/NAME` directory, never at a disposable worktree or a
+held/unlanded commit. Inspect all
 destinations first: retain an identical link, create only absent paths, and stop
 on any other file/directory/link rather than overwriting it. Native permission
 refusals stop installation. Installation does not authorize editing BCH or change

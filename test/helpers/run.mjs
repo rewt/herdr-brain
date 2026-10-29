@@ -7,6 +7,7 @@ import { pipeline } from 'node:stream/promises';
 import { fileURLToPath } from 'node:url';
 import { registerProcess, killProcess, auditGroup } from './processes.mjs';
 import { offlineHerdr } from './offline-herdr.mjs';
+import { ownFixtureLifetime } from './fixture-lifetime.mjs';
 import { runnerLimits } from './runner-limits.mjs';
 import path from 'node:path';
 import { watchRun } from '../../test-slot/watch.mjs';
@@ -15,6 +16,9 @@ import * as timingJournal from '../../test-slot/timings.mjs';
 const { TIMINGS_ENV, startTiming, timing } = timingJournal;
 
 const cleanupHerdr = offlineHerdr();
+// Chain coordinator -> suite leader -> test file -> product fixture. Native
+// writer death covers abrupt exits even when JS/IPC cleanup cannot execute.
+ownFixtureLifetime();
 
 const script = fileURLToPath(import.meta.url);
 const policy = fileURLToPath(new URL('./fixture-policy.mjs', import.meta.url));

@@ -15,6 +15,12 @@ const nativeSync = cp.spawnSync;
 const nativeSpawn = ChildProcess.prototype.spawn;
 let lifetime;
 
+function watchLifetime(owner) {
+  const guard = cp.spawn(owner.executable,
+    ['--watch', owner.fifo, owner.seconds, String(process.pid)], { stdio: 'ignore' });
+  guard.unref();
+}
+
 function closed(child) {
   let stdout = '', stderr = '', error;
   child.stdout?.setEncoding('utf8').on('data', bytes => { stdout += bytes; });
@@ -84,10 +90,19 @@ function nativeGuard(root) {
   return executable;
 }
 
-// Called once by bounded-test, after offline isolation. Children that only load
-// this preload inherit the test file's writer; they never acquire another one.
+// Called once by each runner/file owner after offline isolation. Children that
+// only load this preload inherit that writer without acquiring another one.
 export function ownFixtureLifetime() {
   if (lifetime) return;
+  // Keep the enclosing runner's writer as a cancellation boundary before
+  // acquiring this process's writer. A killed suite leader cannot run its
+  // IPC cleanup, and a stuck test file otherwise keeps its inbox owners alive.
+  // The native guard also works while this process is blocked or suspended.
+  if (process.env.HERDR_FIXTURE_LIFETIME_EXECUTABLE) watchLifetime({
+    executable: process.env.HERDR_FIXTURE_LIFETIME_EXECUTABLE,
+    fifo: process.env.HERDR_FIXTURE_LIFETIME_FIFO,
+    seconds: process.env.HERDR_FIXTURE_LIFETIME_SECONDS,
+  });
   const standalone = !process.env.HERDR_TEST_OFFLINE_ROOT;
   // A shared offline root can outlive a PID; never reuse its previous FIFO.
   const root = standalone ? fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'fixture-lifetime-')) :
@@ -176,8 +191,6 @@ ChildProcess.prototype.spawn = function (options) {
 // Its preload installs the same guard, so blocking JS cannot escape either.
 if ((process.env.HERDR_FIXTURE_GATE_LIFETIME === '1' || process.argv.includes('--owner-worker')) &&
     process.env.HERDR_FIXTURE_LIFETIME_EXECUTABLE) {
-  const guard = cp.spawn(process.env.HERDR_FIXTURE_LIFETIME_EXECUTABLE,
-    ['--watch', process.env.HERDR_FIXTURE_LIFETIME_FIFO, process.env.HERDR_FIXTURE_LIFETIME_SECONDS, String(process.pid)],
-    { stdio: 'ignore' });
-  guard.unref();
+  watchLifetime({ executable: process.env.HERDR_FIXTURE_LIFETIME_EXECUTABLE,
+    fifo: process.env.HERDR_FIXTURE_LIFETIME_FIFO, seconds: process.env.HERDR_FIXTURE_LIFETIME_SECONDS });
 }

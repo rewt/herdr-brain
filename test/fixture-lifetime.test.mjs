@@ -257,3 +257,58 @@ test('live fixture victim',async t=>{
     for (const scratch of evidence.roots) fs.rmSync(scratch, { recursive: true, force: true });
   });
 }
+
+for (const target of ['suite leader', 'coordinator with suspended leader']) {
+  test(`abrupt ${target} death stops a blocked test file and its orphan inbox owner`, async t => {
+    const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'fixture-runner-death-')));
+    const file = path.join(root, 'victim.test.mjs'), receipt = path.join(root, 'ready.json');
+    const owned = [];
+    t.after(async () => {
+      for (const entry of owned.toReversed()) assert.ok(tracker.killProcess(entry).ok);
+      await until(() => !alive(owned).length, 'owned runner-death fixtures did not stop');
+      fs.rmSync(root, { recursive: true, force: true });
+    });
+    fs.writeFileSync(file, `import test from ${JSON.stringify(local('./helpers/bounded-test.mjs'))};
+import fs from 'node:fs';
+import {resumeInbox} from ${JSON.stringify(local('../supervisor/prompt-supervisor.mjs'))};
+test('blocked fixture',async()=>{
+  const inbox=${JSON.stringify(path.join(root, 'inbox.log'))};
+  fs.writeFileSync(inbox,JSON.stringify({type:'notice',id:'pending',to:'offline',message:'pending',herdr:'/usr/bin/false',attempts:1,retrySeconds:0})+'\\n');
+  const owner=await resumeInbox(inbox,{waitSeconds:1,pollSeconds:.02,confirmSeconds:.02});
+  fs.writeFileSync(${JSON.stringify(receipt)},JSON.stringify({file:process.pid,leader:process.ppid,owner}));
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0);
+});`);
+    const child = spawnScenarioChild(t, process.execPath, [local('./helpers/run.mjs'), file]);
+    let finished;
+    waitForExit(child).then(result => { finished = result; });
+    await until(() => fs.existsSync(receipt) || finished, 'blocked fixture never became ready');
+    assert.ok(fs.existsSync(receipt), finished?.stdout + finished?.stderr);
+    const evidence = JSON.parse(fs.readFileSync(receipt, 'utf8')), rows = snapshot();
+    assert.equal(rows.get(evidence.file)?.ppid, evidence.leader);
+    assert.equal(rows.get(evidence.leader)?.ppid, child.pid);
+    assert.ok(rows.get(evidence.owner)?.command.includes('--owner-worker'));
+    const family = new Set([child.pid, evidence.owner]);
+    let size;
+    do {
+      size = family.size;
+      for (const row of rows.values()) if (family.has(row.ppid)) family.add(row.pid);
+    } while (size !== family.size);
+    for (const pid of family) {
+      const row = rows.get(pid);
+      if (row && !/^Z/.test(row.state)) owned.push({ pid, identity: row.identity, command: row.command, group: false });
+    }
+    const leader = owned.find(entry => entry.pid === evidence.leader);
+    const sentinel = spawnChild(t, process.execPath, ['-e', 'setInterval(()=>{},1000)']);
+    if (target === 'suite leader') assert.equal(tracker.killProcess(leader).signaled, true);
+    else {
+      assert.equal(tracker.killProcess(leader, 'SIGSTOP').signaled, true);
+      assert.equal(child.kill('SIGKILL'), true);
+    }
+    const result = await waitForExit(child);
+    if (target === 'suite leader') assert.equal(result.code, 1, result.stdout + result.stderr);
+    else assert.equal(result.signal, 'SIGKILL', result.stdout + result.stderr);
+    await until(() => !alive(owned).length, () => `fixtures survived ${target}: ${JSON.stringify(alive(owned))}`);
+    assert.doesNotThrow(() => process.kill(sentinel.pid, 0), 'an unrelated fixture was signalled');
+    sentinel.kill('SIGKILL'); await waitForExit(sentinel);
+  });
+}

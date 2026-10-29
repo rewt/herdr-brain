@@ -52,6 +52,24 @@ current inventory and code binding. Its disposition is `allocation-absent` and
 its historical command outcome remains `UNKNOWN`. It sends no input, repeats
 no close, and invents no exit or claim-release receipt. Original bytes remain.
 
+DEC-331 also permits a distinct new close of a surviving inert original shell.
+The ordinary retirement planner/executor and tab lock still apply. Every close
+boundary reads complete global native inventory and proves the exact original
+pane, terminal, workspace, tab and shell birth, no lane or moved original agent,
+one foreground login shell and no raw child processes (including zombies),
+clean index/tracked/untracked work, and all ordinary references/lifecycle guards.
+The existing kernel/login shell spelling equivalence preserves PID, birth and
+shell kind, including a claimed initial-shell receipt. Ambiguity means KEEP.
+
+The new `shell-close-requested` effect carries `legacy-inert-shell/v1` evidence
+and the original intent ID/sequence, giving it a distinct immutable effect ID.
+A linked `legacy-shell-verified` receipt preserves the repeated proof after
+journaling, immediately before native close. Only its actual linked `closed`
+receipt plus fresh global vacancy can create `legacy-exit-settlement/v2`, naming
+both close receipts and retaining the historical exit as UNKNOWN. A new lost,
+failed or refused close is held without replay or replacement. The next normal
+guarded pass owns folder/branch disposition; unlanded refs remain exact.
+
 That typed settlement completes only the allocation-disposition wait. The next
 finite line pass uses the existing folder/branch executor with fresh native,
 source, claim, Git, preservation and STOP/HOLD guards. Unsaved folders stay;

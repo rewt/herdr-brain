@@ -55,7 +55,7 @@ for(const merged of [true,false])test(`line closes the exact inert original shel
   if(!merged)assert.equal(f.git(['rev-parse','lane/topic']),f.head);
 });
 
-for(const kind of ['agent','moved-session','child','zombie','foreground','shell-birth','terminal','moved-terminal','dirty','staged','untracked',
+for(const kind of ['agent','moved-session','child','zombie','foreground','shell-birth','terminal','moved-terminal','dirty','staged','untracked','skip-worktree','assume-unchanged',
   'focus','reference','STOP','HOLD','claim','head','incomplete'])test(`inert close keeps ${kind}`,t=>{
   const f=fixture(t),s=f.state;
   if(['agent','moved-session'].includes(kind))s.agents=[{name:'other',agent:'codex',pane_id:kind==='agent'?'w:p':'else:p',
@@ -69,6 +69,9 @@ for(const kind of ['agent','moved-session','child','zombie','foreground','shell-
   if(kind==='dirty')fs.writeFileSync(path.join(f.lane,'seed'),'unsaved');
   if(kind==='staged'){fs.writeFileSync(path.join(f.lane,'seed'),'staged');f.git(['add','seed'],f.lane);}
   if(kind==='untracked')fs.writeFileSync(path.join(f.lane,'unsaved'),'unsaved');
+  if(['skip-worktree','assume-unchanged'].includes(kind)){
+    f.git(['update-index','--'+kind,'seed'],f.lane);fs.writeFileSync(path.join(f.lane,'seed'),'hidden unsaved work');
+  }
   if(kind==='focus')s.panes[0].focused=true;
   if(kind==='reference')fs.writeFileSync(path.join(f.org,'references/live.json'),JSON.stringify({schema:'herdr-reference/v1',
     kind:'owner',state:'running',owner:'owner',job:'job',item:'ENG-1',cwd:f.lane,
@@ -123,13 +126,16 @@ for(const kind of ['unknown','refused'])test(`a new ${kind} close remains held w
 
 test('new settlement consumers require linked close, boundary proof, completion and vacancy',t=>{
   const f=fixture(t);f.turn();const all=events(f),settlement=legacyExitSettlement(f.entry,f.intent,all);assert.ok(settlement);
-  for(const kind of ['missing-close','missing-verification','missing-completion','wrong-link','wrong-birth','present-terminal']){
+  for(const kind of ['missing-close','missing-verification','missing-completion','wrong-link','wrong-birth','dirty-proof','index-proof','stale-vacancy','present-terminal']){
     let rows=structuredClone(all),row=rows.find(e=>e.type==='closeout.exit-settled');
     if(kind==='missing-close')rows=rows.filter(e=>e.effect!==row.close_intent);
     if(kind==='missing-verification')rows=rows.filter(e=>e.outcome?.action!=='legacy-shell-verified');
     if(kind==='missing-completion')rows=rows.filter(e=>e.seq!==row.close_receipt);
     if(kind==='wrong-link')row.close_intent='other';
     if(kind==='wrong-birth')rows.find(e=>e.outcome?.action==='legacy-shell-verified').outcome.legacy_exit.pane.process_info.process_tree_raw[0].identity='replacement';
+    if(kind==='dirty-proof')rows.find(e=>e.outcome?.action==='legacy-shell-verified').outcome.legacy_exit.git.clean=false;
+    if(kind==='index-proof')rows.find(e=>e.outcome?.action==='legacy-shell-verified').outcome.legacy_exit.index_flags_clear=false;
+    if(kind==='stale-vacancy')row.observation.at=f.intent.at;
     if(kind==='present-terminal')row.observation.panes.push({pane_id:'moved',terminal_id:'term'});
     assert.equal(legacyExitSettlement(f.entry,f.intent,rows),undefined,kind);
     assert.ok(unresolvedCloseoutEffect(f.entry,rows),kind);

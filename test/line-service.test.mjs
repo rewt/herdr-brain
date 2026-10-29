@@ -126,12 +126,16 @@ test('a changed supervisor address recovers only the exact zero-effect pre-journ
 
 test('three completed engineering-idle passes file and immediately dispatch one repair across restart while original native refusal remains retained',t=>{
   const f=fixture(t),item=f.add('Native refusal'),options={haltAfter:3};f.setFailure('native permission refused');
-  // Readback precedes admission. Missing producers stay diagnostic without
-  // creating judgment work or resetting unchanged engineering's idle count.
+  // Admission records the refusal before the first end-of-pass idle observation.
+  // Readback on pass two stays diagnostic: no decision changes the signature.
+  // completeHaltPass therefore counts this same episode as 1, 2, then 3.
   f.service(options).pass();
   const journal=path.join(f.service().directory,'effects.json'),key=Object.keys(JSON.parse(fs.readFileSync(journal)).actions).find(k=>k.startsWith(`dispatch:${item}:`));
   const original=JSON.parse(fs.readFileSync(journal)).actions[key].receipt;
+  assert.equal(JSON.parse(fs.readFileSync(journal)).actions[key].state,'held');
+  assert.equal(original.status,1);assert.match(original.stderr,/native permission refused/);
   const repairs=()=>[...fold(loadEvents(f.org).events).items.values()].filter(i=>i.meta.halt_repair===1);
+  assert.equal(repairs().length,0,'the first completed idle pass is below threshold');
   assert.equal([...fold(loadEvents(f.org).events).items.values()].filter(i=>i.meta.uncertain_outcome).length,0);
   const initial=JSON.parse(fs.readFileSync(journal)).halt_progress;
   assert.equal(initial.count,1);
@@ -141,10 +145,15 @@ test('three completed engineering-idle passes file and immediately dispatch one 
   assert.equal(readback.count,2);assert.equal(readback.episode,initial.episode);
   f.service(options).pass();
   assert.equal(repairs().length,1);const repair=repairs()[0];
+  const threshold=JSON.parse(fs.readFileSync(journal)).halt_progress;
+  assert.equal(threshold.count,options.haltAfter);assert.equal(threshold.episode,initial.episode);
+  assert.equal(threshold.signature,initial.signature);assert.equal(threshold.item,repair.id);
+  assert.equal(repair.meta.halt_episode,initial.episode);assert.equal(repair.meta.halt_pass,threshold.pass);
   assert.equal(f.calls.filter(c=>c.args[1]===item).length,1);
   assert.equal(f.calls.filter(c=>c.args[1]===repair.id).length,1,'fresh ordinary dispatch in the threshold pass');
   for(let n=0;n<3;n++)f.service(options).pass();
   assert.equal(repairs().length,1);assert.equal(f.calls.filter(c=>c.args[1]===repair.id).length,1);
+  assert.equal(JSON.parse(fs.readFileSync(journal)).actions[key].state,'held');
   assert.deepEqual(JSON.parse(fs.readFileSync(journal)).actions[key].receipt,original);
   const release=noticeLock(path.join(f.service().directory,'pass.lock'));
   try{assert.throws(()=>f.service(options).pass(),/locked/);}finally{release();}

@@ -7,7 +7,6 @@ import {fixture} from './dispatch-fixture.mjs';
 import {preflightContinuation,initialCapacityRefusal,implementationChangeOutcome} from '../preflight.mjs';
 import {createHash} from 'node:crypto';
 import {loadEvents} from '../../lib/store.mjs';
-import {loadTimeout} from '../../lib/deadline.mjs';
 
 function phase1Fixture(t,options={}){
   const f=fixture(t,{noticeRecipient:'supervisor-herdr',...options}),file=path.join(f.repo,'.lane.json'),config=JSON.parse(fs.readFileSync(file));
@@ -116,11 +115,11 @@ test('retirement barrier continuation needs matching original zero-native termin
 test('retirement lock clears through the same detached request and normal native dispatch without replacing original evidence',async t=>{
   const f=phase1Fixture(t),common=f.git(['rev-parse','--path-format=absolute','--git-common-dir']),lock=path.join(common,'retirement/owner.lock');
   fs.mkdirSync(lock,{recursive:true});
-  const first=f.start(['--detach']);assert.equal(first.status,0,first.stderr);
-  // The actual retirement owner guard waits loadTimeout(60000) before its
-  // terminal refusal; the receipt reader must outlive that production wait.
-  const {journal}=JSON.parse(first.stdout),terminal=await driverResult(journal,{limit:loadTimeout(90000)}),job=JSON.parse(fs.readFileSync(journal)),launch=fs.readFileSync(journal+'.driver/launch.json');
+  // Refuse immediately through the real owner guard, without its production wait.
+  const first=f.start(['--detach'],{env:{...f.env,HERDR_DISPATCH_RETIREMENT_WAIT_MS:'0'}});assert.equal(first.status,0,first.stderr);
+  const {journal}=JSON.parse(first.stdout),terminal=await driverResult(journal),job=JSON.parse(fs.readFileSync(journal)),launch=fs.readFileSync(journal+'.driver/launch.json');
   assert.equal(terminal.native_launch_attempted,false);assert.equal(terminal.code,'OUTCOME_UNKNOWN');
+  assert.equal(terminal.error,`locked: ${lock}; owner is live or unknown`);
   const args=()=>({journal,repo:f.repo,org:f.org,common,root:job.release.root,events:loadEvents(f.org).events});
   assert.equal(preflightContinuation(args()),null,'retirement ownership is never reclaimed by admission');
   fs.rmdirSync(lock);assert.equal(preflightContinuation(args()).outcome.kind,'retirement-lock-cleared');

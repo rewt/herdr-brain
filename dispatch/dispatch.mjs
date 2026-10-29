@@ -137,7 +137,9 @@ function command(argv, args, cwd = job?.repo ?? path.resolve(opt.repo)) {
   return result.stdout.trim();
 }
 const allocationEffect=operation=>{
-  const release=claimRetirementOwner(job.common,{waitMs:60000,deadline:controllerDeadline});
+  // Fixtures can shorten contention waits while retaining the real lock refusal.
+  const waitMs=Number(process.env.HERDR_DISPATCH_RETIREMENT_WAIT_MS??60000);
+  const release=claimRetirementOwner(job.common,{waitMs,deadline:controllerDeadline});
   try{return operation();}finally{release();}
 };
 const record = args => ['start','worker'].includes(args[0]) ? allocationEffect(()=>command(recordCLI,args)) : command(recordCLI,args);

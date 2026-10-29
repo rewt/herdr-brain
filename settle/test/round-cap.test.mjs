@@ -136,35 +136,39 @@ test('historical explicit cap3 control allows two automatic fix rounds then stop
   assert.equal(f.calls().filter((a) => a[1] === 'prompt' && a[3].startsWith('You are run ')).length, 2);
 });
 
-test('settle refuses same-route worker reuse and starts fresh when the fix route changes', { timeout: 60000 }, (t) => {
+test('settle refuses worker reuse before intake and starts fresh from saved reuse settings', { timeout: 60000 }, (t) => {
   for (const changed of [false, true]) {
     const f = fixture(t, { actor: 'settle-reuse-route-test' }); review(f);
     const item = JSON.parse(f.record(['status', '--json'])).items[0].id;
     const first = dispatchWorker(f, item), prior = f.show(first.run);
-    const reviewed = result(f.settle(first.run, ['--reuse', ...(changed ? ['--fix-route', 'engineer-max'] : [])]));
+    const file = path.join(f.org, 'settle', `${first.run}.json`);
+    const before = launchCalls(f), head = f.git(['rev-parse', 'HEAD'], f.workspace);
+    const refused = f.settle(first.run, ['--reuse']);
+    assert.equal(refused.status, 1); assert.match(refused.stderr, /REUSE_REMOVED.*new work starts fresh/);
+    assert.equal(fs.existsSync(file), false, 'reuse refuses before saving any settle stage');
+    const configFile = path.join(f.root, 'reuse-config.json');
+    fs.writeFileSync(configFile, JSON.stringify({ settle: { reuse: true } }));
+    f.env.LANE_CONFIG = configFile;
+    const configured = f.settle(first.run);
+    assert.equal(configured.status, 1); assert.match(configured.stderr, /REUSE_REMOVED.*settle.reuse/);
+    assert.equal(fs.existsSync(file), false, 'configured reuse also refuses before intake');
+    delete f.env.LANE_CONFIG;
+    assert.deepEqual(f.show(item).runs, [first.run]); assert.deepEqual(launchCalls(f), before);
+    assert.equal(f.git(['rev-parse', 'HEAD'], f.workspace), head);
+    const reviewed = result(f.settle(first.run, changed ? ['--fix-route', 'engineer-max'] : []));
     assert.equal(reviewed.review_policy.cap, 1);
     assert.equal(reviewed.result, 'promotable_with_findings');
-    // Intake has captured the reuse/route choice. Request the one formal fix
-    // from that receipt; retry must not replace those saved settings.
-    const before = launchCalls(f), head = f.git(['rev-parse', 'HEAD'], f.workspace);
-    const correction = f.retry(first.run, ['--fix-findings']);
-    if (!changed) {
-      assert.equal(correction.status, 1); assert.match(correction.stderr, /new work starts fresh/);
-      assert.deepEqual(f.show(item).runs, [first.run]);
-      assert.deepEqual(launchCalls(f), before, 'refused reuse cannot start or prompt a worker');
-      assert.equal(f.git(['rev-parse', 'HEAD'], f.workspace), head);
-      assert.equal(JSON.parse(fs.readFileSync(path.join(f.org, 'settle', `${first.run}.json`))).reviewPolicy.round, 1);
-      continue;
-    }
-    const r = result(correction);
+    // An older receipt may retain reuse=true. Correction must start fresh
+    // without forwarding the retired option or stranding dispatching.
+    const saved = JSON.parse(fs.readFileSync(file)); saved.reuse = true;
+    fs.writeFileSync(file, JSON.stringify(saved));
+    const r = result(f.retry(first.run, ['--fix-findings']));
     assert.equal(r.result, 'fix_round');
+    assert.equal(JSON.parse(fs.readFileSync(file)).stage, 'complete');
     const next = f.show(r.fix.run);
-    assert.equal(r.reuse_skipped, 'route_changed'); assert.notEqual(next.meta.agent, prior.meta.agent);
-    assert.notEqual(next.meta.pane, prior.meta.pane);
-    assert.equal(next.meta.route, 'engineer-max'); assert.equal(next.meta.continuation_of, undefined);
-    assert.equal(next.meta.same_session, undefined);
-    const saved = JSON.parse(fs.readFileSync(path.join(f.org, 'settle', `${first.run}.json`)));
-    assert.equal(saved.reuse_skipped, r.reuse_skipped);
+    assert.notEqual(next.meta.agent, prior.meta.agent); assert.notEqual(next.meta.pane, prior.meta.pane);
+    assert.equal(next.meta.route, changed ? 'engineer-max' : 'engineer');
+    assert.equal(next.meta.continuation_of, undefined); assert.equal(next.meta.same_session, undefined);
     const calls = launchCalls(f);
     assert.deepEqual(result(f.retry(first.run)), r); assert.deepEqual(launchCalls(f), calls);
   }

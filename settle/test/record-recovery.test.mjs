@@ -113,6 +113,44 @@ test('a legacy correction refusal resumes the fix stage after blockers clear and
   assert.deepEqual(result(f.retry(run)), fixed); assert.equal(workers(f).length, 1);
 });
 
+for (const mutation of ['head', 'dirty']) test(`correction preflight retains fix when the lane becomes ${mutation} after review`, t => {
+  const f = fixture(t), run = f.start(); f.commit('wrong\n'); f.report(run);
+  const reviewed = result(f.settle(run)); assert.equal(reviewed.result, 'promotable_with_findings');
+  const original = receipt(f, run), marker = path.join(f.root, 'mutated'), adapter = path.join(f.root, 'record-adapter.mjs');
+  // Mutate after fix's initial lane check, while the final record readiness
+  // snapshot is returned. The final pre-dispatch lane check must catch it.
+  fs.writeFileSync(adapter, `#!${process.execPath}
+import fs from 'node:fs'; import { spawnSync } from 'node:child_process';
+const args=process.argv.slice(2), r=spawnSync(process.execPath,[${JSON.stringify(path.join(f.source, 'bin/org.mjs'))},...args],{stdio:'inherit'});
+const saved=JSON.parse(fs.readFileSync(${JSON.stringify(receiptPath(f, run))}));
+if(r.status===0&&args[0]==='status'&&saved.stage==='fix'&&saved.fixBrief&&!fs.existsSync(${JSON.stringify(marker)})) {
+ fs.writeFileSync(${JSON.stringify(marker)},'once');
+ fs.writeFileSync(${JSON.stringify(path.join(f.workspace, 'late.txt'))},'late lane change');
+ if(${JSON.stringify(mutation)}==='head') {
+  for(const a of [['add','late.txt'],['commit','-qm','Late lane commit']]) {
+   const changed=spawnSync('git',a,{cwd:${JSON.stringify(f.workspace)},stdio:'inherit'}); if(changed.status!==0) process.exit(changed.status??1);
+  }
+ }
+}
+process.exit(r.status??1);
+`, { mode: 0o755 });
+  const options = ['--org-cli', adapter], beforeWorkers = workers(f).length;
+  const refused = f.retry(run, [...options, '--fix-findings']);
+  const expected = mutation === 'head' ? /lane HEAD or branch moved/ : /lane worktree changed/;
+  assert.equal(refused.status, 1); assert.match(refused.stderr, expected);
+  assert.equal(receipt(f, run).stage, 'fix');
+  assert.equal(receipt(f, run).dispatch, undefined); assert.equal(receipt(f, run).result, undefined);
+  const dispatchDir = path.join(f.org, 'dispatch');
+  assert.equal(fs.existsSync(dispatchDir) && fs.readdirSync(dispatchDir).some(name => name.endsWith('.json')), false);
+  const retried = f.retry(run, options);
+  assert.equal(retried.status, 1); assert.match(retried.stderr, expected);
+  assert.equal(receipt(f, run).stage, 'fix'); assert.equal(workers(f).length, beforeWorkers);
+  if (mutation === 'head') f.git(['reset', '--hard', original.finalHead], f.workspace);
+  else fs.unlinkSync(path.join(f.workspace, 'late.txt'));
+  const fixed = result(f.retry(run, options)); assert.equal(fixed.result, 'fix_round');
+  assert.equal(workers(f).length, beforeWorkers + 1); assert.equal(reviews(f).length, 1);
+});
+
 test('a legacy dispatching refusal adopts only its existing correction after blockers clear', t => {
   const f = fixture(t), run = f.start(); f.commit('wrong\n'); f.report(run);
   const marker = path.join(f.root, 'watch-fail'), adapter = path.join(f.root, 'watch-adapter.mjs');

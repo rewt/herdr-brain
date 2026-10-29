@@ -538,7 +538,7 @@ function dispatchArgs() {
   // Captured post-code reviews retain their separate source-selection path.
   if (!job.postCodePolicy) unchanged({ movingMain: true });
   return [job.item, '--controller', opt.controller, '--repo', job.repo, '--org', opt.org, '--lane', job.lane, '--route', job.fixRoute,
-    '--brief', job.fixBrief, '--to', job.to, '--from-run', id, ...(job.reuse && !job.reuse_skipped ? ['--reuse', id] : []),
+    '--brief', job.fixBrief, '--to', job.to, '--from-run', id,
     ...(!job.postCodePolicy ? ['--base', job.finalHead ?? job.head] : []),
     ...['org', 'lane', 'watch'].flatMap((key) => opt[`${key}-cli`] ? [`--${key}-cli`, opt[`${key}-cli`]] : [])];
 }
@@ -570,7 +570,6 @@ function fix() {
   // Another run is authoritative; neither display metadata nor a prior result
   // authorizes starting overlapping work on this lane/item.
   const item = show(job.item);
-  if (job.reuse && job.fixRoute !== (job.workerRoute ?? show(id).meta?.route)) job.reuse_skipped = 'route_changed';
   if (!job.fixBrief) {
     job.fixBrief = evidence('fix.md', `# Correct the reported work\n\nContinue the original ask below on the same lane. Resolve every finding in the independent review and the validation log. Do not alter the previous report; the new run has its own report.\n\nReview: ${job.review?.path ?? 'No review completed'}\nValidation: ${job.validation.log}\n\n${job.review?.text ?? ''}\n\n## Original ask\n${job.ask}\n\n## Acceptance\n${JSON.stringify(item.accept)}\n`);
     job.stage = 'fix'; save();
@@ -603,9 +602,12 @@ function fix() {
     }
   } else {
     if (correctionStopped()) return;
+    // Deterministic source refusals must leave fix resumable, before any
+    // dispatch attempt (and therefore before a dispatch journal can exist).
+    const args = dispatchArgs();
     job.stage = 'dispatching'; save();
     if (correctionStopped()) { job.stage = 'fix'; save(); return; }
-    output = checked(cli('dispatch', '../dispatch/dispatch.mjs'), dispatchArgs(), undefined, { stdio: ['ignore', 'pipe', 'inherit'] });
+    output = checked(cli('dispatch', '../dispatch/dispatch.mjs'), args, undefined, { stdio: ['ignore', 'pipe', 'inherit'] });
   }
   const receipt = JSON.parse(output);
   if (receipt.result === 'stopped') return stopCorrection(receipt.reason);
@@ -613,8 +615,9 @@ function fix() {
   finish('fix_round', 'Independent findings require a correction; a new run was dispatched on the same lane', { fix: receipt });
 }
 function main() {
+  if (opt.reuse !== undefined) throw new Error('REUSE_REMOVED: --reuse is retired; new work starts fresh');
   if (!positionals.length) {
-    process.stdout.write('settle R-n [--repo DIR] [--org DIR] [--brief FILE] [--review-round-cap N] [--review-route ROUTE] [--fix-route ROUTE] [--followup-expected] [--reuse] [--retry [--fix-findings] | --status]\n'); return;
+    process.stdout.write('settle R-n [--repo DIR] [--org DIR] [--brief FILE] [--review-round-cap N] [--review-route ROUTE] [--fix-route ROUTE] [--followup-expected] [--retry [--fix-findings] | --status]\n'); return;
   }
   if (positionals.length !== 1 || !/^R-\d+$/.test(id)) throw new Error('settle requires one run ID');
   if (opt['review-again'] && !opt.retry) throw new Error('--review-again requires --retry after inspecting the old reviewer');
@@ -723,6 +726,7 @@ function main() {
     if (config.main !== undefined && (typeof config.main !== 'string' || !config.main.trim())) throw new Error('main must be a nonempty string');
     const settings = config.settle ?? {};
     validateDeskSettings(settings);
+    if (settings.reuse) throw new Error('REUSE_REMOVED: settle.reuse is retired; new work starts fresh');
     const reviewRoute = opt['review-route'] ?? settings.review_route ?? (config.selection_policy ? selectRoute(config, 'review', run.meta?.harness) : 'review');
     const fixRoute = opt['fix-route'] ?? settings.fix_route ?? run.meta?.route ?? 'engineer';
     resolveLaunchRoute(config, { route: reviewRoute }); resolveLaunchRoute(config, { route: fixRoute });
@@ -752,7 +756,7 @@ function main() {
       ...(target ? { reviewScope: target.scope, capturedTargetEvidence: target } : {}),
       workerRoute: run.meta?.route ?? null,
       followupExpected: opt['followup-expected'] ?? false,
-      reuse: opt.reuse ?? settings.reuse ?? false, to: opt.to ?? settings.to ?? 'supervisor-herdr',
+      to: opt.to ?? settings.to ?? 'supervisor-herdr',
       ownership, ownerActive: true, stage: 'record', reportText, reportHash: hash(reportText), summary: parsed.report.summary,
       blockers: parsed.report.blockers, proposals: parsed.report.proposals, questions: parsed.report.extra?.questions ?? [],
       outcome: parsed.report.outcome, round: 1, reviewPolicy: policy };

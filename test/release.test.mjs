@@ -6,7 +6,7 @@ import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { releaseEnvironment } from './helpers/release-environment.mjs';
 import { copyProduct, productFiles, captureProductCheckout, createProductCheckout, verifyProductPayload } from '../lib/product-files.mjs';
-import { freezeReleaseValidation, verifyReleaseCoverage } from '../herdr/validation-admission.mjs';
+import { freezeReleaseValidation, releaseCoverageFiles, verifyReleaseCoverage } from '../herdr/validation-admission.mjs';
 import { createHash } from 'node:crypto';
 import { configFixture } from './helpers/config-home-fixture.mjs';
 import { policyLocation, contentDigest } from '../lib/config-home.mjs';
@@ -161,6 +161,89 @@ test('a covered build retains one full execution, refuses stale or unresolved ev
   assert.equal(fs.existsSync(path.join(f.home, 'builds/covered/execution.json')), false);
   assert.deepEqual(fs.readFileSync(f.gateLog, 'utf8').trim().split('\n'), [f.checkout('t1'), `live:${f.checkout('covered')}`]);
   assert.equal(JSON.parse(fs.readFileSync(path.join(f.release('covered'), '.release-manifest.json'))).acceptance.ready, true);
+});
+test('release coverage maps the full-pass declaration to the real tracked inventory', async t => {
+  const root = path.resolve(import.meta.dirname, '..');
+  const declaration = JSON.parse(fs.readFileSync(path.join(root, '.lane.validation.json')));
+  assert.equal(declaration.release, 'npm run test:slot && node test/helpers/full-pass.mjs');
+  const expected = execFileSync('git', ['-C', root, 'ls-files', '*.test.mjs'], { encoding: 'utf8' }).trim().split('\n').sort();
+  const files = await releaseCoverageFiles(root, declaration.release);
+  assert.deepEqual(files, expected);
+  assert.equal(files.some(file => file.startsWith('command:')), false);
+  assert.deepEqual(files, await releaseCoverageFiles(root, 'npm run test:release'));
+  t.diagnostic(`Full-pass coverage maps all ${files.length} tracked test files.`);
+  const custom = 'node custom-release.mjs';
+  assert.deepEqual(await releaseCoverageFiles(root, custom), [`command:${custom}`]);
+});
+test('release coverage continues a red full pass only with its specific passing correction', async t => {
+  const repo = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'full-pass-coverage-')));
+  t.after(() => fs.rmSync(repo, { recursive: true, force: true }));
+  const write = (file, text) => {
+    fs.mkdirSync(path.dirname(path.join(repo, file)), { recursive: true });
+    fs.writeFileSync(path.join(repo, file), text);
+  };
+  const command = 'npm run test:slot && node test/helpers/full-pass.mjs';
+  const pkg = { type: 'module', scripts: { 'test:slot': 'node --test test-slot/test/*.test.mjs' } };
+  write('package.json', JSON.stringify(pkg));
+  // Use the actual tier planner against a small fixture inventory.
+  write('test/helpers/tier.mjs', `export { tierFiles } from ${JSON.stringify(new URL('./helpers/tier.mjs', import.meta.url).href)};`);
+  for (const file of ['test-slot/test/slot.test.mjs', 'test/green.test.mjs', 'test/red.test.mjs']) write(file, '// fixture');
+  assert.deepEqual(await releaseCoverageFiles(repo, command), [`command:${command}`], 'a missing helper keeps the whole-command obligation');
+  write('test/helpers/full-pass.mjs', '// fixture declaration helper');
+  write('package.json', JSON.stringify({ ...pkg, scripts: { 'test:slot': 'node custom-slot.mjs' } }));
+  assert.deepEqual(await releaseCoverageFiles(repo, command), [`command:${command}`], 'a custom slot script keeps the whole-command obligation');
+  write('package.json', JSON.stringify(pkg));
+  assert.deepEqual(await releaseCoverageFiles(repo, `${command} --custom`), [`command:${command} --custom`]);
+  const files = await releaseCoverageFiles(repo, command);
+  assert.deepEqual(files, ['test-slot/test/slot.test.mjs', 'test/green.test.mjs', 'test/red.test.mjs']);
+  const git = (...args) => execFileSync('git', ['-C', repo, ...args], { encoding: 'utf8' }).trim();
+  git('init', '-qb', 'main'); git('config', 'user.name', 'Test'); git('config', 'user.email', 'test@example.invalid');
+  git('add', '.'); git('commit', '-qm', 'full-pass coverage fixture');
+  const identity = { root: repo, commit: git('rev-parse', 'HEAD'), tree: git('rev-parse', 'HEAD^{tree}') };
+  const sha = value => createHash('sha256').update(value).digest('hex');
+  const frozen = { common: git('rev-parse', '--absolute-git-dir'), declaration: { release: command }, sha256: sha(command) };
+  const identityFile = path.join(repo, 'identity.json');
+  write('identity.json', JSON.stringify({ identity }));
+  const redFile = 'test/red.test.mjs';
+  const reconciliation = Object.fromEntries(['source', 'runner', 'environment', 'dependencies', 'cleanup'].map(key =>
+    [key, `The isolated fixture retains identical ${key} inputs for this specific correction.`]));
+  const evidence = (id, executedFiles, exit_code) => {
+    const timings = executedFiles.flatMap(name => [
+      { id: name, kind: 'file', name, depth: 0, event: 'start' },
+      { id: name, kind: 'file', name, depth: 0, event: 'finish', exit_code: exit_code && name === redFile ? 1 : 0 },
+    ]);
+    const file = path.join(repo, `${id}.execution.json`);
+    fs.writeFileSync(file, JSON.stringify({ exit_code, attempts: 1, started_at: '2026-10-29T00:00:00Z', finished_at: '2026-10-29T00:00:01Z', timings }));
+    return { id, file, sha256: sha(fs.readFileSync(file)), source: identity.commit, identityFile,
+      identitySha256: sha(fs.readFileSync(identityFile)), executedFiles, changedFiles: [], reconciliation };
+  };
+  const base = { schema: 'release-full-coverage/v1', commit: identity.commit, tree: identity.tree, common: frozen.common,
+    command, admissionSha256: frozen.sha256, complete: true, unresolved: [],
+    runtime: { executable: process.execPath, version: process.version, sha256: sha(fs.readFileSync(process.execPath)), platform: process.platform, arch: process.arch },
+    evidence: [evidence('full', files, 1), evidence('specific-fix', [redFile], 0)],
+    files: files.map(file => ({ file, receipts: ['full'], scope: 'Retain the paired top-level file observations from the original full pass.' })) };
+  const savedFleet = process.env.HERDR_MONITOR_FLEET;
+  process.env.HERDR_MONITOR_FLEET = path.join(repo, 'fleet');
+  t.after(() => { if (savedFleet === undefined) delete process.env.HERDR_MONITOR_FLEET; else process.env.HERDR_MONITOR_FLEET = savedFleet; });
+  const org = path.join(repo, '.org'), env = { ...process.env, ORG_DIR: org, ORG_ACTOR: 'fixture-supervisor' };
+  const record = (...args) => execFileSync(process.execPath, [path.resolve(import.meta.dirname, '../bin/org.mjs'), ...args], { cwd: repo, env, encoding: 'utf8' });
+  record('init', org);
+  const item = record('add', 'Full-pass coverage fixture').trim();
+  const verify = value => {
+    const attestationDigest = sha(JSON.stringify(value));
+    record('note', item, `Release full coverage reconciled: ${attestationDigest}`, '--decision');
+    const events = fs.readFileSync(path.join(org, 'events.jsonl'), 'utf8').trim().split('\n').map(line => JSON.parse(line));
+    const file = path.join(repo, 'coverage.json');
+    fs.writeFileSync(file, JSON.stringify({ ...value, attestationDigest, attestationSeq: events.at(-1).seq }));
+    return verifyReleaseCoverage(file, { identity, frozen, canonical: repo, env });
+  };
+  await assert.rejects(verify(base), /known-red component/);
+  const corrected = { ...base, files: base.files.map(row => row.file !== redFile ? row : { ...row,
+    corrections: [{ original: 'full', passed: 'specific-fix', file: redFile,
+      scope: 'The separate passing correction closes only the failed file; all other full-pass file observations are retained.' }] }) };
+  assert.equal((await verify(corrected)).kind, 'supervisor-reconciled-full-coverage');
+  await assert.rejects(verify({ ...corrected, evidence: [base.evidence[0], { ...base.evidence[1], executedFiles: ['test/green.test.mjs'] }] }), /known-red component/);
+  await assert.rejects(verify({ ...corrected, files: corrected.files.map(row => ({ ...row, corrections: [] })) }), /known-red component/);
 });
 test('the release gate queues for the host test slot by default; an explicit wait wins', t => {
   const f = scratch(t), seen = path.join(f.root, 'slot-wait');

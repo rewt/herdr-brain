@@ -19,7 +19,12 @@ const plain = file => {
 // Custom release commands retain one whole-command obligation.
 export async function releaseCoverageFiles(root, command) {
   const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json')));
-  if (command === 'npm run test:release' && pkg.scripts?.['test:release'] === 'node test-slot/test-slot.mjs run test:release -- npm run test:release:steps') {
+  const legacyRelease = command === 'npm run test:release' &&
+    pkg.scripts?.['test:release'] === 'node test-slot/test-slot.mjs run test:release -- npm run test:release:steps';
+  const fullPassRelease = command === 'npm run test:slot && node test/helpers/full-pass.mjs' &&
+    pkg.scripts?.['test:slot'] === 'node --test test-slot/test/*.test.mjs' &&
+    fs.existsSync(path.join(root, 'test/helpers/full-pass.mjs'));
+  if (legacyRelease || fullPassRelease) {
     const { tierFiles } = await import(pathToFileURL(path.join(root, 'test/helpers/tier.mjs')).href);
     return [...fs.readdirSync(path.join(root, 'test-slot/test')).filter(file => file.endsWith('.test.mjs')).map(file => `test-slot/test/${file}`),
       ...['core', 'cycle', 'lanes', 'acceptance', 'release'].flatMap(tier => tierFiles(tier, root))].sort();

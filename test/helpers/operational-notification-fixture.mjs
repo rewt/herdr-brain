@@ -24,6 +24,7 @@ export function notificationFixture(t, {startFail=false,topic='topic'}={}) {
   setSessionEnvironment(t,{HERDR_MONITOR_FLEET:f.env.HERDR_MONITOR_FLEET});
   Object.assign(f.env,{HERDR_BRAIN_ROOT:source,LANE_WORKTREE_ROOT:f.root,
     MONITOR_SUPERVISOR_AGENT:'supervisor-test',HERDR_TEST_SCRATCH_ROOTS:'[]'});
+  fs.symlinkSync(f.org,path.join(f.repo,'.org'));
   fs.writeFileSync(path.join(f.repo,'.git/info/exclude'),'.org/\n.lane/\n.lane.json\n');
   fs.writeFileSync(path.join(f.repo,'.lane.json'),JSON.stringify({main:'main',
     routes:{engineer:{kind:'codex'},reviewer:{kind:'codex'}},
@@ -38,7 +39,7 @@ export function notificationFixture(t, {startFail=false,topic='topic'}={}) {
   // A scratch installation receipt selects the existing finite owner. It does
   // not install/start launchd, change source pins, or wake a live service.
   fs.writeFileSync(path.join(directory,'installation.json'),JSON.stringify({repo:f.repo,org:f.org,source,
-    node:process.execPath,file:path.join(directory,'service.plist'),target:`gui/${process.getuid()}/dev.herdr.line.fixture`}));
+    node:process.execPath,file:path.join(directory,'service.plist'),target:`gui/${process.getuid()}/dev.herdr.line.${path.basename(directory)}`}));
   const boundary={id:'notification-fixture',project:project.identity,repo:f.repo,org:f.org,source,
     main:'main',canonical_head:f.git(['rev-parse','HEAD'])};
   add(['line-service.cutover','line-service.phase0'].map(type=>({...boundary,type})));

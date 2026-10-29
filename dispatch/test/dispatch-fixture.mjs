@@ -9,6 +9,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { fold } from '../../lib/state.mjs';
 import { BRAIN_CONTROLLER } from '../../lib/run-owner.mjs';
+import { ADMISSION_WAIT_MS, loadTimeout } from '../../lib/deadline.mjs';
 
 const DISPATCH = fileURLToPath(new URL('../dispatch.mjs', import.meta.url));
 const RECORD = fileURLToPath(new URL('../../bin/org.mjs', import.meta.url));
@@ -250,10 +251,11 @@ fs.renameSync=function(from,to) {
   pending.child.stderr.on('data', data => { stderr += data; });
   try {
     if (stage === 'worker') {
-      await until(() => fs.existsSync(hook.PAUSE_MARKER));
+      // Reaching this saved stage includes real lane preparation and record I/O.
+      await until(() => fs.existsSync(hook.PAUSE_MARKER), loadTimeout(ADMISSION_WAIT_MS));
       held = reserve(); fs.writeFileSync(hook.PAUSE_RELEASE, 'go');
     }
-    await until(() => stderr.includes('waiting; proving'));
+    await until(() => stderr.includes('waiting; proving'), loadTimeout(ADMISSION_WAIT_MS));
     return { pending, held };
   } catch (error) {
     held?.release();

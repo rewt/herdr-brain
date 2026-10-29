@@ -15,6 +15,7 @@ import {createWorkerBrief,lineWorkerPrompt,renderWorkerBrief} from '../lib/worke
 import {checkSessionCap,dispatchPool,countSessions} from '../dispatch/session-cap.mjs';
 import {checkSourceAdmission} from '../dispatch/unlanded-cap.mjs';
 import {protectRecordMutation} from '../lib/record-guard.mjs';
+import {noticeLock} from '../supervisor/notice-lock.mjs';
 
 const config={routes:{unblock:{kind:'codex'},review:{kind:'claude'},engineer:{kind:'codex'}}};
 const owner=identity=>({controller:'brain',legacy:false,release:{id:'source',commit:null,root:sourceRoot,identity}});
@@ -207,7 +208,11 @@ function diskFixture(t,{originalOutcome='blocked',captured=true}={}){
     {type:'line-service.phase0',id:'boundary',project:identity,repo,org,main:'main',canonical_head:head});
   report('R-1',originalOutcome);add({type:'line.decisions-activated',project:identity,org,subjects:['ENG-1']});
   // Original captured work remains consumable after automatic creation retires.
-  if(captured){const snapshot=loadRecord(org),request=decisionCandidates({...snapshot,identity,org})[0];queueDecision({repo,org,request,env});}
+  if(captured){
+    const release=noticeLock(path.join(directory,'pass.lock'),{recover:false});
+    try{const snapshot=loadRecord(org),request=decisionCandidates({...snapshot,identity,org})[0];queueDecision({repo,org,request,env});}
+    finally{release();}
+  }
   const calls=[];
   const native={name:'judge-fixture',pane_id:'w1:p1',workspace_id:'w1',terminal_id:'terminal',agent_session:{value:'session'},cwd:repo};
   const command=(exe,args)=>{calls.push(args);if(exe==='herdr')return{status:0,stdout:JSON.stringify({result:{agent:native}})};return {status:0,stdout:JSON.stringify({result:'detached'})};};

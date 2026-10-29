@@ -144,6 +144,18 @@ test('review queue retains malformed and missing individual history journals as 
   }
 });
 
+test('review queue retains a dangling dispatch history directory as a failure', t => {
+  const f = fixture(t), qid = f.create().review_item, c = f.context();
+  const directory = path.join(f.org, 'dispatch');
+  fs.renameSync(directory, path.join(f.scratch, 'saved-dispatch'));
+  fs.symlinkSync(path.join(f.scratch, 'missing-dispatch'), directory, 'dir');
+  const before = fs.readFileSync(path.join(f.org, 'events.jsonl'));
+  assert.throws(() => validateQueuedReview({ ...c, item: c.state.items.get(qid) }),
+    { code: 'ENOENT', syscall: 'scandir', path: directory });
+  assert.deepEqual(fs.readFileSync(path.join(f.org, 'events.jsonl')), before);
+  assert.equal(fs.lstatSync(directory).isSymbolicLink(), true);
+});
+
 test('review queue atomically creates one landed tuple item across concurrent create and replay', async t => {
   const f = fixture(t), args = [entry, 'queue-review', 'R-1', '--head', f.head, '--base', f.base];
   f.git(['reset','--hard',f.base]); const unlanded=f.run(['queue-review','R-1']); assert.notEqual(unlanded.status,0); assert.match(unlanded.stderr,/not actually landed/); f.git(['merge','--ff-only',f.head]);

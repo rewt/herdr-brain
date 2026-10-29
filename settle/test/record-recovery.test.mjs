@@ -115,6 +115,8 @@ test('a legacy correction refusal resumes the fix stage after blockers clear and
 
 for (const mutation of ['head', 'dirty']) test(`correction preflight retains fix when the lane becomes ${mutation} after review`, t => {
   const f = fixture(t), run = f.start(); f.commit('wrong\n'); f.report(run);
+  fs.writeFileSync(path.join(f.root, 'review-result.json'), JSON.stringify({ verdict: 'NEEDS-WORK',
+    findings: '- [Moderate] work.txt:1 - Remaining issue; Fix: write correct' }));
   const reviewed = result(f.settle(run)); assert.equal(reviewed.result, 'promotable_with_findings');
   const original = receipt(f, run), marker = path.join(f.root, 'mutated'), adapter = path.join(f.root, 'record-adapter.mjs');
   // Mutate after fix's initial lane check, while the final record readiness

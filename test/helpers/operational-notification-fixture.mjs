@@ -38,10 +38,9 @@ export function notificationFixture(t, {startFail=false,topic='topic'}={}) {
   const add=rows=>transact(f.org,()=>({add:rows}),{actor:'notification-fixture'});
   const directory=serviceDirectory(f.org,project.identity);
   fs.mkdirSync(directory,{recursive:true});
-  // A scratch installation receipt selects the existing finite owner. It does
-  // not install/start launchd, change source pins, or wake a live service.
-  fs.writeFileSync(path.join(directory,'installation.json'),JSON.stringify({repo:f.repo,org:f.org,source,
-    node:process.execPath,file:path.join(directory,'service.plist'),target:`gui/${process.getuid()}/dev.herdr.line.${path.basename(directory)}`}));
+  // Invoke the finite role directly below. Advertising an installed cleanup
+  // owner would make report hints spawn competing turns and require cleanup
+  // policy/refresh that this notification fixture deliberately does not select.
   const boundary={id:'notification-fixture',project:project.identity,repo:f.repo,org:f.org,source,
     main:'main',canonical_head:f.git(['rev-parse','HEAD'])};
   add(['line-service.cutover','line-service.phase0'].map(type=>({...boundary,type})));

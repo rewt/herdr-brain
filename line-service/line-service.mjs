@@ -124,6 +124,10 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
     finally { fs.closeSync(fd); }
   };
   const childEnv = { ...env, ORG_DIR: org, ORG_ACTOR: 'line-service', HERDR_BRAIN_ROOT: sourceRoot };
+  // Only development dispatches use this override. An accepted release keeps
+  // its immutable entry point and normal project-pin selection, even if the
+  // installer's environment carried a different source override.
+  if (bundleRelease().commit) delete childEnv.HERDR_BRAIN_ROOT;
   // A launchd controller has no pane/session identity. Never inherit an installer's.
   for (const key of Object.keys(childEnv)) if (/^(HERDR_(ENV|PANE_ID|TAB_ID|WORKSPACE_ID)|CODEX_(SESSION_ID|THREAD_ID)|GIT_.*|LANE_CONFIG)$/.test(key)) delete childEnv[key];
   delete childEnv.ORG_GUARD_OVERRIDE; // A routine line never inherits an explicit judgment override.

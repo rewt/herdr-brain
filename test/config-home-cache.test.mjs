@@ -5,7 +5,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { configFixture } from './helpers/config-home-fixture.mjs';
 import { homeBindings, homeProject, readConfigJSON } from '../lib/config-home.mjs';
-import { transact } from '../lib/store.mjs';
+import { transact, withLock } from '../lib/store.mjs';
 import {captureReads} from '../lib/record-observation.mjs';
 
 function countRecordReads(record, action) {
@@ -41,6 +41,23 @@ test('adopted binding projections ignore unrelated canonical index/config writes
   assert.doesNotThrow(observed.validate);
   fs.unlinkSync(path.join(f.cwd,'.brain'));fs.symlinkSync(f.scratch,path.join(f.cwd,'.brain'));
   assert.throws(observed.validate,/conflicting home link|observation conflict/);
+});
+
+test('sealed adopted binding inputs tolerate planning churn and refuse a late home link change without reads under lock',async t=>{
+  const f=configFixture(t);await f.adopt();
+  const observation=captureReads(()=>homeProject(f.cwd,f.env));
+  execFileSync('git',['-C',f.cwd,'config','color.ui','false'],{env:f.env});
+  execFileSync('git',['-C',f.cwd,'update-index','--index-version','4'],{env:f.env});
+  const validate=observation.seal(),read=fs.readFileSync;
+  fs.readFileSync=function(file,...args){
+    assert.equal(fs.existsSync(path.join(observation.value.record,'lock')),false,'commit validation only stats sealed inputs');
+    return read.call(this,file,...args);
+  };
+  try{
+    withLock(observation.value.record,validate);
+    fs.unlinkSync(path.join(f.cwd,'.brain'));fs.symlinkSync(f.scratch,path.join(f.cwd,'.brain'));
+    assert.throws(()=>withLock(observation.value.record,validate),/record.*observation conflict/);
+  }finally{fs.readFileSync=read;}
 });
 
 test('config verification cache invalidates on record replacement, same-size writes, scope and link changes', async t => {

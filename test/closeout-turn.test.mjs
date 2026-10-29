@@ -8,6 +8,7 @@ import {runCloseoutTurn} from '../line-service/closeout-turn.mjs';
 import {gitProject} from '../lib/project.mjs';
 import {noticeLock} from '../supervisor/notice-lock.mjs';
 import {claimRetirementOwner,currentCloseoutEntries} from '../lib/closeout.mjs';
+import {refreshCloseouts} from '../lib/closeout-consumer.mjs';
 import {wakeLineService} from '../line-service/line-service.mjs';
 import {launchPlist} from '../line-service/plist.mjs';
 import {events,setup,selectCurrentCleanup} from './helpers/closeout-fixture.mjs';
@@ -49,6 +50,46 @@ test('measurement runs once after all closeout locks release and diagnostic fail
   };
   const result=runCloseoutTurn({...f.args,measure});assert.equal(result.result,'closeout-turn-complete');assert.deepEqual(result.errors,[]);
   assert.equal(calls,1);assert.match(fs.readFileSync(path.join(f.directory,'closeout.log'),'utf8'),/closeout-measurement-failed/);
+});
+
+test('retained dirty work permits original binding refresh on each of three finite turns',t=>{
+  const f=fixture(t);f.report();
+  const dirty=path.join(f.lane,'unsaved'),bytes='irreplaceable draft\n';fs.writeFileSync(dirty,bytes);
+  const target=currentCloseoutEntries(f.common,f.org,events(f))[0];
+  const prior=f.drain({keys:[target.key],retrySafe:true}).evaluated[0];
+  assert.equal(prior.condition.kind,'dirty-work');assert.equal(prior.resources.folder.status,'kept');
+  const actions=f.read().actions;
+  const originalEffects=events(f).filter(e=>e.type==='closeout.effect'&&e.key===target.key);
+  const unbound=f.lane+'-unbound';f.git(['worktree','add','-qb','lane/unbound-report',unbound,f.head]);
+  f.append([{type:'item.added',id:'ENG-2',role:'engineer',title:'Missing original allocation'},
+    {type:'run.started',id:'R-2',item:'ENG-2',workspace:unbound,meta:{dispatch_project:f.common}},
+    {type:'report.ingested',run:'R-2',sha256:'missing',report:{outcome:'done'}}]);
+  // Retain an old producer's report without an envelope. Refresh can bind its
+  // physical allocation from original evidence without inventing a session.
+  const all=events(f).filter(e=>!(e.type==='closeout.binding-kept'&&e.run==='R-2'));
+  delete all.find(e=>e.type==='report.ingested'&&e.run==='R-2').closeout_targets;
+  fs.writeFileSync(f.eventFile,all.map(e=>JSON.stringify(e)+'\n').join(''));
+  assert.equal(currentCloseoutEntries(f.common,f.org,events(f)).some(e=>e.run==='R-2'),false);
+  const calls=[];
+  const cli=(file,argv)=>{
+    calls.push(argv[0]);
+    if(argv[0]==='refresh')return JSON.stringify(refreshCloseouts({cwd:f.repo,org:f.org,env:f.env,retirementOptions:f.options}));
+    return f.args.cli(file,argv);
+  };
+  for(let turn=1;turn<=3;turn++){
+    const result=runCloseoutTurn({...f.args,cli,budgetMs:600000});
+    assert.equal(result.steps,1);assert.deepEqual(result.errors,[]);
+    assert.equal(calls.filter(command=>command==='refresh').length,turn,'refresh is bounded to the first turn, then every turn');
+    const disposition=events(f).find(e=>e.type==='closeout.binding-kept'&&e.run==='R-2');
+    assert.ok(disposition,'unbound report gains a typed disposition by turn one');
+    assert.equal(disposition.condition.kind,'missing-identity');
+    assert.ok(events(f).some(e=>e.type==='cleanup.bound'&&e.run==='R-2'),'refresh binds the unbound allocation by turn one');
+    assert.equal(fs.readFileSync(dirty,'utf8'),bytes);
+    assert.equal(f.git(['rev-parse','refs/heads/lane/topic']),target.head);
+    assert.deepEqual(f.read().actions,actions,'no duplicate native or Git effect on the dirty allocation');
+    assert.deepEqual(events(f).filter(e=>e.type==='closeout.effect'&&e.key===target.key),originalEffects);
+  }
+  assert.deepEqual(calls,['drain','refresh','drain','refresh','drain','refresh']);
 });
 
 test('two wakeups share one owner and checkpoint a kept target before serving an independent target',t=>{

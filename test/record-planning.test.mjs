@@ -3,9 +3,10 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
-import observed, { captureReads, observeGit } from '../lib/record-observation.mjs';
-import { initOrg, planTransaction, transact, loadEvents } from '../lib/store.mjs';
+import { spawnSync, execFileSync } from 'node:child_process';
+import observed, { captureReads, observeGit, isRecordSourceConflict } from '../lib/record-observation.mjs';
+import { initOrg, planTransaction, transact, loadEvents, prepareRecordGuard } from '../lib/store.mjs';
+import { gitProject } from '../lib/project.mjs';
 import { nextItemId, fold } from '../lib/state.mjs';
 import { fold as oldFold } from './fixtures/state-v0.mjs';
 import { protectRecordMutation } from '../lib/record-guard.mjs';
@@ -31,6 +32,63 @@ function onAcquisition(f, t, action) {
   };
   t.after(() => { fs.mkdirSync = original; });
 }
+
+test('Git semantic rechecks stay outside the record lock across slow failed and changed queries', async t => {
+  const realGit = execFileSync('/usr/bin/which', ['git'], { encoding: 'utf8' }).trim();
+  for (const mode of ['slow', 'exit-128', 'changed', 'late-change', 'guard']) await t.test(mode, t => {
+    const f = fixture(t); f.git(['init', '-qb', 'main']);
+    f.git(['config', 'user.name', 'Planner']); f.git(['config', 'user.email', 'planner@example.invalid']);
+    f.git(['commit', '--allow-empty', '-qm', 'base']);
+    const base = f.git(['rev-parse', 'HEAD']);
+    f.git(['commit', '--allow-empty', '-qm', 'changed']);
+    const changed = f.git(['rev-parse', 'HEAD']); f.git(['reset', '--hard', base]);
+    const bin = path.join(f.root, 'shim'), journal = path.join(f.root, 'git-calls.jsonl');
+    fs.mkdirSync(bin);
+    fs.writeFileSync(path.join(bin, 'git'), `#!${process.execPath}
+import fs from 'node:fs';
+import {spawnSync} from 'node:child_process';
+const args=process.argv.slice(2), file=${JSON.stringify(journal)};
+const rows=fs.existsSync(file)?fs.readFileSync(file,'utf8').trim().split('\\n').map(JSON.parse):[];
+const selected=args.includes('--show-toplevel'), second=selected&&rows.filter(r=>r.selected).length===1;
+fs.appendFileSync(file,JSON.stringify({selected,locked:fs.existsSync(${JSON.stringify(f.lock)})})+'\\n');
+if(second&&${JSON.stringify(mode)}==='slow')Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,2000);
+if(second&&${JSON.stringify(mode)}==='exit-128')process.exit(128);
+const result=spawnSync(${JSON.stringify(realGit)},args,{stdio:'inherit'});
+process.exit(result.status??1);
+`, { mode: 0o755 });
+    // A package-free .mjs target keeps the PATH shim independent of Node flags.
+    fs.renameSync(path.join(bin, 'git'), path.join(bin, 'git.mjs'));
+    fs.symlinkSync('git.mjs', path.join(bin, 'git'));
+    const env = { ...process.env, PATH: `${bin}:${process.env.PATH}` };
+    if (mode === 'late-change') onAcquisition(f, t, () => {
+      fs.writeFileSync(path.join(f.root, '.git/refs/heads/main'), changed + '\n');
+    });
+    let commits = 0;
+    const plan = () => {
+      assert.equal(gitProject(f.root, { env }).identity, path.join(f.root, '.git'));
+      if (mode === 'changed') f.git(['update-ref', 'refs/heads/main', changed]);
+      return { add: [{ type: 'future.git-checked' }], commit: validate => { commits++; validate(); } };
+    };
+    if (mode === 'guard') {
+      const guard = prepareRecordGuard(f.dir, () => gitProject(f.root, { env }));
+      guard.run(() => { assert.equal(fs.existsSync(f.lock), true); guard.validate(); commits++; });
+    } else if (['exit-128', 'changed', 'late-change'].includes(mode)) {
+      assert.throws(() => planTransaction(f.dir, plan), error => {
+        assert.equal(isRecordSourceConflict(error), true);
+        if (mode === 'exit-128') assert.equal(error.code, 'RECORD_PLANNING_CONFLICT');
+        assert.match(error.message, /record Git observation conflict/); return true;
+      });
+      assert.equal(fs.readFileSync(f.file, 'utf8'), ''); assert.equal(commits, 0);
+    } else {
+      const result = planTransaction(f.dir, plan);
+      assert.equal(result.added.length, 1); assert.equal(commits, 1);
+    }
+    const rows = fs.readFileSync(journal, 'utf8').trim().split('\n').map(JSON.parse);
+    assert.ok(rows.length >= 3, 'the semantic query was rechecked');
+    assert.equal(rows.some(row => row.locked), false, JSON.stringify(rows));
+    assert.equal(fs.existsSync(f.lock), false);
+  });
+});
 
 test('read-only planning and queue discovery run outside the append lock', t => {
   const f = fixture(t); f.git(['init', '-qb', 'main']);

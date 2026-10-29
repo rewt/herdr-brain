@@ -123,7 +123,7 @@ test('direct queued review dispatch refuses a corrupt current journal before eff
     const result = f.run([qid, '--org', f.org, '--repo', f.cwd, '--lane', 'review-corrupt', '--route', 'review',
       '--base', f.head, '--brief', path.join(f.org, 'reports/R-1.md')], { PATH: `${bin}:${f.env.PATH}` }, path.join(root, 'dispatch/dispatch.mjs'));
     assert.notEqual(result.status, 0);
-    assert.match(result.stderr, /SyntaxError|absence UNKNOWN/);
+    assert.match(result.stderr, bytes === '{invalid' ? /Expected property name or '}' in JSON at position 1/ : /absence UNKNOWN/);
     assert.equal(fs.existsSync(calls), false, 'no native input on refusal');
     assert.deepEqual(fs.readFileSync(path.join(f.org, 'events.jsonl')), before);
     assert.deepEqual(fs.readdirSync(path.join(f.org, 'dispatch')), journals, 'no replacement dispatch');

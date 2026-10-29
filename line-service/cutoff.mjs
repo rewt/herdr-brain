@@ -13,6 +13,8 @@ import { noticeLock } from '../supervisor/notice-lock.mjs';
 import { loadDiscoveredRoutes } from '../lanes/routes.mjs';
 import { bundleRelease } from '../lib/releases.mjs';
 import {migratedCutover} from './runtime.mjs';
+import {recipientChanges,legacyRecipientHistory} from './recipient-history.mjs';
+import {readPlainFile} from '../lib/files.mjs';
 
 export const developmentRoot=fs.realpathSync(fileURLToPath(new URL('../',import.meta.url)));
 const hash=v=>createHash('sha256').update(v).digest('hex');
@@ -43,9 +45,12 @@ export function serviceCutoff(events,{repo,org,identity}) {
   const e=found[0];
   if(e.repo!==repo||!Number.isSafeInteger(e.seq)||e.seq<1||!e.id||!/^[a-f0-9]{40}(?:[a-f0-9]{24})?$/.test(e.canonical_head??'')||!e.main)reject('service cutover binding is UNKNOWN');
   const directory=lineDirectory(org,identity),installation=regularJSON(path.join(directory,'installation.json'));
+  const changes=recipientChanges(events,{repo,org,identity,directory});
   if(e.source!==developmentRoot||installation?.migration||events.some(row=>row.type==='line-service.runtime-upgraded'&&row.project===identity&&row.org===org)){
     if(!installation||installation.source!==developmentRoot||installation.repo!==repo||installation.org!==org)reject('service cutover binding is UNKNOWN');
     migratedCutover(events,{repo,org,identity,directory,installation,cutover:e});
+  }else if(changes.length){
+    legacyRecipientHistory(changes,{installation,plist:readPlainFile(path.join(directory,'service.plist')),cutover:e});
   }
   return e;
 }

@@ -138,6 +138,10 @@ node line-service/launchd.mjs stop --repo /OWN/CANONICAL
 node line-service/launchd.mjs restart --repo /OWN/CANONICAL
 ```
 
+For a new install, omitting `--to` selects the actual canonical native supervisor
+performing the install. An explicit recipient must also resolve to a live named
+agent in that project through the selected Herdr executable and socket.
+
 Stop writes this service's STOP and boots out its exact saved job. Restart proves
 the saved job absent and archives its STOP before one bootstrap. Refusal or
 uncertainty retains STOP and its receipt; it grants no alternate-executor retry.
@@ -145,6 +149,48 @@ Project STOP/HOLD, actual native identity, claims/generation, source cleanliness
 main CAS/FF and archives remain mandatory. Ordinary lock recovery requires fresh
 positive ESRCH, existing recovery serialization, owner re-read/CAS and original
 owner archive; live, EPERM and unknown stay held. There is no force entry.
+
+### Change a stopped service's notice recipient
+
+The project's own canonical native supervisor uses the matching current source
+or accepted installed release containing this command. Retarget requires an
+existing `installed` receipt, clean canonical main/source, the service's own
+STOP and a positively absent launchd job. A project STOP/HOLD, occupied control,
+pass or promotion lock, foreign record/caller/recipient, changed native session,
+unknown phase or saved-binding drift refuses the operation. It never recovers
+a pass owner or stops/starts a job itself.
+
+```sh
+"$NODE" "$CURRENT_ROOT/line-service/launchd.mjs" status --repo /OWN/CANONICAL --org /OWN/RECORD
+# If not already stopped, the owning supervisor first uses the supported stop.
+"$NODE" "$CURRENT_ROOT/line-service/launchd.mjs" stop --repo /OWN/CANONICAL --org /OWN/RECORD
+"$NODE" "$CURRENT_ROOT/line-service/launchd.mjs" retarget --repo /OWN/CANONICAL --org /OWN/RECORD --to PROJECT_SUPERVISOR --dry-run
+"$NODE" "$CURRENT_ROOT/line-service/launchd.mjs" retarget --repo /OWN/CANONICAL --org /OWN/RECORD --to PROJECT_SUPERVISOR
+```
+
+`NODE` is the pinned Node 20.19.4; `CURRENT_ROOT` must be the saved installation's
+current source, after its separately authorized release upgrade if necessary.
+Brain uses `--to supervisor-herdr`; BCH's owner uses `--to supervisor-opus` with
+BCH's own canonical repository and record. These are owner commands, not worker
+authorization to operate either real service. Restart remains a separate owner
+action subject to its existing guards and release acceptance.
+
+The dry run writes no installation, plist or receipt. Apply preserves every
+plist byte except the recipient string at `ProgramArguments[8]` and sets only
+`installation.recipient`. It first writes an exclusive immutable before/after
+archive under `retargets/`, then appends a typed
+`line-service.recipient-retargeted` record receipt naming old/new recipients and
+the actual native caller/recipient tuples. The service STOP, runtime, pin,
+transport, interval, logs, saved jobs/watchers and retained deliveries stay intact.
+An already-current recipient returns unchanged without another receipt.
+
+An interrupted intent or changed archive is UNKNOWN: STOP and the original
+archive remain, and restart, migration, upgrade and further retargets refuse
+automatic replay or replacement. Completed changes participate in the existing
+installation history across migration and release upgrades. Rollback of a later
+upgrade restores its exact previous recipient; a new retarget after an upgrade
+requires a separate owner disposition before rolling that upgrade back, because
+its exact prior installation would otherwise overwrite the later routing choice.
 
 ### Move a stopped development-source service to an accepted release
 

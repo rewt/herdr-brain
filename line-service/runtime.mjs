@@ -7,6 +7,7 @@ import {fileURLToPath} from 'node:url';
 import {gitProject} from '../lib/project.mjs';
 import {bundleRelease,projectPin,selectRelease,checkRelease,releaseHome,requireReadyAcceptance} from '../lib/releases.mjs';
 import {readPlainFile,plainDirectory} from '../lib/files.mjs';
+import {recipientChanges,applyRecipientChange,legacyRecipientHistory} from './recipient-history.mjs';
 
 export const runtimeRoot=fs.realpathSync(fileURLToPath(new URL('../',import.meta.url)));
 export const digest=bytes=>createHash('sha256').update(bytes).digest('hex');
@@ -33,6 +34,7 @@ export function serviceSource(repo,options={}) {
 // Resolve the immutable migration followed by completed release handoffs. The
 // original boundary and migration stay intact, including across a rollback.
 export function runtimeHistory(events,{repo,org,identity,directory,installation,cutover,root=runtimeRoot}) {
+  const changes=recipientChanges(events,{repo,org,identity,directory});
   const rows=events.filter(e=>e.type==='line-service.runtime-migrated'&&e.project===identity&&e.org===org);
   if(rows.length!==1)throw Error('service runtime migration is missing/ambiguous');
   const event=rows[0],ref=installation.migration;
@@ -44,6 +46,7 @@ export function runtimeHistory(events,{repo,org,identity,directory,installation,
       archive.source!==event.source||archive.previous_source!==cutover.source||JSON.stringify(archive.cutover)!==JSON.stringify(cutover)||
       JSON.stringify(archive.runtime)!==JSON.stringify(event.runtime))throw Error('service runtime migration archive changed');
   let saved={...JSON.parse(archive.after.installation),migration:ref},plist=archive.after.plist,last=event,previous;
+  legacyRecipientHistory(changes.filter(c=>c.event.seq<event.seq),{installation:JSON.parse(archive.before.installation),plist:archive.before.plist,cutover});
   if(saved.source!==event.source||JSON.stringify(saved.runtime)!==JSON.stringify(event.runtime))throw Error('service runtime migration archive changed');
   const upgrades=events.filter(e=>e.type==='line-service.runtime-upgraded'&&e.project===identity&&e.org===org);
   const upgradeDirectory=path.join(directory,'upgrades');
@@ -54,7 +57,11 @@ export function runtimeHistory(events,{repo,org,identity,directory,installation,
     if(JSON.stringify(files)!==JSON.stringify(upgrades.map(e=>e.id+'.json').sort()))throw Error('existing/UNKNOWN runtime upgrade is retained; no replay or replacement');
   }else if(upgrades.length)throw Error('service runtime upgrade archive is missing');
   const ids=new Set();
-  for(const next of upgrades){
+  for(const next of [...upgrades,...changes.filter(c=>c.event.seq>event.seq).map(c=>c.event)].sort((a,b)=>a.seq-b.seq)){
+    if(next.type==='line-service.recipient-retargeted'){
+      const state=applyRecipientChange(changes.find(c=>c.event.seq===next.seq),{installation:saved,plist,last});
+      saved=state.installation;plist=state.plist;last=state.last;continue;
+    }
     const a=next.archive;
     if(!/^[-a-zA-Z0-9_]{1,80}$/.test(next.id??'')||ids.has(next.id)||next.repo!==repo||next.previous_seq!==last.seq||next.seq<=last.seq||
         next.previous_source!==saved.source||!path.isAbsolute(next.source??'')||next.source===saved.source||

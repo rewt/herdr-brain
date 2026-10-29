@@ -12,6 +12,7 @@ import {loadEvents,transact,writeFileAtomic} from '../lib/store.mjs';
 import {readPlainFile,plainDirectory} from '../lib/files.mjs';
 import {withRuntimeLocks} from './runtime-locks.mjs';
 import {loadDiscoveredRoutes} from '../lanes/routes.mjs';
+import {recipientChanges,legacyRecipientHistory} from './recipient-history.mjs';
 
 const git=(repo,args)=>execFileSync('git',['--no-optional-locks','-C',repo,...args],{encoding:'utf8',stdio:['ignore','pipe','pipe'],timeout:10000}).trim();
 const tuple=b=>({project:b.project,native:{name:b.native.name,pane:b.native.pane_id,workspace:b.native.workspace_id,terminal:b.native.terminal_id,session:b.native.agent_session.value}});
@@ -27,7 +28,7 @@ export function inspectService(target,repo,command=spawnSync) {
 
 // Decode through the native plist reader, then validate the complete supported
 // job schema. Regeneration changes only argv[1], retaining all other bindings.
-export function replacementPlist(c,installation,command,source=runtimeRoot) {
+export function savedPlist(c,installation,command) {
   const r=command('/usr/bin/plutil',['-convert','json','-o','-','--',installation.file],{cwd:c.repo,encoding:'utf8',maxBuffer:4*1024*1024});
   if(r.error||r.status!==0)throw Error((r.stderr||r.error?.message||'saved plist could not be read').trim());
   const p=JSON.parse(r.stdout),a=p.ProgramArguments,e=p.EnvironmentVariables,label=`dev.herdr.line.${path.basename(c.directory)}`;
@@ -38,6 +39,11 @@ export function replacementPlist(c,installation,command,source=runtimeRoot) {
     WorkingDirectory:c.repo,EnvironmentVariables:{PATH:e.PATH,HERDR_SOCKET_PATH:e.HERDR_SOCKET_PATH},StartInterval:p.StartInterval,RunAtLoad:true,
     StandardOutPath:path.join(c.directory,'launchd.log'),StandardErrorPath:path.join(c.directory,'launchd.error.log')};
   if(!same(p,expected))throw Error('saved plist bindings drifted; no replacement authorized');
+  if(installation.recipient!==undefined&&installation.recipient!==a[8])throw Error('saved installation recipient differs from plist');
+  return p;
+}
+export function replacementPlist(c,installation,command,source=runtimeRoot) {
+  const p=savedPlist(c,installation,command),a=p.ProgramArguments,e=p.EnvironmentVariables,label=p.Label;
   return launchPlist({label,repo:c.repo,org:c.org,to:a[8],herdr:a[10],socket:e.HERDR_SOCKET_PATH,directory:c.directory,interval:p.StartInterval,
     node:installation.node,environment:e,source});
 }
@@ -67,6 +73,7 @@ export function migrateRuntime({repo,org,id,dryRun=false,expectedPlan,cwd=proces
   };
   const snapshot=initial(),loaded=loadEvents(c.org);if(loaded.tornTail)throw Error('incomplete record prevents service migration');
   const savedBytes=readPlainFile(installationFile),saved=JSON.parse(savedBytes),plistBytes=readPlainFile(file);
+  const recipientHistory=recipientChanges(loaded.events,c);
   if(saved.repo!==c.repo||saved.org!==c.org||saved.file!==file||saved.target!==target||saved.node!==process.execPath||!['installed','uncertain-or-refused'].includes(saved.phase)||!path.isAbsolute(saved.source??''))throw Error('saved installation binding differs; retain it');
   const prior=loaded.events.filter(e=>e.type==='line-service.runtime-migrated'&&e.project===c.identity&&e.org===c.org);
   if(prior.length){
@@ -85,6 +92,7 @@ export function migrateRuntime({repo,org,id,dryRun=false,expectedPlan,cwd=proces
   if(cutovers.length!==1||cutover.repo!==c.repo||!path.isAbsolute(cutover.source??'')||path.resolve(cutover.source)!==path.resolve(saved.source)||!cutover.id||!Number.isSafeInteger(cutover.seq)||cutover.seq<1||
       !/^[a-f0-9]{40}(?:[a-f0-9]{24})?$/.test(cutover.canonical_head??'')||cutover.main!==git(c.repo,['symbolic-ref','--short','HEAD']))throw Error('original cutover binding differs; preserve it');
   git(c.repo,['merge-base','--is-ancestor',cutover.canonical_head,snapshot.head]);
+  legacyRecipientHistory(recipientHistory,{installation:saved,plist:plistBytes,cutover});
   const nextPlist=replacementPlist(c,saved,command),after={...saved,source:runtimeRoot,runtime:snapshot.runtime};
   // Observe the stopped state, never complete or replay the refused bootstrap.
   // Keep its original phase/error in both the archive and migrated installation.

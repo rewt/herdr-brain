@@ -276,6 +276,9 @@ if (worker) {
     });
   }
   for (const [input, output] of [[child.stdout, process.stdout], [child.stderr, process.stderr]]) {
+    // A failed write also emits 'error' on the destination. Keep that event on
+    // the normal drain/cleanup path instead of letting it escape uncaught.
+    output.on('error', () => { outputFailed = true; checkDrain(); });
     input.on('data', data => {
       watcher?.output();
       groupOutputBytes += data.length;

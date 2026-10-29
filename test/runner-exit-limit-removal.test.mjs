@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import { EventEmitter } from 'node:events';
+import { Writable } from 'node:stream';
 import vm from 'node:vm';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
@@ -18,7 +19,7 @@ const tracker = readFileSync(new URL('./helpers/processes.mjs', import.meta.url)
 const limits = readFileSync(new URL('./helpers/runner-limits.mjs', import.meta.url), 'utf8');
 const unused = () => assert.fail('unselected worker/native interface executed');
 
-async function coordinator() {
+async function coordinator({ failedSink } = {}) {
   const trace = [], exits = [], errors = [], signals = [], timers = [], timings = [];
   const leader = { pid: 4242, ppid: 202, pgid: 4242, state: 'S', identity: 'birth-1', command: 'suite-worker' };
   const state = { current: leader, auditError: false, survivors: [], holdOutput: false };
@@ -34,12 +35,18 @@ async function coordinator() {
   const proc = Object.assign(new EventEmitter(), {
     argv: [process.execPath, fileURLToPath(runner), 'controlled.test.mjs'], env: {},
     pid: 202, execPath: process.execPath, platform: process.platform,
-    ...Object.fromEntries(['stdout', 'stderr'].map(name => [name, { write: (data, callback) => {
+    ...Object.fromEntries(['stdout', 'stderr'].map(name => [name, Object.assign(new EventEmitter(), { write: (data, callback) => {
       trace.push(`${name}:${data}`);
       if (state.holdOutput) writes.push(callback); else callback();
-    } }])),
+    } })])),
     exit: code => { trace.push('exit'); exits.push(code); },
     kill: (pid, signal) => { trace.push('signal'); signals.push([pid, signal]); },
+  });
+  if (failedSink) proc[failedSink] = new Writable({
+    write(data, encoding, callback) {
+      trace.push(`${failedSink}:${data}`);
+      callback(Object.assign(Error('consumer pipe closed'), { code: 'EPIPE' }));
+    },
   });
   let watch;
   const context = createContext({
@@ -143,8 +150,8 @@ if (typeof SourceTextModule !== 'function') {
     const result = await waitForExit(child);
     assert.equal(result.signal, null, result.stderr);
     assert.equal(result.code, 0, result.stdout + result.stderr);
-    assert.match(result.stdout, /# tests 15\b/);
-    assert.match(result.stdout, /# pass 15\b/);
+    assert.match(result.stdout, /# tests 16\b/);
+    assert.match(result.stdout, /# pass 16\b/);
     assert.match(result.stdout, /# fail 0\b/);
   });
 } else {
@@ -279,8 +286,8 @@ test('a retained pipe or blocked forwarded write fails the bounded post-exit dra
   }
 });
 
-test('premature pipe close, pipe error and forwarded write error cannot claim success', async () => {
-  for (const fault of ['close', 'read', 'write']) {
+test('premature pipe close, pipe error and forwarded sink errors cannot claim success', async () => {
+  for (const fault of ['close', 'read', 'write', 'stdout', 'stderr']) {
     const h = await coordinator(); h.ready();
     if (fault === 'read') h.child.stderr.emit('error', Error('read failed'));
     if (fault === 'write') {
@@ -288,7 +295,22 @@ test('premature pipe close, pipe error and forwarded write error cannot claim su
       h.writes.shift()(Error('write failed'));
     }
     h.complete(); h.exit(null, 'SIGKILL', false);
+    if (fault === 'stdout' || fault === 'stderr') h.proc[fault].emit('error', Error('sink failed'));
     h.closePipe('stdout', fault !== 'close'); h.closePipe('stderr'); h.finished(1);
+  }
+});
+
+test('real writable failures emit EPIPE without bypassing timing and owned cleanup', async () => {
+  for (const failedSink of ['stdout', 'stderr']) {
+    const h = await coordinator({ failedSink }); h.ready();
+    h.child[failedSink].emit('data', 'tail');
+    h.complete(); h.pending(); h.exit(null, 'SIGKILL', false);
+    // Node delivers both the write callback and a later stream error event.
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(h.proc[failedSink].errored.code, 'EPIPE');
+    assert.deepEqual(h.exits, []);
+    h.closePipe('stdout'); h.closePipe('stderr'); h.finished(1);
+    assert.deepEqual(h.signals, [[-4242, 'SIGKILL']]);
   }
 });
 
@@ -307,7 +329,19 @@ test('native runner captures large TAP and stderr tails with complete success an
   const file = path.join(root, 'output.test.mjs'), preload = path.join(root, 'output.mjs');
   const tapTail = `TAP-BEGIN${'x'.repeat(1024 * 1024)}TAP-END`;
   const stderrTail = `STDERR-BEGIN${'y'.repeat(1024 * 1024)}STDERR-END\n`;
-  writeFileSync(preload, `if (process.argv[2] === '--worker') process.stderr.write(${JSON.stringify(stderrTail)});`);
+  // The empty stdout barrier runs only after the worker's output pipeline
+  // resolves. Queue raw stderr there, before its own flush barrier, so this
+  // payload exercises the end of the run rather than worker startup.
+  writeFileSync(preload, `if (process.argv[2] === '--worker') {
+    const write = process.stdout.write;
+    process.stdout.write = function (data, ...args) {
+      if (data === '') {
+        process.stdout.write = write;
+        process.stderr.write(${JSON.stringify(stderrTail)});
+      }
+      return write.call(this, data, ...args);
+    };
+  }`);
   writeFileSync(file, `import test from 'node:test'; test('large output', t => { t.diagnostic(${JSON.stringify(tapTail)}); if (process.env.RUNNER_FIXTURE_FAIL === '1') throw Error('expected runner fixture failure'); });`);
   for (const fail of [false, true]) {
     const env = { ...process.env, RUNNER_FIXTURE_FAIL: fail ? '1' : '0' };

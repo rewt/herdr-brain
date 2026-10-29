@@ -146,6 +146,11 @@ test('review queue retains malformed and missing individual history journals as 
 
 test('review queue retains a dangling dispatch history directory as a failure', t => {
   const f = fixture(t);
+  const service = path.join(f.org, 'line-service', createHash('sha256').update(JSON.stringify(f.identity)).digest('hex').slice(0, 20));
+  fs.mkdirSync(service, { recursive: true });
+  fs.writeFileSync(path.join(service, 'installation.json'), JSON.stringify({ repo: f.cwd, org: f.org,
+    source: root, node: process.execPath, file: path.join(service, 'service.plist'),
+    target: `gui/${process.getuid()}/dev.herdr.line.${path.basename(service)}` }));
   // A canonical review reaches history validation without rereading a producer journal.
   fs.writeFileSync(path.join(f.cwd, 'canonical-source.mjs'), 'export const value=2;\n');
   f.git(['add', 'canonical-source.mjs']); f.git(['commit', '-qm', 'Canonical source to review']);

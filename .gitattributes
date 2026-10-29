@@ -1,0 +1,3 @@
+# Harness discovery/configuration stays in source checkouts, outside releases.
+/.agents export-ignore
+/.claude export-ignore

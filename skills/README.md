@@ -40,6 +40,9 @@ The tracked `.agents/skills/` and `.claude/skills/` links expose these five fold
 inside Brain without a second copy. A project session can also read the canonical
 absolute skill path explicitly. The package is local source, not a published
 marketplace or an immutable product release.
+The source-only `.agents/` and `.claude/` harness trees are excluded from release
+inventories and Git archives; the canonical `skills/` files remain in the archive.
+Genuine build checkouts retain both harnesses' discovery links.
 
 For cross-project discovery on this machine, put one link per skill under
 `~/.agents/skills` for Codex and `$CLAUDE_CONFIG_DIR/skills` for Claude. The `ai`

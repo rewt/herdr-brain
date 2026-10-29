@@ -7,6 +7,7 @@ import { loadEvents, transact } from '../lib/store.mjs';
 import { readReport } from '../lib/report.mjs';
 import { reviewResultEvents } from '../line-service/phase1.mjs';
 import { reviewFindingKey } from '../line-service/review-findings.mjs';
+import { reviewQueueBrief } from '../line-service/review-queue.mjs';
 import { setupOrg } from './helpers.mjs';
 
 const target = { base: 'a'.repeat(40), head: 'b'.repeat(40), reportHash: 'c'.repeat(64),
@@ -37,7 +38,7 @@ function orgFixture(t) {
 
 test('finding intake: one formal proposal covers Major and Minor findings without a severity duplicate', () => {
   const data = report([{ role: 'engineering', title: 'Repair the review findings', accept: ['Fix both defects'] }]);
-  data.extra.findings = [{ severity: 'major', text: `  ${major}  ` }, { severity: 'minor', text: minor }];
+  data.extra.findings = [{ severity: 'major', text: `  ${major}  ` }];
   const before = structuredClone(data), events = stamped(seed());
   const add = intake(events, data, `- [Major] ${major}\n- [Minor] ${minor}`);
   assert.equal(items(add).length, 1);
@@ -103,6 +104,33 @@ test('finding intake: structured findings and paraphrased body summaries file on
     assert.equal(items(next).length, 0, 'another intake reuses the same typed finding owners');
     assert.deepEqual(fold([...retained, ...next]).items, fold(retained).items, 'held and UNKNOWN items remain unchanged');
     assert.equal(JSON.stringify(data), bytes, 'canonical declarations and display text are never rewritten');
+  }
+});
+
+test('finding intake: Majors-only frontmatter retains every body Minor and one canonical Major', () => {
+  const events = stamped(seed()), reviewItem = fold(events).items.get('REV-1');
+  const data = report();
+  data.extra.findings = [{ severity: 'major', text: major, correction_check: 'x' }];
+  const minors = [minor, 'codec.mjs:51 - Retain the original receipt'];
+  const body = ['- [Major] codec.mjs:41 - Paraphrased Major summary',
+    ...minors.map(text => `- [Minor] ${text}`)].join('\n');
+  const before = structuredClone(data), add = intake(events, data, body);
+  const keys = [data.extra.findings[0], ...minors.map(text => ({ severity: 'minor', text }))]
+    .map(f => reviewFindingKey(reviewItem, f));
+  assert.equal(items(add).length, 3);
+  assert.deepEqual(add[0].findings.map(f => f.key), keys);
+  assert.deepEqual(bindings(add).map(e => e.finding_key), keys);
+  assert.equal(items(add)[0].meta.review_correction_checks[keys[0]], 'x');
+  assert.deepEqual(data, before, 'intake retains the immutable declarations');
+  assert.deepEqual(intake(stamped([...events, ...add]), data, body), []);
+  const next = intake(stamped([...events, ...add, ...review('REV-2', 'R-3')]), data, body, 'R-3');
+  assert.equal(items(next).length, 0, 'another run reuses the same typed-key owners');
+  for (const evidence_kind of [undefined, 'canonical-unattributed/v1']) {
+    const brief = reviewQueueBrief({ ...reviewItem, meta: { ...reviewItem.meta,
+      review_target: { ...target, evidence_kind } } });
+    assert.match(brief, /Structured findings are canonical per severity/);
+    assert.match(brief, /include every finding of that severity there/);
+    assert.match(brief, /Minors may therefore remain body-only when only Majors are in frontmatter/);
   }
 });
 

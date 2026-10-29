@@ -8,6 +8,7 @@ import {legacyExitIntent,legacyExitSettlement,observeLegacyExitAbsence} from '..
 import {nativeCloseoutWait,closeoutWaitState} from '../lib/closeout-status.mjs';
 import {runCloseoutTurn} from '../line-service/closeout-turn.mjs';
 import {gitProject} from '../lib/project.mjs';
+import {reconcileCloseoutBacklog} from '../lib/closeout-backlog.mjs';
 
 function fixture(t,{merged=true,vacant=true}={}) {
   const f=setup(t,{direct:true,bound:true,merged});selectCurrentCleanup(f);f.report();
@@ -31,6 +32,69 @@ function fixture(t,{merged=true,vacant=true}={}) {
       retrySafe:true,sessionsOnly:args.includes('--sessions-only')})):'{}'});
   return Object.assign(f,{entry,intent});
 }
+
+test('backlog corrects a held legacy wait to its ready owned stage without replacing original evidence',t=>{
+  const f=fixture(t),before=events(f),wait=before.find(e=>e.type==='closeout.waiting'),
+    prior=before.findLast(e=>e.type==='closeout.evaluated');
+  f.append([{type:'closeout.wait-classified',identity:f.common,key:f.entry.key,source:f.entry.source,
+    wait_id:wait.wait_id,evaluation_seq:prior.seq,disposition:'held',binding:{schema:f.entry.schema,actionable:true}}]);
+  const original=events(f),calls=f.herdrCalls(),args={project:gitProject(f.repo),org:f.org,events:original,guard:()=>{}};
+  const [row]=reconcileCloseoutBacklog(args);
+  assert.equal(row.disposition,'continuation');assert.equal(row.owner,'lane-closeout');
+  assert.deepEqual(row.continuation,{kind:'owned-stage',owner:'lane-closeout',stage:'legacy-exit-absence',ready:true});
+  assert.equal(closeoutWaitState(wait,events(f)),'classified');
+  assert.ok(unresolvedCloseoutEffect(f.entry,events(f)),'classification does not complete the original intent');
+  assert.deepEqual(events(f).slice(0,original.length),original);
+  assert.deepEqual(reconcileCloseoutBacklog({...args,events:events(f)}),[]);
+  assert.deepEqual(f.herdrCalls(),calls);assert.deepEqual(f.read().actions,[]);
+});
+
+for(const kind of ['ordinary-unknown','unknown-git','refused'])test(`backlog retains ${kind} instead of claiming an owned stage`,t=>{
+  const f=fixture(t);
+  if(kind==='ordinary-unknown'){
+    const rows=events(f);rows.find(e=>e.type==='closeout.evaluated').code.code.files='f'.repeat(64);
+    fs.writeFileSync(f.eventFile,rows.map(e=>JSON.stringify(e)+'\n').join(''));
+  }
+  if(kind==='unknown-git')f.append([{type:'closeout.effect',identity:f.common,key:f.entry.key,source:f.entry.source,
+    effect:'unresolved-git',outcome:{action:'git-removal-started',attempt:'original',operation:'worktree'}}]);
+  if(kind==='refused')f.append([{type:'closeout.command-failed',identity:f.common,key:f.entry.key,source:f.entry.source,
+    intent:f.intent.effect,failure:{kind:'fence',code:'NATIVE_REFUSAL'}}]);
+  const original=events(f),calls=f.herdrCalls();
+  const [row]=reconcileCloseoutBacklog({project:gitProject(f.repo),org:f.org,events:original,guard:()=>{}});
+  assert.equal(row.disposition,'held');assert.equal(row.continuation.kind,'owner-evidence');
+  assert.deepEqual(events(f).slice(0,original.length),original);
+  assert.deepEqual(f.herdrCalls(),calls);assert.deepEqual(f.read().actions,[]);
+});
+
+test('original completion between selection and evaluation reaches observation-only reconciliation',t=>{
+  const f=fixture(t),original=events(f),rmdir=fs.rmdirSync;
+  let completed=false;
+  // Publish the original producer's receipt immediately after selection releases
+  // queue.lock, while the drain still holds its retirement ownership lock.
+  const hook=t.mock.method(fs,'rmdirSync',function(directory,...args){
+    const result=rmdir.call(this,directory,...args);
+    if(!completed&&directory===path.join(f.common,'closeout/queue.lock')&&
+        fs.existsSync(path.join(f.common,'retirement/owner.lock'))){
+      completed=true;
+      assert.ok(unresolvedCloseoutEffect(f.entry,events(f)));
+      f.append([{type:'closeout.effect',identity:f.common,key:f.entry.key,source:f.entry.source,
+        effect:'original-completion',intent:f.intent.effect,
+        outcome:{action:'exit-observed',pane:f.entry.panes[0].pane}}]);
+    }
+    return result;
+  });
+  const result=f.drain({keys:[f.entry.key],retrySafe:true});hook.mock.restore();
+  assert.equal(completed,true);assert.equal(result.evaluated.length,1);
+  const [row]=result.evaluated;
+  assert.equal(row.reason,'original native outcome reconciled; fresh drain required');
+  assert.equal(typeof row.stages.exit_reconciliation_ms,'number');
+  assert.equal(row.completed,false);assert.equal(unresolvedCloseoutEffect(f.entry,events(f)),undefined);
+  assert.ok(fs.existsSync(f.lane),'observation-only reconciliation leaves physical cleanup for a fresh drain');
+  assert.deepEqual(events(f).slice(0,original.length),original);
+  assert.equal(effects(f).filter(e=>e.action==='agent-exit-requested').length,1);
+  assert.equal(events(f).some(e=>e.type==='closeout.exit-settled'),false);
+  assert.deepEqual(f.read().actions,[]);
+});
 
 test('line settles only the old absent allocation then removes its clean merged folder without replay',t=>{
   const f=fixture(t),original=events(f),wait=original.find(e=>e.type==='closeout.waiting');

@@ -96,12 +96,13 @@ test('exit identity spelling never excuses replacement occupants or changed exit
 
 test('exit transition waits for cleared native fields without mistaking them for completion', t => {
   const f = exitFixture(t, { bound: true }), before = f.retirement().observe(), plan = planRetirement(before);
-  for (const after of ['gone', 'replacement', 'never-clears', 'native-refusal']) {
+  for (const after of ['gone', 'replacement', 'never-clears', 'native-refusal', 'deadline']) {
     const current = structuredClone(before), candidate = plan.close[0];
     let requested = 0, paused = 0, observed = 0, clock = 0, readingExit = false;
     const result = executeRetirement(plan, {
       observe: () => {
         if (readingExit && paused && after === 'native-refusal') throw Object.assign(Error('native refusal'), { code: 'EPERM' });
+        if (readingExit && paused && after === 'deadline') throw Object.assign(Error('deadline'), { code: 'RETIREMENT_DEADLINE' });
         return current;
       },
       exit: () => {
@@ -129,7 +130,7 @@ test('exit transition waits for cleared native fields without mistaking them for
       close: () => { assert.equal(after, 'gone'); assert.equal(observed, 1); },
     });
     assert.equal(requested, 1, after); assert.ok(paused > 0, after);
-    assert.equal(result[0].action, after === 'gone' ? 'closed' : 'skip-close', after);
+    assert.equal(result[0].action, after === 'gone' ? 'closed' : after === 'deadline' ? 'deferred' : 'skip-close', after);
     if (after === 'replacement') {
       assert.equal(paused, 1, 'a positive replacement stops immediately');
       assert.equal(result[0].exit_observation.state, 'changed');
@@ -137,5 +138,59 @@ test('exit transition waits for cleared native fields without mistaking them for
     }
     if (after === 'never-clears') assert.equal(result[0].exit_observation.state, 'leaving');
     if (after === 'native-refusal') assert.equal(result[0].command_error.code, 'EPERM');
+    if (['native-refusal', 'deadline'].includes(after)) {
+      assert.equal(paused, 1, 'a thrown read is never retried');
+      assert.equal(observed, 0);
+      const facts = result[0].exit_observation;
+      assert.equal(facts.state, 'leaving');
+      assert.equal(facts.panes[0].terminal, candidate.occupant[5]);
+      assert.deepEqual(facts.panes[0].tree.map(p => [p.pid, p.identity]), [[candidate.shell.pid, candidate.shell.identity]]);
+      assert.deepEqual(facts.occupants[0], [undefined, ...candidate.occupant.slice(1, 6), undefined]);
+    }
+  }
+});
+
+test('exit diagnostics retain the final wait snapshot and distinguish clearing from replacement', t => {
+  const f = exitFixture(t, { bound: true }), before = f.retirement().observe(), plan = planRetirement(before);
+  for (const after of ['clearing', 'replacement', 'EPERM', 'RETIREMENT_DEADLINE', 'first-read-refusal']) {
+    let reads = 0, requested = 0, observed = 0;
+    const exited = structuredClone(before), candidate = plan.close[0];
+    exited.agents = [];
+    const pane = exited.panes[0], shell = pane.process_info.process_tree[0];
+    pane.shellOnly = true;
+    pane.process_info = { ...pane.process_info, process_tree: [shell], foreground_processes: [{ pid: shell.pid, name: 'zsh' }] };
+    const final = structuredClone(exited);
+    final.agents = [{ ...before.agents[0] }];
+    if (after === 'clearing') { delete final.agents[0].name; delete final.agents[0].agent_session; }
+    else final.agents[0].agent_session = { value: 'replacement' };
+    const result = executeRetirement(plan, {
+      observe: () => {
+        reads++;
+        if (reads === 1) return before;
+        if (reads === 2 && after !== 'first-read-refusal') return exited;
+        if (['EPERM', 'RETIREMENT_DEADLINE', 'first-read-refusal'].includes(after))
+          throw Object.assign(Error('observation refused'), { code: after === 'first-read-refusal' ? 'EPERM' : after, status: 7 });
+        return final;
+      },
+      exit: () => { requested++; }, exitObserved: () => { observed++; },
+      close: () => assert.fail('incomplete or refused observation must keep the pane'),
+    })[0];
+    assert.equal(requested, 1); assert.equal(reads, after === 'first-read-refusal' ? 2 : 3);
+    assert.equal(observed, after === 'first-read-refusal' ? 0 : 1);
+    assert.equal(result.action, after === 'RETIREMENT_DEADLINE' ? 'deferred' : 'skip-close');
+    const facts = result.exit_observation;
+    assert.equal(facts.panes[0].terminal, candidate.occupant[5]);
+    if (after === 'clearing') {
+      assert.equal(facts.state, 'leaving'); assert.match(result.why, /fields still clearing/);
+      assert.doesNotMatch(result.why, /identity changed/);
+    } else if (after === 'replacement') {
+      assert.equal(facts.state, 'changed'); assert.match(result.why, /identity changed/);
+    } else {
+      assert.equal(facts.state, 'same');
+      assert.equal(result.command_error.status, 7);
+      assert.equal(result.command_error.code, after === 'first-read-refusal' ? 'EPERM' : after);
+      assert.deepEqual(facts.occupants, after === 'first-read-refusal' ? [candidate.occupant] : []);
+      assert.deepEqual(facts.panes[0].tree, (after === 'first-read-refusal' ? before : exited).panes[0].process_info.process_tree);
+    }
   }
 });

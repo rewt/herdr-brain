@@ -81,8 +81,8 @@ test('a changed supervisor address recovers only the exact zero-effect pre-journ
 
 test('three completed engineering-idle passes file and immediately dispatch one repair across restart while original native refusal remains retained',t=>{
   const f=fixture(t),item=f.add('Native refusal'),options={haltAfter:3};f.setFailure('native permission refused');
-  // Readback precedes admission: the initial refusal is first observed on the
-  // next pass. Its retired missing-producer decision is not additional work.
+  // Readback precedes admission. Missing producers stay diagnostic without
+  // creating judgment work or resetting unchanged engineering's idle count.
   f.service(options).pass();
   const journal=path.join(f.service().directory,'effects.json'),key=Object.keys(JSON.parse(fs.readFileSync(journal)).actions).find(k=>k.startsWith(`dispatch:${item}:`));
   const original=JSON.parse(fs.readFileSync(journal)).actions[key].receipt;
@@ -91,7 +91,7 @@ test('three completed engineering-idle passes file and immediately dispatch one 
   const initial=JSON.parse(fs.readFileSync(journal)).halt_progress;
   assert.equal(initial.count,1);
   f.service(options).pass();assert.equal(repairs().length,0);
-  assert.equal([...fold(loadEvents(f.org).events).items.values()].filter(i=>i.meta.uncertain_outcome).length,1);
+  assert.equal([...fold(loadEvents(f.org).events).items.values()].filter(i=>i.meta.uncertain_outcome).length,0);
   const readback=JSON.parse(fs.readFileSync(journal)).halt_progress;
   assert.equal(readback.count,2);assert.equal(readback.episode,initial.episode);
   f.service(options).pass();
@@ -144,7 +144,7 @@ test('engineering-idle keeps only exact saved judgment inputs and rechecks them 
 });
 
 test('engineering-idle excludes held ancestry reserved work and unchanged blocked reports while independent work still dispatches',t=>{
-  const f=fixture(t),held=f.add('Explicit hold'),parent=f.add('Closed review ancestry'),child=f.add('Selected child',99,['--parent',parent]),blocked=f.add('Unchanged blocked report');
+  const f=fixture(t),held=f.add('Explicit hold'),parent=f.record(['add','Closed review ancestry','--role','reviewer']).split(' ')[0],child=f.add('Selected child',99,['--parent',parent]),blocked=f.add('Unchanged blocked report');
   const reserved=f.add('Reserved publication'),ancestor=f.add('Reserved ancestor'),descendant=f.add('Reserved descendant',99,['--parent',ancestor]);
   transact(f.org,()=>({add:[
     {type:'item.updated',id:held,fields:{meta:{hold:true}}},

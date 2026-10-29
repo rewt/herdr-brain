@@ -8,13 +8,72 @@ import {bindCloseoutSources,currentCloseoutEntries,unresolvedCloseoutEffect} fro
 import {closeoutNextStage} from '../lib/closeout-status.mjs';
 import {runCloseoutTurn} from '../line-service/closeout-turn.mjs';
 import {refreshCloseouts} from '../lib/closeout-consumer.mjs';
-import {closeoutCondition} from '../lib/closeout-facts.mjs';
+import {closeoutCondition,preEffectCloseout} from '../lib/closeout-facts.mjs';
+import {sealRemovalInputs} from '../lib/retire-local.mjs';
 import {acquireLock} from '../lanes/promotion-lock.mjs';
 import {setup,events,evaluations,effects,selectCurrentCleanup} from './helpers/closeout-fixture.mjs';
 
 const entry=f=>currentCloseoutEntries(f.common,f.org,events(f))[0];
 const drain=f=>f.drain({keys:[entry(f).key],retrySafe:true});
 const latest=f=>evaluations(f).findLast(e=>e.key===entry(f).key);
+
+test('named pre-effect keeps ignore safety keywords in paths branches and occupant names',()=>{
+  const target={run:'R-1',common:'/git',key:'target',source:{seq:1,type:'cleanup.bound'}};
+  for(const word of ['STOP','hold','ownership','claim','source binding','generation','identity','preservation','evidence-changed','archive-changed']){
+    const name=`lane/topic-${word}-fix`,file=`/project/${name}/index.lock`;
+    for(const [reason,kind] of [
+      [`removal preflight input changed: ${file}; prepare and observe again; lane kept`,'pre-effect-change'],
+      [`locked: ${file}; owner is live or unknown`,'contention'],
+      [`locked: ${file}; inspect owner.json and surviving processes before removing a stale lock`,'contention'],
+      [`locked Git metadata refs/heads/${name}.lock`,'contention'],
+      [`process cwd reference ${file}`,'active-process'],
+      [`settle callback reference ${name}`,'active-process'],
+      [`watcher callback reference ${name}`,'active-process'],
+      [`occupant ${name} is working`,'active-process'],
+    ]){
+      const condition=closeoutCondition(target,{reason},[]),prior={completed:false,reason,condition};
+      assert.equal(condition.kind,kind,reason);assert.equal(condition.owner,'lane-closeout',reason);
+      assert.equal(condition.continuation.kind,'pre-effect-observation',reason);
+      assert.equal(preEffectCloseout(target,prior,[]),true,reason);
+      assert.deepEqual(closeoutNextStage(target,prior,[]),{stage:'pre-effect-observation',ready:true},reason);
+    }
+  }
+});
+
+test('named pre-effect formats preserve real fences uncertainty and historical safety holds',()=>{
+  const target={run:'R-1',common:'/git',key:'target',source:{seq:1,type:'cleanup.bound'}};
+  for(const reason of [
+    'STOP/HOLD prevents queued retirement effect',
+    'preservation claim inputs changed; prepare again; lane kept',
+    'original report allocation/current run/claim changed; keep',
+    'occupant or shell identity changed during agent exit',
+    'source binding changed: locked Git metadata refs/heads/lane/topic.lock',
+    'preservation evidence changed: removal preflight input changed: /project/index',
+    'locked: /project/index; STOP/HOLD prevents queued retirement effect',
+    'process cwd reference /project; preservation claim changed',
+  ]){
+    const condition=closeoutCondition(target,{reason},[]);
+    assert.equal(condition.kind,'safety-hold',reason);assert.equal(condition.continuation.kind,'owner-evidence',reason);
+    assert.equal(preEffectCloseout(target,{completed:false,reason,condition},[]),false,reason);
+  }
+  const reason='removal preflight input changed: /project/identity; prepare and observe again; lane kept';
+  assert.equal(closeoutCondition(target,{reason,failure:{kind:'fence',code:'NATIVE_REFUSAL'}},[]).kind,'native-refusal');
+  assert.equal(closeoutCondition(target,{reason},[],{uncertain:true}).kind,'uncertain-invocation');
+  assert.equal(preEffectCloseout(target,{completed:false,reason,condition:{kind:'safety-hold'}},[]),false,
+    'a new classifier must not reopen an existing typed hold');
+});
+
+test('real removal input seal with a safety word in its path remains eligible for fresh observation',t=>{
+  const f=setup(t,{direct:true,bound:true}),file=path.join(f.scratch,'identity-claim-HOLD-input');
+  fs.writeFileSync(file,'original');const verify=sealRemovalInputs([file]);fs.writeFileSync(file,'changed bytes');
+  assert.throws(verify,error=>{
+    const target={run:'R-1',common:f.common,key:'target',source:{seq:1,type:'cleanup.bound'}};
+    const condition=closeoutCondition(target,{reason:error.message},[]);
+    assert.equal(condition.kind,'pre-effect-change');
+    assert.equal(preEffectCloseout(target,{completed:false,reason:error.message,condition},[]),true);
+    return true;
+  });
+});
 
 test('late binding keeps original finality age and names the uncertain effect footprint',()=>{
   const entry={run:'R-1',common:'/git',key:'target',source:{seq:9,type:'cleanup.bound'}},

@@ -37,7 +37,8 @@ async function fixture(t,{phase='installed'}={}){
     if(exe==='/usr/bin/plutil')return spawnSync(exe,args,options);
     assert.equal(exe,'/bin/launchctl');
     if(args[0]==='print')return loaded?{status:0,stdout:'saved job'}:{status:113,stderr:'Could not find service in domain'};
-    if(args[0]==='bootstrap')return bootstrapError?{status:1,stderr:bootstrapError}:{status:0,stdout:''};
+    if(args[0]==='bootstrap'){if(bootstrapError)return{status:1,stderr:bootstrapError};loaded=true;return{status:0,stdout:''};}
+    if(args[0]==='bootout'){loaded=false;return{status:0,stdout:''};}
     throw Error('unexpected native effect '+args.join(' '));
   };
   const module=async relative=>import(pathToFileURL(path.join(f.bundle,relative)).href);
@@ -181,4 +182,131 @@ test('accepted migrated release supports guarded restart and a real offline pass
   assert.equal(audit.find(e=>e.action==='pass-start').source_head,'1'.repeat(40));
   const {installedContext}=await g.module('line-service/cutoff.mjs');
   fs.appendFileSync(g.file,'\n');assert.throws(()=>installedContext(g.cwd,g.org),/drifted/);
+});
+
+async function successor(t){
+  const f=await fixture(t);f.migrate();
+  const migrated={installation:fs.readFileSync(f.installationFile,'utf8'),plist:fs.readFileSync(f.file,'utf8'),events:loadEvents(f.org).events};
+  const next=f.release('successor',{commit:'2'.repeat(40)});
+  const pin=id=>{fs.writeFileSync(path.join(f.cwd,'.herdr-release.json'),JSON.stringify({release:id})+'\n');f.git('add','.herdr-release.json');f.git('commit','-qm','Select '+id);};
+  pin('successor');
+  const {main}=await import(pathToFileURL(path.join(next,'line-service/launchd.mjs')).href);
+  const argv=['upgrade','--repo',f.cwd,'--org',f.org,'--id','fixture-upgrade','--from-root',f.bundle,'--target-root',next];
+  const plan=()=>main([...argv,'--dry-run'],f.args);
+  const upgrade=extra=>main([...argv,'--expected-plan',plan().archive.sha256,...(extra??[])],f.args);
+  return {...f,next,pin,main,argv,plan,upgrade,migrated};
+}
+function retained(f){
+  return {installation:fs.readFileSync(f.installationFile,'utf8'),plist:fs.readFileSync(f.file,'utf8'),stop:fs.readFileSync(f.stop,'utf8'),events:fs.readFileSync(path.join(f.org,'events.jsonl'),'utf8')};
+}
+
+test('release upgrade retains original migration and cutoff, restarts the successor and rolls back through the same guarded path',async t=>{
+  const f=await successor(t),before=retained(f),files=fs.readdirSync(f.directory).sort(),plan=f.plan();
+  assert.deepEqual(retained(f),before);assert.deepEqual(fs.readdirSync(f.directory).sort(),files);
+  const result=f.main([...f.argv,'--expected-plan',plan.archive.sha256],f.args);assert.equal(result.upgraded,true);
+  assert.equal(result.runtime_started,false);assert.equal(fs.readFileSync(f.stop,'utf8'),f.original.stop);
+  const installed=JSON.parse(fs.readFileSync(f.installationFile));
+  assert.equal(installed.source,f.next);assert.deepEqual(installed.migration,JSON.parse(f.migrated.installation).migration);
+  const originalMigration=installed.migration,originalArchive=fs.readFileSync(originalMigration.file,'utf8');
+  const {serviceCutoff,installedContext}=await import(pathToFileURL(path.join(f.next,'line-service/cutoff.mjs')).href);
+  assert.equal(serviceCutoff(loadEvents(f.org).events,{repo:f.cwd,org:f.org,identity:f.identity}).seq,f.migrated.events.find(e=>e.type==='line-service.cutover').seq);
+  assert.equal(installedContext(f.cwd,f.org).installation.source,f.next);
+  assert.equal(f.main([...f.argv,'--expected-plan',plan.archive.sha256],f.args).existing,true);
+  assert.equal(loadEvents(f.org).events.filter(e=>e.type==='line-service.runtime-upgraded').length,1);
+  assert.throws(()=>f.main([...f.argv,'--expected-plan','a'.repeat(64)],f.args),/exact dry-run/);
+  assert.equal(f.main(['restart','--repo',f.cwd,'--org',f.org],f.args).restarted,true);
+  const {createLineService}=await import(pathToFileURL(path.join(f.next,'line-service/line-service.mjs')).href);
+  const service=createLineService({repo:f.cwd,org:f.org,to:'fixture-supervisor',runtimeHome:f.installationHome,env:{...f.env,HERDR_ENV:'',HERDR_PANE_ID:''},haltAfter:100,
+    command:()=>({status:0,stdout:'{"created":[]}'}),capacity:()=>({count:0,cap:2})});
+  assert.equal(service.pass().result,'pass-complete');
+  const audit=fs.readFileSync(path.join(f.directory,'passes.jsonl'),'utf8').trim().split('\n').map(JSON.parse);
+  assert.equal(audit.find(e=>e.action==='pass-start').source_head,'2'.repeat(40));
+  f.main(['stop','--repo',f.cwd,'--org',f.org],f.args);f.pin('compatible');
+  const rollback=['upgrade','--repo',f.cwd,'--org',f.org,'--id','fixture-rollback','--from-root',f.next,'--target-root',f.bundle,'--rollback'];
+  const back=f.main([...rollback,'--dry-run'],f.args);
+  assert.equal(f.main([...rollback,'--expected-plan',back.archive.sha256],f.args).direction,'rollback');
+  assert.equal(fs.readFileSync(f.installationFile,'utf8'),f.migrated.installation);
+  assert.equal(fs.readFileSync(f.file,'utf8'),f.migrated.plist);assert.equal(fs.readFileSync(originalMigration.file,'utf8'),originalArchive);
+  assert.deepEqual(loadEvents(f.org).events.filter(e=>['line-service.cutover','line-service.phase0','line-service.runtime-migrated'].includes(e.type)),f.migrated.events);
+  const {main:restart}=await f.module('line-service/launchd.mjs');
+  assert.equal(restart(['restart','--repo',f.cwd,'--org',f.org],f.args).restarted,true);
+  assert.equal(fs.readFileSync(path.join(f.org,'dispatch/retained.json'),'utf8'),f.original.jobs);
+  assert.equal(fs.readFileSync(path.join(f.directory,'effects.json'),'utf8'),f.original.effects);
+});
+
+test('upgrade refuses foreign owners, mismatched roots and records, STOP/HOLD, live locks, loaded service and changed native CAS',async t=>{
+  const f=await successor(t),before=retained(f),plan=f.plan();
+  const apply=extra=>f.main([...f.argv,'--expected-plan',plan.archive.sha256],{...f.args,...extra});
+  assert.throws(()=>apply({env:{...f.args.env,CODEX_THREAD_ID:'foreign-session'}}),/native caller/);
+  assert.throws(()=>f.main([...f.argv,'--dry-run','--org',f.scratch],f.args),/record differs/);
+  assert.throws(()=>f.main([...f.argv,'--dry-run','--from-root',f.next],f.args),/different current/);
+  f.setLoaded(true);assert.throws(()=>apply(),/remains loaded/);f.setLoaded(false);
+  for(const name of ['STOP','HOLD']){
+    const file=path.join(f.cwd,'.lane/supervisor',name);fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,'keep');
+    assert.throws(()=>apply(),/STOP\/HOLD/);fs.unlinkSync(file);
+  }
+  for(const file of [path.join(f.directory,'pass.lock'),path.join(f.directory,'control.lock'),path.join(f.identity,'lane-promote.lock')]){
+    const release=noticeLock(file,{recover:false});try{assert.throws(()=>apply(),/lock/);assert.throws(()=>f.plan(),/lock/);}finally{release();}
+  }
+  assert.throws(()=>f.main([...f.argv,'--dry-run','--rollback'],f.args),/previous accepted root/);
+  let prints=0;
+  const command=(exe,args,options)=>{const r=f.args.command(exe,args,options);if(args[0]==='print'&&++prints===2)fs.appendFileSync(f.file,'\n');return r;};
+  assert.throws(()=>apply({command}),/CAS changed/);fs.writeFileSync(f.file,before.plist);
+  assert.deepEqual(retained(f),before);assert.equal(fs.existsSync(path.join(f.directory,'upgrades')),false);
+  assert.equal(f.calls.some(c=>['bootstrap','bootout'].includes(c.args[0])),false);
+});
+
+test('upgrade requires sealed READY payloads, an exact target pin and the unchanged dry-run plan',async t=>{
+  const f=await successor(t),before=retained(f),plan=f.plan(),manifestFile=path.join(f.next,'.release-manifest.json'),manifestBytes=fs.readFileSync(manifestFile);
+  const manifest=JSON.parse(manifestBytes);manifest.acceptance.ready=false;fs.writeFileSync(manifestFile,JSON.stringify(manifest));
+  assert.throws(()=>f.plan(),/acceptance/);fs.writeFileSync(manifestFile,manifestBytes);
+  const payload=path.join(f.next,'line-service/line-service.mjs'),payloadBytes=fs.readFileSync(payload);fs.appendFileSync(payload,'\n// unsealed change\n');
+  assert.throws(()=>f.plan(),/incomplete release/);fs.writeFileSync(payload,payloadBytes);
+  f.pin('compatible');assert.throws(()=>f.plan(),/accepted project pin/);f.pin('successor');
+  assert.throws(()=>f.main([...f.argv,'--expected-plan',plan.archive.sha256],f.args),/plan changed/);
+  assert.throws(()=>f.main(f.argv,f.args),/expected-plan/);
+  assert.deepEqual(retained(f),before);
+});
+
+test('partial upgrades keep STOP and immutable UNKNOWN intent and refuse both ids and restart at every write boundary',async t=>{
+  for(const point of ['intent','plist','installation']){
+    const f=await successor(t),{upgradeRuntime}=await import(pathToFileURL(path.join(f.next,'line-service/upgrade-runtime.mjs')).href),plan=f.plan();
+    assert.throws(()=>upgradeRuntime({...f.args,id:'fixture-upgrade',fromRoot:f.bundle,targetRoot:f.next,expectedPlan:plan.archive.sha256,
+      fault:phase=>{if(phase===point)throw Error('lost reply at '+point);}}),/lost reply/);
+    assert.equal(fs.readFileSync(f.stop,'utf8'),f.original.stop);
+    assert.equal(loadEvents(f.org).events.filter(e=>e.type==='line-service.runtime-upgraded').length,0);
+    for(const id of ['fixture-upgrade','different-id'])assert.throws(()=>f.main([...f.argv,'--id',id,'--dry-run'],f.args),/UNKNOWN runtime upgrade/);
+    assert.throws(()=>f.main(['restart','--repo',f.cwd,'--org',f.org],f.args),/UNKNOWN runtime upgrade|cutover binding/);
+    assert.equal(f.calls.some(c=>c.args[0]==='bootstrap'),false);
+  }
+});
+
+test('partial rollback cannot expose a legacy-readable installation before its durable event',async t=>{
+  for(const point of ['plist','record']){
+    const f=await successor(t);f.upgrade();f.pin('compatible');
+    const {upgradeRuntime}=await import(pathToFileURL(path.join(f.next,'line-service/upgrade-runtime.mjs')).href);
+    const args={...f.args,id:'rollback-interrupted',fromRoot:f.next,targetRoot:f.bundle,rollback:true};
+    const plan=upgradeRuntime({...args,dryRun:true});
+    assert.throws(()=>upgradeRuntime({...args,expectedPlan:plan.archive.sha256,fault:phase=>{if(phase===point)throw Error('interrupted rollback');}}),/interrupted rollback/);
+    assert.equal(JSON.parse(fs.readFileSync(f.installationFile)).source,f.next);
+    assert.ok(fs.existsSync(f.stop));
+    const {main:old}=await f.module('line-service/launchd.mjs');
+    assert.throws(()=>old(['restart','--repo',f.cwd,'--org',f.org],f.args),/cutover binding/);
+    assert.throws(()=>upgradeRuntime({...args,dryRun:true}),/UNKNOWN runtime upgrade|drifted/);
+    assert.equal(f.calls.some(c=>c.args[0]==='bootstrap'),false);
+  }
+});
+
+test('successive accepted upgrades validate the whole archive chain and reject changed archives and saved bindings',async t=>{
+  const f=await successor(t);const first=f.upgrade();
+  const third=f.release('third',{commit:'3'.repeat(40)});f.pin('third');
+  const {main}=await import(pathToFileURL(path.join(third,'line-service/launchd.mjs')).href);
+  const argv=['upgrade','--repo',f.cwd,'--org',f.org,'--id','third-upgrade','--from-root',f.next,'--target-root',third];
+  const plan=main([...argv,'--dry-run'],f.args);main([...argv,'--expected-plan',plan.archive.sha256],f.args);
+  const {installedContext}=await import(pathToFileURL(path.join(third,'line-service/cutoff.mjs')).href);
+  assert.equal(installedContext(f.cwd,f.org).installation.source,third);
+  const bytes=fs.readFileSync(first.archive.file);fs.chmodSync(first.archive.file,0o644);fs.appendFileSync(first.archive.file,'\n');
+  assert.throws(()=>installedContext(f.cwd,f.org),/archive changed/);fs.writeFileSync(first.archive.file,bytes);
+  const installation=fs.readFileSync(f.installationFile,'utf8');fs.writeFileSync(f.installationFile,installation.replace('2026-10-27','2026-10-28'));
+  assert.throws(()=>installedContext(f.cwd,f.org),/drifted/);
 });

@@ -212,6 +212,75 @@ test/line-service-runtime.test.mjs` and the existing `launchd uses` control in
 `test/line-service.test.mjs`, through one lane check on clean committed source.
 No full/default suite or reviewer suite is selected here.
 
+### Upgrade an already migrated service, or roll back
+
+`upgrade` hands the controller between two explicit immutable release roots.
+Both roots must be fully sealed and READY in the same installation home, and
+the project's supported pin must already select the target. The command must
+execute from one of those roots with this upgrade support. It requires the
+owning canonical native supervisor, clean canonical main, the service's own
+STOP and an unloaded job; use the existing `stop` command first. Project
+STOP/HOLD and occupied control/pass/promotion locks refuse without recovery.
+This command never changes a pin or starts a service.
+
+After the release coordinator has qualified and installed the successor, the
+project owner changes its pin through the supported pin path, then runs:
+
+```sh
+NODE=/Users/rewt/.nvm/versions/node/v20.19.4/bin/node
+CURRENT_ROOT=/ABS/installed/releases/CURRENT_ACCEPTED_RELEASE
+TARGET_ROOT=/ABS/installed/releases/QUALIFIED_SUCCESSOR_WITH_UPGRADE_SUPPORT
+"$NODE" "$TARGET_ROOT/line-service/launchd.mjs" stop --repo /OWN/CANONICAL --org /OWN/RECORD
+"$NODE" "$TARGET_ROOT/line-service/launchd.mjs" upgrade --repo /OWN/CANONICAL --org /OWN/RECORD --id release-upgrade-STABLE_ID --from-root "$CURRENT_ROOT" --target-root "$TARGET_ROOT" --dry-run
+PLAN_SHA256=EXACT_64_CHARACTER_DRY_RUN_DIGEST
+"$NODE" "$TARGET_ROOT/line-service/launchd.mjs" upgrade --repo /OWN/CANONICAL --org /OWN/RECORD --id release-upgrade-STABLE_ID --from-root "$CURRENT_ROOT" --target-root "$TARGET_ROOT" --expected-plan "$PLAN_SHA256"
+"$NODE" "$TARGET_ROOT/line-service/launchd.mjs" restart --repo /OWN/CANONICAL --org /OWN/RECORD
+"$NODE" "$TARGET_ROOT/line-service/launchd.mjs" status --repo /OWN/CANONICAL --org /OWN/RECORD
+```
+
+The dry-run is read-only. Apply rechecks native identity, payloads, pin, STOP,
+record and saved bytes under the existing control/pass/promotion/record locks.
+It fsyncs a new `upgrades/ID.json` intent before replacing the controller path
+and installation source/runtime, then appends `line-service.runtime-upgraded`
+with old/new roots, direction, previous event sequence and archive digest.
+The original cutover, migration event and migration archive remain untouched;
+the original cutoff still bounds review debt. Every later start validates the
+whole handoff chain. Saved jobs, watchers, transport, Node, claims and UNKNOWN
+effects retain their existing bindings. Older folds ignore the new event type.
+An orphan intent, changed archive, partial write or mismatched completion
+refuses replacement under both the same and another ID. Inspect the original
+attempt; do not replay a native refusal or restore files by hand. An exact
+completed latest-ID retry only returns its completion and never restarts.
+
+To roll back, stop through the existing path and select the previous accepted
+release through the supported pin path. Use the successor's qualified tool
+again with a new stable ID, reversed roots and `--rollback` on both dry-run and
+apply:
+
+```sh
+"$NODE" "$TARGET_ROOT/line-service/launchd.mjs" stop --repo /OWN/CANONICAL --org /OWN/RECORD
+# The project owner selects CURRENT_ROOT using its supported pin command.
+"$NODE" "$TARGET_ROOT/line-service/launchd.mjs" upgrade --repo /OWN/CANONICAL --org /OWN/RECORD --id release-rollback-STABLE_ID --from-root "$TARGET_ROOT" --target-root "$CURRENT_ROOT" --rollback --dry-run
+ROLLBACK_PLAN_SHA256=EXACT_64_CHARACTER_DRY_RUN_DIGEST
+"$NODE" "$TARGET_ROOT/line-service/launchd.mjs" upgrade --repo /OWN/CANONICAL --org /OWN/RECORD --id release-rollback-STABLE_ID --from-root "$TARGET_ROOT" --target-root "$CURRENT_ROOT" --rollback --expected-plan "$ROLLBACK_PLAN_SHA256"
+"$NODE" "$CURRENT_ROOT/line-service/launchd.mjs" restart --repo /OWN/CANONICAL --org /OWN/RECORD
+"$NODE" "$CURRENT_ROOT/line-service/launchd.mjs" status --repo /OWN/CANONICAL --org /OWN/RECORD
+```
+
+Rollback accepts only the previous root in the latest completed handoff and
+restores that installation/plist snapshot exactly. It records the rollback
+before restoring the legacy-readable installation, so an interruption cannot
+start an old runtime with an unrecorded handoff. The archives and both events
+remain available. This also supports returning to the first migrated release,
+which predates upgrade support. Qualification and live acceptance remain the
+release coordinator's obligation; fixture bootstrap/pass controls do not
+authorize a real project upgrade or count as live acceptance.
+
+Focused upgrade selection: the runtime migration/upgrade controls in
+`test/line-service-runtime.test.mjs`, `producer cutoff` in
+`test/line-service-producer.test.mjs`, and `launchd uses` in
+`test/line-service.test.mjs`, through one lane check using the bounded runner.
+
 The original service cutover remains immutable. Before Phase1 activation, the
 owning native supervisor records its designated intended pre-Phase0 SOURCE
 boundary with the existing stopped-service helper:

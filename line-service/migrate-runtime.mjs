@@ -28,7 +28,7 @@ export function inspectService(target,repo,command=spawnSync) {
 
 // Decode through the native plist reader, then validate the complete supported
 // job schema. Regeneration changes only argv[1], retaining all other bindings.
-function replacementPlist(c,installation,command) {
+export function replacementPlist(c,installation,command,source=runtimeRoot) {
   const r=command('/usr/bin/plutil',['-convert','json','-o','-','--',installation.file],{cwd:c.repo,encoding:'utf8',maxBuffer:4*1024*1024});
   if(r.error||r.status!==0)throw Error((r.stderr||r.error?.message||'saved plist could not be read').trim());
   const p=JSON.parse(r.stdout),a=p.ProgramArguments,e=p.EnvironmentVariables,label=`dev.herdr.line.${path.basename(c.directory)}`;
@@ -40,7 +40,7 @@ function replacementPlist(c,installation,command) {
     StandardOutPath:path.join(c.directory,'launchd.log'),StandardErrorPath:path.join(c.directory,'launchd.error.log')};
   if(!same(p,expected))throw Error('saved plist bindings drifted; no replacement authorized');
   return launchPlist({label,repo:c.repo,org:c.org,to:a[8],herdr:a[10],socket:e.HERDR_SOCKET_PATH,directory:c.directory,interval:p.StartInterval,
-    node:installation.node,environment:e,source:runtimeRoot});
+    node:installation.node,environment:e,source});
 }
 
 export function migrateRuntime({repo,org,id,dryRun=false,expectedPlan,cwd=process.cwd(),env=process.env,command=spawnSync,call,home,fault=()=>{}}={}) {

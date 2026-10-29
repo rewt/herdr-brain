@@ -42,8 +42,8 @@ export function serviceCutoff(events,{repo,org,identity}) {
   if(found.length!==1)reject('durable service cutover is missing/ambiguous; historical review remains held');
   const e=found[0];
   if(e.repo!==repo||!Number.isSafeInteger(e.seq)||e.seq<1||!e.id||!/^[a-f0-9]{40}(?:[a-f0-9]{24})?$/.test(e.canonical_head??'')||!e.main)reject('service cutover binding is UNKNOWN');
-  if(e.source!==developmentRoot){
-    const directory=lineDirectory(org,identity),installation=regularJSON(path.join(directory,'installation.json'));
+  const directory=lineDirectory(org,identity),installation=regularJSON(path.join(directory,'installation.json'));
+  if(e.source!==developmentRoot||installation?.migration||events.some(row=>row.type==='line-service.runtime-upgraded'&&row.project===identity&&row.org===org)){
     if(!installation||installation.source!==developmentRoot||installation.repo!==repo||installation.org!==org)reject('service cutover binding is UNKNOWN');
     migratedCutover(events,{repo,org,identity,directory,installation,cutover:e});
   }

@@ -10,6 +10,7 @@ import { parseArgs, isMain } from '../lib/cli-help.mjs';
 import { sourceRoot, serviceDirectory } from './line-service.mjs';
 import {serviceSource} from './runtime.mjs';
 import {migrateRuntime} from './migrate-runtime.mjs';
+import {upgradeRuntime} from './upgrade-runtime.mjs';
 import {nativeSender} from '../messages/operator-inbox.mjs';
 import {noticeLock} from '../supervisor/notice-lock.mjs';
 import {acquireLock} from '../lanes/promotion-lock.mjs';
@@ -19,15 +20,22 @@ export {launchPlist} from './plist.mjs';
 
 export function main(argv = process.argv.slice(2), { command = spawnSync,call:nativeCall,home,cwd=process.cwd(),env=process.env } = {}) {
   const { positionals, values: v } = parseArgs({ args: argv, allowPositionals: true,
-    usage: 'launchd.mjs install|migrate|restart|status|stop|revert --repo CANONICAL [--org RECORD --id MIGRATION --dry-run --expected-plan SHA256 --to SUPERVISOR --herdr ABS_PATH --socket ABS_PATH --interval 30 --commit SHA]', options: {
+    usage: 'launchd.mjs install|migrate|upgrade|restart|status|stop|revert --repo CANONICAL [--org RECORD --id HANDOFF --from-root CURRENT --target-root TARGET --rollback --dry-run --expected-plan SHA256 --to SUPERVISOR --herdr ABS_PATH --socket ABS_PATH --interval 30 --commit SHA]', options: {
       repo: { type: 'string' }, org: { type: 'string' }, to: { type: 'string' }, herdr: { type: 'string' }, socket: { type: 'string' },
       interval: { type: 'string' }, commit: { type: 'string', multiple: true },
       id:{type:'string'},'dry-run':{type:'boolean'},
       'expected-plan':{type:'string'},
+      'from-root':{type:'string'},'target-root':{type:'string'},rollback:{type:'boolean'},
     } });
   const action = positionals[0];
-  if (positionals.length !== 1 || !['install','migrate', 'restart', 'status', 'stop', 'revert'].includes(action) || !v.repo) throw Error('name install|migrate|restart|status|stop|revert and --repo CANONICAL');
-  if(action!=='migrate'&&(v.id||v['dry-run']||v['expected-plan']))throw Error('--id/--dry-run/--expected-plan apply only to migrate');
+  if (positionals.length !== 1 || !['install','migrate','upgrade', 'restart', 'status', 'stop', 'revert'].includes(action) || !v.repo) throw Error('name install|migrate|upgrade|restart|status|stop|revert and --repo CANONICAL');
+  if(!['migrate','upgrade'].includes(action)&&(v.id||v['dry-run']||v['expected-plan']))throw Error('--id/--dry-run/--expected-plan apply only to migrate/upgrade');
+  if(action!=='upgrade'&&(v['from-root']||v['target-root']||v.rollback))throw Error('--from-root/--target-root/--rollback apply only to upgrade');
+  if(action==='upgrade'){
+    if(v.to||v.herdr||v.socket||v.interval||v.commit)throw Error('upgrade preserves saved bindings; no install/revert options');
+    return upgradeRuntime({repo:v.repo,org:v.org??findOrgDir({cwd:v.repo,env:{...env,ORG_DIR:''}}),id:v.id,fromRoot:v['from-root'],targetRoot:v['target-root'],rollback:v.rollback,
+      dryRun:v['dry-run'],expectedPlan:v['expected-plan'],command,call:nativeCall,home,cwd,env});
+  }
   if(action==='migrate'){
     if(v.to||v.herdr||v.socket||v.interval||v.commit)throw Error('migration preserves saved bindings; no install/revert options');
     return migrateRuntime({repo:v.repo,org:v.org??findOrgDir({cwd:v.repo,env:{...env,ORG_DIR:''}}),id:v.id,dryRun:v['dry-run'],expectedPlan:v['expected-plan'],command,call:nativeCall,home,cwd,env});

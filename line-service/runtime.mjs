@@ -6,7 +6,7 @@ import {createHash} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import {gitProject} from '../lib/project.mjs';
 import {bundleRelease,projectPin,selectRelease,checkRelease,releaseHome,requireReadyAcceptance} from '../lib/releases.mjs';
-import {readPlainFile} from '../lib/files.mjs';
+import {readPlainFile,plainDirectory} from '../lib/files.mjs';
 
 export const runtimeRoot=fs.realpathSync(fileURLToPath(new URL('../',import.meta.url)));
 export const digest=bytes=>createHash('sha256').update(bytes).digest('hex');
@@ -30,21 +30,53 @@ export function serviceSource(repo,options={}) {
   return bundle;
 }
 
-// A migrated cutover is an immutable old boundary plus one completed handoff,
-// never a replacement boundary. Partial filesystem writes without that event
-// remain UNKNOWN and cannot start a service.
-export function migratedCutover(events,{repo,org,identity,directory,installation,cutover,root=runtimeRoot}) {
+// Resolve the immutable migration followed by completed release handoffs. The
+// original boundary and migration stay intact, including across a rollback.
+export function runtimeHistory(events,{repo,org,identity,directory,installation,cutover,root=runtimeRoot}) {
   const rows=events.filter(e=>e.type==='line-service.runtime-migrated'&&e.project===identity&&e.org===org);
   if(rows.length!==1)throw Error('service runtime migration is missing/ambiguous');
   const event=rows[0],ref=installation.migration;
-  if(event.repo!==repo||event.source!==root||event.previous_source!==cutover.source||event.cutover_seq!==cutover.seq||
+  if(event.repo!==repo||event.previous_source!==cutover.source||event.cutover_seq!==cutover.seq||
       event.cutover_id!==cutover.id||!ref||ref.id!==event.id||ref.file!==event.archive?.file||ref.sha256!==event.archive?.sha256||
       event.seq<=cutover.seq||!/^[-a-zA-Z0-9_]{1,80}$/.test(event.id??'')||ref.file!==path.join(directory,'migrations',event.id+'.json'))throw Error('service runtime migration binding differs');
   const bytes=readPlainFile(ref.file),archive=JSON.parse(bytes);
   if(digest(bytes)!==ref.sha256||archive.schema!=='line-runtime-migration/v1'||archive.id!==event.id||archive.repo!==repo||archive.org!==org||archive.identity!==identity||
-      archive.source!==root||archive.previous_source!==cutover.source||JSON.stringify(archive.cutover)!==JSON.stringify(cutover)||
-      JSON.stringify(archive.runtime)!==JSON.stringify(installation.runtime)||JSON.stringify(event.runtime)!==JSON.stringify(installation.runtime))throw Error('service runtime migration archive changed');
-  const {migration,...saved}=installation;
-  if(JSON.stringify(saved)!==archive.after.installation||digest(readPlainFile(path.join(directory,'service.plist')))!==digest(archive.after.plist))throw Error('migrated installation/plist drifted');
+      archive.source!==event.source||archive.previous_source!==cutover.source||JSON.stringify(archive.cutover)!==JSON.stringify(cutover)||
+      JSON.stringify(archive.runtime)!==JSON.stringify(event.runtime))throw Error('service runtime migration archive changed');
+  let saved={...JSON.parse(archive.after.installation),migration:ref},plist=archive.after.plist,last=event,previous;
+  if(saved.source!==event.source||JSON.stringify(saved.runtime)!==JSON.stringify(event.runtime))throw Error('service runtime migration archive changed');
+  const upgrades=events.filter(e=>e.type==='line-service.runtime-upgraded'&&e.project===identity&&e.org===org);
+  const upgradeDirectory=path.join(directory,'upgrades');
+  if(fs.existsSync(upgradeDirectory)){
+    plainDirectory(upgradeDirectory,{create:false});
+    // An intent without its completion is UNKNOWN even if no files changed.
+    const files=fs.readdirSync(upgradeDirectory).sort();
+    if(JSON.stringify(files)!==JSON.stringify(upgrades.map(e=>e.id+'.json').sort()))throw Error('existing/UNKNOWN runtime upgrade is retained; no replay or replacement');
+  }else if(upgrades.length)throw Error('service runtime upgrade archive is missing');
+  const ids=new Set();
+  for(const next of upgrades){
+    const a=next.archive;
+    if(!/^[-a-zA-Z0-9_]{1,80}$/.test(next.id??'')||ids.has(next.id)||next.repo!==repo||next.previous_seq!==last.seq||next.seq<=last.seq||
+        next.previous_source!==saved.source||!path.isAbsolute(next.source??'')||next.source===saved.source||
+        !['upgrade','rollback'].includes(next.direction)||a?.file!==path.join(upgradeDirectory,next.id+'.json'))throw Error('service runtime upgrade binding differs');
+    ids.add(next.id);
+    const bytes=readPlainFile(a.file),intent=JSON.parse(bytes);
+    if(digest(bytes)!==a.sha256||intent.schema!=='line-runtime-upgrade/v1'||intent.id!==next.id||intent.repo!==repo||intent.org!==org||intent.identity!==identity||
+        intent.source!==next.source||intent.previous_source!==saved.source||intent.previous_seq!==last.seq||intent.direction!==next.direction||
+        JSON.stringify(intent.runtime)!==JSON.stringify(next.runtime)||intent.before.installation!==JSON.stringify(saved)+'\n'||intent.before.plist!==plist)throw Error('service runtime upgrade archive changed');
+    if(next.direction==='rollback'&&(last.type!=='line-service.runtime-upgraded'||next.source!==last.previous_source||!previous))throw Error('runtime rollback does not name the previous accepted root');
+    const after=next.direction==='rollback'?previous.installation:{...saved,source:next.source,runtime:next.runtime};
+    if(after.source!==next.source||JSON.stringify(after.runtime)!==JSON.stringify(next.runtime))throw Error('service runtime upgrade target differs');
+    if(intent.after.installation!==JSON.stringify(after))throw Error('service runtime upgrade installation differs');
+    if(next.direction==='rollback'&&intent.after.plist!==previous.plist)throw Error('service runtime rollback plist differs');
+    previous={installation:saved,plist};
+    saved=next.direction==='rollback'?after:{...after,upgrade:{id:next.id,...a}};plist=intent.after.plist;last=next;
+  }
+  if(saved.source!==root||JSON.stringify(saved)!==JSON.stringify(installation)||digest(readPlainFile(path.join(directory,'service.plist')))!==digest(plist))throw Error('migrated installation/plist drifted');
+  return {last,installation:saved,plist,previous};
+}
+export function migratedCutover(events,options) {
+  runtimeHistory(events,options);
+  const {cutover}=options;
   return cutover;
 }

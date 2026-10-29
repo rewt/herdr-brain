@@ -1137,8 +1137,9 @@ test('phase1 pending pre-effect closeout source handoff continues its original k
   assert.equal(successors.length,1,'only one fresh successor runs inside the original handoff allowance');
 });
 
-test('closeout respects the pass budget and retains its finite ceiling',t=>{
-  for(const [passBudgetMs,budgetMs]of [[1000,1000],[180000,180000],[480000,180000],[undefined,180000]]){
+test('closeout has a viable finite allowance independent of the general pass budget',t=>{
+  for(const passBudgetMs of [1000,180000,480000,undefined]){
+    const budgetMs=720000;
     const f=fixture(t),policy=JSON.parse(fs.readFileSync(path.join(f.cwd,'.lane.json')));
     policy.retirement={closeout_queue:true};fs.writeFileSync(path.join(f.cwd,'.lane.json'),JSON.stringify(policy));
     const added=transact(f.org,events=>bindCloseoutSources({cwd:f.cwd,org:f.org,events,env:f.env,mutation:{add:[{type:'item.closed',id:'ENG-1',as:'done',completed_run:'R-1'}]}})).added;

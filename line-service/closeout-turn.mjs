@@ -16,11 +16,13 @@ import {closeoutNextStage,closeoutWait,closeoutWaitState,unresolvedGitRemoval} f
 import {recordCloseoutTurn} from './closeout-measurement.mjs';
 import {missingCloseoutBinding} from '../lib/closeout-facts.mjs';
 import {reconcileCloseoutBacklog} from '../lib/closeout-backlog.mjs';
+import {vacantAllocation} from '../lib/closeout-vacancy.mjs';
 
 export const closeoutServiceDirectory=(org,common)=>path.join(org,'line-service',createHash('sha256').update(JSON.stringify(common)).digest('hex').slice(0,20));
-// Includes the existing inventory-sized Git removal allowance (often >60s),
-// native exit and fresh preservation/identity reads. Still one finite owner.
-export const CLOSEOUT_TURN_BUDGET_MS=180000;
+// Git removal alone may need its existing 600s inventory-sized allowance.
+// Reserve another 120s for native exit, preservation and fresh guards. This
+// finite role has its own allowance, independent of a general review pass.
+export const CLOSEOUT_TURN_BUDGET_MS=720000;
 export const CLOSEOUT_MIN_STEP_BUDGET_MS=120000;
 export function runCloseoutTurn(options) {
   const clock=options.clock??(()=>performance.now()),now=options.now??(()=>Date.now()),started=clock();
@@ -103,7 +105,7 @@ function closeoutTurn({project,org,cli,guard,env=process.env,maxSteps=8,budgetMs
       if(missing.length>=maxSteps)break;
       const runId=source.type==='report.ingested'?source.run:source.type==='run.abandoned'?(source.run??source.id):source.type==='item.closed'?source.completed_run:null;
       const run=observed.state.runs.get(runId);
-      if(!run||run.meta?.dispatch_project&&run.meta.dispatch_project!==project.identity||boundRuns.has(runId)||kept.has(JSON.stringify([runId,{seq:source.seq,type:source.type}])))continue;
+      if(!run||run.meta?.dispatch_project&&run.meta.dispatch_project!==project.identity||vacantAllocation(run,observed.events,project.identity)||boundRuns.has(runId)||kept.has(JSON.stringify([runId,{seq:source.seq,type:source.type}])))continue;
       missing.push(missingCloseoutBinding({project,org,source,run,signal:source.type==='item.closed'?'landed':'ready',events:observed.events}));
     }
     if(missing.length)planTransaction(org,current=>({add:missing.filter(row=>!current.some(e=>e.type===row.type&&e.key===row.key&&e.identity===row.identity))}),{actor:'finite missing-binding observation',replaySafe:true});
@@ -113,7 +115,7 @@ function closeoutTurn({project,org,cli,guard,env=process.env,maxSteps=8,budgetMs
       if(expired()||!lineServiceOwnsCleanup(project,org))return;
       refreshed=true;
       try{guard();cli('supervisor/closeout.mjs',['refresh','--repo',project.canonical,'--org',org,
-        '--deadline',String(Math.floor(now()+Math.min(15000,budgetMs-(clock()-started))))]);}
+        '--deadline',String(Math.floor(now()+Math.min(60000,budgetMs-(clock()-started))))]);}
       catch(error){if(error.code==='CLOSEOUT_CODE_CHANGED')throw error;errors.push({stage:'refresh',reason:error.message});}
     };
     // Periodic priority also covers turns whose effects consume every second.

@@ -14,6 +14,7 @@ import { captureProductCheckout } from '../lib/product-files.mjs';
 import { tierFiles } from './helpers/tier.mjs';
 import {createHash} from 'node:crypto';
 import {haltObservation} from '../line-service/halt-repair.mjs';
+import {dispatchInput} from '../line-service/phase1.mjs';
 
 function fixture(t) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'line-service-'))), repo = path.join(root, 'project'), org = path.join(repo, '.org');
@@ -81,7 +82,7 @@ test('a changed supervisor address recovers only the exact zero-effect pre-journ
 test('three completed engineering-idle passes file and immediately dispatch one repair across restart while original native refusal remains retained',t=>{
   const f=fixture(t),item=f.add('Native refusal'),options={haltAfter:3};f.setFailure('native permission refused');
   // Readback precedes admission: the initial refusal is first observed on the
-  // next pass. Its missing-producer decision starts a new idle episode.
+  // next pass. Its retired missing-producer decision is not additional work.
   f.service(options).pass();
   const journal=path.join(f.service().directory,'effects.json'),key=Object.keys(JSON.parse(fs.readFileSync(journal)).actions).find(k=>k.startsWith(`dispatch:${item}:`));
   const original=JSON.parse(fs.readFileSync(journal)).actions[key].receipt;
@@ -92,9 +93,7 @@ test('three completed engineering-idle passes file and immediately dispatch one 
   f.service(options).pass();assert.equal(repairs().length,0);
   assert.equal([...fold(loadEvents(f.org).events).items.values()].filter(i=>i.meta.uncertain_outcome).length,1);
   const readback=JSON.parse(fs.readFileSync(journal)).halt_progress;
-  assert.equal(readback.count,1);assert.notEqual(readback.episode,initial.episode);
-  f.service(options).pass();assert.equal(repairs().length,0);
-  assert.equal(JSON.parse(fs.readFileSync(journal)).halt_progress.count,2);
+  assert.equal(readback.count,2);assert.equal(readback.episode,initial.episode);
   f.service(options).pass();
   assert.equal(repairs().length,1);const repair=repairs()[0];
   assert.equal(f.calls.filter(c=>c.args[1]===item).length,1);
@@ -105,6 +104,43 @@ test('three completed engineering-idle passes file and immediately dispatch one 
   const release=noticeLock(path.join(f.service().directory,'pass.lock'));
   try{assert.throws(()=>f.service(options).pass(),/locked/);}finally{release();}
   assert.equal(repairs().length,1);
+});
+
+test('engineering-idle ignores retired automatic judgments across completed passes and still admits independent engineering',t=>{
+  const f=fixture(t);
+  transact(f.org,()=>({add:Array.from({length:12},(_,n)=>({type:'item.added',id:`DEC-${n+1}`,kind:'work',role:'decision',title:'Retained outcome',
+    meta:{queue_selected:true,route:'unblock',...(n===11?{backlog_batch:1}:{uncertain_outcome:{check:{key:`${n===10?'dispatch':'review'}:retained-${n}`}}})}}))}));
+  const original=loadEvents(f.org).events;
+  for(let n=0;n<3;n++)f.service({haltAfter:3}).pass();
+  assert.equal(f.calls.length,0,'no new judgment or recursive repair dispatch');
+  assert.deepEqual(loadEvents(f.org).events,original,'retired READY records and their full history stay intact');
+  const journal=JSON.parse(fs.readFileSync(path.join(f.service().directory,'effects.json')));
+  assert.equal(journal.halt_progress.count,0);assert.deepEqual(journal.actions,{});
+  const observations=fs.readFileSync(path.join(f.service().directory,'passes.jsonl'),'utf8').trim().split('\n').map(JSON.parse).filter(r=>r.action==='engineering-idle-observation');
+  assert.equal(observations.length,3);assert.ok(observations.every(r=>r.observation.ready.length===0));
+  const ready=f.add('Independent engineering');f.service({haltAfter:3}).pass();
+  assert.deepEqual(f.calls.map(c=>c.args[1]),[ready]);
+});
+
+test('engineering-idle keeps only exact saved judgment inputs and rechecks them before repair intent without replay',t=>{
+  const f=fixture(t);
+  transact(f.org,()=>({add:[1,2,3].map(n=>({type:'item.added',id:`DEC-${n}`,kind:'work',role:'decision',title:'Retained judgment',
+    meta:n===3?{}:{queue_selected:true,route:'unblock',uncertain_outcome:{check:{key:`${n===1?'review':'dispatch'}:original`}}}}))}));
+  const events=loadEvents(f.org).events,state=fold(events),identity=gitProject(f.repo).identity;
+  const input=dispatchInput({state,events,item:state.items.get('DEC-1'),org:f.org,identity}),key=`dispatch:DEC-1:${input}`;
+  const original={state:'complete',result:{result:'dispatched'},receipt:{status:0,stdout:'original dispatch',stderr:''}};
+  const actions={[key]:original,'dispatch:DEC-2:stale-input':original};
+  assert.deepEqual(haltObservation({state,events,org:f.org,identity,config:{},actions}).ready,['DEC-1','DEC-3'],'manual decisions remain ordinary work, stale saved inputs do not qualify');
+  // Leave only the exact retained decision eligible so the transactional recheck
+  // must receive the same actions as the observation, including after restart.
+  f.record(['set','DEC-3','meta.hold=true']);
+  const journal=path.join(f.service().directory,'effects.json');fs.writeFileSync(journal,JSON.stringify({identity,org:f.org,actions}));
+  f.service({haltAfter:1}).pass();
+  const repairs=[...fold(loadEvents(f.org).events).items.values()].filter(i=>i.meta.halt_repair===1);
+  assert.equal(repairs.length,1,'exact saved work survives the record-intent recheck');
+  assert.deepEqual(f.calls.map(c=>c.args[1]),[repairs[0].id],'retained judgment is never replayed');
+  const retained=JSON.parse(fs.readFileSync(journal)).actions;
+  assert.deepEqual(retained[key],original);assert.deepEqual(retained['dispatch:DEC-2:stale-input'],original);
 });
 
 test('engineering-idle excludes held ancestry reserved work and unchanged blocked reports while independent work still dispatches',t=>{

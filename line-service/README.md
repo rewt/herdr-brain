@@ -659,8 +659,12 @@ cost from effect command time; they are passive next-real-pass observations.
 After three completed passes with ready non-review work and no productive native
 engineering, the same line files and immediately admits one ordinary halt-repair
 engineer. `HERDR_LINE_HALT_PASSES` sets a positive completed-pass threshold. A
-detached acknowledgement or unrelated review does not reset that count. Native
-engineering progress, an observed productive engineer, or changed ready/hold/
+retired automatic judgment without its exact-input saved dispatch effect is not
+admissible work and does not count toward an idle episode; its record and original
+attempt remain intact. Observation and the repair-intent recheck use admission's
+same judgment policy. A detached acknowledgement or unrelated review does not
+reset that count. Native engineering progress, an observed productive engineer,
+or changed ready/hold/
 routing inputs resets the episode. Counters and full item/report/hold observations
 remain in the diagnostic journal; only the repair intent enters the record. Pending, working,
 held and uncertain repair owners exclude another repair; completion permits a

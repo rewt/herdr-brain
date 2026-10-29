@@ -37,7 +37,7 @@ import {haltObservation,completeHaltPass} from './halt-repair.mjs';
 import {itemLaunchHold} from '../lib/item-launch-hold.mjs';
 import {queuePolicy,queueClass,queueSelected,orderQueue} from './priority-order.mjs';
 import {isDecision,decisionActivation,decisionRoute,decisionBrief,applyDecision,observeDecisionConsequences} from './decisions.mjs';
-import {recordOnlyJudgment} from './decision-policy.mjs';
+import {judgmentDispatchAllowed} from './decision-policy.mjs';
 import {outcomeFailure} from '../lib/uncertain-outcome.mjs';
 import {queueOutcomeDecision,obsoleteOutcomeDecision} from './outcome-decision.mjs';
 import {registerCloseoutWait,closeoutWait,closeoutWaitState,closeoutNextStage} from '../lib/closeout-status.mjs';
@@ -438,7 +438,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         if(!input)continue;
         // A saved request may finish through the original guarded continuation.
         // No new rule-generated review/dispatch or backlog attempt is admitted.
-        if(recordOnlyJudgment(item)&&!effects.actions[`dispatch:${item.id}:${input}`])continue;
+        if(!judgmentDispatchAllowed(item,input,effects.actions))continue;
         if(!admissionLogged){log({action:'admission-stage',preceding_work_ms:precedingWork,preceding_budget_exhausted:precedingWork>=passBudgetMs,work_budget_ms:passBudgetMs});admissionLogged=true;}
         if(roleIs(item,'REV')&&cutoff&&isQueueReview(item)&&!index?.heads.includes(item.meta.review_target?.head)&&!snapshot.events.some(e=>e.type==='review.recovery-completed'&&e.item===item.meta.review_source_item&&e.target?.head===item.meta.review_target?.head)){
           try{sourceGit(repo,['merge-base','--is-ancestor',item.meta.review_target.head,cutoff.canonical_head]);timings.historical_review_skipped++;continue;}catch{/* Unlanded/unknown targets are errors, never historical skips. */}
@@ -520,7 +520,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
           const route=config.routes?.['engineer-xhigh']?'engineer-xhigh':routeFor({role:'engineer',meta:{}},config);
           const completedPass=randomUUID();
           log({action:'engineering-idle-observation',pass:completedPass,observation:observed});
-          const repair=completeHaltPass({repo,org,env:childEnv,pass:completedPass,previous:effects.halt_progress,observation:observed,route,after:haltAfter,audit:path.join(directory,'passes.jsonl'),effects:journal});
+          const repair=completeHaltPass({repo,org,env:childEnv,pass:completedPass,previous:effects.halt_progress,observation:observed,route,after:haltAfter,audit:path.join(directory,'passes.jsonl'),effects:journal,actions:effects.actions});
           log({action:'engineering-idle',...repair});
           effects.halt_progress=repair.progress;save();
           if(repair.dispatch){

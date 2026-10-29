@@ -7,3 +7,9 @@ export function recordOnlyJudgment(item) {
   return typeof key === 'string' &&
     ['review:', 'dispatch:'].some(prefix => key.startsWith(prefix));
 }
+
+// A retained exact-input effect may use its guarded continuation. A READY
+// record alone cannot create new judgment work or justify an idle repair.
+export function judgmentDispatchAllowed(item, input, actions = {}) {
+  return !recordOnlyJudgment(item) || Boolean(actions[`dispatch:${item.id}:${input}`]);
+}

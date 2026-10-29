@@ -65,7 +65,7 @@ test('typed zero-native disposition preserves original evidence and permits one 
 
 test('line reconsiders its remembered fence after disposition, retaining the original observation across restart',t=>{
   const f=fixture(t),commands=[],options={repo:f.repo,org:f.org,to:'fixture-supervisor',env:f.serviceEnv,command:(_exe,args)=>{
-    if(args[0].endsWith('supervisor/closeout.mjs'))return{status:0,stdout:'{"created":[]}',stderr:''};
+    if(args[1]!=='queue-review')return{status:0,stdout:'{"created":[]}',stderr:''};
     commands.push(args);return{status:0,stdout:JSON.stringify(f.queue()),stderr:''};
   }};
   createLineService(options).pass();const file=path.join(f.directory,'effects.json'),before=JSON.parse(fs.readFileSync(file));

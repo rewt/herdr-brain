@@ -316,9 +316,9 @@ export async function drainInbox(file, options = {}) {
         } catch (error) {
           const refused = ['agent_blocked', 'agent_not_found'].includes(error.code);
           reason = `notice ${entry.id}: ${error.code ?? 'UNKNOWN'}: ${error.message}`;
-          if (refused && entry.recipient_role === 'project-supervisor') {
-            // Absence observed before input is pending. A refused input is a
-            // stopped effect: retain its original attempt, never auto-resend it.
+          if (error.code === 'agent_blocked' && entry.recipient_role === 'project-supervisor') {
+            // Missing recipients stay pending even if they vanish at input.
+            // Blocked input is a stopped effect: retain it without auto-resend.
             record(file, { type: 'attempt-error', id: entry.id, error: reason, may_have_delivered: false });
             undeliverable(file, entry, { reason: 'native-refused', native_code: error.code, native_error: reason });
             continue;

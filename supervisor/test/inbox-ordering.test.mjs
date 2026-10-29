@@ -171,13 +171,46 @@ test('supervisor exception CLI retains the source notice after its caller exits 
   assert.match(f.sent()[0][3], /notice-id=R-1:exception:cli$/);
 });
 
-for (const mode of ['refused', 'missing-on-prompt']) test(`supervisor exception ${mode} stops the original input effect without retry or a replacement ID`, async t => {
-  const f = fixture(t); f.write('modes', { A: mode });
+test('supervisor exception missing-on-prompt stays pending and delivers once to the returned quiet binding', async t => {
+  const f = fixture(t), options = { projectSupervisor: true };
+  f.write('modes', { A: 'missing-on-prompt' });
+  f.add('exception', 'A', 'R-1', options);
+  const receipt = await f.drain('exception');
+  assert.equal(receipt.delivered, false); assert.equal(receipt.queued, true);
+  assert.equal(receipt.undeliverable, undefined); assert.equal(f.state('exception'), 'pending');
+  assert.deepEqual(f.sent(), []);
+  assert.equal(f.calls().filter(args => args[1] === 'prompt').length, 1);
+  const rows = () => fs.readFileSync(f.inbox, 'utf8').trim().split('\n').map(JSON.parse);
+  assert.ok(rows().some(e => e.id === 'exception' && e.type === 'retry' &&
+    e.may_have_delivered === false && /agent_not_found/.test(e.error)));
+  assert.ok(rows().some(e => e.id === 'exception' && e.type === 'notified'));
+  f.write('targets', { B: f.target('B') }); f.write('modes', {});
+  f.add('independent', 'B', 'R-1');
+  assert.equal((await f.drain('independent')).delivered, true);
+  assert.equal(f.state('exception'), 'pending');
+  const returned = { ...f.target('A'), pane_id: 'fake:returned', terminal_id: 'new-terminal', agent_session: { value: 'new-session' } };
+  f.write('targets', { A: returned, B: f.target('B') }); f.write('modes', { A: 'typed' });
+  f.add('exception', 'A', 'R-1', options);
+  assert.equal((await f.drain('exception', { waitSeconds: 0 })).queued, true);
+  assert.equal(f.calls().filter(args => args[1] === 'prompt' && args[2] === 'A').length, 1);
+  f.write('modes', {});
+  assert.equal((await f.drain('exception')).delivered, true);
+  assert.deepEqual(f.sent().filter(args => args[2] === 'A').map(args => args[3]), ['exception notice-id=exception']);
+  assert.equal(rows().filter(e => e.id === 'exception' && e.type === 'notice').length, 1);
+  assert.equal(rows().filter(e => e.id === 'exception' && e.type === 'sending').length, 2);
+  assert.ok(rows().filter(e => e.id === 'exception' && e.type === 'sending').at(-1).occupant.includes('new-session'));
+  const bytes = fs.readFileSync(f.inbox, 'utf8');
+  f.add('exception', 'A', 'R-1', options); await f.drain('exception');
+  assert.equal(fs.readFileSync(f.inbox, 'utf8'), bytes);
+});
+
+test('supervisor exception refused stops the original input effect without retry or a replacement ID', async t => {
+  const f = fixture(t); f.write('modes', { A: 'refused' });
   f.add('exception', 'A', 'R-1', { projectSupervisor: true });
   const receipt = await f.drain('exception');
   assert.equal(receipt.delivered, false); assert.equal(receipt.queued, false);
   assert.equal(receipt.undeliverable.reason, 'native-refused');
-  assert.equal(receipt.undeliverable.native_code, mode === 'refused' ? 'agent_blocked' : 'agent_not_found');
+  assert.equal(receipt.undeliverable.native_code, 'agent_blocked');
   assert.deepEqual(f.sent(), []);
   f.write('modes', {}); f.add('exception', 'A', 'R-1', { projectSupervisor: true });
   await f.drain('exception');

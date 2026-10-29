@@ -707,8 +707,10 @@ record identity, ambiguous lookup failures and unknown native status stay held.
 An open continuation sharing the exact native session remains deliverable.
 Lifecycle checks never resolve uncertain attempts or bypass their dependencies.
 
-For `--project-supervisor`, absence observed by lookup before input is pending.
-An actual `agent prompt` refusal (`agent_blocked` or `agent_not_found`) instead
+For `--project-supervisor`, `agent_not_found` stays pending whether observed by
+lookup or by `agent prompt` at input: no input happened, and the existing owner
+can deliver the same notice after resolving the returned quiet binding.
+An actual `agent prompt` refusal (`agent_blocked`) instead
 stops that notice as `undeliverable.reason: native-refused`, retaining the original
 intent and error without automatic retry, a replacement ID or an alternate target.
 A lost/unknown acknowledgement remains uncertain and requires the existing

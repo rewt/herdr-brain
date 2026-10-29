@@ -6,7 +6,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { checkCompatibility, scratchEnvironment } from '../herdr/compat.mjs';
-import { copyProduct } from '../lib/product-files.mjs';
+import { copyProduct, productRoots } from '../lib/product-files.mjs';
 
 const source = fileURLToPath(new URL('../', import.meta.url));
 const cli = path.join(source, 'herdr/compat.mjs');
@@ -42,8 +42,7 @@ test('NEW real writers -> archived OLD own readers without an OLD formats list',
   assert.equal(revision.status, 0, revision.stderr);
   const oldCommit = revision.stdout.trim();
   t.diagnostic(`archived OLD commit ${oldCommit}`);
-  const archive = spawnSync('git', ['archive', oldCommit, 'bin', 'lib', 'lanes', 'discovery', 'herdr', 'housekeeping', 'dispatch', 'watch',
-    'settle', 'promote', 'test-slot', 'verify', 'supervisor', 'brain', 'messages', 'contrib', 'sessions', 'setup', 'logs', 'board', 'line-service', 'package.json', '.nvmrc'],
+  const archive = spawnSync('git', ['archive', oldCommit, ...productRoots],
   { cwd: source, maxBuffer: 64 * 1024 * 1024 });
   assert.equal(archive.status, 0, archive.stderr.toString());
   const unpack = spawnSync('tar', ['-xf', '-', '-C', old], { input: archive.stdout });

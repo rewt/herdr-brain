@@ -186,7 +186,7 @@ function manyAllocations(count){
   return{...f.args,events,inventory:{...f.inventory,folders,branches},historical:[{id:'original',members:[{run:'R-1'}]}],now:100000+count*20000};
 }
 
-for(const type of ['cleanup.bound','item.closed'])test(`late ${type} joins the same allocation without borrowing terminal-source receipts`,()=>{
+for(const type of ['cleanup.bound','item.closed','review.verdict'])test(`late ${type} joins the same allocation without borrowing terminal-source receipts`,()=>{
   const f=fixture(),target=f.report.closeout_targets[0];delete f.report.closeout_targets;
   const bound={seq:7,at:new Date(105500).toISOString(),type,run:'R-1',id:'ENG-1',closeout_targets:[target]};
   f.events.splice(6,0,bound);
@@ -232,6 +232,65 @@ test('declared activation window can pass while all fifty legacy rows and their 
     assert.equal(measureCloseouts(bad).window.green,false,failure);
   }
   assert.ok(measureCloseouts({...args,window:{...args.window,commit:'wrong'}}).failures.includes('measurement-window-invalid'));
+});
+
+test('offline 72-hour window accounts for 100 closeouts with legacy history and injected failures',t=>{
+  const args=manyAllocations(150),after_seq=500,activated=1100000,duration=72*60*60*1000,end=activated+duration,
+    spacing=Math.floor((duration-20000)/(99*60000))*60000;
+  // Fifty pre-activation allocations retain their missing clocks/resources.
+  // Spread the next hundred completions across the entire synthetic window.
+  for(const e of args.events){
+    if(e.seq<=after_seq){
+      if(e.type==='report.available')e.type='legacy.origin-unavailable';
+      if(e.type==='closeout.evaluated')delete e.resources;
+    }else{
+      const allocation=Math.floor((e.seq-1)/10),shift=(allocation-50)*(spacing-20000);
+      e.at=new Date(Date.parse(e.at)+shift).toISOString();
+      if(e.observed_at)e.observed_at=new Date(Date.parse(e.observed_at)+shift).toISOString();
+    }
+  }
+  args.window={id:'offline-72-hours',after_seq,activated_at:new Date(activated).toISOString(),commit:args.source.commit};
+  args.historical=[{id:'claude-research',inventory_complete:false,members:[{run:'R-1'}]}];
+  const allEvents=args.events;let cursor=0,previous=null,doc,samples=0;
+  // Observe each minute from the first completed allocation, including quiet
+  // periods. This tests continuity without waiting or touching a live service.
+  for(let at=activated+10000;;at=Math.min(at+60000,end)){
+    while(cursor<allEvents.length&&Date.parse(allEvents[cursor].at)<=at)cursor++;
+    doc=measureCloseouts({...args,events:allEvents.slice(0,cursor),now:at,previous});samples++;
+    assert.equal(doc.green,true,`synthetic minute ${samples}: ${JSON.stringify(doc.failures)}`);
+    assert.equal(doc.window.green,true);assert.equal(doc.window.accounted,doc.window.denominator);
+    assert.equal(doc.legacy.denominator,50);assert.equal(doc.historical_green,false);
+    assert.ok(doc.historical_failures.includes('historical-inventory-incomplete'));
+    previous={observed_at:doc.observed_at,source:doc.source,cutoff:doc.cutoff,window_declaration:doc.window_declaration};
+    if(at===end)break;
+  }
+  args.now=end;
+  assert.equal(Date.parse(doc.observed_at)-Date.parse(doc.window.activated_at),duration);
+  assert.equal(doc.aggregate.denominator,150);assert.equal(doc.window.denominator,100);assert.equal(doc.window.accounted,100);
+  assert.equal(doc.legacy.row_ids.length,50);assert.equal(cursor,allEvents.length);assert.equal(samples,4321);
+  assert.equal(new Set(doc.cohort.map(r=>r.id)).size,150);
+  for(const clock of ['first_disposition','session_close','folder_removal'])assert.equal(doc.window.latency[clock].unknown,0);
+
+  const retained=structuredClone(args);
+  retained.inventory.agents=[{pane_id:'w1:p1',terminal_id:'term-1',cwd:'/fixture/lane-1'}];
+  retained.inventory.worktrees=[{worktree:'/fixture/lane-1',clean:true}];retained.inventory.folders[0].present=true;
+  retained.inventory.processes=[{pid:42,identity:'birth-42',cwd:'/fixture/lane-2'}];
+  const absolute=measureCloseouts(retained);
+  assert.equal(absolute.window.green,true);assert.equal(absolute.green,false);
+  for(const count of ['open_over_2h','clean_retained','orphan_processes'])assert.equal(absolute.aggregate.counts[count],1);
+
+  for(const failure of ['manual','native','git','process','refusal','exclusion','cadence']){
+    const bad=structuredClone(args);
+    if(failure==='manual')bad.events.push({seq:1501,at:new Date(end).toISOString(),type:'closeout.manual-assistance',run:'R-150',project:args.project.identity});
+    if(['native','git','process'].includes(failure))bad.inventory.coverage[failure]=false;
+    if(failure==='refusal')bad.events.at(-1).condition={kind:'native-refusal'};
+    if(failure==='exclusion')bad.cohort=doc.cohort.slice(0,-1);
+    if(failure==='cadence')bad.previous={...previous,observed_at:new Date(end-60001).toISOString()};
+    const result=measureCloseouts(bad);
+    assert.equal(result.window.green,false,failure);assert.equal(result.green,false,failure);
+    assert.equal(result.window.denominator,100);assert.equal(result.legacy.denominator,50);
+  }
+  t.diagnostic(`offline exposure: ${duration} ms; ${samples} samples; 100 current and 50 legacy allocations; live acceptance UNRUN`);
 });
 
 test('installed payload includes every default historical path and reads all three without an override',async t=>{

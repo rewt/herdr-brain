@@ -57,9 +57,13 @@ Operator envelopes use plain headline, what happened, action and one Details lin
 Only a genuine explicitly reserved pending human question pushes once.
 One operator chat writes authorized requests directly to the record for the owning
 decision/engineering session; answers return through that record. The operator
-chooses which chat stays. Do not send questions to quiet pane w3PD:p4 without
-explicit operator confirmation; keep existing reserved-question delivery, native
-bindings, saved recipients and watchers until that choice is applied by its owner.
+selected Quiet Chat (w3PD:p4) on ENG-933: genuine operator questions only, one
+short message with a recommendation; status, milestones, logs and FYIs stay in
+the record. ENG-939 owns applying that choice through the supported native
+routing path; this instruction does not activate it. The retired brain-chat
+binding is not a delivery fallback. Preserve saved callbacks, watchers and
+original pending, refused or uncertain deliveries; do not replay them or add a
+chat relay.
 Apply [decision routing](DECISION-ROUTING.md); one durable note for a material
 choice, not every command. Other identities execute their own actions.
 

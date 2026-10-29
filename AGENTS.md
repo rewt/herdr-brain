@@ -55,10 +55,13 @@ do not grant authority or replace the guarded project tools.
   Only a genuinely reserved pending human question pushes once; digest is pulled.
   Use [messaging](messages/README.md) for the supported source entry.
 - One operator chat writes requests and authority directly to the record for the
-  owning decision/engineering session. The operator chooses which chat stays;
-  quiet pane w3PD:p4 receives questions only after explicit operator confirmation.
-  Until then preserve existing reserved-question delivery and native bindings;
-  do not add a chat relay or redirect a saved callback.
+  owning decision/engineering session. The operator selected Quiet Chat (w3PD:p4)
+  on ENG-933: genuine operator questions only, one short message with a
+  recommendation; status, milestones, logs and FYIs stay in the record. ENG-939
+  owns applying that choice through the supported native routing path; this
+  instruction does not activate it. The retired brain-chat binding is not a
+  delivery fallback. Preserve saved callbacks, watchers and original pending,
+  refused or uncertain deliveries; do not replay them or add a chat relay.
 - Until standing sessions retire, their owners prepare a short recorded handoff
   around **200K context tokens** and recycle at a verified safe boundary. Include
   active work, decisions, unresolved deliveries, watcher/job owners and next steps.

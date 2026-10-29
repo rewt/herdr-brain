@@ -4,10 +4,13 @@ Replies, status and milestones belong in the owning item/run record as notes or
 the report. Routine notices go to the line and recorded owner through existing
 callbacks, never to a chat. One operator chat writes authorized work directly to
 the record; only genuine pending operator questions use push delivery. The
-operator chooses which chat stays. Until its owner applies that choice, retain
-the existing reserved-question inbox/binding and watchers; never type questions
-into quiet pane w3PD:p4 without explicit operator confirmation. This instruction
-does not change the native inbox adapter described below.
+operator selected Quiet Chat (w3PD:p4) on ENG-933: genuine operator questions only,
+one short message with a recommendation; status, milestones, logs and FYIs stay
+in the record. ENG-939 owns applying that choice through the supported native
+routing path. The native inbox adapter described below still names brain-chat;
+this instruction does not activate the selected route, and the retired binding
+is not a delivery fallback. Preserve saved callbacks, watchers and original
+pending, refused or uncertain deliveries; do not replay them or add a chat relay.
 
 The [operator record inbox](#operator-record-inbox) is a foreground record command
 using the existing native inbox. The supervisor inbox and identity-desk helper

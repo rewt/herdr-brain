@@ -47,11 +47,11 @@ export function main(argv = process.argv.slice(2), {
     else { if (base !== undefined) throw Error('--base may only be supplied once'); base = argv[++i]; }
   }
   const plan = combinedPlan({ cwd, base, extra });
-  output(JSON.stringify({ ...plan, execution: planOnly ? 'unrun-plan' : 'selected-checks' }));
+  output(JSON.stringify({ ...plan, execution: planOnly ? 'unrun-plan' : plan.files.length ? 'selected-checks' : 'unrun-empty' }));
   if (planOnly) return 0;
   if (!plan.files.length) {
     output('No focused tests selected; no tests executed. This is not full coverage or a test PASS.');
-    return 0; // Never pass an empty selection to the full-inventory runner.
+    return 3; // Unrun must not become a green lane receipt or invoke the full inventory.
   }
   assertSource(plan.root, plan.head);
   let status;

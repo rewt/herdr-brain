@@ -70,11 +70,23 @@ test('extra tests must belong to the tracked candidate and unknown flags refuse'
 test('empty and plan-only selections never invoke the runner', t => {
   const f = fixture(t), output = [];
   const options = { cwd: f.cwd, output: text => output.push(text), execute: () => assert.fail('must remain unrun') };
-  assert.equal(main(['--base', f.base], options), 0);
+  assert.equal(main(['--base', f.base], options), 3);
+  assert.equal(JSON.parse(output[0]).execution, 'unrun-empty');
   assert.match(output.at(-1), /no tests executed.*not full coverage or a test PASS/);
   f.write('writer.mjs', 'changed'); f.commit();
   assert.equal(main(['--base', f.base, '--plan'], options), 0);
   assert.equal(JSON.parse(output.at(-1)).execution, 'unrun-plan');
+});
+test('real CLI empty selection exits unrun without producing passing test evidence', t => {
+  const f = fixture(t);
+  const cli = fileURLToPath(new URL('./helpers/combined-checks.mjs', import.meta.url));
+  const result = spawnSync(process.execPath, [cli, '--base', f.base], { cwd: f.cwd, encoding: 'utf8' });
+  assert.equal(result.status, 3, result.stdout + result.stderr);
+  const plan = JSON.parse(result.stdout.split('\n')[0]);
+  assert.equal(plan.execution, 'unrun-empty');
+  assert.deepEqual(plan.files, []);
+  assert.match(result.stdout, /no tests executed.*not full coverage or a test PASS/);
+  assert.doesNotMatch(result.stdout, /TAP version|# tests|All release-tier suites passed/);
 });
 test('real CLI planning captures the combined commit without running tests', t => {
   const f = fixture(t);

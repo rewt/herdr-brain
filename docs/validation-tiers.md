@@ -56,7 +56,11 @@ Execution uses the existing project runner, host ownership and file grouping
 retry or full-tier append. Logs capture base/head/tree, changed paths, selected
 and deferred files, groups and status; `lane check` keeps the command, actual
 exit, Node version and TAP totals in its normal gate/log/shared receipt. A
-plan-only or empty selection is unrun, never a test PASS. A failure stays red;
+plan-only or empty selection is unrun, never a test PASS. An empty execution
+selection emits `execution: "unrun-empty"` and exits 3, so `lane check --cmd`
+records a non-green (red) receipt with no TAP totals; it cannot be reused as
+passing evidence. A `--plan` preview exits 0 and is not a test check.
+A failure stays red;
 the owner fixes it forward and runs only failing, affected or unrun controls.
 Reuse the immutable command/target evidence across unchanged-tree rebases;
 source movement during a check refuses attribution to the new target.

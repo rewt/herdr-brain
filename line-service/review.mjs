@@ -9,14 +9,15 @@ import { fileURLToPath } from 'node:url';
 import { projectPin, selectRelease } from '../lib/releases.mjs';
 import { roleIs } from '../lib/roles.mjs';
 import {reviewResolution,archivedReviewFile,reviewDigest} from './review-resolutions.mjs';
-import {producerGroupKey,queueProducerGroup,sameProducerQueue,capturedReviewCommits} from './review-group.mjs';
+import {producerGroupKey,queueProducerGroup,sameProducerQueue,capturedReviewCommits,sameCapturedTarget} from './review-group.mjs';
 import {canonical} from '../messages/schema.mjs';
 import {effectiveWorkerIdentity} from '../lib/worker-identity.mjs';
 import {additionalTarget,disjointCapture,captureEvidence} from './review-targets.mjs';
 import {producerReviewObservation} from './review-observation.mjs';
+import {resolvedReference} from './review-reference-proof.mjs';
 
 const codeRoot = fs.realpathSync(fileURLToPath(new URL('../', import.meta.url)));
-const capabilityFiles = ['line-service/review.mjs','line-service/review-observation.mjs','line-service/review-targets.mjs','line-service/review-group.mjs', 'settle/settle.mjs', 'supervisor/supervisor.mjs'];
+const capabilityFiles = ['line-service/review.mjs','line-service/review-reference-proof.mjs','line-service/review-observation.mjs','line-service/review-targets.mjs','line-service/review-group.mjs', 'settle/settle.mjs', 'supervisor/supervisor.mjs'];
 const capability = capabilityFiles.map(file => createHash('sha256').update(fs.readFileSync(path.join(codeRoot, file))).digest('hex'));
 
 const sha = value => createHash('sha256').update(value).digest('hex');
@@ -75,6 +76,10 @@ function changeReviewAttempt(item,{org,identity,events,state,repo,effects,target
   const reference=file=>{references.push(file);try{return read(file);}catch{return null;}};
   const resolution=reviewResolution({events,org,item:item.id,head:target.head}),archivedItems=new Set(resolution?.event.archived_review_items??[]);
   capturedRun??=target.source_group?.run;
+  const disposed=file=>resolvedReference({events,state,repo,org,identity,item:item.id,run:capturedRun,target,file});
+  // Missing/untyped/progressed originals must not make a granted disposition
+  // disappear from validation just because the inventory no longer matches.
+  for(const e of events)if(e.type==='review.reference-resolved'&&e.project===identity&&e.org===org&&e.item===item.id&&e.run===capturedRun&&sameCapturedTarget(e.target,target))disposed(e.reference);
   const runs=new Set(capturedRun?[capturedRun]:item.runs.filter(id=>(state.runs.get(id)?.report?.artifacts??[]).some(a=>typeof a==='string'&&a.includes(target.head)))),group=producerGroupKey(item.id,capturedRun,target.reportHash),covered=new Set(capturedReviewCommits(target));
   const sourceRun=state.runs.get(capturedRun),worker=effectiveWorkerIdentity(sourceRun,state),nativeHeads=new Set(events.filter(e=>e.type==='change.landed'&&e.project===identity&&e.item===item.id&&e.run===capturedRun&&e.landed_at&&e.producer?.agent&&e.producer?.session&&!worker.identity_conflict&&e.producer.agent===worker.agent&&e.producer.pane===worker.pane&&e.producer.terminal===worker.terminal_id&&e.producer.session===worker.agent_session_id&&e.producer.ownership_generation===sourceRun?.owner_generation).map(e=>e.head)),ownerEvidence=path.join(org,'evidence',item.id,capturedRun??'UNKNOWN'),proofCache=new Map();
   const runtimeAttempt=v=>['stage','review','reviewer','verdict','qualification','native_launch_attempted','worker','launchProcess','deliveryRange','review_item','review_run'].some(k=>Object.hasOwn(v,k));
@@ -127,7 +132,7 @@ function changeReviewAttempt(item,{org,identity,events,state,repo,effects,target
     // unreadable or untyped locators do not establish an attempt.
     if(typeof artifact==='string'&&/review|settle/i.test(artifact)&&/\.json(?:$|[ #])/.test(artifact)&&path.isAbsolute(artifact.split(/[ #]/)[0])){
       const file=artifact.split(/[ #]/)[0],value=reference(file);
-      if(typedReviewAttempt(value)&&matches(value,id)&&!producerEvidence(file)&&!archivedReviewFile(resolution,file))return 'same-change source-owner typed review reference UNKNOWN';
+      if(typedReviewAttempt(value)&&matches(value,id)&&!producerEvidence(file)&&!archivedReviewFile(resolution,file)&&!disposed(file))return 'same-change source-owner typed review reference UNKNOWN';
     }
   }
   for(const e of events){
@@ -169,7 +174,7 @@ function changeReviewAttempt(item,{org,identity,events,state,repo,effects,target
     // Receipt attribution is scoped to its source run/head. An unrelated old
     // directory or opaque filename is never a project-wide review hold.
     if(runs.has(id))for(const entry of entries(evidence))if(/review|settle/i.test(entry.name)&&entry.name.endsWith('.json')){
-      const file=path.join(evidence,entry.name),value=reference(file);if(!typedReviewAttempt(value)||producerEvidence(file)||archivedReviewFile(resolution,file))continue;if(matches(value,id))return 'same-change source-owner review receipt/UNKNOWN';
+      const file=path.join(evidence,entry.name),value=reference(file);if(!typedReviewAttempt(value)||producerEvidence(file)||archivedReviewFile(resolution,file))continue;if(matches(value,id)&&!disposed(file))return 'same-change source-owner review receipt/UNKNOWN';
     }
     for(const root of new Set([repo,run.workspace].filter(Boolean))){
       if(!fs.existsSync(root))continue;

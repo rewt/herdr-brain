@@ -21,6 +21,7 @@ import { noticeLock } from '../supervisor/notice-lock.mjs';
 import { closeoutRevision, scheduleLineCloseouts,lineServiceOwnsCleanup } from '../lib/closeout.mjs';
 import { parseArgs, isMain } from '../lib/cli-help.mjs';
 import { reviewAttempt, readServiceJournal } from './review.mjs';
+import {referenceRevision} from './review-reference-proof.mjs';
 import { queueConsumer, isQueueReview, validateQueuedReview, reviewQueueBrief, reviewQueueRoute } from './review-queue.mjs';
 import { roleIs } from '../lib/roles.mjs';
 import { recordLineNotice,canonicalFailure } from './record-inbox.mjs';
@@ -286,10 +287,12 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         try{
           reviewLock=noticeLock(path.join(directory,`review-change-${digest([item.id,target.head])}.lock`),{recover:false});
           const ignoreService={file:journal,key,target,operation:'record-queue'};
-          if(effects.review_reference_observed?.[key])continue;
+          const retained=effects.review_reference_observed?.[key],resolutionSeq=referenceRevision({events:snapshot.events,identity:project.identity,org,item:item.id,run:run.id,target});
+          if(retained&&resolutionSeq<=(effects.review_reference_reconsidered?.[key]?.resolution_seq??0))continue;
           const attempt=reviewAttempt(item,{org,identity:project.identity,events:snapshot.events,state:snapshot.state,repo,effects,cache:reviewCache,target,capturedRun:run.id,ignoreService});
           if(attempt){
-            effects.review_reference_observed??={};effects.review_reference_observed[key]={owner:'line-service',target,attempt};save();
+            if(retained){effects.review_reference_reconsidered??={};effects.review_reference_reconsidered[key]={resolution_seq:resolutionSeq,target,attempt};}
+            else{effects.review_reference_observed??={};effects.review_reference_observed[key]={owner:'line-service',target,attempt};}save();
             if(attempt.includes('UNKNOWN'))note(`outcome:${key}`,'Original review completion producer is missing; retain its attempt for the project supervisor.',{item:item.id,run:run.id,head:target.head,attempt});
             note(key,attempt,{item:item.id,run:run.id,head:target.head,review:true},false,{action:'review-retained',item:item.id,head:target.head});continue;
           }

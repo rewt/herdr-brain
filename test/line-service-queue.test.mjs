@@ -18,14 +18,14 @@ import { checkSessionCap } from '../dispatch/session-cap.mjs';
 import { fixture as dispatchFixture, promptCalls } from '../dispatch/test/dispatch-fixture.mjs';
 
 const root = fs.realpathSync(sourceRoot), entry = path.join(root, 'bin/org.mjs');
-function fixture(t, { outcome = 'blocked', beforeReport = () => [], producerHarness = 'claude', sourceMeta = {} } = {}) {
+function fixture(t, { outcome = 'blocked', beforeReport = () => [], producerHarness = 'claude', sourceMeta = {}, sourceJournal = 'dispatch/source.json' } = {}) {
   const f = configFixture(t, { custom: true }), org = f.env.ORG_DIR, identity = gitProject(f.cwd).identity;
   const git = (args, cwd = f.cwd) => { const r = spawnSync('git', ['-C', cwd, ...args], { env: f.env, encoding: 'utf8' }); assert.equal(r.status, 0, r.stderr); return r.stdout.trim(); };
   fs.writeFileSync(path.join(f.cwd, 'code.mjs'), 'export const value=0;\n'); git(['add', 'code.mjs']); git(['commit', '-qm', 'Base']);
   const base = git(['rev-parse', 'HEAD']), workspace = path.join(f.scratch, 'lane'); git(['worktree', 'add', '-qb', 'lane/implementation', workspace]);
   fs.writeFileSync(path.join(workspace, 'code.mjs'), 'export const value=1;\n'); git(['add', 'code.mjs'], workspace); git(['commit', '-qm', 'Landed implementation'], workspace);
   const head = git(['rev-parse', 'HEAD'], workspace); git(['merge', '--ff-only', head]);
-  const dispatch = path.join(org, 'dispatch', 'source.json'); fs.mkdirSync(path.dirname(dispatch), { recursive: true });
+  const dispatch = path.join(org, sourceJournal); fs.mkdirSync(path.dirname(dispatch), { recursive: true });
   fs.writeFileSync(dispatch, JSON.stringify({ token: 'fixture', stage: 'complete', run: 'R-1', item: 'ENG-1', org, common: identity, workspace, base }));
   const report = `---\nrun: R-1\noutcome: ${outcome}\nsummary: Landed code with red producer evidence.\nartifacts:\n  - "Commit: ${head}"\n  - code.mjs\n---\n`, reportHash = createHash('sha256').update(report).digest('hex');
   fs.mkdirSync(path.join(org, 'reports'), { recursive: true }); fs.writeFileSync(path.join(org, 'reports', 'R-1.md'), report);
@@ -145,9 +145,9 @@ test('review queue retains malformed and missing individual history journals as 
 });
 
 test('review queue retains a dangling dispatch history directory as a failure', t => {
-  const f = fixture(t), qid = f.create().review_item, c = f.context();
+  // Keep producer baseline evidence readable before the history-directory scan.
+  const f = fixture(t, { sourceJournal: 'producer/source.json' }), qid = f.create().review_item, c = f.context();
   const directory = path.join(f.org, 'dispatch');
-  fs.renameSync(directory, path.join(f.scratch, 'saved-dispatch'));
   fs.symlinkSync(path.join(f.scratch, 'missing-dispatch'), directory, 'dir');
   const before = fs.readFileSync(path.join(f.org, 'events.jsonl'));
   assert.throws(() => validateQueuedReview({ ...c, item: c.state.items.get(qid) }),

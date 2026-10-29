@@ -140,13 +140,18 @@ test('review admission retains an existing UNKNOWN launch and legacy review with
   const q=f.context().state.items.get(mutation.result.review_item),target=structuredClone(q.meta.review_target);
   f.add([{type:'item.added',id:'REV-99',role:'reviewer',title:'Old manual review'}]);
   const input=dispatchInput({...f.context(),item:q}),key=`dispatch:${q.id}:${input}`,original={state:'started',owner:'line-service',error:'UNKNOWN original native outcome',receipt:{status:null,stdout:'original evidence'}};
+  const saved=path.join(f.org,'dispatch/retained.json'),savedBytes=JSON.stringify({token:'retained',item:q.id,org:f.org,common:f.identity,repo:f.cwd,stage:'complete',reviewQueueProtocol:1,reviewQueue:target,native_launch_attempted:true});fs.writeFileSync(saved,savedBytes);
   fs.writeFileSync(path.join(f.directory,'effects.json'),JSON.stringify({identity:f.identity,org:f.org,actions:{[key]:original}}));
   admissionPolicy(f,{});const s=admissionService(f);s.pass();s.pass();
   admissionPolicy(f,{producer_groups:[target.source_group.key]});s.pass();
   assert.equal(s.calls.some(a=>a[0].endsWith('/dispatch/dispatch.mjs')),false);
-  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(f.directory,'effects.json'))).actions[key],original);
+  const kept=JSON.parse(fs.readFileSync(path.join(f.directory,'effects.json'))).actions[key];
+  for(const [field,value]of Object.entries(original))assert.deepEqual(kept[field],value,'original attempt and receipt stay intact');
+  assert.equal(kept.original_outcome.status,'unknown','existing readback may annotate the retained attempt without replacing it');
+  assert.equal(kept.history,undefined);assert.equal(fs.readFileSync(saved,'utf8'),savedBytes);
   assert.deepEqual(f.context().state.items.get(q.id).meta.review_target,target);
   assert.ok(diagnostics(f).some(r=>r.action==='review-admission-held'&&r.item==='REV-99'&&r.code==='REVIEW_ADMISSION_BINDING_UNKNOWN'));
+  assert.ok(diagnostics(f).some(r=>r.action==='review-admission-held'&&r.item===q.id&&r.stage==='recovery'));
   assert.equal([...f.context().state.items.values()].filter(i=>i.role==='reviewer').length,2);
 });
 

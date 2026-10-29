@@ -18,7 +18,10 @@ function retained(f,job){
   assert.equal(f.state().runs.get(job.run).abandoned,null);
   assert.ok(fs.existsSync(f.lane));return row;
 }
-function queueReview(f){
+function queueReview(f,{priorHistory=false}={}){
+  // Overnight records already contain dispatch history. Keep the original
+  // fresh-record controls below red too: ENG-986 owns that distinct defect.
+  if(priorHistory)fs.mkdirSync(path.join(f.org,'dispatch'),{recursive:true});
   fs.writeFileSync(path.join(f.repo,'reviewed-source'),'new canonical source');
   f.git(['add','reviewed-source']);f.git(['commit','-qm','Source to review']);const head=f.git(['rev-parse','HEAD']);
   const q=f.execute('bin/org.mjs',['queue-review',`canonical:${head}`],{...f.env,ORG_ACTOR:'line-service'});
@@ -60,9 +63,9 @@ test('operational opened worker with an undelivered prompt retains its failure a
   assert.deepEqual(fs.readFileSync(job.journal),bytes);assert.equal(f.jobs().length,1);
 });
 
-test('operational review launch with no agent preserves the ending status and the one-review cap after abandonment',t=>{
+for(const priorHistory of [false,true])test('operational review launch with no agent preserves the ending status and the one-review cap after abandonment'+(priorHistory?' with existing dispatch history':''),t=>{
   const f=notificationFixture(t,{startFail:true,topic:'review-notification'});
-  const {review,launch}=queueReview(f),r=launch();
+  const {review,launch}=queueReview(f,{priorHistory}),r=launch();
   assert.equal(r.status,1,r.stderr+r.stdout);f.assertOpened();const job=f.job(),bytes=fs.readFileSync(job.journal);
   assert.equal(f.native.state().agent,undefined);assert.ok(!job.worker);
   const ending=f.events().findLast(e=>e.type==='dispatch.completed');assert.equal(ending.exit_code,1);assert.equal(ending.run,job.run);
@@ -75,8 +78,8 @@ test('operational review launch with no agent preserves the ending status and th
   assert.deepEqual(f.state().items.get(review).runs,[job.run]);
 });
 
-test('operational written review report crosses watcher and intake with its original Minor findings linked once',t=>{
-  const f=notificationFixture(t,{topic:'review-notification'}),{launch}=queueReview(f),launched=launch();
+for(const priorHistory of [false,true])test('operational written review report crosses watcher and intake with its original Minor findings linked once'+(priorHistory?' with existing dispatch history':''),t=>{
+  const f=notificationFixture(t,{topic:'review-notification'}),{launch}=queueReview(f,{priorHistory}),launched=launch();
   assert.equal(launched.status,0,launched.stderr+launched.stdout);f.assertOpened();const job=f.job();
   const report=f.writeReport(job.run),historical=fs.readFileSync(new URL('./fixtures/review-findings/R-1307.md',import.meta.url),'utf8');
   fs.writeFileSync(report,historical.replace(/^run: R-1307$/m,`run: ${job.run}`));const bytes=fs.readFileSync(report);

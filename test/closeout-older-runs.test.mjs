@@ -88,7 +88,7 @@ function stopped(t,{unprompted=false}={}){
     stage:job.stage,exit_code:1,native_launch_attempted:job.native_launch_attempted,failure:job.failure,
     request_sha256:createHash('sha256').update(fs.readFileSync(journal)).digest('hex')}]);};
   complete();
-  return{...f,journal,job,save,complete,dispose:()=>disposeStoppedAllocations({cwd:f.repo,org:f.org,env:f.env,retirementOptions:f.options})};
+  return{...f,journal,job,saveJob:save,complete,dispose:()=>disposeStoppedAllocations({cwd:f.repo,org:f.org,env:f.env,retirementOptions:f.options})};
 }
 
 test('a completed pre-native capacity-lock failure releases its no-run folder once',t=>{

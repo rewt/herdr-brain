@@ -845,6 +845,28 @@ function removalSnapshot() {
   return s;
 }
 
+test('lane removal token retains unknown standard-slot rows while scoping valid slots', () => {
+  const s = removalSnapshot();
+  s.standardSlots = { schema: 'standard-slot-history/v1', slots: [], errors: [] };
+  const plan = planRetirement(s);
+  const other = { ...standardSlots(s).slots[0], uid: 'other', checkout: '/repo/other', workspace: 'other', tab: 'other:t' };
+  s.standardSlots.slots.push(other);
+  assert.equal(planRetirement(s).laneClose[0].token, plan.laneClose[0].token);
+  s.standardSlots.slots.push(null);
+  const before = planRetirement(s).laneKeep[0];
+  assert.match(before.why, /standard-slot protection identity/);
+  for (const unknown of [null, undefined]) {
+    s.standardSlots.slots.push(unknown);
+    const after = planRetirement(s).laneKeep[0];
+    assert.equal(after.why, before.why);
+    assert.notEqual(after.token, before.token, 'unknown rows bind the token even when the keep reason is unchanged');
+    s.standardSlots.slots.pop();
+  }
+  const result = executeRetirement(plan, { observe: () => s, removeLane: () => assert.fail('unknown protection') });
+  assert.equal(result[0].action, 'skip-close');
+  assert.equal(result[0].why, before.why);
+});
+
 for (const change of ['agent', 'record', 'workspace', 'tab', 'reference']) test(`lane removal ignores unrelated ${change} changes while global authority changes`, () => {
   const s = removalSnapshot();
   s.agents.push({ name: 'other', cwd: '/repo/other', pane_id: 'other:p', agent_status: 'working', state_change_seq: 1 });

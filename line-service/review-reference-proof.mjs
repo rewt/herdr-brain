@@ -19,6 +19,32 @@ export const producerReportHandoff=value=>Boolean(value&&typeof value==='object'
   producerSchemas.includes(value.schema)||
   ['schema','type','kind','role'].every(k=>value[k]==null)&&typeof value.run==='string'&&typeof value.worker==='string'&&value.producerEvidence!=null&&(value.head!=null||value.source!=null||value.ownedScope?.head!=null)));
 
+// Dispatch's top-level watcher waits for the producer report. Its process is
+// not a reviewer. Unknown shapes and any binding to another run stay held;
+// even a recognized watcher still needs the full historical record/STOP proof.
+function producerWatcherProof({value,state,org,item,run}){
+  const w=value.watcher;if(w==null)return null;
+  if(typeof w!=='object'||Array.isArray(w)||!Number.isSafeInteger(w.pid)||w.pid<1||
+    Object.keys(w).some(k=>!['run','item','pid','identity','log','release','to','target','retained'].includes(k))||
+    w.run!=null&&w.run!==run||w.item!=null&&w.item!==item||
+    w.identity!=null&&(typeof w.identity!=='string'||!w.identity)||
+    w.log!=null&&w.log!==path.join(org,'dispatch',`${run}.watch.log`)||
+    w.retained!=null&&w.retained!==true||
+    ['to','target'].some(k=>w[k]!=null&&(typeof w[k]!=='string'||!w[k]))||
+    roleIs(state.items.get(item),'REV'))throw Error('producer watcher binding is UNKNOWN or tied to a review run; retain the original reference');
+  const source=state.runs.get(run)?.meta??{};
+  for(const [key,meta] of [['pid','watcher_pid'],['identity','watcher_identity'],['log','watcher_log']]){
+    if(w[key]!=null&&source[meta]!=null&&String(w[key])!==String(source[meta]))throw Error('producer watcher differs from its recorded dispatch binding');
+  }
+  for(const r of state.runs.values())if(roleIs(state.items.get(r.item),'REV')){
+    const m=r.meta??{};
+    if(String(m.watcher_pid??'')===String(w.pid)||w.identity!=null&&m.watcher_identity===w.identity||w.log!=null&&m.watcher_log===w.log||
+      [w.to,w.target].some(v=>v!=null&&v===effectiveWorkerIdentity(r,state).agent))
+      throw Error('producer watcher is tied to a review run; retain the original attempt');
+  }
+  return{kind:'producer-report-watcher',run,sha256:hash(JSON.stringify(w))};
+}
+
 function producerRecordProof({events,repo,org,item,run,target,input,observation}){
   const recordSeq=observation?.record_seq??events.at(-1)?.seq;
   if(!Number.isSafeInteger(recordSeq)||recordSeq<1||!events.some(e=>e.seq===recordSeq))throw Error('producer record checkpoint is UNKNOWN');
@@ -74,13 +100,15 @@ export function referenceProof({events,state,repo,org,item,run,target,input,obse
         ['type','kind','role'].some(k=>value[k]!=null)||queueFlags.some(v=>v!==false)||
         Object.hasOwn(value,'stage')||
         Object.hasOwn(value,'native_launch_attempted')&&value.native_launch_attempted!==false||
-        ['reviewer','launchProcess','sessionBinding','watcher','verdict','qualification','native_qualification','review_item','review_run','agent','pane','terminal','session','pid','reviewer_session','reviewer_pane'].some(k=>value[k]!=null||review&&typeof review==='object'&&review[k]!=null)||
+        ['reviewer','launchProcess','sessionBinding','verdict','qualification','native_qualification','review_item','review_run','agent','pane','terminal','session','pid','reviewer_session','reviewer_pane'].some(k=>value[k]!=null||review&&typeof review==='object'&&review[k]!=null)||
         review!=null&&typeof review!=='string'&&(typeof review!=='object'||Array.isArray(review))||
-        review?.worker!=null||review?.item!=null||review?.run!=null||review?.native_launch_attempted!=null||
+        review?.worker!=null||review?.watcher!=null||review?.item!=null||review?.run!=null||review?.native_launch_attempted!=null||
         review?.cap!=null&&review.cap!==1||review?.reviewerSuites!=null&&review.reviewerSuites!==0||
         value.error!=null)throw Error('producer handoff queue outcome remains UNKNOWN/started/refused; retain the original reference');
-      if(value.queueAttempted===false&&value.queueMutation===false)return{kind:'producer-queue-not-attempted',reference_sha256:hash(bytes)};
-      return producerRecordProof({events,repo,org,item,run,target,input,observation});
+      const watcher=producerWatcherProof({value,state,org,item,run});
+      if(!watcher&&value.queueAttempted===false&&value.queueMutation===false)return{kind:'producer-queue-not-attempted',reference_sha256:hash(bytes)};
+      const proof=producerRecordProof({events,repo,org,item,run,target,input,observation});
+      return watcher?{...proof,watcher}:proof;
     }
     // A missing launch flag or missing process is not positive zero-native proof.
     // Only a serialized pre-native barrier may enter ordinary queue admission.

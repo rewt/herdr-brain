@@ -92,6 +92,33 @@ corroboration for the record-backed proof. Any populated queue/parallel-start or
 waited-for-verdict flag must be false. Review strings and cap/suite/deferred
 metadata describe the intended handoff, not a review identity or verdict.
 
+A top-level producer handoff `watcher` can be the dispatch-time process waiting
+for that producer's own report, rather than a review attempt. Supported watcher
+objects contain a positive integer `pid` and only the optional dispatch fields
+`run`, `item`, `identity`, `log`, `release`, `to`, `target`, and `retained`.
+Populated run/item fields must name the producer; a log must be its exact
+`ORG/dispatch/R-SOURCE.watch.log`. Populated identity/log/PID fields must agree
+with any recorded producer watcher binding. A watcher linked to a review run
+through its run/item, recorded watcher identity, or reviewer recipient refuses;
+so does `review.watcher`, an unknown shape, or any review/launch/verdict evidence.
+No live process probe or absence inference is used.
+
+These watcher handoffs **always** require the complete record-backed historical
+STOP proof and competing-attempt inventories above, even when both queue flags
+are false. Their `producer-record-no-attempt` receipt additionally contains a
+typed `producer-report-watcher` observation binding the producer run and watcher
+SHA256. Admission revalidates it alongside the unchanged original reference,
+report checkpoint, audit prefix, exact range/diff and immutable evidence. The
+watcher itself is neither modified nor restarted.
+
+The retained range/diff proof has a hard **32 MiB per Git output stream** ceiling,
+matching existing source discovery/capture. It hashes the complete UTF-8 diff
+with the same trimming and SHA256 predicate as existing captures. Above that
+ceiling it refuses with `REVIEW_PROOF_OUTPUT_LIMIT` and an explicit UNKNOWN
+diagnostic; it never hashes truncated output, substitutes a weaker predicate,
+or permits a disposition. Such a source needs a separate implementation change
+to stream its proof, not a guessed hash or a replacement capture.
+
 For this producer type, head aliases additionally include `ownedScope.head` and
 `source`. All populated head aliases must identify one full commit exactly equal
 to the landed target; duplicate identical aliases are allowed. Conflicting,

@@ -2,6 +2,7 @@ import test from './helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import {execFileSync} from 'node:child_process';
 import {configFixture} from './helpers/config-home-fixture.mjs';
 import {loadEvents,transact} from '../lib/store.mjs';
 import {fold} from '../lib/state.mjs';
@@ -9,16 +10,17 @@ import {gitProject} from '../lib/project.mjs';
 import {lineDirectory} from '../line-service/cutoff.mjs';
 import {inspectReviewReferences,resolveReviewReference} from '../line-service/review-reference.mjs';
 import {referenceProof,resolvedReference} from '../line-service/review-reference-proof.mjs';
+import {capturedRange,REVIEW_PROOF_MAX_BYTES} from '../line-service/review-targets.mjs';
 import {reviewDigest as hash} from '../line-service/review-resolutions.mjs';
 import {reviewAttempt} from '../line-service/review.mjs';
 import {queueReviewMutation,validateQueuedReview} from '../line-service/review-queue.mjs';
 import {createLineService,sourceRoot} from '../line-service/line-service.mjs';
 
 const root=fs.realpathSync(sourceRoot);
-function fixture(t){
+function fixture(t,{diffBytes=0}={}){
   const f=configFixture(t,{custom:true}),repo=f.cwd,org=f.env.ORG_DIR,identity=gitProject(repo).identity;
   fs.writeFileSync(path.join(repo,'.promote.json'),JSON.stringify({to:'fixture-supervisor'}));f.git('add','.promote.json');f.git('commit','-qm','Supervisor policy');
-  const base=f.git('rev-parse','HEAD');fs.writeFileSync(path.join(repo,'build'),'landed change');f.git('add','build');f.git('commit','-qm','Build');const head=f.git('rev-parse','HEAD');
+  const base=f.git('rev-parse','HEAD');fs.writeFileSync(path.join(repo,'build'),diffBytes?'landed change\n'.repeat(Math.ceil(diffBytes/14)):'landed change');f.git('add','build');f.git('commit','-qm','Build');const head=f.git('rev-parse','HEAD');
   const reference=path.join(org,'evidence/ENG-1/R-1/review-reference.json');fs.mkdirSync(path.dirname(reference),{recursive:true});
   const report=`---\nrun: R-1\noutcome: done\nsummary: Landed change\nartifacts:\n  - "source: ${head}; base: ${base}"\n  - ${reference}\n---\n`;
   fs.mkdirSync(path.join(org,'reports'),{recursive:true});fs.writeFileSync(path.join(org,'reports/R-1.md'),report);
@@ -71,6 +73,69 @@ const producerHandoff=(f,shape='head')=>({
   ...(shape==='head'?{schema:'record-review-handoff/v1',head:f.head,base:f.base,queueMutation:false,review:'Deferred to the ordinary record queue after STOP',interleavedDependency:{head:f.base}}:
     shape==='ownedScope.head'?{ownedScope:{head:f.head,base:f.base},cumulativeScope:{head:f.base},review:{asynchronous:true,cap:1,reviewerSuites:0,formalFixRounds:1,attemptPolicy:'one ordinary record review'}}:
       {schema:'bch-single-record-review-handoff/1',source:f.head,base:f.base,queueAttempted:false}),
+});
+
+const reportWatcher=f=>({run:'R-1',pid:123,identity:'original-watcher-birth',log:path.join(f.org,'dispatch/R-1.watch.log')});
+for(const shape of ['dispatch','retained','explicit-queue-flags'])test(`producer ${shape} watcher is retained with typed record-backed proof and one ordinary queue`,t=>{
+  const f=fixture(t),watcher=shape==='retained'?{pid:123,to:'fixture-supervisor',retained:true}:reportWatcher(f);
+  f.add([{type:'run.updated',id:'R-1',meta:{watcher_pid:watcher.pid,watcher_identity:watcher.identity,watcher_log:watcher.log}}]);
+  f.prepare({...producerHandoff(f),...(shape==='explicit-queue-flags'?{queueAttempted:false,queueMutation:false}:{}),watcher});
+  const before=f.captured(),bytes=fs.readFileSync(f.reference);
+  const result=resolveReviewReference(f.args());assert.equal(result.existing,false);
+  const c=f.context(),event=c.events.find(e=>e.type==='review.reference-resolved');
+  assert.equal(event.proof.kind,'producer-record-no-attempt');
+  assert.deepEqual(event.proof.watcher,{kind:'producer-report-watcher',run:'R-1',sha256:hash(JSON.stringify(watcher))});
+  assert.deepEqual(f.captured().subarray(0,before.length),before);assert.deepEqual(fs.readFileSync(f.reference),bytes);
+  assert.equal(resolvedReference({...c,item:'ENG-1',run:'R-1',file:f.reference}),true);
+  assert.equal(resolveReviewReference(f.args()).existing,true);
+  const q=f.queue();assert.equal(q.existing,false);assert.equal(f.queue().review_item,q.review_item);
+  const next=f.context();assert.equal(validateQueuedReview({...next,item:next.state.items.get(q.review_item)}).head,f.head);
+  assert.equal(next.events.filter(e=>e.type==='review.reference-resolved').length,1);
+  assert.ok(f.calls.every(a=>a[0]==='agent'&&a[1]==='get'),'no watcher or reviewer native effects');
+});
+
+for(const kind of ['review-run','review-item','review-link','review-log','review-metadata','review-recipient','nested','unknown','recorded-mismatch','missing-stop','competing-attempt','competing-queue'])test(`producer watcher refuses ${kind} without changing original history`,t=>{
+  const f=fixture(t),watcher=reportWatcher(f),value={...producerHandoff(f),queueAttempted:false,queueMutation:false,watcher};
+  if(kind==='review-run')watcher.run='R-2';
+  if(kind==='review-item')watcher.item='REV-1';
+  if(kind==='review-link')watcher.review_run='R-2';
+  if(kind==='review-log')watcher.log=path.join(f.org,'dispatch/R-2.watch.log');
+  if(['review-metadata','review-recipient'].includes(kind))f.add([
+    {type:'item.added',id:'REV-1',title:'Existing review',role:'reviewer',meta:{}},
+    {type:'run.started',id:'R-2',item:'REV-1',workspace:f.repo,meta:kind==='review-metadata'?{watcher_pid:watcher.pid}:{agent:'fixture-reviewer'}},
+  ]);
+  if(kind==='review-recipient')watcher.to='fixture-reviewer';
+  if(kind==='nested'){delete value.watcher;value.review={watcher};}
+  if(kind==='unknown')value.watcher='unknown';
+  if(kind==='recorded-mismatch')f.add([{type:'run.updated',id:'R-1',meta:{watcher_pid:456}}]);
+  if(kind==='missing-stop')fs.unlinkSync(path.join(f.directory,'controls.jsonl'));
+  if(kind==='competing-attempt'){
+    fs.mkdirSync(path.join(f.org,'settle'));fs.writeFileSync(path.join(f.org,'settle/R-1.json'),JSON.stringify({kind:'settle',run:'R-1',head:f.head,native_launch_attempted:true}));
+  }
+  if(kind==='competing-queue'){fs.unlinkSync(f.reference);f.queue();}
+  f.prepare(value);const before=f.captured(),bytes=fs.readFileSync(f.reference);
+  assert.throws(()=>resolveReviewReference(f.args()));
+  assert.deepEqual(f.captured(),before);assert.deepEqual(fs.readFileSync(f.reference),bytes);
+});
+
+test('multi-megabyte immutable diff keeps its exact hash through watcher disposition and queue admission',t=>{
+  const f=fixture(t,{diffBytes:2*1024*1024});f.prepare({...producerHandoff(f),watcher:reportWatcher(f)});
+  // Capture/disposition must agree with the historical UTF-8 + trim predicate.
+  const output=execFileSync('git',['-C',f.repo,'diff','--no-ext-diff','--no-textconv',f.base,f.head],{encoding:'utf8',maxBuffer:4*1024*1024});
+  assert.ok(Buffer.byteLength(output)>1024*1024);
+  assert.equal(f.context().target.diff_sha256,hash(output.trim()));
+  const c=f.context();assert.throws(()=>capturedRange({...c,target:{...c.target,diff_sha256:'0'.repeat(64)}}),/range\/diff/);
+  resolveReviewReference(f.args());const q=f.queue(),next=f.context();
+  assert.equal(validateQueuedReview({...next,item:next.state.items.get(q.review_item)}).diff_sha256,c.target.diff_sha256);
+});
+
+test('diff above the hard proof ceiling refuses clearly without hashing partial output',t=>{
+  const f=fixture(t),row='over-limit change\n';
+  fs.writeFileSync(path.join(f.repo,'large.txt'),row.repeat(Math.ceil((REVIEW_PROOF_MAX_BYTES+1024*1024)/row.length)));
+  f.git('add','large.txt');f.git('commit','-qm','Oversize immutable diff');const head=f.git('rev-parse','HEAD'),c=f.context();
+  const target={...c.target,head,scope:{...c.target.scope,commits:[f.head,head],claims:[f.head,head]},source_group:{...c.target.source_group,owned_commits:[f.head,head]}};
+  assert.throws(()=>capturedRange({...c,target}),e=>e.code==='REVIEW_PROOF_OUTPUT_LIMIT'&&/hard 32 MiB ceiling/.test(e.message)&&e.cause.code==='ENOBUFS');
+  assert.equal(f.context().events.some(e=>e.type==='review.reference-resolved'),false);
 });
 
 for(const shape of ['head','ownedScope.head','source'])test(`producer report-handoff ${shape} preserves its producer and permits one ordinary review`,t=>{

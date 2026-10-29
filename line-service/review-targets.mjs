@@ -8,7 +8,16 @@ import {capturedReviewCommits,sameProducerQueue} from './review-group.mjs';
 
 const hash=value=>createHash('sha256').update(value).digest('hex');
 const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
-const git=(repo,args)=>execFileSync('git',['--no-optional-locks','-C',repo,...args],{encoding:'utf8',stdio:['ignore','pipe','pipe']}).trim();
+// Match the existing discovery/capture ceiling. Never hash truncated output or
+// replace an exact diff/range predicate with a weaker one after overflow.
+export const REVIEW_PROOF_MAX_BYTES=32*1024*1024;
+const git=(repo,args)=>{
+  try{return execFileSync('git',['--no-optional-locks','-C',repo,...args],{encoding:'utf8',stdio:['ignore','pipe','pipe'],maxBuffer:REVIEW_PROOF_MAX_BYTES}).trim();}
+  catch(error){
+    if(error.code==='ENOBUFS')throw Object.assign(Error('retained review proof output exceeds the hard 32 MiB ceiling; exact range/diff remains UNKNOWN, no disposition'),{code:'REVIEW_PROOF_OUTPUT_LIMIT',cause:error});
+    throw error;
+  }
+};
 export const additionalTarget=t=>['supplemental-review/v1','canonical-unattributed/v1'].includes(t?.evidence_kind);
 export const canonicalSelector=head=>`canonical:${head}`;
 export const reviewCutoff=boundary=>({id:boundary.id,seq:boundary.seq,head:boundary.canonical_head,main:boundary.main??'main',time_qualification:boundary.time_qualification??'intended source boundary; exact adoption-time head UNKNOWN'});

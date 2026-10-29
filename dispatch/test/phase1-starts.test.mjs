@@ -114,12 +114,14 @@ test('retirement barrier continuation needs matching original zero-native termin
 
 test('retirement lock clears through the same detached request and normal native dispatch without replacing original evidence',async t=>{
   const f=phase1Fixture(t),common=f.git(['rev-parse','--path-format=absolute','--git-common-dir']),lock=path.join(common,'retirement/owner.lock'),lane=path.join(f.root,'bin/lane');
-  fs.mkdirSync(lock,{recursive:true});
+  // Inject the completed barrier at prepare, then model its still-held lock.
+  // Preseeding it would spend the real allocation wait before this fixture runs.
   fs.writeFileSync(lane,fs.readFileSync(lane,'utf8').replace("console.error('injected '+fail)",`console.error(${JSON.stringify(`locked: ${lock}; owner is live or unknown`)})`));
   f.fail('prepare');const first=f.start(['--detach']);assert.equal(first.status,0,first.stderr);
   const {journal}=JSON.parse(first.stdout),terminal=await driverResult(journal),job=JSON.parse(fs.readFileSync(journal)),launch=fs.readFileSync(journal+'.driver/launch.json');
   assert.equal(terminal.native_launch_attempted,false);assert.equal(terminal.code,'OUTCOME_UNKNOWN');
   const args=()=>({journal,repo:f.repo,org:f.org,common,root:job.release.root,events:loadEvents(f.org).events});
+  fs.mkdirSync(lock,{recursive:true});
   assert.equal(preflightContinuation(args()),null,'retirement ownership is never reclaimed by admission');
   fs.rmdirSync(lock);f.fail('');assert.equal(preflightContinuation(args()).outcome.kind,'retirement-lock-cleared');
   const resumed=f.dispatch(['--retry',journal,'--continue-preflight']);assert.equal(resumed.status,0,resumed.stderr);assert.equal(JSON.parse(resumed.stdout).journal,journal);

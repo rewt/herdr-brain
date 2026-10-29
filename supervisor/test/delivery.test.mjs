@@ -230,11 +230,10 @@ test('torn inbox tails fail closed and preserve their bytes', async (t) => {
   assert.equal(fs.readFileSync(f.inbox, 'utf8'), '{"type":"notice"');
   assert.deepEqual(f.calls(), []);
 });
-test('retired mirror options leave quiet-gated prompt bytes and delivery unchanged', async t => {
+test('quiet-gated delivery preserves original notice bytes', async t => {
   const f = fixture(t); f.clear();
   const text = '[watch-blocked] run=R-9 item=ENG-3 worker=worker state=blocked report=/tmp/report.md';
-  const result = await promptSupervisor('supervisor', text, { ...f.options, id: 'without-shadow',
-    mirror: () => { throw Error('retired mirror must not run'); } });
+  const result = await promptSupervisor('supervisor', text, { ...f.options, id: 'without-shadow' });
   assert.equal(result.delivered, true);
   assert.deepEqual(f.transmitted(), [`${text} notice-id=without-shadow`]);
   assert.equal(readInbox(f.inbox)[0].message, text);

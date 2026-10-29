@@ -265,7 +265,7 @@ function waitForSignal(agent, until, reportPath, timeoutMs, beforeStamp, recordC
   });
 }
 
-async function deliver(message, sound = 'request', id, { allowQueued = false, shadowEvidence } = {}) {
+async function deliver(message, sound = 'request', id, { allowQueued = false } = {}) {
   log(message);
   if (dry) return true;
   if(opt['record-only']){
@@ -281,7 +281,7 @@ async function deliver(message, sound = 'request', id, { allowQueued = false, sh
   const result = await promptSupervisor(opt.to, message, {
     org: opt.org, cwd: opt.cwd, inbox: opt.inbox, herdr: opt.herdr, attempts: deliveryAttempts,
     correlation,
-    retrySeconds: retryAfterMs / 1000, sound, title: `${runId} watch could not deliver`, id, log, shadowEvidence,
+    retrySeconds: retryAfterMs / 1000, sound, title: `${runId} watch could not deliver`, id, log,
   });
   if (result.delivered) { finishWatch(); return true; }
   if (allowQueued && result.queued && Number.isInteger(result.owner_pid) && result.owner_pid > 0) return true;
@@ -468,11 +468,7 @@ async function watch() {
   const deliverFinal = (report) => deliver(reportNotice({
     run: runId, item, outcome: report.outcome, headline: report.headline ?? report.summary,
     report: reportPath, check: 'pass',
-  }), 'done', `watch:${runId}:final`, { shadowEvidence: {
-    channel: 'org-report', validated: true, outcome: report.outcome,
-    ...(report.extra?.verdict !== undefined ? { verdict: report.extra.verdict } : {}),
-    ...(report.extra?.review_scope === 'deferred' ? { reviewScope: 'deferred' } : {}),
-  } });
+  }), 'done', `watch:${runId}:final`);
 
   if (dry) {
     const status = agentStatus(agent);

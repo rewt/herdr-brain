@@ -89,6 +89,31 @@ test('shadow root resolution refuses symlink markers, identity roots and storage
   assert.deepEqual(fs.readdirSync(target), [], 'refused roots remain untouched');
 });
 
+test('shadow-report discovers a historical default journal without root or identity flags', async t => {
+  const f = fixture(t), env = { HOME: path.join(f.root, 'home') };
+  fs.writeFileSync(path.join(f.root, '.identity-root'), '');
+  assert.equal(spawnSync('git', ['-C', f.root, 'init', '-q'], { encoding: 'utf8' }).status, 0);
+  const identity = path.basename(f.root), historical = new HistoricalShadow({ identity, commonDir: f.scope.commonDir, env });
+  const event = f.event(); event.identity = identity;
+  event.payload.from.identity = identity; event.payload.to[0].identity = identity;
+  await historical.append(event);
+  const file = path.join(historical.directory, 'shadow.jsonl'), before = fs.readFileSync(file);
+  const entries = (await readJournal(historical.directory)).entries;
+  assert.equal(entries.length, 1);
+  assert.equal(historical.directory, path.join(f.root, '.herdr-brain/logs', identity, digest(f.scope.commonDir)));
+  // Clear the preload's overrides only in the child, with Git, fleet and HOME
+  // contained by the fixture. The actual CLI must discover both defaults.
+  const cliModule = new URL('../messages/messages.mjs', import.meta.url).href;
+  const cli = spawnSync(process.execPath, ['--input-type=module', '-e', `delete process.env.BRAIN_SHADOW_ROOT; delete process.env.BRAIN_IDENTITY; const {main} = await import(${JSON.stringify(cliModule)}); await main(['shadow-report', '--json']);`], {
+    cwd: f.root, env: { ...process.env, HOME: env.HOME, HERDR_MONITOR_FLEET: path.join(f.root, 'fleet') }, encoding: 'utf8',
+  });
+  assert.equal(cli.status, 0, cli.stderr);
+  assert.deepEqual(JSON.parse(cli.stdout), report({ entries, tornTail: null }));
+  assert.equal(JSON.parse(cli.stdout).accepted, 1, 'the reader found the seeded journal');
+  assert.deepEqual(fs.readFileSync(file), before, 'historical bytes remain unchanged');
+  assert.equal(fs.existsSync(path.join(env.HOME, '.local')), false, 'a marked identity never falls back to home state');
+});
+
 test('message schema accepts the envelope, qualified refs, body and decision evidence', t => {
   const f = fixture(t), e = f.event();
   e.payload.body_ref = { path: path.join(f.root, 'body.txt'), sha256: 'a'.repeat(64), bytes: 4, mediaType: 'text/plain' };
@@ -224,8 +249,7 @@ test('report counts accepted kinds/paths/would-wakes and duplicate/conflict atte
 test('notice enqueue keeps original IDs and bytes without creating a shadow copy', async t => {
   const f = fixture(t), inbox = path.join(f.root, 'inbox.log');
   const text = notices.blockedNotice({ run: 'R-1', item: 'ENG-1', agent: 'worker', report: '/a/report.md' });
-  const options = { inbox, id: 'watch:R-1:state', shadow: f.scope,
-    mirror: () => { throw Error('retired mirror must not run'); } };
+  const options = { inbox, id: 'watch:R-1:state' };
   const first = enqueueSupervisor('supervisor', text, options);
   enqueueSupervisor('supervisor', text, options);
   await new Promise(resolve => setImmediate(resolve));

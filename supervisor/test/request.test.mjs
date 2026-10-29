@@ -103,8 +103,7 @@ test('identity traversal and empty requests fail before contacting Herdr', async
 test('identity requests do not create a second notice journal', async t => {
   const f = fixture(t, true), text = 'Please inspect this exact request.';
   const root = path.join(f.root, 'shadow');
-  await request(['bastian', text], { ...f, shadow: { root },
-    mirror: () => { throw Error('retired mirror must not run'); } });
+  await request(['bastian', text], { ...f, env: { ...f.env, BRAIN_SHADOW_ROOT: root } });
   await new Promise(resolve => setImmediate(resolve));
   assert.deepEqual(f.calls().at(-1), ['agent', 'prompt', 'desk-bastian', text]);
   assert.equal(fs.existsSync(root), false);

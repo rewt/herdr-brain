@@ -666,13 +666,17 @@ test('stage-8 handover excludes an active receiver offer through its existing de
   await transferSessionInbox(args);assert.equal(i.receiver.records().filter(r=>r.type==='session-role-transfer').length,1);
 });
 
-test('A2 opted-in supervisor and chat launches remain human-typed and hook-free', async t => {
-  for (const role of ['supervisor', 'chat']) {
+test('A2 retired hook-pull configuration leaves supervisor and chat launch settings untouched', async t => {
+  for (const role of ['supervisor', 'chat']) for (const config of ['{"enabled":true}\n', '{retired-invalid-json']) {
     const f = fixture(t, role);
-    fs.writeFileSync(path.join(f.project.root, '.hook-pull.json'), '{"enabled":true}\n');
+    // Historical configuration is ignored, including bytes the old opt-in
+    // reader would reject. It no longer enables any launch behavior.
+    const file = path.join(f.project.root, '.hook-pull.json');
+    fs.writeFileSync(file, config);
     const result = await f.apply();
     assert.equal(result.decisions[0].decision, 'KEEP', JSON.stringify(result));
     assert.equal(starts(f)[0].includes('--settings'), false);
     assert.equal(fs.existsSync(path.join(f.project.common, 'sessions/hook-pull')), false);
+    assert.equal(fs.readFileSync(file, 'utf8'), config);
   }
 });

@@ -16,7 +16,6 @@ export function silenceNotice(observation, { label, receipt, runId = randomUUID(
     const message = `[test-watch] ${label}: no output for ${observation.silence_s.toFixed(3)}s; test continues${receipt ? `; receipt=${receipt}` : ''}`;
     const options = {
       ...context, id: `test-watch:${createHash('sha256').update(JSON.stringify([receipt ?? null, runId])).digest('hex')}`, waitSeconds: 0, title: 'Test run silence observation',
-      shadowEvidence: { channel: 'test-watch', validated: true },
     };
     const result = spawnSync(process.execPath, ['--input-type=module', '-e', enqueue], {
       encoding: 'utf8', input: JSON.stringify([to, message, options]),

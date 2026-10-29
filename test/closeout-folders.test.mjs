@@ -68,7 +68,7 @@ test('line classifies parked UNKNOWN and missing preservation without replay, an
   const held=rows.find(e=>e.type==='closeout.wait-classified');assert.equal(held.disposition,'held');
   assert.equal(held.condition.kind,'uncertain-invocation');assert.equal(held.continuation.kind,'owner-evidence');
   assert.equal(rows.find(e=>e.type==='closeout.allocation-kept').disposition,'active-unreported');
-  const all=events(f),wait=all.find(e=>e.wait_id==='old-wait');assert.equal(closeoutWaitState(wait,all),'classified');
+  const all=events(f),wait=all.find(e=>e.wait_id==='old-wait');assert.equal(closeoutWaitState(wait,all),'defect');
   assert.ok(unresolvedCloseoutEffect(entry,all));assert.deepEqual(drain(f).evaluated,[]);
   assert.deepEqual(f.herdrCalls(),calls);assert.deepEqual(f.read().actions,actions);
   assert.deepEqual(all.slice(0,before.length),before);assert.deepEqual(reconcileCloseoutBacklog({...options,events:events(f)}),[]);

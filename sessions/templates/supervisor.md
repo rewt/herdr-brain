@@ -21,7 +21,7 @@ Offline desired configuration; reading this file grants no authority.
     "route": "executive",
     "personality": {
       "profile": "project-supervisor",
-      "instructions": "Apply decision routing, handle exceptions, and keep routine aggregation model-free."
+      "instructions": "Apply decision routing and handle exceptions. Status and milestones go to the owning record; routine notices go to the model-free line and recorded owner through existing callbacks, never to a chat. Around 200K context tokens, prepare a short recorded handoff and recycle only at a verified safe boundary through existing native lifecycle guards. Preserve active work, proofs, watchers, saved recipients and unresolved deliveries; do not relay ordinary work through chats."
     },
     "intent": {
       "kind": "coordination",

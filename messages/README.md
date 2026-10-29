@@ -1,5 +1,14 @@
 # Session messages
 
+Replies, status and milestones belong in the owning item/run record as notes or
+the report. Routine notices go to the line and recorded owner through existing
+callbacks, never to a chat. One operator chat writes authorized work directly to
+the record; only genuine pending operator questions use push delivery. The
+operator chooses which chat stays. Until its owner applies that choice, retain
+the existing reserved-question inbox/binding and watchers; never type questions
+into quiet pane w3PD:p4 without explicit operator confirmation. This instruction
+does not change the native inbox adapter described below.
+
 The [operator record inbox](#operator-record-inbox) is a foreground record command
 using the existing native inbox. The staged shadow and offline fixture modules
 described below retain their original boundaries.

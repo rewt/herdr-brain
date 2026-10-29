@@ -10,8 +10,8 @@ technical references are consulted when needed.
 The required contract names purpose, outcome, scope, unchanged boundaries,
 evidence selection and the existing item/report premise-attempt-check-result
 ledger. It binds the actual project, record, lane, workspace and assigned route,
-the configured review route, brain-chat and the supported PROJECT SUPERVISOR
-address. Item fields/notes and the full ask retain detailed scope and evidence;
+the configured review route, the owning record for replies and the supported
+PROJECT SUPERVISOR address. Item fields/notes and the full ask retain detailed scope and evidence;
 the page adds no duplicate ledger or failure-count automation. Missing execution,
 scope or routing fields refuse a new line spawn, listing all missing fields.
 Budget, time and size estimates remain advisory. Native identity is recorded
@@ -21,7 +21,10 @@ Act and log within the named contract. Routine progress, check output, already-r
 main, bounded retries, receipts, review completion and queue status never become
 operator questions. Reserved pending asks alone use the existing push-once inbox;
 ordinary operator envelopes remain in the record. A native refusal stops its
-effect; independent work continues. Existing routes remain in place.
+effect; independent work continues. Routine notices go to the line and recorded
+owner through existing callbacks, never to a chat. Existing saved brief routing,
+watchers and reserved-question delivery remain in place. The operator chooses the
+single operator chat; quiet pane w3PD:p4 needs explicit confirmation before use.
 
 Codex/Sol is the provisional default judge, with no family superiority claim.
 New judgment-heavy/outward work uses ONE other-family post-code review through an

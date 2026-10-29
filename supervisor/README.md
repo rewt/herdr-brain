@@ -59,6 +59,14 @@ install, release or promote.
 
 ## Slot handoffs and safe-point observations
 
+Until standing sessions retire, their owners prepare a short recorded handoff
+around 200K context tokens and recycle at a verified safe boundary. The handoff
+names active work, authority/decisions, unresolved deliveries, watcher/job owners
+and next steps, with record references instead of a transcript. Token counts are
+an observation and planning trigger, never reset authority. Missing context
+telemetry stays unknown. Preserve active proofs, pending callbacks, native identity
+and existing lifecycle guards; a source instruction does not rotate live sessions.
+
 ```sh
 node bin/org.mjs handoffs template > /tmp/handoff.md
 # Fill in the draft, then record a fresh immutable copy:

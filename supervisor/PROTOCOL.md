@@ -49,12 +49,26 @@ sessions load operator-applied rules; do not bulk restart or claim old-session l
 
 ## Communication and decisions
 
-Replies/milestones go to brain-chat, never the operator/quiet pane. Unsafe, native,
-ownership, reserved and failed exceptions go to the PROJECT SUPERVISOR.
+Replies, status and milestones go to the owning item/run record as notes or the
+report. Routine notices go to the line and recorded owner through existing
+callbacks, never to a chat. Unsafe, native, ownership, reserved and failed
+exceptions go to the PROJECT SUPERVISOR.
 Operator envelopes use plain headline, what happened, action and one Details line.
 Only a genuine explicitly reserved pending human question pushes once.
+One operator chat writes authorized requests directly to the record for the owning
+decision/engineering session; answers return through that record. The operator
+chooses which chat stays. Do not send questions to quiet pane w3PD:p4 without
+explicit operator confirmation; keep existing reserved-question delivery, native
+bindings, saved recipients and watchers until that choice is applied by its owner.
 Apply [decision routing](DECISION-ROUTING.md); one durable note for a material
 choice, not every command. Other identities execute their own actions.
+
+Until standing sessions retire, their owners prepare a short recorded handoff
+around 200K context tokens and recycle at a verified safe boundary. Carry active
+work, authority/decisions, unresolved deliveries, watcher/job owners and next
+steps. Use existing [slot handoffs](README.md#slot-handoffs-and-safe-point-observations)
+and native lifecycle guards; token count alone authorizes no reset. No bulk
+restart, pin change or interruption of a live proof follows from this policy.
 
 ## Close and release
 

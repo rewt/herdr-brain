@@ -36,14 +36,26 @@ task needs them, not as another admission stage.
 - Verify each routine fact once and name verifier/evidence in the normal report.
   Consumers reuse it; fresh native/claim/source/CAS checks remain at mutations.
   Keep the existing watcher and immutable receipts.
-- Replies/milestones go to **brain-chat**, never the operator/quiet pane (w3PD:p4).
-  Exceptions go to the PROJECT SUPERVISOR at its recorded address. A native refusal
+- Replies, status and milestones go to the owning item/run record as notes or the
+  report. Routine notices go to the line and recorded owner through existing
+  callbacks, never to a chat. Exceptions go to the PROJECT SUPERVISOR at its
+  recorded address. A native refusal
   stops that effect: preserve it, no retry/alternate executor/identity substitution.
   Other independent work continues.
 - Operator messages use the owning record's messages send: plain headline,
   explanation, action (usually Nothing needed), then one Details line for codes.
   Only a genuinely reserved pending human question pushes once; digest is pulled.
   Use [messaging](messages/README.md) for the supported source entry.
+- One operator chat writes requests and authority directly to the record for the
+  owning decision/engineering session. The operator chooses which chat stays;
+  quiet pane w3PD:p4 receives questions only after explicit operator confirmation.
+  Until then preserve existing reserved-question delivery and native bindings;
+  do not add a chat relay or redirect a saved callback.
+- Until standing sessions retire, their owners prepare a short recorded handoff
+  around **200K context tokens** and recycle at a verified safe boundary. Include
+  active work, decisions, unresolved deliveries, watcher/job owners and next steps.
+  Token count alone authorizes no reset; preserve live work and callbacks. See
+  [slot handoffs](supervisor/README.md#slot-handoffs-and-safe-point-observations).
 
 ## Boundaries
 

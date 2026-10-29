@@ -43,6 +43,7 @@ for (const [project, address] of [['/brain', 'supervisor-herdr'], ['/bch', 'supe
   assert.match(prompt, /use this included copy once\. Do not reload the brief or role page/);
   for (const label of ['Purpose', 'Outcome', 'Scope', 'Unchanged', 'Evidence', 'Ledger', 'Execution', 'Routing']) assert.ok(brief.includes(`${label}:`));
   assert.ok(brief.includes(`PROJECT SUPERVISOR ${address} (project promote.to)`));
+  assert.match(brief, /replies record; PROJECT SUPERVISOR/);
   assert.ok(brief.includes(`project ${project};`));
   assert.doesNotMatch(brief, /actual-native-worker/);
   assert.match(prompt, /watcher targets actual-native-worker/);
@@ -53,6 +54,23 @@ for (const [project, address] of [['/brain', 'supervisor-herdr'], ['/bch', 'supe
   assert.match(prompt, /Keep the check focused\./);
   assert.equal(runWorkerBrief(f.run).harness, 'opaque-harness');
   assert.doesNotMatch(prompt, address === 'supervisor-herdr' ? /supervisor-opus/ : /supervisor-herdr/);
+});
+
+test('saved chat routing and watcher recipients survive while new replies use the record', () => {
+  const f = assignment(), saved = structuredClone(f.contract);
+  saved.reply_to = 'brain-chat';
+  saved.guidance.text = 'Saved role guidance; do not rewrite delivered instructions.';
+  f.run.meta.worker_brief = JSON.stringify(saved);
+  f.job.workerBrief = structuredClone(saved);
+  f.job.to = 'existing-supervisor-watcher';
+  const bytes = f.run.meta.worker_brief;
+  const brief = f.render(), prompt = f.prompt(brief);
+  assert.match(brief, /replies brain-chat; PROJECT SUPERVISOR supervisor-herdr/);
+  assert.match(prompt, /watcher targets existing-supervisor-watcher\. Retain that watcher/);
+  assert.match(prompt, /Use --to actual-native-worker for ordinary settle\/queued-promotion notices/);
+  assert.equal(runWorkerBrief(f.run).guidance.text, saved.guidance.text);
+  assert.equal(f.run.meta.worker_brief, bytes);
+  assert.equal(createWorkerBrief(f.input).reply_to, 'record');
 });
 
 test('missing scope/execution/routing fields refuse before the launch caller proceeds and list every blocker', () => {

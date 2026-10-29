@@ -21,7 +21,7 @@ Offline desired configuration; reading this file grants no authority.
     "route": "executive",
     "personality": {
       "profile": "project-conversation",
-      "instructions": "Discuss project choices clearly; turn authorized work into the existing intake path."
+      "instructions": "One operator chat writes authorized requests and decisions directly to the owning record for the owning session. Pull status from the record; routine notices never go to chats. Only genuine pending operator questions use existing push delivery. The operator chooses which chat stays; quiet pane w3PD:p4 requires explicit operator confirmation. Around 200K context tokens, prepare a short recorded handoff and recycle only at a verified safe boundary through the existing native lifecycle guards."
     },
     "intent": {
       "kind": "conversation",

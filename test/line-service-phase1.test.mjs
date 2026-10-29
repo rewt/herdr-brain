@@ -545,15 +545,19 @@ function originalPartialFixture(t){
 
 test('original REV4-shaped continuation preserves its disjoint PASS peer and zero-native journal then uses one same-request native launch without replacement',async t=>{
   const f=originalPartialFixture(t),before=f.context(),original=fs.readFileSync(f.journal),verdict=before.events.find(e=>e.type==='change.reviewed'),calls=[],refreshes=[];
-  const service=createLineService({repo:f.cwd,org:f.org,to:'brain-chat',env:f.env,maxStarts:1,capacity:()=>({cap:1,count:calls.some(a=>a[0]===path.join(sourceRoot,'dispatch/dispatch.mjs'))?1:0}),recordNotice:d=>({id:d.id,state:'record-only'}),command:(exe,args)=>{
+  const service=createLineService({repo:f.cwd,org:f.org,to:'brain-chat',env:f.env,maxStarts:1,capacity:()=>({cap:3,count:0}),recordNotice:d=>({id:d.id,state:'record-only'}),command:(exe,args)=>{
     if(args[0]===path.join(sourceRoot,'supervisor/closeout.mjs')){assertFiniteRefresh(f,args);refreshes.push(args);return{status:0,stdout:'{"created":[]}',stderr:''};}
     calls.push(args);if(exe==='herdr')return{status:0,stdout:'{"result":{"agents":[]}}',stderr:''};
+    // A later pass may admit independent engineering work. It is not another
+    // launch of the captured review request and uses this test's normal fake.
+    if(args[0]===path.join(sourceRoot,'dispatch/dispatch.mjs')&&args[1]==='ENG-2')return{status:0,stdout:'{"result":"dispatched"}',stderr:''};
     assert.equal(args[0],path.join(sourceRoot,'dispatch/dispatch.mjs'));assert.equal(args[args.indexOf('--retry')+1],f.journal);assert.ok(args.includes('--continue-preflight'));return f.d.dispatch(args.slice(1),{env:{...f.d.env,HERDR_BRAIN_ROOT:fs.realpathSync(sourceRoot)}});
   }});service.pass();
   const c=f.context(),proof=c.events.find(e=>e.type==='review.original-prestart');assert.ok(proof,'legacy product hold is reconsidered on the checked original-scope capability');assert.equal(proof.original_native_launch_attempted,false);assert.equal(c.state.items.get('REV-4').closed,null);assert.equal(c.events.some(e=>e.type==='review.recovery-completed'),false);assert.deepEqual(c.events.find(e=>e.seq===verdict.seq),verdict);
-  assert.equal(calls.filter(a=>a[0]===path.join(sourceRoot,'dispatch/dispatch.mjs')).length,1,'a missing-producer diagnostic no longer creates a decision that delays the original continuation');
+  const originalLaunches=()=>calls.filter(a=>a[0]===path.join(sourceRoot,'dispatch/dispatch.mjs')&&a[1]!=='ENG-2');
+  assert.equal(originalLaunches().length,1,'a missing-producer diagnostic no longer creates a decision that delays the original continuation');
   service.pass();assert.equal(refreshes.length,2);
-  assert.equal(calls.filter(a=>a[0]===path.join(sourceRoot,'dispatch/dispatch.mjs')).length,1,JSON.stringify(diagnostics(f)));const archived=JSON.parse(fs.readFileSync(proof.archive.file)),savedOriginal=archived.files.find(f=>f.original===proof.journal);assert.deepEqual(fs.readFileSync(savedOriginal.archive),original);
+  assert.equal(originalLaunches().length,1,JSON.stringify(diagnostics(f)));const archived=JSON.parse(fs.readFileSync(proof.archive.file)),savedOriginal=archived.files.find(f=>f.original===proof.journal);assert.deepEqual(fs.readFileSync(savedOriginal.archive),original);
   const file=f.journal+'.driver/results.jsonl';let terminal;
   for(;;){if(fs.existsSync(file)){terminal=JSON.parse(fs.readFileSync(file,'utf8').trim().split('\n').at(-1));if(terminal.stage==='complete'||terminal.exit_code!==0)break;}await new Promise(resolve=>setTimeout(resolve,25));}
   assert.equal(terminal.stage,'complete',JSON.stringify(terminal));assert.equal(promptCalls(f.d).length,1);const saved=JSON.parse(fs.readFileSync(f.journal));assert.equal(saved.token,'original-r4');assert.equal(saved.reviewQueue.head,f.heads[0]);assert.equal(saved.reviewQueue.base,f.base);assert.equal(saved.native_launch_attempted,true);assert.equal(saved.preflightContinuations[0].native_launch_attempted,false);assert.equal(saved.preflightContinuations[0].original_prestart_seq,proof.seq);assert.equal(f.context().state.items.get('REV-4').runs.length,1);assert.deepEqual(f.context().events.find(e=>e.seq===verdict.seq),verdict);assert.equal([...f.context().state.items.values()].filter(i=>i.role==='reviewer').length,2);

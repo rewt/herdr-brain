@@ -372,7 +372,7 @@ or owned callbacks. Saved jobs without the new composition marker retain their
 original guidance; source AGENTS supplies the current/cold instruction defaults.
 
 Under the current operator waiver, the finishing engineer self-lands immediately
-with `lane promote TOPIC --expected-head FULL_COMMIT`, preserving native claims,
+with `lane promote TOPIC --expected-head-from-worktree`, preserving native claims,
 clean worktrees/rebase, exact source/CAS/fast-forward, STOP, HOLD and archives.
 It starts ONE async independent post-code review through the existing review
 route, with zero reviewer suites, and owns one formal correction/fix-forward.

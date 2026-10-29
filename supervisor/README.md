@@ -600,7 +600,7 @@ an exception. No scheduler or timing service is installed.
 
 **Saved second-project adapter seam (compatibility reference).** Admitted requests
 retain their captured record/run/check bindings and receipts. New workers land OWN
-finished source with `lane promote TOPIC --expected-head FULL_SHA`, then report;
+finished source with `lane promote TOPIC --expected-head-from-worktree`, then report;
 no report-first flag, completed settle or review PASS is a pre-main step. Do not
 retrofit this older adapter's admission sequence onto new workers. The project
 supplies its canonical

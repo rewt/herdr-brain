@@ -18,7 +18,9 @@ test('entry policies keep ordinary landing with workers and supervisor authority
   const context = { canonical: f.repo, org: f.org };
   const worker = entryPolicy({ ...context, role: 'worker' }, root);
   assert.ok(worker.includes(`${root}/lanes/lane.mjs`));
-  assert.match(worker, /promote TOPIC --expected-head FULL_COMMIT/);
+  assert.match(worker, /promote TOPIC --expected-head-from-worktree/);
+  assert.doesNotMatch(worker, /--expected-head FULL_/);
+  assert.match(worker, /record the resulting committed candidate head, and verify the command's captured head matches it/);
   assert.match(worker, /Hand immutable landed base\/head and producer evidence through your report to the single existing record queue-review path/);
   assert.match(worker, /the line service creates\/dispatches ONE independent async post-code diff\/evidence review, cap1/);
   assert.match(worker, /Never start a manual settle\/lane review, add a second reviewer, wait for a verdict to land, or replace an existing\/UNKNOWN attempt/);

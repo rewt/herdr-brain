@@ -111,7 +111,7 @@ members are refused individually. The final fast-forward guard rechecks each
 original completion fingerprint while holding the record lock. Saved native
 enqueue requests retain their explicit superseded/current-run bindings; omitted
 attempts remain intact. New workers land first with
-`lane promote TOPIC --expected-head FULL_SHA`, then report. This compatibility
+`lane promote TOPIC --expected-head-from-worktree`, then report. This compatibility
 transaction is not a report-first or review-readiness instruction for workers.
 
 1. Rebase and independently review the exact candidate. Record every included

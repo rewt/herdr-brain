@@ -7,7 +7,7 @@ They never run a baseline,
 Settle reviews code and runs no suite.
 
 Under the current operator landing waiver, finished owned source lands through
-`lane promote TOPIC --expected-head FULL_SHA` with native identity, claim,
+`lane promote TOPIC --expected-head-from-worktree` with native identity, claim,
 source, clean rebase, STOP/HOLD and fast-forward/CAS checks. Tests, report and
 review readiness add no landing gate. The record dispatches one asynchronous
 post-code diff/evidence review. Outside that waiver, promotion validates once

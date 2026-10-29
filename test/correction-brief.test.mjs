@@ -81,6 +81,10 @@ test('full fix context survives review intake and detached prompt with both repo
     const prompt = lineWorkerPrompt({ job, run, brief, node: process.execPath, laneCLI: '/brain/lanes/lane.mjs' });
     assert.ok(prompt.includes(source.brief), 'the complete context is delivered through the real detached prompt builder');
     assert.match(prompt, /watcher targets supervisor-herdr/);
+    assert.equal(contract.guidance.role, 'worker');
+    assert.match(prompt, /promote fresh-fixer --expected-head-from-worktree/);
+    assert.doesNotMatch(prompt, /--expected-head FULL_SHA/);
+    assert.match(prompt, /record the resulting committed candidate head, and verify the command's captured head matches it/);
     assert.equal(c.state.items.get(item.id).meta.review_round_cap, 1);
     assert.deepEqual(f.read().actions, []);
   }

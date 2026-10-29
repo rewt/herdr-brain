@@ -24,9 +24,10 @@ publication; Chipnet withdrawal. Rehearsal/withdrawal engineering continues unde
 its own owner. Prioritize explicitly and hold irrelevant backlog without false
 completion or discarding active claims.
 
-Workers self-land OWN source with lane promote TOPIC --expected-head FULL_SHA,
+Workers self-land OWN source with lane promote TOPIC --expected-head-from-worktree,
 then report. Main admits no test/review readiness gate under the current waiver.
-The same owner rebases moved main and captures its new head. ONE async post-code
+The same owner rebases moved main, records the committed candidate head, and
+verifies the command's captured head matches it. ONE async post-code
 immutable diff/evidence review per source item/landed head, cap1, zero suites; about30 minutes
 is advisory. Retain prior pending/ambiguous/UNKNOWN attempts. One formal correction,
 no re-review chain. Majors require specific correction checks before release.

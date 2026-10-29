@@ -56,11 +56,13 @@ not start settle/lane reviews, wait for a verdict to land, or invoke supervisor
 cycle mutations. Ordinary notices use the recorded worker's `--to`; saved review
 completion keeps its prompt path. Own a linked correction/fix-forward when assigned.
 
-Operator notices use the owning record's supported `messages send` entry from
-the brief: plain headline, what happened, action, then one Details line for codes.
-Routine status stays in the record. Only a genuinely pending question explicitly
-reserved in the record uses its existing one-time operator push. Actual exceptions
-go to the PROJECT SUPERVISOR; no operator-pane typing or borrowed identity.
+Routine completion, status and landing go only in the report/record; do not send
+an operator message for them. Send an operator message only when the brief
+explicitly asks for an operator-facing message, using the owning record's supported
+`messages send` entry: plain headline, what happened, action, then one Details
+line for codes. Only a genuinely pending question explicitly reserved in the
+record uses its existing one-time operator push. Actual exceptions go to the
+PROJECT SUPERVISOR; no operator-pane typing or borrowed identity.
 Use the owning brief's durable inbox command before exception input, and retain
 the item/run note and actual receipt. Brain's `--project-supervisor` mode keeps
 missing bindings pending under one stable ID across a supervisor recycle; it

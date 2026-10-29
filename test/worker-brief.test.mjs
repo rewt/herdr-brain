@@ -48,6 +48,8 @@ for (const [project, address] of [['/brain', 'supervisor-herdr'], ['/bch', 'supe
   assert.doesNotMatch(brief, /actual-native-worker/);
   assert.match(prompt, /watcher targets actual-native-worker/);
   assert.match(prompt, /Use --to actual-native-worker/);
+  assert.match(prompt, /Routine completion, status and landing go only in the report\/record/);
+  assert.match(prompt, /Send an operator message only when the brief explicitly asks for an operator-facing message/);
   assert.ok(prompt.includes(`'/node20' '/brain/supervisor/prompt-supervisor.mjs' '${address}'`));
   assert.ok(prompt.includes("'--org' '/record' '--run' 'R-1' '--id' 'R-1:exception:STABLE_ID' '--project-supervisor'"));
   assert.match(prompt, /SUPERVISOR_INPUT_WAIT_SECONDS=0/);

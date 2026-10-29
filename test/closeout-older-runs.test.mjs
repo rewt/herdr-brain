@@ -92,6 +92,13 @@ function stopped(t,{unprompted=false,session='session'}={}){
   return{...f,journal,job,saveJob:save,complete,dispose:()=>disposeStoppedAllocations({cwd:f.repo,org:f.org,env:f.env,retirementOptions:f.options})};
 }
 
+function promptGuard(f){
+  Object.assign(f.job,{stage:'prompt',error:'dispatch launch input changed: item/ancestor G-1 is closed/held/reserved'});
+  f.job.failure={code:'DISPATCH_INPUT_CHANGED',kind:'unknown',stage:'prompt',native_launch_attempted:true,
+    launch_input:{journal:f.journal,token:f.job.token}};
+  f.complete();
+}
+
 test('a completed pre-native capacity-lock failure releases its no-run folder once',t=>{
   const f=stopped(t),bytes=fs.readFileSync(f.journal);
   assert.equal(f.dispose().results[0].disposition,'removed');assert.equal(fs.existsSync(f.lane),false);
@@ -113,18 +120,24 @@ test('a failed original dispatcher at watch abandons its verified unprompted wor
 // prompt-boundary guard refused delivery, so stage stays 'prompt'.
 test('a never-prompted Codex worker without a native session is finalized once with its typed receipt',t=>{
   const f=stopped(t,{unprompted:true,session:null});
-  Object.assign(f.job,{stage:'prompt',error:'dispatch launch input changed: item/ancestor G-1 is closed/held/reserved'});
-  f.job.failure={code:'DISPATCH_INPUT_CHANGED',kind:'unknown',stage:'prompt',native_launch_attempted:true};f.complete();
+  promptGuard(f);
   const result=f.dispose();assert.equal(result.results[0].disposition,'NOT_PROMPTED',JSON.stringify(result));
   const receipt=events(f).find(e=>e.type==='dispatch.allocation-finalized');assert.equal(receipt.proof.session,null);
   assert.ok(fold(events(f)).runs.get('R-1').abandoned);assert.deepEqual(f.dispose().results,[]);
 });
 test('a session-less unprompted worker that gained a native session is retained',t=>{
-  const f=stopped(t,{unprompted:true,session:null});f.state.agents[0].agent_session={value:'later'};f.save();
+  const f=stopped(t,{unprompted:true,session:null});promptGuard(f);f.state.agents[0].agent_session={value:'later'};f.save();
   f.dispose();assert.equal(fold(events(f)).runs.get('R-1').abandoned,null);assert.ok(fs.existsSync(f.lane));
 });
-for(const kind of ['launch-UNKNOWN','prompting','binding','working','birth','dirty','refusal','claim','request-live','HOLD'])test(`unprompted finality retains ${kind}`,t=>{
-  const f=stopped(t,{unprompted:true});
+for(const kind of ['hook-review','hook-review-session','no-guard','guard-journal','guard-token','launch-UNKNOWN','prompting','binding','working','birth','dirty','refusal','claim','request-live','HOLD'])test(`unprompted finality retains ${kind}`,t=>{
+  const f=stopped(t,{unprompted:true,...(['hook-review','no-guard','guard-journal','guard-token'].includes(kind)?{session:null}:{})});
+  if(kind.startsWith('hook-review')){
+    f.job.stage='prompt';
+    f.job.error=`Codex hook-review dialog "Review hooks" blocks worker worker in w:p, the configured default profile (no -p/--profile in the saved route); brief not sent. Open /hooks in that worker session and review the hooks in that profile, then retry with --retry R-1. Hook trust is the operator's decision.`;
+    f.job.failure={code:'DISPATCH_HOOK_REVIEW',stage:'prompt',native_launch_attempted:true};
+    f.state.agents[0].agent_status='idle';f.save();f.complete();
+  }
+  if(kind.startsWith('guard-')){promptGuard(f);f.job.failure.launch_input[kind.slice(6)]='other';f.complete();}
   if(kind==='launch-UNKNOWN'){f.job.stage='launching';delete f.job.worker;delete f.job.launchProcess;f.job.failure.stage='launching';f.complete();}
   if(kind==='prompting'){f.job.stage='prompting';f.job.failure.stage='prompting';f.complete();}
   if(kind==='binding'){f.job.sessionBinding={status:'observing'};f.complete();}
@@ -137,6 +150,7 @@ for(const kind of ['launch-UNKNOWN','prompting','binding','working','birth','dir
   if(kind==='HOLD')fs.mkdirSync(path.join(f.repo,'.lane/supervisor/HOLD'),{recursive:true});
   const before=fs.readFileSync(f.eventFile),bytes=fs.readFileSync(f.journal);
   if(kind==='HOLD')assert.throws(f.dispose,/STOP\/HOLD/);else f.dispose();
+  assert.equal(events(f).some(e=>e.type==='dispatch.allocation-finalized'),false);
   assert.equal(fold(events(f)).runs.get('R-1').abandoned,null);assert.ok(fs.existsSync(f.lane));
   assert.deepEqual(f.read().actions,[]);assert.deepEqual(fs.readFileSync(f.journal),bytes);
   assert.deepEqual(fs.readFileSync(f.eventFile).subarray(0,before.length),before);

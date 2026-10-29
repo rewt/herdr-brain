@@ -93,3 +93,49 @@ test('exit identity spelling never excuses replacement occupants or changed exit
     assert.equal(exits, 1, name); assert.equal(result[0].action, 'skip-close', name);
   }
 });
+
+test('exit transition waits for cleared native fields without mistaking them for completion', t => {
+  const f = exitFixture(t, { bound: true }), before = f.retirement().observe(), plan = planRetirement(before);
+  for (const after of ['gone', 'replacement', 'never-clears', 'native-refusal']) {
+    const current = structuredClone(before), candidate = plan.close[0];
+    let requested = 0, paused = 0, observed = 0, clock = 0, readingExit = false;
+    const result = executeRetirement(plan, {
+      observe: () => {
+        if (readingExit && paused && after === 'native-refusal') throw Object.assign(Error('native refusal'), { code: 'EPERM' });
+        return current;
+      },
+      exit: () => {
+        requested++; readingExit = true;
+        // Native recognition can clear the name/session before removing its
+        // row. The original terminal and shell remain, but this is not finality.
+        delete current.agents[0].name; delete current.agents[0].agent_session;
+        const pane = current.panes[0], shell = pane.process_info.process_tree[0];
+        pane.shellOnly = true;
+        pane.process_info = { ...pane.process_info, process_tree: [shell], foreground_processes: [{ pid: shell.pid, name: 'zsh' }] };
+      },
+      exitObserved: () => {
+        observed++;
+        assert.equal(after, 'gone'); assert.equal(current.agents.length, 0);
+        current.exits = [{ schema: 'retirement-exit/v1', common: current.common, cwd: f.lane,
+          workspace: 'w', tab: 'w:t', pane: 'w:p', run: 'R-1',
+          occupant: { ...before.agents[0], agent_session_id: 'session' }, shell: candidate.shell }];
+      },
+      now: () => clock, exitTimeoutMs: 500,
+      pause: ms => {
+        assert.equal(observed, 0); paused++; clock += ms;
+        if (after === 'gone') current.agents = [];
+        if (after === 'replacement') current.agents = [{ ...before.agents[0], agent_session: { value: 'replacement' } }];
+      },
+      close: () => { assert.equal(after, 'gone'); assert.equal(observed, 1); },
+    });
+    assert.equal(requested, 1, after); assert.ok(paused > 0, after);
+    assert.equal(result[0].action, after === 'gone' ? 'closed' : 'skip-close', after);
+    if (after === 'replacement') {
+      assert.equal(paused, 1, 'a positive replacement stops immediately');
+      assert.equal(result[0].exit_observation.state, 'changed');
+      assert.equal(result[0].exit_observation.occupants[0][6], 'replacement');
+    }
+    if (after === 'never-clears') assert.equal(result[0].exit_observation.state, 'leaving');
+    if (after === 'native-refusal') assert.equal(result[0].command_error.code, 'EPERM');
+  }
+});

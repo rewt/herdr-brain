@@ -122,7 +122,7 @@ test('an observed exit survives a hold arriving after the agent exits and closes
 });
 
 test('an exit observed just as its retirement deadline expires remains available to the next pass', t => {
-  const f = exitFixture(t), now = Date.now, lstat = fs.lstatSync, deadline = now() + 60000;
+  const f = exitFixture(t), now = Date.now, lstat = fs.lstatSync, deadline = now() + 180000;
   let prompted = false, expired = false, result;
   const retirement = f.retirement({ deadline, command: (exe, args, options) => {
     const result = spawnSync(exe, args, options);

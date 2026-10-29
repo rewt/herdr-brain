@@ -99,3 +99,61 @@ for (const kind of ['live', 'unidentified']) test(`notice lock preserves a ${kin
   assert.equal(fs.readFileSync(f.owner, 'utf8'), bytes);
   assert.equal(fs.existsSync(`${f.directory}.recovery`), false);
 });
+
+test('recovery receipts bracket removal and retain the exact recorded owner identity', t => {
+  const f = fixture(t); deadOwner(t, f);
+  const bytes = fs.readFileSync(f.owner, 'utf8'), receipts = [];
+  const release = noticeLock(f.directory, { onRecovery: receipt => {
+    receipts.push(receipt);
+    assert.equal(fs.existsSync(f.owner), receipt.phase === 'intent');
+  } });
+  assert.deepEqual(receipts.map(r => r.phase), ['intent', 'recovered']);
+  assert.deepEqual(receipts[0].owner, JSON.parse(bytes));
+  assert.equal(receipts[0].proof.result, 'ESRCH');
+  assert.match(receipts[0].owner_sha256, /^[a-f0-9]{64}$/);
+  assert.ok(receipts[0].lock_identity);
+  release();
+});
+
+for (const kind of ['receipt-failure', 'same-pid-new-owner', 'live-replacement', 'probe-refused'])
+  test(`recovery preserves the lock after ${kind}`, t => {
+    const f = fixture(t); deadOwner(t, f);
+    const original = fs.readFileSync(f.owner, 'utf8');
+    let expected = original;
+    assert.throws(() => noticeLock(f.directory, { onRecovery: receipt => {
+      assert.equal(receipt.phase, 'intent');
+      if (kind === 'receipt-failure') throw Error('receipt unavailable');
+      if (kind === 'probe-refused') {
+        t.mock.method(process, 'kill', () => { throw Object.assign(Error('probe denied'), { code: 'EPERM' }); });
+      } else {
+        expected = JSON.stringify({ pid: kind === 'live-replacement' ? process.pid : JSON.parse(original).pid, at: 'new owner' });
+        fs.writeFileSync(f.owner, expected);
+      }
+    } }), /receipt unavailable|owner changed/);
+    assert.equal(fs.readFileSync(f.owner, 'utf8'), expected);
+    assert.equal(fs.existsSync(`${f.directory}.recovery`), false);
+  });
+
+test('a live replacement under the recovery guard is re-read and retained without a recovery receipt', t => {
+  const f = fixture(t); deadOwner(t, f);
+  const rename = fs.renameSync, bytes = JSON.stringify({ pid: process.pid, identity: 'different-birth' });
+  t.mock.method(fs, 'renameSync', (from, to) => {
+    const result = rename(from, to);
+    if (to === `${f.directory}.recovery`) fs.writeFileSync(f.owner, bytes);
+    return result;
+  });
+  assert.throws(() => noticeLock(f.directory, { onRecovery: () => assert.fail('live owner cannot be recovered') }), /locked:/);
+  assert.equal(fs.readFileSync(f.owner, 'utf8'), bytes);
+});
+
+test('dead recovery guards use the same serialized receipt path', t => {
+  const f = fixture(t); deadOwner(t, f);
+  fs.mkdirSync(`${f.directory}.recovery`);
+  fs.copyFileSync(f.owner, path.join(`${f.directory}.recovery`, 'owner.json'));
+  const receipts = [], release = noticeLock(f.directory, { onRecovery: r => receipts.push(r) });
+  assert.deepEqual(receipts.map(r => [r.directory, r.phase]), [
+    [`${f.directory}.recovery`, 'intent'], [`${f.directory}.recovery`, 'recovered'],
+    [f.directory, 'intent'], [f.directory, 'recovered'],
+  ]);
+  release();
+});

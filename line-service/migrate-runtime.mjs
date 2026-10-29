@@ -10,8 +10,7 @@ import {nativeSender} from '../messages/operator-inbox.mjs';
 import {canonical} from '../messages/schema.mjs';
 import {loadEvents,transact,writeFileAtomic} from '../lib/store.mjs';
 import {readPlainFile,plainDirectory} from '../lib/files.mjs';
-import {noticeLock} from '../supervisor/notice-lock.mjs';
-import {acquireLock} from '../lanes/promotion-lock.mjs';
+import {withRuntimeLocks} from './runtime-locks.mjs';
 import {loadDiscoveredRoutes} from '../lanes/routes.mjs';
 
 const git=(repo,args)=>execFileSync('git',['--no-optional-locks','-C',repo,...args],{encoding:'utf8',stdio:['ignore','pipe','pipe'],timeout:10000}).trim();
@@ -98,37 +97,33 @@ export function migrateRuntime({repo,org,id,dryRun=false,expectedPlan,cwd=proces
     ...(stoppedInstallation?{stopped_installation:stoppedInstallation}:{}),
     before:{installation:savedBytes,plist:plistBytes},after:{installation:JSON.stringify(after),plist:nextPlist}};
   const bytes=json(archive),ref={id,file:archiveFile,sha256:digest(bytes)},nextInstallation=json({...after,migration:ref});
-  const locks=[path.join(c.directory,'control.lock'),path.join(c.directory,'pass.lock'),path.join(c.identity,'lane-promote.lock')];
-  if(dryRun){
-    if(locks.some(f=>fs.existsSync(f)))throw Error('occupied control/pass/promotion lock prevents migration; no recovery');
-    return{dry_run:true,id,target,runtime:snapshot.runtime,archive:ref,changes:['installation.source','installation.runtime','installation.migration','service.ProgramArguments[1]'],
-      preserved:['node','transport','recipient','interval','logs','STOP','cutover','phase0','saved jobs/watchers','claims','queue attempts'],stopped:true,runtime_started:false};
-  }
-  if(!/^[a-f0-9]{64}$/.test(expectedPlan??'')||expectedPlan!==ref.sha256)throw Error('migration dry-run plan changed or --expected-plan SHA256 is missing; no replacement authorized');
-  const releaseControl=noticeLock(locks[0],{recover:false});
-  try{
-    const releasePass=noticeLock(locks[1],{recover:false});
-    try{
-      const releasePromotion=acquireLock(locks[2]);
-      try{
-        const result=transact(c.org,events=>{
-          if(!same(initial(),snapshot)||readPlainFile(installationFile)!==savedBytes||readPlainFile(file)!==plistBytes||fs.existsSync(archiveFile)||
-              events.some(e=>e.type==='line-service.runtime-migrated'&&e.project===c.identity&&e.org===c.org)||
-              !same(events.find(e=>e.seq===cutover.seq),cutover))throw Error('service migration source/record/native CAS changed');
-          // Publish the immutable intent before either replacement. A crash at
-          // any later point leaves STOP and this archive; it never auto-retries.
-          plainDirectory(path.dirname(archiveFile));
-          const fd=fs.openSync(archiveFile,'wx',0o444);try{fs.writeFileSync(fd,bytes);fs.fsyncSync(fd);}finally{fs.closeSync(fd);}
-          fault('intent');
-          writeFileAtomic(file,nextPlist,0o600);fault('plist');
-          writeFileAtomic(installationFile,nextInstallation,0o600);fault('installation');
-          const observed=stoppedInstallation?[{type:'line-service.stopped-installation-verified',id,project:c.identity,repo:c.repo,org:c.org,
-            observation:stoppedInstallation,archive:{file:ref.file,sha256:ref.sha256},native_caller:owner.native,runtime_started:false}]:[];
-          return{add:[...observed,{type:'line-service.runtime-migrated',id,project:c.identity,repo:c.repo,org:c.org,source:runtimeRoot,previous_source:cutover.source,
-            cutover_seq:cutover.seq,cutover_id:cutover.id,runtime:snapshot.runtime,archive:{file:ref.file,sha256:ref.sha256},native_caller:owner.native,runtime_started:false}],result:{migrated:true,id,target,archive:ref,runtime:snapshot.runtime,stopped:true,runtime_started:false}};
-        },{actor:owner.native.name,strictTail:true,lockOptions:{recover:false}});
-        return result.result;
-      }finally{releasePromotion();}
-    }finally{releasePass();}
-  }finally{releaseControl();}
+  const validate=()=>{
+    if(!same(initial(),snapshot)||readPlainFile(installationFile)!==savedBytes||readPlainFile(file)!==plistBytes)
+      throw Error('service migration source/native CAS changed');
+  };
+  if(!dryRun&&(!/^[a-f0-9]{64}$/.test(expectedPlan??'')||expectedPlan!==ref.sha256))throw Error('migration dry-run plan changed or --expected-plan SHA256 is missing; no replacement authorized');
+  return withRuntimeLocks(c,{id,operation:'migration',dryRun,owner,validate},()=>{
+    if(dryRun){
+      validate();
+      return{dry_run:true,id,target,runtime:snapshot.runtime,archive:ref,changes:['installation.source','installation.runtime','installation.migration','service.ProgramArguments[1]'],
+        preserved:['node','transport','recipient','interval','logs','STOP','cutover','phase0','saved jobs/watchers','claims','queue attempts'],stopped:true,runtime_started:false};
+    }
+    const result=transact(c.org,events=>{
+      if(!same(initial(),snapshot)||readPlainFile(installationFile)!==savedBytes||readPlainFile(file)!==plistBytes||fs.existsSync(archiveFile)||
+          events.some(e=>e.type==='line-service.runtime-migrated'&&e.project===c.identity&&e.org===c.org)||
+          !same(events.find(e=>e.seq===cutover.seq),cutover))throw Error('service migration source/record/native CAS changed');
+      // Publish the immutable intent before either replacement. A crash at
+      // any later point leaves STOP and this archive; it never auto-retries.
+      plainDirectory(path.dirname(archiveFile));
+      const fd=fs.openSync(archiveFile,'wx',0o444);try{fs.writeFileSync(fd,bytes);fs.fsyncSync(fd);}finally{fs.closeSync(fd);}
+      fault('intent');
+      writeFileAtomic(file,nextPlist,0o600);fault('plist');
+      writeFileAtomic(installationFile,nextInstallation,0o600);fault('installation');
+      const observed=stoppedInstallation?[{type:'line-service.stopped-installation-verified',id,project:c.identity,repo:c.repo,org:c.org,
+        observation:stoppedInstallation,archive:{file:ref.file,sha256:ref.sha256},native_caller:owner.native,runtime_started:false}]:[];
+      return{add:[...observed,{type:'line-service.runtime-migrated',id,project:c.identity,repo:c.repo,org:c.org,source:runtimeRoot,previous_source:cutover.source,
+        cutover_seq:cutover.seq,cutover_id:cutover.id,runtime:snapshot.runtime,archive:{file:ref.file,sha256:ref.sha256},native_caller:owner.native,runtime_started:false}],result:{migrated:true,id,target,archive:ref,runtime:snapshot.runtime,stopped:true,runtime_started:false}};
+    },{actor:owner.native.name,strictTail:true,lockOptions:{recover:false}});
+    return result.result;
+  });
 }

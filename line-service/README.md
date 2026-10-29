@@ -130,8 +130,9 @@ PLAN_SHA256=EXACT_64_CHARACTER_DRY_RUN_DIGEST
 "$NODE" "$ACCEPTED_ROOT/line-service/launchd.mjs" migrate --repo /OWN/CANONICAL --org /OWN/RECORD --id development-to-release --expected-plan "$PLAN_SHA256"
 ```
 
-Dry-run performs read-only native/record/pin/payload checks and writes no files
-or locks. Apply requires its exact plan digest, the same native owner and clean
+Dry-run checks native/record/pin/payload bindings under the handoff locks and
+leaves runtime files intact; dead-pass recovery is receipted below. Apply
+requires its exact plan digest, the same native owner and clean
 canonical main, unchanged installation/plist/STOP, the original cutover, an
 absent launchd job and READY acceptance for the exact fully verified installed
 payload. Drift between planning and application refuses; inspect it before
@@ -149,7 +150,8 @@ immutable migration archive records a `line-stopped-installation/v1` observation
 and the same record transaction appends `line-service.stopped-installation-verified`
 before the migration completion. The original phase/error remain preserved;
 this proves the stopped state, never claims the refused bootstrap succeeded.
-Dry-run still writes nothing. `starting`, other phases and partial/UNKNOWN
+Dry-run leaves runtime bindings unchanged (dead-pass recovery is receipted as below).
+`starting`, other phases and partial/UNKNOWN
 migrations remain refused. This recovery must be present in the accepted release
 **before the project's one migration**; a7b9b37dcd does not contain it.
 
@@ -165,7 +167,18 @@ and UNKNOWN review attempts are not rewritten. Those jobs keep their recorded
 runtime; only new controller invocations use the installed entry point.
 
 The control takes the existing pass, promotion and record locks plus one
-service-control lock, with no recovery. An interrupted application leaves STOP
+service-control lock. Both dry-run and apply may recover only a proven dead
+`pass.lock` owner (including a dead `.recovery` guard), using the line pass's
+serialized recovery protocol. A fresh positive ESRCH, exact directory/owner
+re-read and repeated death probe are required. Legacy at/argv owner identity is
+retained; live PIDs (including reuse), malformed/missing identities and refused
+probes retain their locks. Append-only `line-service.lock-recovery` events with
+schema `line-lock-recovery/v1` bracket removal with intent/completion, recording
+the operation/ID, dry-run flag, native caller, owner bytes digest, directory
+identity and death proof. Receipt failure prevents removal; an intent without
+completion remains visible for inspection. No stale lock means no recovery event.
+Control, promotion and record locks retain their no-recovery behavior.
+An interrupted application leaves STOP
 and its immutable intent; either the same ID or another ID refuses replacement
 of an UNKNOWN attempt. A completed exact-ID retry only reads the original
 completion. Partial migration is not authority to restore files by hand or
@@ -228,7 +241,9 @@ the project's supported pin must already select the target. The command must
 execute from one of those roots with this upgrade support. It requires the
 owning canonical native supervisor, clean canonical main, the service's own
 STOP and an unloaded job; use the existing `stop` command first. Project
-STOP/HOLD and occupied control/pass/promotion locks refuse without recovery.
+STOP/HOLD and occupied control/promotion locks refuse without recovery. The
+pass lock follows the same guarded, receipted dead-owner recovery as migration,
+in dry-run, upgrade and rollback.
 This command never changes a pin or starts a service.
 
 After the release coordinator has qualified and installed the successor, the
@@ -246,7 +261,8 @@ PLAN_SHA256=EXACT_64_CHARACTER_DRY_RUN_DIGEST
 "$NODE" "$TARGET_ROOT/line-service/launchd.mjs" status --repo /OWN/CANONICAL --org /OWN/RECORD
 ```
 
-The dry-run is read-only. Apply rechecks native identity, payloads, pin, STOP,
+Dry-run may recover a dead pass owner with the append-only receipts described
+above; it leaves runtime files intact. Apply rechecks native identity, payloads, pin, STOP,
 record and saved bytes under the existing control/pass/promotion/record locks.
 It fsyncs a new `upgrades/ID.json` intent before replacing the controller path
 and installation source/runtime, then appends `line-service.runtime-upgraded`

@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {spawnSync} from 'node:child_process';
+import {createHash} from 'node:crypto';
 import {configFixture} from './helpers/config-home-fixture.mjs';
 import {loadEvents,transact} from '../lib/store.mjs';
 import {gitProject} from '../lib/project.mjs';
@@ -323,3 +324,89 @@ test('successive accepted upgrades validate the whole archive chain and reject c
   const installation=fs.readFileSync(f.installationFile,'utf8');fs.writeFileSync(f.installationFile,installation.replace('2026-10-27','2026-10-28'));
   assert.throws(()=>installedContext(f.cwd,f.org),/drifted/);
 });
+
+function stalePass(t, f, name = 'pass.lock') {
+  const directory = path.join(f.directory, name), pid = 2147483647, kill = process.kill;
+  t.mock.method(process, 'kill', (target, signal) => {
+    if (target === pid) throw Object.assign(Error('fixture owner absent'), { code: 'ESRCH' });
+    return kill(target, signal);
+  });
+  const owner = {pid, at:'2026-10-27T20:15:22Z', argv:['node','line-service.mjs','--once','--to','brain-chat']};
+  fs.mkdirSync(directory);fs.writeFileSync(path.join(directory,'owner.json'),JSON.stringify(owner));
+  return {directory,owner};
+}
+function recoveryEvents(f) {return loadEvents(f.org).events.filter(e=>e.type==='line-service.lock-recovery');}
+
+for (const operation of ['migration','upgrade']) for (const dryRun of [true,false])
+  test(`${operation} ${dryRun?'dry-run':'apply'} recovers a dead pass owner with append-only intent and completion`,async t=>{
+    const f=await (operation==='migration'?fixture(t):successor(t)),before=retained(f);
+    const plan=operation==='migration'?f.migrate({dryRun:true}):f.plan();
+    const stale=stalePass(t,f),guard=stalePass(t,f,'pass.lock.recovery');
+    const invoke=()=>operation==='migration'?f.migrate({dryRun,expectedPlan:plan.archive.sha256}):
+      f.main([...f.argv,...(dryRun?['--dry-run']:['--expected-plan',plan.archive.sha256])],f.args);
+    const result=invoke(),events=recoveryEvents(f);
+    assert.equal(dryRun?result.dry_run:(result.migrated??result.upgraded),true);
+    assert.deepEqual(events.map(e=>[e.directory,e.phase]),[
+      [guard.directory,'intent'],[guard.directory,'recovered'],[stale.directory,'intent'],[stale.directory,'recovered']]);
+    for(const event of events){
+      assert.equal(event.schema,'line-lock-recovery/v1');assert.equal(event.operation,operation);
+      assert.equal(event.dry_run,dryRun);assert.equal(event.project,f.identity);assert.equal(event.org,f.org);
+      assert.equal(event.native_caller.name,f.agent.name);assert.deepEqual(event.owner,stale.owner);
+      assert.equal(event.proof.result,'ESRCH');assert.equal(event.proof.method,'kill(pid, 0)');
+      assert.equal(event.owner_sha256,createHash('sha256').update(JSON.stringify(stale.owner)).digest('hex'));
+      assert.ok(event.lock_identity);
+    }
+    assert.equal(fs.existsSync(stale.directory),false);assert.equal(fs.existsSync(guard.directory),false);
+    assert.equal(fs.readFileSync(f.stop,'utf8'),before.stop);
+    if(dryRun){
+      assert.equal(fs.readFileSync(f.installationFile,'utf8'),before.installation);
+      assert.equal(fs.readFileSync(f.file,'utf8'),before.plist);
+      assert.equal(plan.archive.sha256,result.archive.sha256,'recovery receipts do not change the dry-run plan');
+      assert.ok(fs.readFileSync(path.join(f.org,'events.jsonl'),'utf8').startsWith(before.events));
+      invoke();assert.deepEqual(recoveryEvents(f),events,'a clean retry does not duplicate recovery receipts');
+      const applied=operation==='migration'?f.migrate({expectedPlan:result.archive.sha256}):
+        f.main([...f.argv,'--expected-plan',result.archive.sha256],f.args);
+      assert.equal(applied.migrated??applied.upgraded,true);
+    }
+    assert.equal(f.calls.some(c=>['bootstrap','bootout'].includes(c.args[0])),false);
+  });
+
+for(const operation of ['migration','upgrade'])
+  test(`${operation} preserves unidentified, live, reused-PID and unprobeable pass owners and dead control/promotion owners`,async t=>{
+    const f=await (operation==='migration'?fixture(t):successor(t)),before=retained(f);
+    const plan=operation==='migration'?f.migrate({dryRun:true}):f.plan();
+    const apply=dryRun=>operation==='migration'?f.migrate({dryRun,expectedPlan:plan.archive.sha256}):
+      f.main([...f.argv,...(dryRun?['--dry-run']:['--expected-plan',plan.archive.sha256])],f.args);
+    const dead=2147483647,denied=2147483646,kill=process.kill;
+    t.mock.method(process,'kill',(pid,signal)=>{
+      if(pid===dead||pid===denied)throw Object.assign(Error('fixture probe'),{code:pid===dead?'ESRCH':'EPERM'});
+      return kill(pid,signal);
+    });
+    for(const value of ['{',JSON.stringify({pid:dead}),JSON.stringify({pid:process.pid,identity:'old-birth'}),
+        JSON.stringify({pid:denied,identity:'recorded-birth'})]){
+      const lock=path.join(f.directory,'pass.lock');fs.mkdirSync(lock);fs.writeFileSync(path.join(lock,'owner.json'),value);
+      for(const dryRun of [true,false]){
+        assert.throws(()=>apply(dryRun),/lock/);assert.equal(fs.readFileSync(path.join(lock,'owner.json'),'utf8'),value);
+        assert.deepEqual(retained(f),before);assert.equal(recoveryEvents(f).length,0);
+      }
+      fs.rmSync(lock,{recursive:true});
+    }
+    for(const lock of [path.join(f.directory,'control.lock'),path.join(f.identity,'lane-promote.lock')]){
+      const bytes=JSON.stringify({pid:dead,at:'2026-10-27T20:15:22Z',argv:['line-service']});
+      fs.mkdirSync(lock);fs.writeFileSync(path.join(lock,'owner.json'),bytes);
+      for(const dryRun of [true,false]){assert.throws(()=>apply(dryRun),/lock/);assert.equal(fs.readFileSync(path.join(lock,'owner.json'),'utf8'),bytes);}
+      fs.rmSync(lock,{recursive:true});assert.deepEqual(retained(f),before);
+    }
+  });
+
+for(const operation of ['migration','upgrade'])
+  test(`${operation} retains the dead pass owner when its append-only receipt cannot be committed`,async t=>{
+    const f=await (operation==='migration'?fixture(t):successor(t)),before=retained(f),stale=stalePass(t,f);
+    const recordLock=path.join(f.org,'lock');fs.mkdirSync(recordLock);fs.writeFileSync(path.join(recordLock,'pid'),String(process.pid));
+    try{
+      assert.throws(()=>operation==='migration'?f.migrate({dryRun:true}):f.plan(),/record is locked/);
+      assert.deepEqual(JSON.parse(fs.readFileSync(path.join(stale.directory,'owner.json'))),stale.owner);
+      assert.equal(fs.existsSync(`${stale.directory}.recovery`),false);
+      assert.deepEqual(retained(f),before);
+    }finally{fs.rmSync(recordLock,{recursive:true});}
+  });

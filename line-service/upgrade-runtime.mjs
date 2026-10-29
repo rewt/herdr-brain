@@ -11,8 +11,7 @@ import {nativeSender} from '../messages/operator-inbox.mjs';
 import {canonical} from '../messages/schema.mjs';
 import {loadEvents,transact} from '../lib/store.mjs';
 import {readPlainFile,plainDirectory,writeFileAtomic} from '../lib/files.mjs';
-import {noticeLock} from '../supervisor/notice-lock.mjs';
-import {acquireLock} from '../lanes/promotion-lock.mjs';
+import {withRuntimeLocks} from './runtime-locks.mjs';
 import {loadDiscoveredRoutes} from '../lanes/routes.mjs';
 
 const git=(repo,args)=>execFileSync('git',['--no-optional-locks','-C',repo,...args],{encoding:'utf8',stdio:['ignore','pipe','pipe'],timeout:10000}).trim();
@@ -81,36 +80,32 @@ export function upgradeRuntime({repo,org,id,fromRoot,targetRoot,rollback=false,d
     owner,canonical_head:snapshot.head,stop_sha256:snapshot.stop_sha256,runtime:snapshot.runtime,
     before:{installation:savedBytes,plist:plistBytes},after:{installation:JSON.stringify(after),plist:nextPlist}};
   const bytes=json(archive),ref={id,file:archiveFile,sha256:digest(bytes)},nextInstallation=json(rollback?after:{...after,upgrade:ref});
-  const locks=[path.join(c.directory,'control.lock'),path.join(c.directory,'pass.lock'),path.join(c.identity,'lane-promote.lock')];
-  if(dryRun){
-    if(locks.some(f=>fs.existsSync(f)))throw Error('occupied control/pass/promotion lock prevents upgrade; no recovery');
-    return {dry_run:true,id,direction,target,archive:ref,previous:snapshot.previous,runtime:snapshot.runtime,stopped:true,runtime_started:false,
-      changes:['installation.source','installation.runtime','installation.upgrade','service.ProgramArguments[1]'],preserved:['migration archive/event','cutover','phase0','STOP','node','transport','saved jobs/watchers','claims','queue attempts']};
-  }
-  if(!/^[a-f0-9]{64}$/.test(expectedPlan??'')||expectedPlan!==ref.sha256)throw Error('upgrade dry-run plan changed or --expected-plan SHA256 is missing; no replacement authorized');
-  const releaseControl=noticeLock(locks[0],{recover:false});
-  try{
-    const releasePass=noticeLock(locks[1],{recover:false});
-    try{
-      const releasePromotion=acquireLock(locks[2]);
-      try{
-        const result=transact(c.org,events=>{
-          if(!same(initial(),snapshot)||readPlainFile(installationFile)!==savedBytes||readPlainFile(file)!==plistBytes||fs.existsSync(archiveFile)||
-              history(events).last.seq!==state.last.seq)throw Error('service upgrade source/record/native CAS changed');
-          plainDirectory(path.dirname(archiveFile));
-          const fd=fs.openSync(archiveFile,'wx',0o444);try{fs.writeFileSync(fd,bytes);fs.fsyncSync(fd);}finally{fs.closeSync(fd);}
-          fault('intent');writeFileAtomic(file,nextPlist,0o600);fault('plist');
-          if(!rollback){writeFileAtomic(installationFile,nextInstallation,0o600);fault('installation');}
-          return {add:[{type:'line-service.runtime-upgraded',id,project:c.identity,repo:c.repo,org:c.org,direction,source:targetRoot,previous_source:fromRoot,previous_seq:state.last.seq,
-            runtime:snapshot.runtime,archive:{file:ref.file,sha256:ref.sha256},native_caller:owner.native,runtime_started:false}],
-          result:{upgraded:true,id,direction,target,archive:ref,previous:snapshot.previous,runtime:snapshot.runtime,stopped:true,runtime_started:false}};
-        },{actor:owner.native.name,strictTail:true,lockOptions:{recover:false}}).result;
-        // An older runtime cannot recognize a pending upgrade intent. Publish
-        // the rollback event before restoring its legacy-readable receipt;
-        // until then its saved source mismatches and startup must refuse.
-        if(rollback){fault('record');writeFileAtomic(installationFile,nextInstallation,0o600);fault('installation');}
-        return result;
-      }finally{releasePromotion();}
-    }finally{releasePass();}
-  }finally{releaseControl();}
+  const validate=()=>{
+    if(!same(initial(),snapshot)||readPlainFile(installationFile)!==savedBytes||readPlainFile(file)!==plistBytes)
+      throw Error('service upgrade source/native CAS changed');
+  };
+  if(!dryRun&&(!/^[a-f0-9]{64}$/.test(expectedPlan??'')||expectedPlan!==ref.sha256))throw Error('upgrade dry-run plan changed or --expected-plan SHA256 is missing; no replacement authorized');
+  return withRuntimeLocks(c,{id,operation:direction,dryRun,owner,validate},()=>{
+    if(dryRun){
+      validate();
+      return {dry_run:true,id,direction,target,archive:ref,previous:snapshot.previous,runtime:snapshot.runtime,stopped:true,runtime_started:false,
+        changes:['installation.source','installation.runtime','installation.upgrade','service.ProgramArguments[1]'],preserved:['migration archive/event','cutover','phase0','STOP','node','transport','saved jobs/watchers','claims','queue attempts']};
+    }
+    const result=transact(c.org,events=>{
+      if(!same(initial(),snapshot)||readPlainFile(installationFile)!==savedBytes||readPlainFile(file)!==plistBytes||fs.existsSync(archiveFile)||
+          history(events).last.seq!==state.last.seq)throw Error('service upgrade source/record/native CAS changed');
+      plainDirectory(path.dirname(archiveFile));
+      const fd=fs.openSync(archiveFile,'wx',0o444);try{fs.writeFileSync(fd,bytes);fs.fsyncSync(fd);}finally{fs.closeSync(fd);}
+      fault('intent');writeFileAtomic(file,nextPlist,0o600);fault('plist');
+      if(!rollback){writeFileAtomic(installationFile,nextInstallation,0o600);fault('installation');}
+      return {add:[{type:'line-service.runtime-upgraded',id,project:c.identity,repo:c.repo,org:c.org,direction,source:targetRoot,previous_source:fromRoot,previous_seq:state.last.seq,
+        runtime:snapshot.runtime,archive:{file:ref.file,sha256:ref.sha256},native_caller:owner.native,runtime_started:false}],
+      result:{upgraded:true,id,direction,target,archive:ref,previous:snapshot.previous,runtime:snapshot.runtime,stopped:true,runtime_started:false}};
+    },{actor:owner.native.name,strictTail:true,lockOptions:{recover:false}}).result;
+    // An older runtime cannot recognize a pending upgrade intent. Publish
+    // the rollback event before restoring its legacy-readable receipt;
+    // until then its saved source mismatches and startup must refuse.
+    if(rollback){fault('record');writeFileAtomic(installationFile,nextInstallation,0o600);fault('installation');}
+    return result;
+  });
 }

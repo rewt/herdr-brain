@@ -194,8 +194,15 @@ record dispatch_unlanded_admitted=false because lifecycle capacity is no longer
 charged. The core remains advisory for manual record starts.
 
 Current-source dispatch re-reads the actual item and its current parent/ancestor
-chain at native launch and immediately before prompt delivery. A closed, held,
-reserved or missing subject refuses only that request. The launcher also checks
+chain at native launch and immediately before prompt delivery. A closed target,
+closed goal, dropped ancestor, held, reserved or missing subject refuses only
+that request. Completing an ordinary work ancestor leaves its open follow-ups
+dispatchable without reparenting, including nested follow-ups and older direct
+filings without a proposing run. A completed review still admits only its exact
+formally linked correction with immutable finding/source evidence; moving that
+correction under completed ordinary work does not grant an exception. Explicit
+holds and human/reserved ancestors remain barriers even after completion.
+The launcher also checks
 after native shell preparation, binding its check to the pending journal bytes,
 source/project, current run and claim generation. Changed inputs retain a typed
 `DISPATCH_INPUT_CHANGED` receipt in the original journal; existing workers and

@@ -94,6 +94,19 @@ test('formal correction beneath an arbitrary closed parent stays refused', t => 
   refused(g, g.job(), 'REV-1');
 });
 
+test('formal correction keeps its exact review source beneath completed ordinary work ancestors', t => {
+  const f = formalFixture(t), correction = f.source();
+  transact(f.org, () => ({ add: [
+    { type: 'item.added', id: 'DEC-1', kind: 'work', role: 'decision', parent: 'G-1' },
+    { type: 'item.updated', id: 'REV-1', fields: { parent: 'DEC-1' } },
+    { type: 'item.closed', id: 'DEC-1', as: 'done' },
+  ] }));
+  assert.equal(checkDispatchEligibility(f.job({ correction }), 'offline-formal-boundary').item, 'ENG-2');
+  assert.deepEqual(f.source(), correction, 'completed decision does not change the immutable correction source');
+  transact(f.org, () => ({ add: [{ type: 'item.updated', id: 'DEC-1', fields: { meta: { hold: true } } }] }));
+  refused(f, f.job({ correction }), 'DEC-1');
+});
+
 test('formal correction refuses an explicitly held or reserved review or grandparent even when matched', t => {
   for (const subject of ['REV-1', 'G-1']) for (const flag of ['hold', 'held', 'operator_reserved', 'reserved']) {
     const f = formalFixture(t);

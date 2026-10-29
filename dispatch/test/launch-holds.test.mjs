@@ -26,6 +26,27 @@ function inject(f,script,marker,commands){
 }
 const effects=f=>f.calls().filter(c=>c.type==='lane'&&c.a[0]==='dispatch');
 
+test('dispatch launches nested follow-up work beneath completed ordinary work without reparenting',t=>{
+  const f=fixture(t),goal=f.rec(['add','Roadmap','--goal']).match(/G-\d+/)[0];
+  const decision=f.rec(['add','Filed plan','--role','decision','--parent',goal]).match(/DEC-\d+/)[0];
+  const parent=f.rec(['add','Completed implementation','--role','engineer','--parent',decision]).match(/ENG-\d+/)[0];
+  f.rec(['set',f.item,`parent=${parent}`]);
+  f.rec(['close',parent]);f.rec(['close',decision]);
+  const result=f.start();assert.equal(result.status,0,result.stderr);
+  assert.equal(effects(f).length,1);assert.equal(promptCalls(f).length,1);assert.equal(f.jobs().length,1);
+  assert.equal(f.show(f.item).parent,parent);assert.equal(f.show(parent).parent,decision);
+  assert.equal(f.show(parent).closed.as,'done');assert.equal(f.show(decision).closed.as,'done');
+});
+
+test('ordinary work completion during preparation preserves its original follow-up launch',t=>{
+  const f=fixture(t),parent=f.rec(['add','Filed follow-up','--role','engineer']).match(/ENG-\d+/)[0];
+  f.rec(['set',f.item,`parent=${parent}`]);
+  inject(f,'lane',"if(a[0]==='prepare' && !entry()) process.exit(1);",[['close',parent]]);
+  const result=f.start();assert.equal(result.status,0,result.stderr);
+  assert.equal(effects(f).length,1);assert.equal(promptCalls(f).length,1);
+  assert.equal(f.show(f.item).parent,parent);assert.equal(f.show(parent).closed.as,'done');
+});
+
 for(const [subject,field]of [['item','meta.hold=true'],['parent','meta.held=true'],['ancestor','meta.reserved=true']]){
   test(`prepared dispatch rechecks a real ${subject} ${field} before native launch`,t=>{
     const f=fixture(t),ids=addParent(f);

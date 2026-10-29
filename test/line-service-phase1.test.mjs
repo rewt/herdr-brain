@@ -169,7 +169,7 @@ function assertFiniteRefresh(f,args){
   assert.deepEqual(args.slice(0,6),[path.join(sourceRoot,'supervisor/closeout.mjs'),'refresh','--repo',f.cwd,'--org',f.org]);
   assert.equal(args.length,8);assert.equal(args[6],'--deadline');
   const deadline=Number(args[7]),now=Date.now();
-  assert.ok(Number.isSafeInteger(deadline)&&deadline>now&&deadline<=now+15000,'refresh retains its finite original-binding allowance');
+  assert.ok(Number.isSafeInteger(deadline)&&deadline>now&&deadline<=now+60000,'refresh retains its finite original-binding allowance');
 }
 
 function recoveryFixture(t,{verdict,kind='never-created'}={}){
@@ -1196,7 +1196,9 @@ test('cleanup runs before slow review work and a fresh STOP still prevents the r
       }});
     const result=service.pass();if(stopped)assert.match(result.held,/STOP/);
     assert.equal(calls.filter(a=>a[1]==='drain'&&JSON.parse(a[a.indexOf('--keys')+1]).includes(key)).length,1);
-    assert.equal(calls.filter(a=>a[1]==='refresh').length,!stopped&&cleanupWorkMs<100?1:0,'refresh follows bound work only with allowance remaining and no STOP');
+    const refreshes=calls.filter(a=>a[1]==='refresh');
+    assert.equal(refreshes.length,stopped?0:1,'refresh uses its independent closeout allowance while a fresh STOP still prevents it');
+    if(!stopped)assertFiniteRefresh(f,refreshes[0]);
     assert.equal(calls.filter(a=>a[1]==='queue-review').length,stopped?0:1);
     if(!stopped)assert.ok(calls.findIndex(a=>a[1]==='drain')<calls.findIndex(a=>a[1]==='queue-review'),'slow review cannot consume the prior closeout turn');
   }

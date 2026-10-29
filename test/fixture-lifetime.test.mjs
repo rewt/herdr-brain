@@ -9,7 +9,7 @@ import { createProcessTracker } from './helpers/processes.mjs';
 import { loadTimeout } from '../lib/deadline.mjs';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { spawnFixtureExec } from './helpers/fixture-lifetime.mjs';
+import { spawnFixtureExec, exitedLifetimeGuardCommands } from './helpers/fixture-lifetime.mjs';
 
 const local = file => fileURLToPath(new URL(file, import.meta.url));
 const tracker = createProcessTracker();
@@ -30,6 +30,23 @@ const alive = entries => {
     return row && !/^Z/.test(row.state) && row.identity === entry.identity && row.command === entry.command;
   });
 };
+
+test('exited lifetime guard selection requires the exact binary, private writer and departed parent', () => {
+  const owner = { executable: '/private/fixture-cache/source-digest', root: '/private/fixture root' };
+  const command = `${owner.executable} --watch ${owner.root}/lifetime-404-Ab12CD/alive 60 505`;
+  const row = { ppid: 1, command };
+  assert.deepEqual([...exitedLifetimeGuardCommands([row], owner)], [command]);
+  for (const other of [
+    { ...row, ppid: 505 },
+    { ...row, command: command.replace('source-digest', 'other-binary') },
+    { ...row, command: command.replace('fixture root', 'other-root') },
+    { ...row, command: command.replace('/alive', '/../other/alive') },
+    { ...row, command: command.replace(' 60 505', ' 0 505') },
+    { ...row, command: command.replace(' 60 505', ' 60 1') },
+    { ...row, command: command + ' extra' },
+    { ...row, command: command.replace('--watch', '--exec') },
+  ]) assert.deepEqual([...exitedLifetimeGuardCommands([other], owner)], []);
+});
 
 test('a stale PID-named FIFO in the shared offline root does not block a new lifetime owner', async t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'fixture-lifetime-pid-reuse-'));
@@ -269,6 +286,58 @@ test('completed fixture',()=>{});`);
   assert.equal(result.code, 0, result.stdout + result.stderr);
   assert.doesNotMatch(result.stderr, /Surviving fixture/);
 });
+
+for (const resume of [true, false]) {
+  test(`an exited file's delayed native guard ${resume ? 'drains before the survivor audit' : 'still fails when it cannot drain'}`, async t => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'fixture-guard-drain-'));
+    const file = path.join(root, 'complete.test.mjs'), ready = path.join(root, 'ready.json');
+    const release = path.join(root, 'finish'), journal = path.join(root, 'timings.jsonl');
+    const owned = [];
+    t.after(async () => {
+      for (const entry of owned.toReversed()) assert.ok(tracker.killProcess(entry).ok);
+      await until(() => !alive(owned).length, 'guard drain control left a fixture alive');
+      fs.rmSync(root, { recursive: true, force: true });
+    });
+    fs.writeFileSync(file, `import test from ${JSON.stringify(local('./helpers/bounded-test.mjs'))};
+import fs from 'node:fs';
+import {ownFixtureLifetime} from ${JSON.stringify(local('./helpers/fixture-lifetime.mjs'))};
+test('completed file with a delayed guard',async()=>{
+  fs.writeFileSync(${JSON.stringify(ready)},JSON.stringify({file:process.pid,guard:ownFixtureLifetime()}));
+  while(!fs.existsSync(${JSON.stringify(release)}))await new Promise(resolve=>setTimeout(resolve,10));
+});`);
+    const child = spawnScenarioChild(t, process.execPath, [local('./helpers/run.mjs'), file],
+      { env: { ...process.env, MONITOR_TEST_TIMINGS_PATH: journal } });
+    let finished;
+    waitForExit(child).then(result => { finished = result; });
+    await until(() => fs.existsSync(ready) || finished, 'file did not publish its guard');
+    assert.ok(fs.existsSync(ready), finished?.stdout + finished?.stderr);
+    const receipt = JSON.parse(fs.readFileSync(ready, 'utf8')), rows = snapshot();
+    const guard = rows.get(receipt.guard.pid);
+    assert.equal(guard?.ppid, receipt.file);
+    assert.equal(guard.command, receipt.guard.command);
+    owned.push({ ...guard, group: false });
+    assert.equal(tracker.killProcess(owned[0], 'SIGSTOP').signaled, true);
+    fs.writeFileSync(release, 'finish');
+    const timings = () => fs.existsSync(journal) ? fs.readFileSync(journal, 'utf8').trim().split('\n').filter(Boolean).map(JSON.parse) : [];
+    await until(() => timings().some(row => row.kind === 'fixture-guard-drain') || finished,
+      'runner did not join the exited file guard');
+    assert.ok(timings().some(row => row.kind === 'fixture-guard-drain' && row.guards.some(row => row.pid === guard.pid)),
+      finished?.stdout + finished?.stderr);
+    assert.equal(snapshot().get(guard.pid)?.ppid, 1);
+    assert.equal(finished, undefined, 'runner completed before the stopped guard drained');
+    if (resume) assert.equal(tracker.killProcess(owned[0], 'SIGCONT').signaled, true);
+    const result = await waitForExit(child);
+    assert.equal(result.code, resume ? 0 : 1, result.stdout + result.stderr);
+    if (resume) assert.doesNotMatch(result.stderr, /Surviving fixture/);
+    else {
+      assert.match(result.stderr, /fixture guard drain exceeded 5000ms/);
+      assert.match(result.stderr, new RegExp(`Surviving fixture: PID ${guard.pid}, command `));
+    }
+    await until(() => !alive(owned).length, 'runner did not reap its delayed guard');
+    t.diagnostic(JSON.stringify({ resumed: resume, exit_code: result.code, guard: guard.pid,
+      drain_observed: true }));
+  });
+}
 
 for (const target of ['suite leader', 'coordinator with suspended leader']) {
   test(`abrupt ${target} death stops a blocked test file and its orphan inbox owner`, async t => {

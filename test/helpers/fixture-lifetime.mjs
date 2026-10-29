@@ -15,6 +15,25 @@ const nativeSync = cp.spawnSync;
 const nativeSpawn = ChildProcess.prototype.spawn;
 let lifetime;
 
+// These are candidates to JOIN, never exemptions from the survivor audit. The
+// native --watch entry validates its original direct parent before watching;
+// reparenting therefore proves that target has exited. Include nested runner
+// owners as well as files, all using this suite's source-bound cached binary
+// and private lifetime writers. A stuck or changed guard must still fail.
+export function exitedLifetimeGuardCommands(rows, { executable = process.env.HERDR_FIXTURE_LIFETIME_EXECUTABLE,
+  root = process.env.HERDR_TEST_OFFLINE_ROOT } = {}) {
+  const commands = new Set();
+  if (!executable || !root) return commands;
+  const prefix = `${executable} --watch ${root}/lifetime-`;
+  for (const row of rows) {
+    if (row.ppid !== 1 || !row.command.startsWith(prefix)) continue;
+    const match = /^([1-9]\d*)-[A-Za-z0-9]+\/alive ([1-9]\d*) ([1-9]\d*)$/.exec(row.command.slice(prefix.length));
+    if (match && Number(match[1]) > 1 && Number(match[3]) > 1 && Number(match[3]) <= 2147483647)
+      commands.add(row.command);
+  }
+  return commands;
+}
+
 function watchLifetime(owner) {
   const args = ['--watch', owner.fifo, owner.seconds, String(process.pid)];
   const guard = cp.spawn(owner.executable,

@@ -5,9 +5,9 @@ import { run } from 'node:test';
 import { tap } from 'node:test/reporters';
 import { pipeline } from 'node:stream/promises';
 import { fileURLToPath } from 'node:url';
-import { registerProcess, killProcess, auditGroup } from './processes.mjs';
+import { registerProcess, killProcess, auditGroup, drainExitedGuards } from './processes.mjs';
 import { offlineHerdr } from './offline-herdr.mjs';
-import { ownFixtureLifetime } from './fixture-lifetime.mjs';
+import { ownFixtureLifetime, exitedLifetimeGuardCommands } from './fixture-lifetime.mjs';
 import { runnerLimits } from './runner-limits.mjs';
 import path from 'node:path';
 import { watchRun } from '../../test-slot/watch.mjs';
@@ -19,6 +19,8 @@ const cleanupHerdr = offlineHerdr();
 // Chain coordinator -> suite leader -> test file -> product fixture. Native
 // writer death covers abrupt exits even when JS/IPC cleanup cannot execute.
 const lifetimeGuard = ownFixtureLifetime();
+const lifetimeCommand = pid => [process.env.HERDR_FIXTURE_LIFETIME_EXECUTABLE, '--watch',
+  process.env.HERDR_FIXTURE_LIFETIME_FIFO, process.env.HERDR_FIXTURE_LIFETIME_SECONDS, String(pid)].join(' ');
 
 const script = fileURLToPath(import.meta.url);
 const policy = fileURLToPath(new URL('./fixture-policy.mjs', import.meta.url));
@@ -307,8 +309,22 @@ if (worker) {
   function finish(code, audit = false) {
     if (finished) return;
     finished = true; watcher?.stop();
-    if (audit && owner) {
-      const result = auditGroup(owner);
+    const result = audit && owner ? auditGroup(owner) : null;
+    const exitedGuards = result?.ok ? exitedLifetimeGuardCommands(result.survivors) : new Set();
+    const draining = result?.ok && drainExitedGuards(result.survivors, exitedGuards, { drainMs: outputDrainMs });
+    if (draining) {
+      // A file's native exit can precede its orphan guard's next scheduling
+      // turn. Join only those exact identities, then audit again: nothing is
+      // exempted merely because its command looks like a cleanup helper.
+      timing({ kind: 'fixture-guard-drain', phase: 'start', files,
+        guards: result.survivors.filter(row => row.ppid === 1 && exitedGuards.has(row.command)) });
+      draining.then(() => teardown(code, auditGroup(owner)), error => {
+        console.error(error); teardown(1, auditGroup(owner));
+      });
+    } else teardown(code, result);
+  }
+  function teardown(code, result) {
+    if (result) {
       if (!result.ok) code = 1;
       for (const row of result.survivors ?? []) {
         // This exact birth/command was verified before admitting any files.
@@ -421,8 +437,7 @@ if (worker) {
     if (message.ready) {
       try {
         owner = registerProcess(child.pid, true);
-        const command = [process.env.HERDR_FIXTURE_LIFETIME_EXECUTABLE, '--watch',
-          process.env.HERDR_FIXTURE_LIFETIME_FIFO, process.env.HERDR_FIXTURE_LIFETIME_SECONDS, String(child.pid)].join(' ');
+        const command = lifetimeCommand(child.pid);
         if (message.lifetimeGuard?.command !== command) throw Error('Suite lifetime guard receipt differs from coordinator ownership');
         workerLifetimeGuard = registerProcess(message.lifetimeGuard.pid, false, { suite: owner, command });
         if (!workerLifetimeGuard) throw Error('Suite lifetime guard is absent before file admission');

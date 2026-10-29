@@ -61,6 +61,34 @@ export function createProcessTracker({
       return entryFor(result.value, group);
     },
     killProcess: signal,
+    drainExitedGuards(rows, commands, { drainMs, now = Date.now,
+      pause = () => new Promise(resolve => setTimeout(resolve, 20)) } = {}) {
+      // Only exact source-bound native --watch commands with departed parents
+      // may drain. Live-parent guards and arbitrary fixtures still fail.
+      const pending = rows.filter(row => row.ppid === 1 && commands.has(row.command));
+      if (!pending.length) return null;
+      return (async () => {
+        const end = now() + drainMs;
+        while (pending.length) {
+          for (let index = pending.length - 1; index >= 0; index--) {
+            const entry = pending[index];
+            const current = readIdentity(entry.pid);
+            if (!current?.ok) throw Error(`fixture guard PID ${entry.pid} lookup failed: ${current?.error ?? 'incomplete result'}`);
+            if (current.value === null || (complete(current.value) && current.value.pid === entry.pid && /^Z/.test(current.value.state))) {
+              pending.splice(index, 1);
+              continue;
+            }
+            if (!complete(current.value) || current.value.pid !== entry.pid || !same(entry, current.value) ||
+                current.value.ppid !== 1 || current.value.pgid !== entry.pgid) {
+              throw Error(`fixture guard PID ${entry.pid} identity changed during drain`);
+            }
+          }
+          if (!pending.length) return;
+          if (now() >= end) throw Error(`fixture guard drain exceeded ${drainMs}ms: ${pending.map(row => row.pid).join(', ')}`);
+          await pause();
+        }
+      })();
+    },
     auditGroup(entry) {
       const current = snapshot();
       if (!current.ok) return current;
@@ -71,4 +99,4 @@ export function createProcessTracker({
   };
 }
 
-export const { registerProcess, killProcess, auditGroup } = createProcessTracker();
+export const { registerProcess, killProcess, auditGroup, drainExitedGuards } = createProcessTracker();

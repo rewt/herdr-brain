@@ -22,6 +22,42 @@ function harness() {
   return { rows, signals, reports, queries, hooks, tracker };
 }
 
+test('exited guard drain waits for exact orphan identities without signalling or exempting survivors', async () => {
+  const h = harness(), command = '/fixture-guard --watch /suite/alive 60 404';
+  const guard = row(303, 'guard birth', command, { pgid: 101 });
+  h.rows.set(303, guard);
+  const rows = [guard, row(304, 'fixture', 'sleep 60', { pgid: 101 }),
+    row(305, 'live guard', command, { ppid: 404, pgid: 101 })];
+  let pauses = 0;
+  await h.tracker.drainExitedGuards(rows, new Set([command]), { drainMs: 100,
+    now: () => 0, pause: async () => { pauses++; h.rows.delete(303); } });
+  assert.equal(pauses, 1);
+  assert.deepEqual(h.queries, [303, 303]);
+  assert.deepEqual(h.signals, []);
+  assert.equal(h.tracker.drainExitedGuards(rows.slice(1), new Set([command]), { drainMs: 100 }), null);
+  assert.equal(h.tracker.drainExitedGuards(rows, new Set([command + ' changed']), { drainMs: 100 }), null);
+});
+
+for (const failure of ['birth', 'command', 'parent', 'group', 'incomplete', 'failed', 'thrown', 'stuck']) {
+  test(`exited guard drain fails closed on ${failure} evidence`, async () => {
+    const h = harness(), guard = row(303, 'guard birth', 'exact guard', { pgid: 101 });
+    h.rows.set(303, { ...guard });
+    const current = h.rows.get(303);
+    if (failure === 'birth') current.identity = 'replacement';
+    if (failure === 'command') current.command = 'other command';
+    if (failure === 'parent') current.ppid = 404;
+    if (failure === 'group') current.pgid = 202;
+    if (failure === 'incomplete') h.hooks.individual = () => ({ ok: true, value: { pid: 303 } });
+    if (failure === 'failed') h.hooks.individual = () => ({ ok: false, error: 'native unavailable' });
+    if (failure === 'thrown') h.hooks.individual = () => { throw Error('native refused'); };
+    let now = 0;
+    await assert.rejects(h.tracker.drainExitedGuards([guard], new Set([guard.command]), {
+      drainMs: 100, now: () => now, pause: async () => { now += 100; },
+    }), /identity changed|lookup failed|native refused|drain exceeded/);
+    assert.deepEqual(h.signals, []);
+  });
+}
+
 for (const failure of ['absent', 'zombie', 'failed', 'incomplete', 'changed leader', 'nonleader']) {
   test(`receipt registration refuses ${failure} ownership without signalling`, () => {
     const h = harness();

@@ -22,6 +22,8 @@ const unused = () => assert.fail('unselected worker/native interface executed');
 async function coordinator({ failedSink } = {}) {
   const trace = [], exits = [], errors = [], signals = [], timers = [], timings = [];
   const leader = { pid: 4242, ppid: 202, pgid: 4242, state: 'S', identity: 'birth-1', command: 'suite-worker' };
+  const guard = { pid: 4241, ppid: 4242, pgid: 4242, state: 'S', identity: 'guard-birth',
+    command: '/fixture-guard --watch /fixture/alive 60 4242' };
   const state = { current: leader, auditError: false, survivors: [], holdOutput: false };
   const writes = [];
   const child = Object.assign(new EventEmitter(), {
@@ -71,6 +73,7 @@ async function coordinator({ failedSink } = {}) {
     'node:stream/promises': { pipeline: unused }, 'node:url': { fileURLToPath },
     '../../lib/processes.mjs': { parseProcessLookup: unused, lookupProcess: pid => {
       if (pid !== undefined) {
+        if (pid === guard.pid) return { ok: true, value: guard };
         assert.equal(pid, leader.pid);
         trace.push('lookup');
         return { ok: true, value: state.current };
@@ -80,6 +83,11 @@ async function coordinator({ failedSink } = {}) {
         : { ok: true, value: new Map([state.current, ...state.survivors].filter(Boolean).map(row => [row.pid, row])) };
     } },
     './offline-herdr.mjs': { offlineHerdr: () => () => trace.push('cleanupHerdr') },
+    './fixture-lifetime.mjs': { exitedLifetimeGuardCommands: () => new Set(), ownFixtureLifetime: () => {
+      Object.assign(proc.env, { HERDR_FIXTURE_LIFETIME_EXECUTABLE: '/fixture-guard',
+        HERDR_FIXTURE_LIFETIME_FIFO: '/fixture/alive', HERDR_FIXTURE_LIFETIME_SECONDS: '60' });
+      return null;
+    } },
     'node:path': { default: path },
     '../../test-slot/watch.mjs': { watchRun: options => {
       watch = options;
@@ -113,7 +121,7 @@ async function coordinator({ failedSink } = {}) {
   global.gc?.();
   await module.evaluate();
   assert.ok(linked.every(dependency => dependency.status === 'evaluated'));
-  const ready = () => { child.emit('message', { ready: true }); assert.deepEqual(trace.slice(-2), ['lookup', 'send:start']); };
+  const ready = () => { child.emit('message', { ready: true, lifetimeGuard: guard }); assert.deepEqual(trace.slice(-2), ['lookup', 'send:start']); };
   const complete = (code = 0) => child.emit('message', { complete: true, code });
   const pending = () => {
     assert.deepEqual(timers, [], 'elapsed fallback must not be armed for a pending child');

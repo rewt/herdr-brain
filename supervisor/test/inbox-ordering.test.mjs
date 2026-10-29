@@ -191,14 +191,16 @@ for (const mode of ['refused', 'missing-on-prompt']) test(`supervisor exception 
 test('supervisor exception uncertainty survives absence and reappearance without replay while an independent recipient progresses', async t => {
   const f = fixture(t); f.write('modes', { A: 'lost-ack' });
   f.add('uncertain', 'A', 'R-1', { projectSupervisor: true });
-  await f.drain('uncertain', { waitSeconds: .2 });
+  f.add('independent', 'B', 'R-3');
+  assert.equal((await f.drain('independent')).delivered, true);
   assert.equal(f.state('uncertain'), 'uncertain');
   f.write('targets', { B: f.target('B') }); f.write('modes', {});
-  f.add('successor', 'A', 'R-2', { projectSupervisor: true }); f.add('independent', 'B', 'R-3');
-  assert.equal((await f.drain('independent')).delivered, true);
+  f.add('successor', 'A', 'R-2', { projectSupervisor: true });
+  await f.drain('successor', { waitSeconds: 0 });
+  assert.equal(f.state('uncertain'), 'uncertain'); assert.equal(f.state('successor'), 'pending');
   f.write('targets', { A: { ...f.target('A'), terminal_id: 'replacement' }, B: f.target('B') });
-  await f.drain('successor', { waitSeconds: .1 });
-  assert.deepEqual(readInbox(f.inbox).map(e => e.state), ['uncertain', 'pending', 'sent']);
+  await f.drain('successor', { waitSeconds: 0 });
+  assert.deepEqual(readInbox(f.inbox).map(e => e.state), ['uncertain', 'sent', 'pending']);
   assert.equal(f.calls().filter(args => args[1] === 'prompt' && args[2] === 'A').length, 1);
 });
 

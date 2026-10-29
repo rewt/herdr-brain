@@ -72,6 +72,7 @@ fs.appendFileSync(${JSON.stringify(calls)}, JSON.stringify(a)+'\\n');
 if(a[0]==='agent' && a[1]==='get') console.log(JSON.stringify({result:{agent:{...${JSON.stringify(recipientAgent('supervisor-opus', repo, { pane_id: 'scratch:supervisor', terminal_id: 'scratch:supervisor-terminal' }))},name:a[2],agent_status:a[2]==='supervisor-opus'?${JSON.stringify(outcome === 'done' ? 'working' : 'done')}:'done'}}}));
 else if(a[0]==='pane' && a[1]==='read') console.log('────────────────────\\n❯ \\n────────────────────');
 else if(a[0]==='agent' && a[1]==='prompt') console.log('{}');
+else if(a[0]==='notification' && a[1]==='show') console.log('{}');
 else process.exit(91);
 `, { mode: 0o755 });
   env.PATH = `${bin}:${env.PATH}`;
@@ -151,8 +152,10 @@ test('an opted-in existing project retains a done notice until the live drainer 
   const f = fixture(t), lock = `${f.inbox}.drain.lock`, release = noticeLock(lock);
   try {
     const child = spawnChild(t, process.execPath, [path.join(monitor, 'watch/watch.mjs'), ...f.args.slice(1)], { cwd: monitor, env: f.env });
-    // Policy and input share the drain lock so dependent notices cannot race.
-    const pending = await waitForNotice(f.inbox, entry => entry.owner_pid);
+    // Observe actual drain-lock contention before checking that policy and
+    // input remain serialized behind the live owner.
+    const pending = await waitForNotice(f.inbox, entry => entry.owner_pid && entry.notified &&
+      entry.error === `locked: ${lock}; owner is live or unidentified`);
     assert.equal(pending.state, 'pending'); assert.equal(pending.autopilot, undefined);
     assert.equal(f.actions().length, 0);
     assert.equal(f.calls().some(a => a[1] === 'prompt'), false);

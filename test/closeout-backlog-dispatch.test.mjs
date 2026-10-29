@@ -9,9 +9,10 @@ import {reconcileCloseoutBacklog} from '../lib/closeout-backlog.mjs';
 
 test('unreported backlog retains the exact original dispatch error and missing SID without finalizing or rebinding',t=>{
   const f=setup(t,{direct:true,bound:true});selectCurrentCleanup(f);
-  const original=events(f),run=original.find(e=>e.type==='run.started'),token='original',journal=path.join(f.org,'dispatch',token+'.json');
-  run.meta={...run.meta,dispatch_project:f.common,dispatch_attempt:token,dispatch_journal:journal};
-  fs.writeFileSync(f.eventFile,original.map(e=>JSON.stringify(e)+'\n').join(''));
+  const run=events(f).find(e=>e.type==='run.started'),token='original',journal=path.join(f.org,'dispatch',token+'.json');
+  // The bound fixture has a later worker metadata event. Use the real fold's
+  // update path so that event cannot overwrite this case's original journal.
+  f.append([{type:'run.updated',id:run.id,meta:{dispatch_project:f.common,dispatch_attempt:token,dispatch_journal:journal}}]);
   const saved=fold(events(f)).runs.get(run.id);
   fs.mkdirSync(path.dirname(journal),{recursive:true});
   const job={token,run:run.id,repo:f.repo,org:f.org,common:f.common,ownership:{generation:saved.owner_generation,owner:saved.owner},stage:'watch',

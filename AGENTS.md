@@ -46,9 +46,12 @@ do not grant authority or replace the guarded project tools.
   Consumers reuse it; fresh native/claim/source/CAS checks remain at mutations.
   Keep the existing watcher and immutable receipts.
 - Replies, status and milestones go to the owning item/run record as notes or the
-  report. Routine notices go to the line and recorded owner through existing
-  callbacks, never to a chat. Exceptions go to the PROJECT SUPERVISOR at its
-  recorded address, using the brief's durable supervisor-inbox command before
+  report. Routing policy: routine notices go to the line and recorded owner
+  through existing callbacks, never to a chat. Legacy line-service launches can
+  still use `--to brain-chat`, and `supervisor/line-notice-aggregate.mjs` still
+  selects brain-chat notices. ENG-939 owns the runtime migration; these
+  instructions alone do not activate it. Exceptions go to the PROJECT SUPERVISOR
+  at its recorded address, using the brief's durable supervisor-inbox command before
   native input (`--project-supervisor`); record the exception on the item/run too.
   Never send exceptions with a direct `herdr agent prompt`. Missing supervisor
   bindings stay pending under the original notice ID. A native input refusal

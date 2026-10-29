@@ -51,8 +51,11 @@ sessions load operator-applied rules; do not bulk restart or claim old-session l
 ## Communication and decisions
 
 Replies, status and milestones go to the owning item/run record as notes or the
-report. Routine notices go to the line and recorded owner through existing
-callbacks, never to a chat. Unsafe, native, ownership, reserved and failed
+report. Routing policy: routine notices go to the line and recorded owner through
+existing callbacks, never to a chat. Legacy line-service launches can still use
+`--to brain-chat`, and `supervisor/line-notice-aggregate.mjs` still selects
+brain-chat notices. ENG-939 owns the runtime migration; these instructions alone
+do not activate it. Unsafe, native, ownership, reserved and failed
 exceptions go to the PROJECT SUPERVISOR.
 Operator envelopes use plain headline, what happened, action and one Details line.
 Only a genuine explicitly reserved pending human question pushes once.

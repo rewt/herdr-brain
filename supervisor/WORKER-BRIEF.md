@@ -21,9 +21,13 @@ Act and log within the named contract. Routine progress, check output, already-r
 main, bounded retries, receipts, review completion and queue status never become
 operator questions. Reserved pending asks alone use the existing push-once inbox;
 ordinary operator envelopes remain in the record. A native refusal stops its
-effect; independent work continues. Routine notices go to the line and recorded
-owner through existing callbacks, never to a chat. The operator selected Quiet
-Chat (w3PD:p4) on ENG-933: genuine operator questions only, one short message with
+effect; independent work continues. Routing policy: routine notices go to the
+line and recorded owner through existing callbacks, never to a chat. Legacy
+line-service launches can still use `--to brain-chat`, and
+`supervisor/line-notice-aggregate.mjs` still selects brain-chat notices. ENG-939
+owns the runtime migration; these instructions alone do not activate it. The
+operator selected Quiet Chat (w3PD:p4) on ENG-933: genuine operator questions only,
+one short message with
 a recommendation; status, milestones, logs and FYIs stay in the record. ENG-939
 owns applying that choice through the supported native routing path; this
 instruction does not activate it. The retired brain-chat binding is not a

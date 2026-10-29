@@ -1,8 +1,11 @@
 # Session messages
 
 Replies, status and milestones belong in the owning item/run record as notes or
-the report. Routine notices go to the line and recorded owner through existing
-callbacks, never to a chat. One operator chat writes authorized work directly to
+the report. Routing policy: routine notices go to the line and recorded owner
+through existing callbacks, never to a chat. Legacy line-service launches can
+still use `--to brain-chat`, and `supervisor/line-notice-aggregate.mjs` still
+selects brain-chat notices. ENG-939 owns the runtime migration; these instructions
+alone do not activate it. One operator chat writes authorized work directly to
 the record; only genuine pending operator questions use push delivery. The
 operator selected Quiet Chat (w3PD:p4) on ENG-933: genuine operator questions only,
 one short message with a recommendation; status, milestones, logs and FYIs stay

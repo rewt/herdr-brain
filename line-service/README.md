@@ -662,7 +662,9 @@ engineer. `HERDR_LINE_HALT_PASSES` sets a positive completed-pass threshold. A
 retired automatic judgment without its exact-input saved dispatch effect is not
 admissible work and does not count toward an idle episode; its record and original
 attempt remain intact. Observation and the repair-intent recheck use admission's
-same judgment policy. A detached acknowledgement or unrelated review does not
+same judgment policy. They also defer obsolete closeout outcome decisions using
+admission's queued cleanup observation before computing dispatch input; current
+cleanup defects remain eligible. A detached acknowledgement or unrelated review does not
 reset that count. Native engineering progress, an observed productive engineer,
 or changed ready/hold/
 routing inputs resets the episode. Counters and full item/report/hold observations

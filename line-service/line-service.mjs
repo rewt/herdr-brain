@@ -18,7 +18,7 @@ import { correctionSource } from '../lib/report-closeout.mjs';
 import { directCloseoutObservation, currentCloseoutEntries, closeoutEvaluation } from '../lib/closeout.mjs';
 import { checkSessionCap,dispatchPool } from '../dispatch/session-cap.mjs';
 import { noticeLock } from '../supervisor/notice-lock.mjs';
-import { readCloseoutEntries, closeoutRevision, scheduleLineCloseouts,closeoutEvaluations,lineServiceOwnsCleanup } from '../lib/closeout.mjs';
+import { closeoutRevision, scheduleLineCloseouts,lineServiceOwnsCleanup } from '../lib/closeout.mjs';
 import { parseArgs, isMain } from '../lib/cli-help.mjs';
 import { reviewAttempt, readServiceJournal } from './review.mjs';
 import { queueConsumer, isQueueReview, validateQueuedReview, reviewQueueBrief, reviewQueueRoute } from './review-queue.mjs';
@@ -39,7 +39,7 @@ import {queuePolicy,queueClass,queueSelected,orderQueue} from './priority-order.
 import {isDecision,decisionActivation,decisionRoute,decisionBrief,applyDecision,observeDecisionConsequences} from './decisions.mjs';
 import {judgmentDispatchAllowed} from './decision-policy.mjs';
 import {outcomeFailure} from '../lib/uncertain-outcome.mjs';
-import {queueOutcomeDecision,obsoleteOutcomeDecision} from './outcome-decision.mjs';
+import {queueOutcomeDecision,observeOutcomeDecisions} from './outcome-decision.mjs';
 import {registerCloseoutWait,closeoutWait,closeoutWaitState,closeoutNextStage} from '../lib/closeout-status.mjs';
 import {runCloseoutTurn,CLOSEOUT_TURN_BUDGET_MS} from './closeout-turn.mjs';
 import {transact} from '../lib/store.mjs';
@@ -420,12 +420,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         return JSON.stringify({policy,candidates:orderQueue(state,[...state.items.values()].filter(i=>!i.closed&&i.kind!=='goal'),policy)
           .map(i=>[i.id,queueClass(state,i,policy),queueSelected(i)])});
       };
-      let cleanupView;
-      const obsoleteDecision=(item,{events}=snapshot)=>{
-        if(!item?.meta?.uncertain_outcome)return null;
-        if(cleanupView?.events!==events)cleanupView={events,entries:readCloseoutEntries(project.identity,{onInvalid:()=>{}}),evaluations:new Map(closeoutEvaluations(project.identity,org,events).map(e=>[e.key,e]))};
-        return obsoleteOutcomeDecision(item,cleanupView);
-      };
+      const obsoleteDecision=observeOutcomeDecisions({identity:project.identity,org});
       const admitItems = (items,repair=false) => {
         const selection=queueSelection(snapshot.state);
         for (const item of items) {
@@ -433,7 +428,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         snapshot=current();
         if(JSON.stringify(queuePolicy(snapshot.state))!==JSON.stringify(standing)||queueSelection(snapshot.state)!==selection){log({action:'queue-selection-changed'});break;}
         if(!queueSelected(snapshot.state.items.get(item.id)))continue;
-        if(obsoleteDecision(snapshot.state.items.get(item.id))){timings.outcome_decisions_deferred++;continue;}
+        if(obsoleteDecision(snapshot.state.items.get(item.id),snapshot)){timings.outcome_decisions_deferred++;continue;}
         const input=dispatchInput({...snapshot,item:snapshot.state.items.get(item.id),org,identity:project.identity});
         if(!input)continue;
         // A saved request may finish through the original guarded continuation.

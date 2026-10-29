@@ -14,18 +14,23 @@ import {queuePolicy,queueClass,queueSelected} from './priority-order.mjs';
 import {dispatchInput} from './phase1.mjs';
 import {itemLaunchHold} from '../lib/item-launch-hold.mjs';
 import {judgmentDispatchAllowed} from './decision-policy.mjs';
+import {observeOutcomeDecisions} from './outcome-decision.mjs';
 
 const hash=value=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const repair=item=>item?.meta?.halt_repair===1;
 // Record READY alone includes held ancestry and blocked reports whose linked
 // dependencies have closed. Only normal admission's current input is work an
 // idle diagnosis can help; this observation never clears an original attempt.
-const readyItems=({state,events,org,identity,actions={}})=>[...state.items.values()].filter(i=>{
-  if(i.kind==='goal'||!queueSelected(i)||repair(i)||roleIs(i,'REV')||itemLaunchHold(state,i.id,events)||
-    ['security','funds-and-chain','publish','delete-data','licensing','priorities'].includes(i.meta.category))return false;
-  const input=dispatchInput({state,events,item:i,org,identity});
-  return input&&judgmentDispatchAllowed(i,input,actions);
-});
+const readyItems=({state,events,org,identity,actions={}})=>{
+  const obsoleteDecision=observeOutcomeDecisions({identity,org});
+  return [...state.items.values()].filter(i=>{
+    if(i.kind==='goal'||!queueSelected(i)||repair(i)||roleIs(i,'REV')||itemLaunchHold(state,i.id,events)||
+      ['security','funds-and-chain','publish','delete-data','licensing','priorities'].includes(i.meta.category))return false;
+    if(obsoleteDecision(i,{events}))return false;
+    const input=dispatchInput({state,events,item:i,org,identity});
+    return input&&judgmentDispatchAllowed(i,input,actions);
+  });
+};
 const held=i=>[i.id,i.meta.hold??null,i.meta.held??null,i.meta.reserved??null,i.meta.operator_reserved??null,i.meta.category??null];
 
 export function haltObservation({state,events,org,identity,config,occupancy,actions={}}) {
@@ -38,7 +43,7 @@ export function haltObservation({state,events,org,identity,config,occupancy,acti
   const causes=ready.map(i=>({item:i.id,created:i.created.seq,role:i.role,capability:i.capability,route:i.meta.route,queue_class:queueClass(state,i,policy),priority:i.priority,last_run:i.runs.at(-1)??null,report:state.runs.get(i.runs.at(-1))?.report?.file??null,
     holds:[held(i),...ancestors(state,i.id).map(held)],
     failures:Object.entries(actions).filter(([key])=>key.startsWith(`dispatch:${i.id}:`)).map(([key,e])=>[key,canonicalFailure(e.error)])}));
-  const source=['line-service/line-service.mjs','line-service/priority-order.mjs','line-service/halt-repair.mjs','line-service/decision-policy.mjs','line-service/phase1.mjs','line-service/review.mjs','line-service/review-observation.mjs','dispatch/preflight.mjs','lib/worker-brief.mjs','lib/item-launch-hold.mjs'].map(file=>[file,hash(fs.readFileSync(new URL(`../${file}`,import.meta.url),'utf8'))]);
+  const source=['line-service/line-service.mjs','line-service/priority-order.mjs','line-service/halt-repair.mjs','line-service/decision-policy.mjs','line-service/outcome-decision.mjs','line-service/phase1.mjs','line-service/review.mjs','line-service/review-observation.mjs','dispatch/preflight.mjs','lib/worker-brief.mjs','lib/item-launch-hold.mjs'].map(file=>[file,hash(fs.readFileSync(new URL(`../${file}`,import.meta.url),'utf8'))]);
   return {ready:ready.map(i=>i.id),productive,progress,causes,signature:hash([causes,policy,progress,config.routes,config.selection_policy,source])};
 }
 

@@ -8,7 +8,19 @@ import {protectRecordMutation} from '../lib/record-guard.mjs';
 import {serviceRecordBinding} from './record-inbox.mjs';
 import {uncertainOutcomeDoctrine} from '../lib/uncertain-outcome.mjs';
 import {closeoutNextStage,closeoutWait,closeoutWaitState} from '../lib/closeout-status.mjs';
+import {readCloseoutEntries,closeoutEvaluations} from '../lib/closeout.mjs';
 const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
+
+// Admission and idle diagnosis observe the same queued cleanup policy. Cache
+// only within one scan; a fresh event snapshot refreshes its cleanup view.
+export function observeOutcomeDecisions({identity,org}) {
+  let view;
+  return (item,{events})=>{
+    if(!item?.meta?.uncertain_outcome)return null;
+    if(view?.events!==events)view={events,entries:readCloseoutEntries(identity,{onInvalid:()=>{}}),evaluations:new Map(closeoutEvaluations(identity,org,events).map(e=>[e.key,e]))};
+    return obsoleteOutcomeDecision(item,view);
+  };
+}
 
 // A queued cleanup decision launches only while its exact request still shows a
 // defect or failure. An owned progress stage, a completed or unqueued request or

@@ -13,8 +13,10 @@ import { fold } from '../lib/state.mjs';
 import { captureProductCheckout } from '../lib/product-files.mjs';
 import { tierFiles } from './helpers/tier.mjs';
 import {createHash} from 'node:crypto';
-import {haltObservation} from '../line-service/halt-repair.mjs';
+import {haltObservation,completeHaltPass} from '../line-service/halt-repair.mjs';
 import {dispatchInput} from '../line-service/phase1.mjs';
+import {closeoutKey} from '../lib/closeout.mjs';
+import {closeoutWaitId} from '../lib/closeout-status.mjs';
 
 function fixture(t) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'line-service-'))), repo = path.join(root, 'project'), org = path.join(repo, '.org');
@@ -141,6 +143,56 @@ test('engineering-idle keeps only exact saved judgment inputs and rechecks them 
   assert.deepEqual(f.calls.map(c=>c.args[1]),[repairs[0].id],'retained judgment is never replayed');
   const retained=JSON.parse(fs.readFileSync(journal)).actions;
   assert.deepEqual(retained[key],original);assert.deepEqual(retained['dispatch:DEC-2:stale-input'],original);
+});
+
+test('engineering-idle ignores obsolete closeout decisions across completed passes without replay and admits independent engineering',t=>{
+  const f=fixture(t),identity=gitProject(f.repo).identity;
+  transact(f.org,()=>({add:[{type:'item.added',id:'DEC-1',kind:'work',role:'decision',title:'Retained cleanup outcome',
+    meta:{queue_selected:true,route:'unblock',uncertain_outcome:{check:{key:'closeout:unqueued',subject:{key:'unqueued',source:{seq:1,type:'report.ingested'}}}}}}]}));
+  const events=loadEvents(f.org).events,state=fold(events),input=dispatchInput({state,events,item:state.items.get('DEC-1'),org:f.org,identity});
+  assert.ok(input,'the obsolete decision otherwise has dispatch input');
+  const key=`dispatch:DEC-1:${input}`,original={state:'complete',result:{result:'dispatched'},receipt:{status:0,stdout:'original cleanup decision',stderr:''}};
+  const journal=path.join(f.service().directory,'effects.json');fs.writeFileSync(journal,JSON.stringify({identity,org:f.org,actions:{[key]:original}}));
+  for(let n=0;n<3;n++)assert.equal(f.service({haltAfter:3}).pass().result,'pass-complete');
+  assert.equal(f.calls.length,0,'obsolete cleanup alone cannot dispatch a judgment or repair');
+  assert.deepEqual(loadEvents(f.org).events,events,'retained decision history stays intact');
+  const saved=JSON.parse(fs.readFileSync(journal));assert.equal(saved.halt_progress.count,0);assert.deepEqual(saved.actions,{[key]:original});
+  const observations=fs.readFileSync(path.join(f.service().directory,'passes.jsonl'),'utf8').trim().split('\n').map(JSON.parse).filter(r=>r.action==='engineering-idle-observation');
+  assert.equal(observations.length,3);assert.ok(observations.every(r=>r.observation.ready.length===0));
+  const ready=f.add('Independent engineering');f.service({haltAfter:3}).pass();
+  assert.deepEqual(f.calls.map(c=>c.args[1]),[ready]);
+});
+
+test('engineering-idle shares closeout deferrals and rechecks current cleanup defects before repair intent',t=>{
+  const f=fixture(t),identity=gitProject(f.repo).identity,directory=path.join(identity,'closeout/entries');fs.mkdirSync(directory,{recursive:true});
+  const cases=['source-changed','completed','owned-stage','unlinked','defect'],entries=[],add=[];
+  for(const [n,name] of cases.entries()){
+    const id=`DEC-${n+1}`,run=`R-${n+1}`,source={seq:1,type:'line-service.cutover'},key=closeoutKey(f.repo,run,'landed');
+    const entry={schema:'closeout-entry/v2',common:identity,signal:'landed',run,branch:'lane/cleanup',key,cwd:f.repo,gitDirectory:identity,
+      org:f.org,project:f.repo,source,head:f.git(['rev-parse','HEAD']),worktreeIdentity:{},gitIdentity:{},panes:[]};
+    entries.push(entry);fs.writeFileSync(path.join(directory,key+'.json'),JSON.stringify(entry));
+    add.push({type:'item.added',id,kind:'work',role:'decision',title:name,meta:{queue_selected:true,route:'unblock',uncertain_outcome:{check:{key:`closeout:${key}`,
+      subject:{key,source:name==='source-changed'?{...source,seq:2}:source}}}}});
+    const prior={type:'closeout.evaluated',identity,key,source,run,item:id,revision:1,completed:name==='completed',
+      reason:name==='owned-stage'?'no bound session target; physical cleanup remains separate':'original native refusal',
+      ...(name==='owned-stage'?{}:{failure:{kind:'fence',code:'EPERM'}})};
+    add.push(prior);
+    if(name==='defect')add.push({type:'closeout.waiting',identity,key,source,run,item:id,revision:1,wait_id:closeoutWaitId(entry,prior),
+      waiting:{owner:'line-service',defect:'Original native refusal needs its owner',producers:[]}});
+  }
+  add.push({type:'item.added',id:'DEC-6',kind:'work',role:'decision',title:'Ordinary manual decision',meta:{queue_selected:true}});
+  transact(f.org,()=>({add}));
+  const events=loadEvents(f.org).events,state=fold(events),observation=haltObservation({state,events,org:f.org,identity,config:{}});
+  for(const id of ['DEC-1','DEC-2','DEC-3','DEC-4','DEC-5','DEC-6'])assert.ok(dispatchInput({state,events,item:state.items.get(id),org:f.org,identity}),id);
+  assert.deepEqual(observation.ready,['DEC-5','DEC-6'],'only the current cleanup defect and ordinary manual decision count');
+  const options={repo:f.repo,org:f.org,env:f.env,observation,route:'engineer',after:1,audit:'fixture audit',effects:'fixture effects'};
+  const result=completeHaltPass({...options,pass:'current-defect'});
+  assert.equal(result.dispatch,true,'the transactional recheck uses the same closeout policy');
+  const repair=fold(loadEvents(f.org).events).items.get(result.item);assert.match(repair.meta.scope,/ready items DEC-5, DEC-6/);
+  const entry=entries.at(-1);fs.writeFileSync(path.join(directory,entry.key+'.json'),JSON.stringify({...entry,source:{...entry.source,seq:2}}));
+  assert.throws(()=>completeHaltPass({...options,pass:'changed-source'}),/halt ready inputs changed/,'a newly obsolete defect cannot pass a stale repair-intent recheck');
+  assert.equal(f.calls.length,0,'observation and intent do not execute cleanup or replay the refusal');
+  assert.deepEqual(loadEvents(f.org).events.slice(0,events.length),events);
 });
 
 test('engineering-idle excludes held ancestry reserved work and unchanged blocked reports while independent work still dispatches',t=>{

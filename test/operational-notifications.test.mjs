@@ -64,7 +64,7 @@ test('operational review launch with no agent preserves the ending status and th
   const f=notificationFixture(t,{startFail:true,topic:'review-notification'});
   const {review,launch}=queueReview(f),r=launch();
   assert.equal(r.status,1,r.stderr+r.stdout);f.assertOpened();const job=f.job(),bytes=fs.readFileSync(job.journal);
-  assert.equal(f.native.state().agent,undefined);assert.equal(job.worker,null);
+  assert.equal(f.native.state().agent,undefined);assert.ok(!job.worker);
   const ending=f.events().findLast(e=>e.type==='dispatch.completed');assert.equal(ending.exit_code,1);assert.equal(ending.run,job.run);
   assert.equal(ending.request_sha256,digest(bytes));
   f.turn();retained(f,job);

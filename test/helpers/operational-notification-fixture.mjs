@@ -43,15 +43,21 @@ export function notificationFixture(t, {startFail=false,topic='topic'}={}) {
   const boundary={id:'notification-fixture',project:project.identity,repo:f.repo,org:f.org,source,
     main:'main',canonical_head:f.git(['rev-parse','HEAD'])};
   add(['line-service.cutover','line-service.phase0'].map(type=>({...boundary,type})));
-  const execute=(file,args,env=f.env)=>spawnSync(process.execPath,[path.join(source,file),...args],{
-    cwd:f.repo,env,encoding:'utf8',maxBuffer:16*1024*1024});
+  const execute=(file,args,env=f.env)=>{
+    const childEnv={...env};
+    // Match the product service's controller environment, rather than lending
+    // its fake dispatcher's pane identity to a model-free record consumer.
+    if(childEnv.ORG_ACTOR==='line-service')for(const key of ['HERDR_ENV','HERDR_PANE_ID','HERDR_TAB_ID','HERDR_WORKSPACE_ID','CODEX_THREAD_ID'])delete childEnv[key];
+    return spawnSync(process.execPath,[path.join(source,file),...args],{
+      cwd:f.repo,env:childEnv,encoding:'utf8',maxBuffer:16*1024*1024});
+  };
   const cli=(file,args)=>{const r=execute(file,args,{...f.env,ORG_ACTOR:'line-service'});
     assert.equal(r.status,0,r.stderr+r.stdout);return r.stdout;};
   const turn=()=>runCloseoutTurn({project,org:f.org,env:f.env,guard:()=>{},maxSteps:1,cli,measure:()=>{}});
   const commands=[];
   const pass=()=>createLineService({repo:f.repo,org:f.org,to:'supervisor-test',env:f.env,
     maxStarts:0,haltAfter:100,closeoutMeasure:()=>{},command:(exe,args,options)=>{
-      commands.push(args);return spawnSync(exe,args,{...options,env:f.env,encoding:'utf8'});
+      commands.push(args);return spawnSync(exe,args,{...options,encoding:'utf8'});
     }}).pass();
   const job=()=>{const journal=f.jobs()[0];return{journal,...JSON.parse(fs.readFileSync(journal))};};
   const patchNative=change=>fs.writeFileSync(f.env.FAKE_HERDR_STATE,JSON.stringify({...native.state(),...change}));

@@ -17,9 +17,18 @@ test('closeout source lookup is lazy across import, injected source and later Gi
     import path from 'node:path';
     import childProcess from 'node:child_process';
     import {syncBuiltinESMExports} from 'node:module';
-    const calls=[],first='a'.repeat(40),second='b'.repeat(40);
+    const calls=[],spawnCalls=[],first='a'.repeat(40),second='b'.repeat(40);
     let commit=first;
     childProcess.spawnSync=(exe,args,options)=>{
+      spawnCalls.push({exe,args});
+      // The scratch measurement lock reads its own birth identity on Darwin.
+      // Keep that fixture separate from the source lookup under observation.
+      if(exe!=='git'){
+        assert.match(path.basename(exe),/^process-source-darwin-/);
+        assert.deepEqual(args,['--identity',String(process.pid)]);
+        return {status:0,stdout:JSON.stringify({pid:process.pid,ppid:process.ppid,
+          pgid:process.pid,state:'S',identity:'1:1',command:'fixture'})+'\\n'};
+      }
       calls.push({exe,args,options});
       assert.equal(exe,'git');
       assert.deepEqual(args.slice(-2),['rev-parse','HEAD']);
@@ -28,7 +37,7 @@ test('closeout source lookup is lazy across import, injected source and later Gi
     };
     syncBuiltinESMExports();
     const {recordCloseoutTurn}=await import(${JSON.stringify(module)});
-    assert.equal(calls.length,0,'import must not spawn Git');
+    assert.equal(spawnCalls.length,0,'import must not spawn a process');
     const org=${JSON.stringify(directory)};
     fs.writeFileSync(path.join(org,'events.jsonl'),'');
     const args={org,project:{identity:'/fixture/project/.git',canonical:'/fixture/project'},

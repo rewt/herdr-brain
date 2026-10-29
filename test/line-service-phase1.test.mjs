@@ -1177,7 +1177,7 @@ test('useful admission proceeds after unrelated productive cleanup exceeds its w
 });
 
 test('cleanup runs before slow review work and a fresh STOP still prevents the review effect',t=>{
-  for(const stopped of [false,true]){
+  for(const cleanupWorkMs of [10,1000])for(const stopped of [false,true]){
     const f=fixture(t),env=installedService(f),policy=JSON.parse(fs.readFileSync(path.join(f.cwd,'.lane.json')));
     policy.retirement={closeout_queue:true};fs.writeFileSync(path.join(f.cwd,'.lane.json'),JSON.stringify(policy));
     const added=transact(f.org,events=>bindCloseoutSources({cwd:f.cwd,org:f.org,events,env:f.env,mutation:{add:[{type:'item.closed',id:'ENG-1',as:'done',completed_run:'R-1'}]}})).added;
@@ -1187,7 +1187,7 @@ test('cleanup runs before slow review work and a fresh STOP still prevents the r
       capacity:()=>({cap:1,count:0}),recordNotice:d=>({id:d.id,state:'record-only'}),command:(_exe,args)=>{
         calls.push(args);
         if(args[1]==='drain'){
-          clock+=1000;
+          clock+=cleanupWorkMs;
           if(stopped)fs.writeFileSync(path.join(f.directory,'STOP'),'fresh stop after independent cleanup');
         }
         if(args[1]==='queue-review')clock+=1000;
@@ -1195,7 +1195,7 @@ test('cleanup runs before slow review work and a fresh STOP still prevents the r
       }});
     const result=service.pass();if(stopped)assert.match(result.held,/STOP/);
     assert.equal(calls.filter(a=>a[1]==='drain'&&JSON.parse(a[a.indexOf('--keys')+1]).includes(key)).length,1);
-    assert.equal(calls.filter(a=>a[1]==='refresh').length,stopped?0:1,'refresh follows the bound work while STOP fences it');
+    assert.equal(calls.filter(a=>a[1]==='refresh').length,!stopped&&cleanupWorkMs<100?1:0,'refresh follows bound work only with allowance remaining and no STOP');
     assert.equal(calls.filter(a=>a[1]==='queue-review').length,stopped?0:1);
     if(!stopped)assert.ok(calls.findIndex(a=>a[1]==='drain')<calls.findIndex(a=>a[1]==='queue-review'),'slow review cannot consume the prior closeout turn');
   }

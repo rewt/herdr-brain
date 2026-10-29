@@ -35,6 +35,30 @@ actual live proof, seal/activation and consumer readback remain coordinator work
 
 The following sections retain the legacy queue compatibility contract.
 
+## Finished older allocations and unsent prompts (ENG-931)
+
+A finished ingested run keeps authority over its own unchanged allocation after
+the item moves to a newer run. Its start, claim, dispatch, report, worker receipt,
+Git generation and native identity must still match. Every successor must use a
+different folder and native identity; it may be actively working there. The exact
+historical current-run-only pre-effect keep can be revisited under these guards.
+An original native/Git UNKNOWN or refusal is never made retryable by this rule.
+
+Finite refresh can bind a finished allocation with no original SID for physical
+disposition. It records no session binding or completion. Real or unproven native
+occupants remain KEEP under the existing unbound and inert-shell rules.
+
+The stopped-allocation disposer also admits a positively pre-native capacity-lock
+failure, matched to its failed dispatch completion and immutable request hash.
+For a run stopped at `watch` or `prompt`, a failed completed dispatcher, original
+worker receipt with SID, original foreground PID/birth, complete fresh inventory,
+idle status, unchanged clean source and current claim can authorize abandonment
+as `NOT_PROMPTED`. This is no native completion: the ordinary guarded closer owns
+any subsequent exit/removal. Prompting, resume delivery, missing continuity,
+changed/working occupants, native refusals and live request locks remain held.
+An ambiguous `launching` attempt with no worker receipt remains UNKNOWN, even
+when a currently idle pane is visible. No saved job or watcher is rewritten.
+
 ## Pre-fix exit absence settlements (ENG-931)
 
 The line may observe the seven pre-`1beac8c2` exit-identity attempts through

@@ -40,8 +40,11 @@ an effect completion or an alternate cleanup allocation. The general diagnostic
 reports classified retained waits separately from completed and unknown waits.
 
 Open unreported runs receive an `active-unreported` allocation disposition with
-their original dispatch journal and claim generation. This includes the real
-remaining ARCH-57 allocation; an idle pane and elapsed age are not abandonment.
+their original dispatch journal and claim generation. A saved original dispatch
+error receives `dispatch-error-unreported`, retaining its journal hash, error,
+failure code, stage and binding status. The remaining ARCH-57 allocation has an
+original watcher-start error and no saved SID; it cannot satisfy the supported
+original-producer abandonment proof. An idle pane and elapsed age are not abandonment.
 The dirty validation-contract folder must retain its actual unsaved bytes until
 its owner preserves or commits them. Original owners must supply missing
 completion/never-started evidence or finalize their own work; this correction
@@ -49,7 +52,8 @@ does not fabricate those facts or signal processes merely from their cwd.
 
 The focused producer checks are `test/closeout-folders.test.mjs`,
 `test/closeout-facts.test.mjs`, `test/closeout-turn.test.mjs`,
-`test/retire-removal-deadlines.test.mjs` and `test/retire-triggers.test.mjs` through
+`test/retire-removal-deadlines.test.mjs`, `test/retire-triggers.test.mjs`,
+`test/closeout-legacy-selection.test.mjs` and `test/closeout-backlog-dispatch.test.mjs` through
 the existing runner/lane check. Actual receipts and any failed/unrun scope belong
 in the run report. The canonical supervisor owns restarting the line and attaching
 real backlog/new-run closes, folder removals, branch outcomes and process census

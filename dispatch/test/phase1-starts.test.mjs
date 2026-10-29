@@ -6,6 +6,7 @@ import path from 'node:path';
 import {fixture} from './dispatch-fixture.mjs';
 import {preflightContinuation,initialCapacityRefusal,implementationChangeOutcome} from '../preflight.mjs';
 import {createHash} from 'node:crypto';
+import {loadEvents} from '../../lib/store.mjs';
 
 function phase1Fixture(t,options={}){
   const f=fixture(t,{noticeRecipient:'supervisor-herdr',...options}),file=path.join(f.repo,'.lane.json'),config=JSON.parse(fs.readFileSync(file));
@@ -86,6 +87,48 @@ test('typed preflight capacity evidence permits unknown occupancy wording while 
   for(const patch of [{native_launch_attempted:true},{native_launch_attempted:undefined},{worker:{agentName:'existing'}},{error:'EPERM native refusal'},{error:'native identity UNKNOWN'}]){save({...job,failure:typed,...patch});assert.equal(preflightContinuation(args),null);}
   save(job);const file=path.join(f.org,'line-service',createHash('sha256').update(JSON.stringify(common)).digest('hex').slice(0,20),'effects.json');fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,JSON.stringify({identity:common,org:f.org,actions:{original:{receipt:{status:1,signal:null,stdout:JSON.stringify({result:'failed',code:'DISPATCH_REVIEW_CAP',reason,journal})}}}}));assert.ok(preflightContinuation(args),'actual retained typed source receipt works without rewriting the old journal');
   save({...job,native_launch_attempted:undefined});fs.mkdirSync(journal+'.driver');fs.writeFileSync(journal+'.driver/results.jsonl',JSON.stringify({journal,stage:'open',run:null,exit_code:1,code:'DISPATCH_REVIEW_CAP',error:reason,native_launch_attempted:null})+'\n');assert.equal(preflightContinuation(args),null,'unavailable launch knowledge stays null');
+});
+
+test('retirement barrier continuation needs matching original zero-native terminal and completion with an absent exact project lock',t=>{
+  const f=fixture(t),root=fs.realpathSync(new URL('../../',import.meta.url)),common=f.git(['rev-parse','--path-format=absolute','--git-common-dir']);
+  const journal=path.join(f.org,'dispatch/retirement.json'),lock=path.join(common,'retirement/owner.lock');fs.mkdirSync(path.dirname(journal),{recursive:true});fs.mkdirSync(journal+'.driver');fs.mkdirSync(path.dirname(lock),{recursive:true});
+  const failure={code:'OUTCOME_UNKNOWN',kind:'unknown',stage:'open',native_launch_attempted:false};
+  const job={token:'retirement',repo:f.repo,org:f.org,common,item:f.item,release:{root},phase1_protocol:1,completion_protocol:1,detached:true,detached_refused:true,stage:'open',run:null,native_launch_attempted:false,error:`locked: ${lock}; owner is live or unknown`,failure};
+  const proof=(patch={},terminalPatch={},eventPatch={},extraEvents=[])=>{
+    const saved={...job,...patch},bytes=JSON.stringify(saved);fs.writeFileSync(journal,bytes);
+    const terminal={journal,stage:saved.stage,run:null,exit_code:1,error:saved.error,code:saved.failure?.code,native_launch_attempted:false,...terminalPatch};
+    fs.writeFileSync(journal+'.driver/results.jsonl',JSON.stringify(terminal)+'\n');
+    const event={type:'dispatch.completed',project:common,journal,attempt:job.token,item:job.item,run:null,stage:saved.stage,exit_code:1,native_launch_attempted:false,failure:saved.failure,request_sha256:createHash('sha256').update(bytes).digest('hex'),...eventPatch};
+    return preflightContinuation({journal,repo:f.repo,org:f.org,common,root,events:[event,...extraEvents]});
+  };
+  const result=proof();assert.equal(result.outcome.kind,'retirement-lock-cleared');assert.equal(result.native_launch_attempted,false);
+  assert.equal(proof({preflightContinuations:[{capability:result.capability}]}).outcome.kind,'retirement-lock-cleared','a new terminal request revision retains its own evidence key');
+  for(const patch of [{native_launch_attempted:true},{native_launch_attempted:undefined},{worker:{agentName:'existing'}},{launchProcess:{pid:1}},{sessionBinding:{}},{run:'R-1'},{stage:'launching'},{error:job.error+' EPERM'},{error:job.error+' native identity UNKNOWN'},{error:job.error.replace(lock,lock+'.recovery')},{error:job.error.replace(common,'/foreign')},{failure:{...failure,kind:'fence'}},{failure:{...failure,native_launch_attempted:null}}])assert.equal(proof(patch),null,JSON.stringify(patch));
+  for(const terminalPatch of [{native_launch_attempted:null},{exit_code:0},{run:'R-1'},{error:'unrelated'},{code:'EPERM'},{journal:journal+'.other'}])assert.equal(proof({},terminalPatch),null,JSON.stringify(terminalPatch));
+  for(const eventPatch of [{request_sha256:'wrong'},{project:'/foreign'},{attempt:'other'},{item:'ENG-99'},{run:'R-1'},{native_launch_attempted:null},{exit_code:0},{failure:null}])assert.equal(proof({},{},eventPatch),null,JSON.stringify(eventPatch));
+  assert.equal(proof({},{},{},[{type:'run.started',meta:{dispatch_attempt:job.token}}]),null);
+  fs.mkdirSync(lock);assert.equal(proof(),null,'even an unreadable owner remains held');fs.rmdirSync(lock);
+  fs.symlinkSync(path.join(f.root,'absent-owner'),lock);assert.equal(proof(),null,'a dangling lock is still present');fs.unlinkSync(lock);
+  proof();fs.unlinkSync(journal+'.driver/results.jsonl');assert.equal(preflightContinuation({journal,repo:f.repo,org:f.org,common,root}),null,'text and missing terminal evidence never authorize continuation');
+});
+
+test('retirement lock clears through the same detached request and normal native dispatch without replacing original evidence',async t=>{
+  const f=phase1Fixture(t),common=f.git(['rev-parse','--path-format=absolute','--git-common-dir']),lock=path.join(common,'retirement/owner.lock'),lane=path.join(f.root,'bin/lane');
+  fs.mkdirSync(lock,{recursive:true});
+  fs.writeFileSync(lane,fs.readFileSync(lane,'utf8').replace("console.error('injected '+fail)",`console.error(${JSON.stringify(`locked: ${lock}; owner is live or unknown`)})`));
+  f.fail('prepare');const first=f.start(['--detach']);assert.equal(first.status,0,first.stderr);
+  const {journal}=JSON.parse(first.stdout),terminal=await driverResult(journal),job=JSON.parse(fs.readFileSync(journal)),launch=fs.readFileSync(journal+'.driver/launch.json');
+  assert.equal(terminal.native_launch_attempted,false);assert.equal(terminal.code,'OUTCOME_UNKNOWN');
+  const args=()=>({journal,repo:f.repo,org:f.org,common,root:job.release.root,events:loadEvents(f.org).events});
+  assert.equal(preflightContinuation(args()),null,'retirement ownership is never reclaimed by admission');
+  fs.rmdirSync(lock);f.fail('');assert.equal(preflightContinuation(args()).outcome.kind,'retirement-lock-cleared');
+  const resumed=f.dispatch(['--retry',journal,'--continue-preflight']);assert.equal(resumed.status,0,resumed.stderr);assert.equal(JSON.parse(resumed.stdout).journal,journal);
+  const completed=await driverResult(journal,{count:2});assert.equal(completed.exit_code,0,JSON.stringify(completed));assert.equal(completed.stage,'complete');
+  assert.deepEqual(fs.readFileSync(journal+'.driver/launch.json'),launch);assert.equal(f.jobs().length,1);
+  const rows=fs.readFileSync(journal+'.driver/results.jsonl','utf8').trim().split('\n').map(JSON.parse);assert.deepEqual(rows[0],terminal);
+  const continued=JSON.parse(fs.readFileSync(journal));for(const key of ['token','item','base','release','routeConfig'])assert.deepEqual(continued[key],job[key]);
+  assert.equal(f.calls().filter(c=>c.type==='herdr'&&c.a[0]==='agent'&&c.a[1]==='prompt').length,1);
+  assert.equal(preflightContinuation(args()),null,'a native start spends the prelaunch proof');
 });
 
 test('old implementation-change outcome is typed without broad text exemptions or converting TRUE and unknown native attempts to zero',t=>{

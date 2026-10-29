@@ -47,6 +47,19 @@ function capacityEvidence({job,journal,org,common,failure,terminal}){
   }
   return null;
 }
+// This legacy diagnostic describes a coordination barrier, not an uncertain
+// launch. Only its original terminal AND published completion prove that fact.
+// An extant/unreadable lock stays held; this reader never probes or recovers it.
+function clearedRetirementBarrier({job,journal,common,terminal,terminalZero,events,requestHash}) {
+  const lock=path.join(common,'retirement/owner.lock');
+  if(job.stage!=='open'||!job.detached||!job.detached_refused||job.native_launch_attempted!==false||!terminalZero||
+      job.error!==`locked: ${lock}; owner is live or unknown`||job.failure?.code!=='OUTCOME_UNKNOWN'||
+      job.failure.kind!=='unknown'||job.failure.stage!==job.stage||job.failure.native_launch_attempted!==false||terminal.code!==job.failure.code)return false;
+  if(!events.some(e=>e.type==='dispatch.completed'&&e.project===common&&e.journal===journal&&e.attempt===job.token&&
+      e.item===job.item&&!e.run&&e.stage===job.stage&&e.exit_code===terminal.exit_code&&e.native_launch_attempted===false&&
+      e.request_sha256===requestHash&&JSON.stringify(e.failure)===JSON.stringify(job.failure)))return false;
+  try{fs.lstatSync(lock);return false;}catch(e){return e.code==='ENOENT';}
+}
 export function preflightContinuation({journal,repo,org,common,root=implementation,events=[],failure}) {
   if(!journal||path.dirname(path.resolve(journal))!==path.join(org,'dispatch'))return null;
   const bytes=plain(journal),job=JSON.parse(bytes);
@@ -59,10 +72,11 @@ export function preflightContinuation({journal,repo,org,common,root=implementati
   const terminalZero=terminal?.journal===journal&&terminal.stage===job.stage&&!terminal.run&&Number.isInteger(terminal.exit_code)&&terminal.exit_code!==0&&terminal.error===job.error&&terminal.native_launch_attempted===false;
   if(job.native_launch_attempted!==false&&!terminalZero&&!original)return null;
   const capacity=job.failure?.kind==='capacity'||capacityCodes.has(failure?.code)||/^(?:review|session) cap \d+ reached:/.test(job.error)?capacityEvidence({job,journal,org,common,failure,terminal}):null;
-  if(/unknown|uncertain/i.test(job.error??'')&&!capacity&&!original)return null;
+  const retirement=clearedRetirementBarrier({job,journal,common,terminal,terminalZero,events,requestHash:hash(bytes)});
+  if(/unknown|uncertain/i.test(job.error??'')&&!capacity&&!original&&!retirement)return null;
   const files=['dispatch/dispatch.mjs','dispatch/preflight.mjs','dispatch/foreground-command.mjs','dispatch/outcome.mjs','dispatch/completion.mjs','lib/uncertain-outcome.mjs','dispatch/not-started.mjs','dispatch/request-lock.mjs','dispatch/launch-guard.mjs','lib/item-launch-hold.mjs','lib/worker-brief.mjs','line-service/review-queue.mjs','line-service/review-group.mjs','dispatch/session-cap.mjs','dispatch/unlanded-cap.mjs'];
   const capability=hash(JSON.stringify(files.map(file=>[file,hash(fs.readFileSync(path.join(root,file)))])));
-  if(!capacity&&job.preflightContinuations?.some(p=>p.capability===capability))return null;
+  if(!capacity&&!retirement&&job.preflightContinuations?.some(p=>p.capability===capability))return null;
   const terminalHash=terminal?hash(JSON.stringify(terminal)):null;
-  return{journal,token:job.token,job,request_sha256:hash(bytes),terminal_sha256:terminalHash,capability,key:capacity?hash(JSON.stringify([capability,hash(bytes),terminalHash])):capability,capacity:!!capacity,outcome:implementationChangeOutcome(job),native_launch_attempted:original?job.native_launch_attempted??null:false,...(original?{original_prestart:{seq:original.seq,request_sha256:original.request_sha256}}:{})};
+  return{journal,token:job.token,job,request_sha256:hash(bytes),terminal_sha256:terminalHash,capability,key:capacity||retirement?hash(JSON.stringify([capability,hash(bytes),terminalHash])):capability,capacity:!!capacity,outcome:retirement?{kind:'retirement-lock-cleared',source:'original-terminal-and-completion'}:implementationChangeOutcome(job),native_launch_attempted:original?job.native_launch_attempted??null:false,...(original?{original_prestart:{seq:original.seq,request_sha256:original.request_sha256}}:{})};
 }

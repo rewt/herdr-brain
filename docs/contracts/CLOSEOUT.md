@@ -57,6 +57,10 @@ finite line pass uses the existing folder/branch executor with fresh native,
 source, claim, Git, preservation and STOP/HOLD guards. Unsaved folders stay;
 clean unlanded folders can go while their exact branches stay. This bridge
 grants no permission to observe or replay other UNKNOWN commands.
+An audited original allocation can also finish after a later check run in a
+different lane, provided every later run is final and shares none of its native
+identities. Its original claim, dispatch, report and Git generation still match;
+an active successor or reused lane/session keeps the old allocation.
 
 ## Never-sent closeout intents (ENG-812)
 

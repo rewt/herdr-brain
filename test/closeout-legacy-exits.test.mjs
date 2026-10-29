@@ -12,8 +12,8 @@ import {gitProject} from '../lib/project.mjs';
 function fixture(t,{merged=true,vacant=true}={}) {
   const f=setup(t,{direct:true,bound:true,merged});selectCurrentCleanup(f);f.report();
   const entry=currentCloseoutEntries(f.common,f.org,events(f))[0],p=entry.panes[0];
-  const target=f.retirement(f.options).plan(f.lane).close[0];
-  assert.ok(target);
+  const target={tab_id:'w:t',occupant:['worker','codex',p.pane,p.workspace,entry.cwd,p.terminal,p.session],
+    shell:(({pid,identity,command})=>({pid,identity,command}))(f.state.info.process_tree[0])};
   const intent=f.append([{type:'closeout.effect',identity:f.common,key:entry.key,source:entry.source,run:entry.run,item:entry.item,
     effect:'original-pre-fix-exit',producer:'native-closeout/v2',outcome:{action:'agent-exit-requested',run:entry.run,
       pane:p.pane,tab_id:target.tab_id,occupant:target.occupant,shell:target.shell}}])[0];
@@ -58,6 +58,17 @@ test('settled absence removes a clean unlanded folder and keeps its exact branch
   assert.equal(f.git(['rev-parse','refs/heads/lane/topic']),f.head);
   assert.ok(effects(f).some(e=>e.action==='branch-kept'));
   assert.deepEqual(f.read().actions,[]);
+});
+
+for(const kind of ['finished-separate','active','reused-lane','reused-session'])test(`legacy original allocation with a ${kind} successor`,t=>{
+  const f=fixture(t),meta={agent:'later',pane:'later:p',worker_workspace:'later',terminal_id:'later-term',agent_session_id:'later-session'};
+  if(kind==='reused-session')meta.agent_session_id='session';
+  f.append([{type:'run.started',id:'R-2',item:'ENG-1',workspace:kind==='reused-lane'?f.lane:f.lane+'-later',meta},
+    ...(kind==='active'?[]:[{type:'report.ingested',run:'R-2',report:{outcome:'done'},sha256:'later'}])]);
+  f.turn();f.turn();
+  assert.equal(fs.existsSync(f.lane),kind!=='finished-separate');
+  assert.deepEqual(f.read().actions,[]);
+  if(kind!=='finished-separate')assert.equal(events(f).some(e=>e.type==='closeout.exit-settled'),false);
 });
 
 for(const kind of ['original-terminal','moved-terminal','lane-agent','moved-session','incomplete'])test(`legacy absence keeps ${kind} without sending native input`,t=>{

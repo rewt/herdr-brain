@@ -19,8 +19,12 @@ do not grant authority or replace the guarded project tools.
   main CAS/fast-forward, STOP/HOLD and recoverable archives. Display labels/session
   metadata grant no authority. Never edit another identity's files.
 - **Land finished OWN source first**, under the existing waiver:
-  `node lanes/lane.mjs promote TOPIC --expected-head FULL_SHA`.
-  Rebase moved main in your lane and capture the resulting head; then report.
+  `node lanes/lane.mjs promote TOPIC --expected-head-from-worktree`.
+  This form applies the native worker/run/claim guard across the fast-forward;
+  literal `--expected-head FULL_SHA` alone does not and is for external exact-head
+  callers, not worker self-landing. Rebase moved main in your lane, record the
+  resulting committed head, and verify the command's captured head matches it;
+  then report.
   No report-first promotion flag, fabricated report, push or release.
 - Routine protected commands request require_escalated from the outset. The
   approved general forms use `git rebase -- UPSTREAM`, mode-only `git rebase

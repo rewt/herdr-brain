@@ -22,10 +22,15 @@ Under the current land-first waiver, self-land finished OWN source through the
 project's existing guarded lane command before reporting. For Brain:
 
 ```sh
-node lanes/lane.mjs promote TOPIC --expected-head FULL_SHA
+node lanes/lane.mjs promote TOPIC --expected-head-from-worktree
 ```
 
 Here `node` means the pinned runtime and source root specified by the brief.
+This form captures the topic's full head once under the promotion lock and applies
+the native worker/run/claim guard across the fast-forward. Literal
+`--expected-head FULL_SHA` alone does not apply that ownership guard; retain it for
+external exact-head callers rather than worker self-landing. Record the finished
+committed candidate head and verify the command's captured head matches it.
 Use BCH's own supported entry under its identity rather than importing this
 Brain-relative command. Clean Git, the actual worktree/common directory, native
 identity, claim generation, source ownership, expected head, main CAS/FF and

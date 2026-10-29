@@ -340,9 +340,12 @@ export function reviewResultEvents({state,events,run,report,sha256,body=report.b
   if(!declarations.length||declarations.some(v=>!['PASS','FAIL','NEEDS-WORK'].includes(v)))throw Error('queued review report requires explicit PASS, FAIL or NEEDS-WORK verdict');
   if(distinct.size!==1)throw Error('queued review report has ambiguous contradictory verdicts; retain immutable bytes for judgment');
   const findings=[];
-  for(const line of String(body).split('\n')){const m=/^\s*[-*]\s*\[(Major|Minor)\]\s*(.+)$/i.exec(line);if(m)findings.push({severity:m[1].toLowerCase(),text:m[2].trim()});}
   const raw=report.extra?.findings;if(Array.isArray(raw))for(const f of raw)if(f&&['major','minor'].includes(String(f.severity).toLowerCase()))findings.push({severity:String(f.severity).toLowerCase(),text:String(f.text??f.summary??''),
     ...(typeof f.correction_check==='string'&&f.correction_check.trim()?{correction_check:f.correction_check.trim()}:{})});
+  // Structured findings are the canonical declarations. The body may summarize
+  // them in different words, which would hash to different typed finding keys.
+  // Both record intake and the service use this same body-only fallback.
+  if(!findings.length)for(const line of String(body).split('\n')){const m=/^\s*[-*]\s*\[(Major|Minor)\]\s*(.+)$/i.exec(line);if(m)findings.push({severity:m[1].toLowerCase(),text:m[2].trim()});}
   const corrections=reviewCorrectionEvents({state,events,run,review,report,findings,verdict,sha256,usedIds});
   return [{type:'change.reviewed',item:source,head:target.head,base:target.base,review_key:key,review_group_key:queueProducerGroup(review),covered_commits:capturedReviewCommits(target),review_item:review.id,review_run:run.id,verdict,
     verdict_evidence:{frontmatter:report.extra?.verdict!==undefined,body_lines:bodyLines},findings:corrections.findings,report_sha256:sha256},...corrections.add];

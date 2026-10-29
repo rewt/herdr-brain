@@ -37,7 +37,7 @@ function orgFixture(t) {
 
 test('finding intake: one formal proposal covers Major and Minor findings without a severity duplicate', () => {
   const data = report([{ role: 'engineering', title: 'Repair the review findings', accept: ['Fix both defects'] }]);
-  data.extra.findings = [{ severity: 'major', text: `  ${major}  ` }];
+  data.extra.findings = [{ severity: 'major', text: `  ${major}  ` }, { severity: 'minor', text: minor }];
   const before = structuredClone(data), events = stamped(seed());
   const add = intake(events, data, `- [Major] ${major}\n- [Minor] ${minor}`);
   assert.equal(items(add).length, 1);
@@ -75,6 +75,45 @@ test('finding intake: separate findings at the same location keep separate corre
   assert.equal(new Set(bindings(add).map(event => event.finding_key)).size, 2);
   assert.equal(new Set(bindings(add).map(event => event.correction_item)).size, 2);
   assert.equal(items(add).some(event => event.meta.severity === 'major'), false, 'FAIL with Minor findings does not invent a Major');
+});
+
+test('finding intake: structured findings and paraphrased body summaries file once in both observed report shapes', () => {
+  for (const count of [5, 2]) {
+    const findings = Array.from({ length: count }, (_, i) => ({
+      severity: count === 5 && i === 0 ? 'major' : 'minor',
+      text: `[${count === 5 && i === 0 ? 'Major' : 'Minor'}] codec.mjs:${40 + i} - Full immutable explanation ${i}`,
+      ...(count === 5 && i === 0 ? { correction_check: 'Reproduce the exact Major and assert its correction' } : {}),
+    }));
+    const proposals = count === 5 ? [{ role: 'engineer', title: 'Repair the Major',
+      extra: { review_findings: [findings[0].text] } }] : [];
+    const data = report(proposals);
+    data.extra = { verdict: count === 5 ? 'FAIL' : 'PASS', findings };
+    const body = findings.map((f, i) => `- [${f.severity}] codec.mjs:${40 + i} - Short display summary ${i}`).join('\n');
+    const events = stamped(seed()), bytes = JSON.stringify(data), add = intake(events, data, body);
+    const reviewItem = fold(events).items.get('REV-1');
+    const keys = findings.map(f => reviewFindingKey(reviewItem, f));
+    assert.equal(items(add).length, count, 'one item per declared finding, with or without proposals');
+    assert.deepEqual(add[0].findings.map(f => f.key), keys);
+    assert.deepEqual(bindings(add).map(e => e.finding_key), keys);
+    if (count === 5) assert.equal(items(add)[0].meta.review_correction_checks[keys[0]], findings[0].correction_check);
+    const retained = stamped([...events, ...add, ...review('REV-2', 'R-3'),
+      ...items(add).map(e => ({ type: 'item.updated', id: e.id, fields: { meta: { hold: true, unknown_attempt: 'retained' } } }))]);
+    assert.deepEqual(intake(retained, data, body), [], 'the second consumer of the same report is idempotent');
+    const next = intake(retained, data, body, 'R-3');
+    assert.equal(items(next).length, 0, 'another intake reuses the same typed finding owners');
+    assert.deepEqual(fold([...retained, ...next]).items, fold(retained).items, 'held and UNKNOWN items remain unchanged');
+    assert.equal(JSON.stringify(data), bytes, 'canonical declarations and display text are never rewritten');
+  }
+});
+
+test('finding intake: body-only findings remain available without structured declarations', () => {
+  for (const findings of [undefined, []]) {
+    const data = report();
+    if (findings) data.extra.findings = findings;
+    const add = intake(stamped(seed()), data, `- [Major] ${major}\n- [Minor] ${minor}`);
+    assert.equal(items(add).length, 2);
+    assert.deepEqual(add[0].findings.map(f => f.text), [major, minor]);
+  }
 });
 
 test('finding intake: an explicitly linked repeat reuses active or closed work without changing UNKNOWN attempts', () => {
@@ -247,7 +286,8 @@ test('finding intake: record ingest shares correction intake and keeps unrelated
   const file = path.join(f.root, 'review.md');
   const data = { run: 'R-2', ...report([{ role: 'engineering', title: 'Repair all findings', blocking: true },
     { role: 'writer', title: 'Document the correction', blocking: false }]), summary: 'Immutable review completed', headline: 'Review completed', verdict: 'FAIL' };
-  const bytes = `---\n${JSON.stringify(data)}\n---\n- [Major] ${major}\n- [Minor] ${minor}\n`;
+  data.findings = [{ severity: 'major', text: major }, { severity: 'minor', text: minor }];
+  const bytes = `---\n${JSON.stringify(data)}\n---\n- [Major] codec.mjs:41 - Short Major summary\n- [Minor] codec.mjs:50 - Short Minor summary\n`;
   assert.deepEqual(readReport(bytes).errors, []);
   fs.writeFileSync(file, bytes);
   const output = f.ok(['ingest', file]);
@@ -256,6 +296,7 @@ test('finding intake: record ingest shares correction intake and keeps unrelated
   assert.equal(corrections.length, 1);
   assert.equal(items(committed).filter(event => event.role === 'writer').length, 1);
   assert.equal(bindings(committed).length, 2);
+  assert.deepEqual(intake(committed, readReport(bytes).report, readReport(bytes).body), [], 'service intake reuses record-ingested findings');
   assert.equal(committed.filter(event => event.type === 'link.added' && event.blocker === corrections[0].id).length, 1);
   assert.equal(fs.readFileSync(path.join(f.dir, 'reports/R-2.md'), 'utf8'), bytes);
   const count = committed.length;

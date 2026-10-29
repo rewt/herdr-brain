@@ -13,6 +13,7 @@ import {loadEvents,transact} from '../lib/store.mjs';
 import {readPlainFile,plainDirectory,writeFileAtomic} from '../lib/files.mjs';
 import {withRuntimeLocks} from './runtime-locks.mjs';
 import {loadDiscoveredRoutes} from '../lanes/routes.mjs';
+import {installationPhaseProof,settledInstallation} from './runtime-phase.mjs';
 
 const git=(repo,args)=>execFileSync('git',['--no-optional-locks','-C',repo,...args],{encoding:'utf8',stdio:['ignore','pipe','pipe'],timeout:10000}).trim();
 const same=(a,b)=>canonical(a)===canonical(b);
@@ -49,8 +50,9 @@ export function upgradeRuntime({repo,org,id,fromRoot,targetRoot,rollback=false,d
     if(git(c.repo,['symbolic-ref','--short','HEAD'])!==main||git(c.repo,['status','--porcelain=v1','--untracked-files=all']))throw Error('upgrade requires clean canonical main');
     const previous=releaseRoot(fromRoot,home),runtime=releaseRoot(targetRoot,home);
     acceptedRuntime(c.repo,{root:targetRoot,home});
-    if(inspectService(target,c.repo,command).loaded)throw Error('service remains loaded; retain STOP and finish its supported stop');
-    return {head:git(c.repo,['rev-parse','HEAD']),previous,runtime,stop_sha256:digest(stopBytes)};
+    const service=inspectService(target,c.repo,command);
+    if(service.loaded)throw Error('service remains loaded; retain STOP and finish its supported stop');
+    return {head:git(c.repo,['rev-parse','HEAD']),previous,runtime,stop_sha256:digest(stopBytes),service};
   };
   const snapshot=initial(),loaded=loadEvents(c.org);if(loaded.tornTail)throw Error('incomplete record prevents service upgrade');
   const savedBytes=readPlainFile(installationFile),saved=JSON.parse(savedBytes),plistBytes=readPlainFile(file);
@@ -73,11 +75,12 @@ export function upgradeRuntime({repo,org,id,fromRoot,targetRoot,rollback=false,d
   const replacement=replacementPlist(c,saved,command,targetRoot);
   // Rollback restores the exact prior saved bytes. In particular, a release
   // predating upgrade events can still read its original migration receipt.
-  const nextPlist=rollback?state.previous.plist:replacement,after=rollback?state.previous.installation:{...saved,source:targetRoot,runtime:snapshot.runtime};
+  const settlement=rollback?null:installationPhaseProof(saved,savedBytes,{target,service:snapshot.service,stop_sha256:snapshot.stop_sha256});
+  const nextPlist=rollback?state.previous.plist:replacement,after=rollback?state.previous.installation:settledInstallation({...saved,source:targetRoot,runtime:snapshot.runtime},settlement);
   if(after.source!==targetRoot||!same(after.runtime,snapshot.runtime))throw Error('previous accepted runtime binding changed');
   const archiveFile=path.join(c.directory,'upgrades',id+'.json');
   const archive={schema:'line-runtime-upgrade/v1',id,repo:c.repo,org:c.org,identity:c.identity,direction,source:targetRoot,previous_source:fromRoot,previous_seq:state.last.seq,
-    owner,canonical_head:snapshot.head,stop_sha256:snapshot.stop_sha256,runtime:snapshot.runtime,
+    owner,canonical_head:snapshot.head,stop_sha256:snapshot.stop_sha256,runtime:snapshot.runtime,...(settlement?{phase_settlement:settlement}:{}),
     before:{installation:savedBytes,plist:plistBytes},after:{installation:JSON.stringify(after),plist:nextPlist}};
   const bytes=json(archive),ref={id,file:archiveFile,sha256:digest(bytes)},nextInstallation=json(rollback?after:{...after,upgrade:ref});
   const validate=()=>{
@@ -98,7 +101,10 @@ export function upgradeRuntime({repo,org,id,fromRoot,targetRoot,rollback=false,d
       const fd=fs.openSync(archiveFile,'wx',0o444);try{fs.writeFileSync(fd,bytes);fs.fsyncSync(fd);}finally{fs.closeSync(fd);}
       fault('intent');writeFileAtomic(file,nextPlist,0o600);fault('plist');
       if(!rollback){writeFileAtomic(installationFile,nextInstallation,0o600);fault('installation');}
-      return {add:[{type:'line-service.runtime-upgraded',id,project:c.identity,repo:c.repo,org:c.org,direction,source:targetRoot,previous_source:fromRoot,previous_seq:state.last.seq,
+      if(inspectService(target,c.repo,command).loaded||digest(readPlainFile(stop))!==snapshot.stop_sha256||readPlainFile(file)!==nextPlist||
+          !rollback&&readPlainFile(installationFile)!==nextInstallation)throw Error('upgrade completion service/configuration changed; original intent retained');
+      return {add:[...(settlement?[{type:'line-service.installation-settled',id,project:c.identity,repo:c.repo,org:c.org,
+        operation:direction,proof:settlement,archive:ref,native_caller:owner.native,runtime_started:false}]:[]),{type:'line-service.runtime-upgraded',id,project:c.identity,repo:c.repo,org:c.org,direction,source:targetRoot,previous_source:fromRoot,previous_seq:state.last.seq,
         runtime:snapshot.runtime,archive:{file:ref.file,sha256:ref.sha256},native_caller:owner.native,runtime_started:false}],
       result:{upgraded:true,id,direction,target,archive:ref,previous:snapshot.previous,runtime:snapshot.runtime,stopped:true,runtime_started:false}};
     },{actor:owner.native.name,strictTail:true,lockOptions:{recover:false}}).result;

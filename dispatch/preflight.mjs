@@ -34,6 +34,24 @@ export function initialBriefRefusal({entry,contract,events,item,outcome}) {
   validateWorkerBrief(current);
   return {kind:'changed-brief-address',original_sha256:hash(JSON.stringify(entry.receipt)),input_sha256:hash(JSON.stringify(current))};
 }
+// The old release override check threw synchronously before allocating a
+// journal or touching a native worker. Only that exact terminal diagnostic,
+// with the override now absent in an accepted release, admits one new intent.
+export function initialSourceRootRefusal({entry,events,item,outcome,release,env}) {
+  const reason='HERDR_BRAIN_ROOT must match the invoked development source root; no dispatch created';
+  if(!release?.commit||env.HERDR_BRAIN_ROOT!==undefined||entry?.state!=='held'||entry.receipt?.status!==1||
+      entry.receipt.signal||entry.receipt.signal_sent||entry.receipt.error||entry.native_launch_attempted===true||entry.history?.length||entry.failure?.kind==='fence'||
+      entry.result?.journal||entry.result?.run||entry.result?.worker||entry.result?.native_launch_attempted===true||
+      outcome?.status!=='unknown'||outcome.reason!=='original request outcome unavailable; no replacement'||outcome.journal||
+      (entry.error??'').replace(/^dispatch:\s*/,'').trim()!==reason||!Number.isFinite(Date.parse(entry.at))||
+      events.some(e=>e.type==='run.started'&&e.item===item&&Date.parse(e.at)>=Date.parse(entry.at)))return null;
+  let result;try{result=JSON.parse(entry.receipt.stdout);}catch{return null;}
+  if(result.result!=='failed'||result.code!=='DISPATCH_FAILED'||result.reason!==reason||result.journal||result.retry||
+      result.native_launch_attempted===true||result.run||result.worker||result.launchProcess)return null;
+  return {schema:'dispatch-readmission/v1',kind:'release-source-override-cleared',
+    original_sha256:hash(JSON.stringify(entry)),input_sha256:hash(JSON.stringify([release.root,release.commit,'HERDR_BRAIN_ROOT absent'])),
+    native_launch_attempted:false};
+}
 function capacityEvidence({job,journal,org,common,failure,terminal}){
   if(job.failure?.kind==='capacity'&&capacityCodes.has(job.failure.code)&&job.failure.stage===job.stage&&job.failure.native_launch_attempted===false)return job.failure;
   const matches=value=>value&&capacityCodes.has(value.code)&&value.journal===journal&&(value.reason??value.error)===job.error;

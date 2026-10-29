@@ -2,6 +2,9 @@ import test from './helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import {pathToFileURL} from 'node:url';
+import {spawnSync} from 'node:child_process';
+import {copyProduct} from '../lib/product-files.mjs';
 import {setup,events,effects,selectCurrentCleanup} from './helpers/closeout-fixture.mjs';
 import {refreshCloseouts} from '../lib/closeout-consumer.mjs';
 import {currentCloseoutEntries,unresolvedCloseoutEffect} from '../lib/closeout.mjs';
@@ -167,4 +170,58 @@ test('BCH retirement still completes after preservation exceeds the old three mi
     }});
   assert.deepEqual(result.errors,[]);assert.equal(result.steps,1);assert.equal(fs.existsSync(f.lane),false);
   assert.ok(effects(f).some(e=>e.action==='worktree-removed'));
+});
+
+
+async function releaseCloseout(t,options={}){
+  const f=setup(t,{direct:true,bound:true,merged:true,...options}),installation=selectCurrentCleanup(f);
+  const bundle=path.join(f.scratch,'accepted-release');copyProduct(process.cwd(),bundle);
+  fs.writeFileSync(path.join(bundle,'.release-commit'),'1'.repeat(40)+'\n');
+  const summary=path.join(bundle,'.release-acceptance.json');fs.writeFileSync(summary,JSON.stringify({ready:true,candidateCommit:'1'.repeat(40),counts:{PASS:1,FAIL:0,PENDING:0,SKIP:0}}));
+  const manifest=spawnSync(process.execPath,[path.resolve('herdr/releases.mjs'),'manifest',bundle,summary],{cwd:f.repo,env:f.env,encoding:'utf8'});
+  assert.equal(manifest.status,0,manifest.stderr);
+  fs.writeFileSync(installation.file,JSON.stringify({...installation.receipt,source:bundle}));
+  const {runCloseoutTurn,CLOSEOUT_TURN_BUDGET_MS}=await import(pathToFileURL(path.join(bundle,'line-service/closeout-turn.mjs')).href);
+  const {refreshCloseouts,drainCloseout}=await import(pathToFileURL(path.join(bundle,'lib/closeout-consumer.mjs')).href);
+  const refresh=()=>refreshCloseouts({cwd:f.repo,org:f.org,env:f.env,retirementOptions:f.options});
+  const turn=()=>runCloseoutTurn({project:gitProject(f.repo),org:f.org,env:f.env,guard:()=>{},measure:()=>{},maxSteps:1,
+    cli:(_file,args)=>{
+      assert.equal(_file,'supervisor/closeout.mjs');
+      if(args[0]==='refresh')return JSON.stringify(refresh());
+      assert.equal(args[0],'drain');const deadline=Number(args[args.indexOf('--deadline')+1]);
+      assert.ok(deadline-Date.now()>700000,'release uses the same twelve-minute closeout allowance');
+      return JSON.stringify(drainCloseout({cwd:f.repo,org:f.org,env:f.env,retirementOptions:{...f.options,deadline},
+        keys:JSON.parse(args[args.indexOf('--keys')+1]),retrySafe:true}));
+    }});
+  assert.equal(CLOSEOUT_TURN_BUDGET_MS,720000);
+  return{...f,turn,refresh,bundle};
+}
+
+for(const obstruction of [null,'UNKNOWN','refusal','identity','claim','HOLD'])
+test(`release line closes a proven original tab after folder removal: ${obstruction??'success'}`,async t=>{
+  const f=await releaseCloseout(t),[source]=f.report(),original=source.closeout_targets[0];
+  f.git(['worktree','remove',f.lane]);
+  if(obstruction==='UNKNOWN')f.append([{type:'closeout.effect',identity:f.common,key:original.key,run:'R-1',source:{seq:source.seq,type:source.type},
+    effect:'original-unknown',producer:'native-closeout/v2',outcome:{action:'agent-exit-requested',pane:'w:p'}}]);
+  if(obstruction==='refusal')f.append([{type:'closeout.evaluated',identity:f.common,key:original.key,run:'R-1',source:{seq:source.seq,type:source.type},
+    completed:false,reason:'original native refusal',failure:{kind:'fence',code:'EACCES'}}]);
+  if(obstruction==='identity'){f.state.agents[0].agent_session.value='replacement';f.save();}
+  if(obstruction==='claim')f.append([{type:'run.claimed',run:'R-1',project:f.common,record:f.org,owner:{controller:'foreign',legacy:true}}]);
+  if(obstruction==='HOLD')fs.mkdirSync(path.join(f.repo,'.lane/supervisor/HOLD'),{recursive:true});
+  const before=events(f);
+  if(obstruction==='HOLD')assert.throws(f.refresh,/STOP\/HOLD/);
+  else f.turn();
+  if(!obstruction){
+    const target=currentCloseoutEntries(f.common,f.org,events(f)).find(e=>e.cleanup?.native_only);
+    assert.ok(target,JSON.stringify(events(f).slice(before.length)));
+    f.turn();f.turn();
+    assert.equal(f.read().tabs.length,0,JSON.stringify(events(f).slice(before.length)));
+    assert.equal(f.read().actions.filter(a=>a[0]==='tab'&&a[1]==='close').length,1);
+    assert.ok(events(f).some(e=>e.type==='closeout.vacancy-settled'));
+    assert.equal(effects(f).some(e=>['worktree-removed','branch-removed','lane-removed','git-removal-started'].includes(e.action)),false);
+  }else{
+    assert.equal(f.read().tabs.length,1);assert.deepEqual(f.read().actions,[]);
+  }
+  assert.equal(fs.existsSync(f.lane),false);assert.equal(f.git(['rev-parse','lane/topic']),f.head);
+  assert.deepEqual(events(f).slice(0,before.length),before);
 });

@@ -13,6 +13,7 @@ import {readPlainFile,plainDirectory} from '../lib/files.mjs';
 import {withRuntimeLocks} from './runtime-locks.mjs';
 import {loadDiscoveredRoutes} from '../lanes/routes.mjs';
 import {recipientChanges,legacyRecipientHistory} from './recipient-history.mjs';
+import {installationPhaseProof,settledInstallation} from './runtime-phase.mjs';
 
 const git=(repo,args)=>execFileSync('git',['--no-optional-locks','-C',repo,...args],{encoding:'utf8',stdio:['ignore','pipe','pipe'],timeout:10000}).trim();
 const tuple=b=>({project:b.project,native:{name:b.native.name,pane:b.native.pane_id,workspace:b.native.workspace_id,terminal:b.native.terminal_id,session:b.native.agent_session.value}});
@@ -93,16 +94,18 @@ export function migrateRuntime({repo,org,id,dryRun=false,expectedPlan,cwd=proces
       !/^[a-f0-9]{40}(?:[a-f0-9]{24})?$/.test(cutover.canonical_head??'')||cutover.main!==git(c.repo,['symbolic-ref','--short','HEAD']))throw Error('original cutover binding differs; preserve it');
   git(c.repo,['merge-base','--is-ancestor',cutover.canonical_head,snapshot.head]);
   legacyRecipientHistory(recipientHistory,{installation:saved,plist:plistBytes,cutover});
-  const nextPlist=replacementPlist(c,saved,command),after={...saved,source:runtimeRoot,runtime:snapshot.runtime};
+  const settlement=installationPhaseProof(saved,savedBytes,{target,service:snapshot.service,stop_sha256:snapshot.stop_sha256});
+  const nextPlist=replacementPlist(c,saved,command),after=settledInstallation({...saved,source:runtimeRoot,runtime:snapshot.runtime},settlement);
   // Observe the stopped state, never complete or replay the refused bootstrap.
-  // Keep its original phase/error in both the archive and migrated installation.
+  // The immutable archive retains the original phase/error. The installed
+  // configuration names this separate stopped-state settlement.
   const stoppedInstallation=saved.phase==='uncertain-or-refused'?{
     schema:'line-stopped-installation/v1',phase:saved.phase,installation_sha256:digest(savedBytes),
     target,service:snapshot.service,stop_sha256:snapshot.stop_sha256,bootstrap_replayed:false,
   }:null;
   const archive={schema:'line-runtime-migration/v1',id,repo:c.repo,org:c.org,identity:c.identity,source:runtimeRoot,previous_source:cutover.source,
     owner,canonical_head:snapshot.head,stop_sha256:snapshot.stop_sha256,cutover,runtime:snapshot.runtime,
-    ...(stoppedInstallation?{stopped_installation:stoppedInstallation}:{}),
+    ...(stoppedInstallation?{stopped_installation:stoppedInstallation,phase_settlement:settlement}:{}),
     before:{installation:savedBytes,plist:plistBytes},after:{installation:JSON.stringify(after),plist:nextPlist}};
   const bytes=json(archive),ref={id,file:archiveFile,sha256:digest(bytes)},nextInstallation=json({...after,migration:ref});
   const validate=()=>{
@@ -127,9 +130,13 @@ export function migrateRuntime({repo,org,id,dryRun=false,expectedPlan,cwd=proces
       fault('intent');
       writeFileAtomic(file,nextPlist,0o600);fault('plist');
       writeFileAtomic(installationFile,nextInstallation,0o600);fault('installation');
+      if(inspectService(target,c.repo,command).loaded||
+          digest(readPlainFile(stop))!==snapshot.stop_sha256||readPlainFile(file)!==nextPlist||readPlainFile(installationFile)!==nextInstallation)
+        throw Error('migration completion service/configuration changed; original intent retained');
       const observed=stoppedInstallation?[{type:'line-service.stopped-installation-verified',id,project:c.identity,repo:c.repo,org:c.org,
         observation:stoppedInstallation,archive:{file:ref.file,sha256:ref.sha256},native_caller:owner.native,runtime_started:false}]:[];
-      return{add:[...observed,{type:'line-service.runtime-migrated',id,project:c.identity,repo:c.repo,org:c.org,source:runtimeRoot,previous_source:cutover.source,
+      return{add:[...observed,...(settlement?[{type:'line-service.installation-settled',id,project:c.identity,repo:c.repo,org:c.org,
+        operation:'migration',proof:settlement,archive:ref,native_caller:owner.native,runtime_started:false}]:[]),{type:'line-service.runtime-migrated',id,project:c.identity,repo:c.repo,org:c.org,source:runtimeRoot,previous_source:cutover.source,
         cutover_seq:cutover.seq,cutover_id:cutover.id,runtime:snapshot.runtime,archive:{file:ref.file,sha256:ref.sha256},native_caller:owner.native,runtime_started:false}],result:{migrated:true,id,target,archive:ref,runtime:snapshot.runtime,stopped:true,runtime_started:false}};
     },{actor:owner.native.name,strictTail:true,lockOptions:{recover:false}});
     return result.result;

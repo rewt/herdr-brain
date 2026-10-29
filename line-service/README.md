@@ -242,8 +242,11 @@ Migration accepts the original uncertain install only with all the same guards,
 including positive native absence and this service's unchanged STOP. Its
 immutable migration archive records a `line-stopped-installation/v1` observation,
 and the same record transaction appends `line-service.stopped-installation-verified`
-before the migration completion. The original phase/error remain preserved;
-this proves the stopped state, never claims the refused bootstrap succeeded.
+before the migration completion. Successful migration or forward upgrade also
+records `line-service.installation-settled` with its immutable archive and verified
+stopped-service proof, and sets the current phase to `installed`. The archive
+retains the original phase/error; no refused bootstrap is replayed or claimed
+successful. Partial intents and unknown service observations remain held.
 Dry-run leaves runtime bindings unchanged (dead-pass recovery is receipted as below).
 `starting`, other phases and partial/UNKNOWN
 migrations remain refused. This recovery must be present in the accepted release
@@ -957,6 +960,10 @@ closeout, then starts (or finds) the ordinary finite general-pass child. Its
 existing launchd interval therefore continues waking while a slow review owns
 `pass.lock`. Startup and each scheduled wake reconcile committed run/report
 sources; no second launchd job, saved watcher replacement or core loop is needed.
+The wake probes `pass.lock` through the same notice-lock owner guard as the pass,
+recording fsynced `line-pass-lock-recovery/v1` intent/completion rows before and
+after recovering an exact dead owner. Live or unidentified owners stay held;
+heartbeat age grants no authority to stop or replace them.
 The new `line-service/closeout.mjs --once --repo ... --org ...` hint entry delegates
 to the same role. Both use the birth-aware `closeout-turn.lock`; the existing
 closer still owns its consumer and retirement locks and every native/Git effect.
@@ -967,10 +974,26 @@ waking the finite role; report availability itself grants no retirement authorit
 Lost hints, spawn replies and ingest acknowledgements are repaired by the next
 finite reconciliation. `closeout-turn.json` checkpoints a selection before its
 command and a continuation before acknowledgement. The default turn selects at
-most eight reports and eight closeouts with a 45-second scheduling allowance;
+most eight reports and eight closeouts with its own 720-second allowance;
 native drains receive the remaining deadline. Least-recently-selected targets
 run first, including after a crash. A kept target yields to independent peers.
 Original UNKNOWN/refused commands remain governed by their original record facts.
+
+The exact historical pre-journal release-source override refusal can be admitted
+once when an accepted release no longer supplies that override. The original
+terminal receipt survives, and `line-service.dispatch-readmitted` binds the new
+intent to the zero-launch proof. Journals, launched workers and other uncertain
+outcomes never qualify. Logical source completion may use a full immutable report
+range or its native landing after the folder is gone, with fresh canonical
+containment and conditional current-run/report guards. Typed pre-command holds
+are reconsidered against current source; a refused or unknown close stays owned.
+
+A missing folder with a surviving fully bound original native tab can receive an
+`absent-allocation-native/v1` cleanup scope. The existing retirement planner and
+executor still check native/process identity, claim, report, focus, references,
+STOP/HOLD and original uncertain/refused effects. This scope closes only the
+original native allocation and grants no Git disposal or preservation proof.
+The ordinary vacancy census settles remaining absence separately.
 
 Final reports and authorized abandonments bind their original run/claim, dispatch,
 launch receipt, common directory and worktree/branch generation in the source

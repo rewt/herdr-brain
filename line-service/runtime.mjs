@@ -8,6 +8,7 @@ import {gitProject} from '../lib/project.mjs';
 import {bundleRelease,projectPin,selectRelease,checkRelease,releaseHome,requireReadyAcceptance} from '../lib/releases.mjs';
 import {readPlainFile,plainDirectory} from '../lib/files.mjs';
 import {recipientChanges,applyRecipientChange,legacyRecipientHistory} from './recipient-history.mjs';
+import {installationPhaseProof,settledInstallation} from './runtime-phase.mjs';
 
 export const runtimeRoot=fs.realpathSync(fileURLToPath(new URL('../',import.meta.url)));
 export const digest=bytes=>createHash('sha256').update(bytes).digest('hex');
@@ -72,7 +73,9 @@ export function runtimeHistory(events,{repo,org,identity,directory,installation,
         intent.source!==next.source||intent.previous_source!==saved.source||intent.previous_seq!==last.seq||intent.direction!==next.direction||
         JSON.stringify(intent.runtime)!==JSON.stringify(next.runtime)||intent.before.installation!==JSON.stringify(saved)+'\n'||intent.before.plist!==plist)throw Error('service runtime upgrade archive changed');
     if(next.direction==='rollback'&&(last.type!=='line-service.runtime-upgraded'||next.source!==last.previous_source||!previous))throw Error('runtime rollback does not name the previous accepted root');
-    const after=next.direction==='rollback'?previous.installation:{...saved,source:next.source,runtime:next.runtime};
+    if(intent.phase_settlement&&JSON.stringify(intent.phase_settlement)!==JSON.stringify(installationPhaseProof(saved,intent.before.installation,
+      {target:saved.target,service:intent.phase_settlement.service,stop_sha256:intent.stop_sha256})))throw Error('runtime installation settlement differs');
+    const after=next.direction==='rollback'?previous.installation:settledInstallation({...saved,source:next.source,runtime:next.runtime},intent.phase_settlement);
     if(after.source!==next.source||JSON.stringify(after.runtime)!==JSON.stringify(next.runtime))throw Error('service runtime upgrade target differs');
     if(intent.after.installation!==JSON.stringify(after))throw Error('service runtime upgrade installation differs');
     if(next.direction==='rollback'&&intent.after.plist!==previous.plist)throw Error('service runtime rollback plist differs');

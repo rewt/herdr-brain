@@ -31,7 +31,8 @@ import {bundleRelease} from '../lib/releases.mjs';
 import {serviceSource,acceptedRuntime} from './runtime.mjs';
 import {installedContext} from './cutoff.mjs';
 import { discoverChanges,dispatchInput,phase0Boundary,morningDigest,recordReviewResults,reviewCompletionPlan,recordReviewCompletion,ensureReviewBoundary,canonicalReviewIndex,observeReviewHealth } from './phase1.mjs';
-import {preflightContinuation,initialCapacityRefusal,initialBriefRefusal} from '../dispatch/preflight.mjs';
+import {preflightContinuation,initialCapacityRefusal,initialBriefRefusal,initialSourceRootRefusal} from '../dispatch/preflight.mjs';
+import {sourceCompletionProof,preEffectSourceHold} from './source-completion.mjs';
 import {createWorkerBrief,projectExceptionAddress} from '../lib/worker-brief.mjs';
 import {observeReviewProgress,recoverServiceReview} from './review-recovery.mjs';
 import {haltObservation,completeHaltPass} from './halt-repair.mjs';
@@ -169,9 +170,13 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
   };
   const closeout=()=>runCloseoutTurn({project,org,env:childEnv,cli,guard:observe,maxSteps:maxStepsPerStage,budgetMs:CLOSEOUT_TURN_BUDGET_MS,clock:workClock,
     ...(closeoutMeasure?{measure:closeoutMeasure}:{})});
+  const acquirePass=()=>noticeLock(path.join(directory,'pass.lock'),{onRecovery:recovery=>{
+    observe();
+    log({action:'general-pass-lock-recovery',schema:'line-pass-lock-recovery/v1',project:project.identity,org,...recovery});
+  }});
   function pass() {
     try { closeout(); } catch(error) { log({action:'closeout-held',reason:error.message}); }
-    const release = noticeLock(path.join(directory, 'pass.lock'));
+    const release = acquirePass();
     let effects,checkpointNotices;
     const passAt=now(),heartbeat=phase=>writeFileAtomic(path.join(directory,'heartbeat.json'),JSON.stringify({at:now(),started_at:passAt,project:project.identity,source:sourceRoot,phase,pid:process.pid})+'\n',0o600);
     heartbeat('starting');
@@ -347,39 +352,49 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       let closeSteps=0;
       for (const item of [...snapshot.state.items.values()].sort((a,b)=>(snapshot.state.runs.get(b.runs.at(-1))?.report?.seq??0)-(snapshot.state.runs.get(a.runs.at(-1))?.report?.seq??0))) {
         if(expired()||closeSteps>=maxStepsPerStage)break;
-        const run = snapshot.state.runs.get(item.runs.at(-1));
-        if (item.closed || isQueueReview(item) || isDecision(item) || run?.report?.outcome !== 'done' || run.abandoned || !run.workspace || !fs.existsSync(run.workspace) ||
-            !run.owner || run.owner.legacy || run.owner.controller !== 'brain') continue;
+        const run=snapshot.state.runs.get(item.runs.at(-1));
+        if(item.closed||isQueueReview(item)||isDecision(item)||run?.report?.outcome!=='done'||run.abandoned||!run.workspace||
+            !run.owner||run.owner.legacy||run.owner.controller!=='brain')continue;
+        const key=`source-complete:${run.id}:${run.report.sha256}`,prior=effects.actions[key];
+        const receipt=(type,details)=>{
+          const binding={project:project.identity,org,item:item.id,run:run.id,report_sha256:run.report.sha256,claim_generation:run.owner_generation,...details};
+          const signature=digest(binding);
+          transact(org,events=>({add:events.some(e=>e.type===type&&e.signature===signature)?[]:[{type,signature,...binding}]}),{actor:'line-service',strictTail:true});
+          stale=true;
+        };
         try {
-          if (identify(run.workspace).identity !== project.identity) continue;
-          if (reserved(item) || item.meta.hold || item.meta.held || run.report.blockers?.length || (run.report.questions ?? run.report.extra?.questions)?.length) {
-            note(`source-complete:${run.id}`, 'T2 source completion needs supervisor judgment: held/reserved item or report blockers/questions; no explicit-judgment override used'); continue;
-          }
           closeSteps++;
-          const key=`source-complete:${run.id}:${run.report.sha256}`,prior=effects.actions[key],landed=snapshot.events.findLast(e=>e.type==='change.landed'&&e.project===project.identity&&e.run===run.id&&e.item===item.id&&e.landed_at&&e.producer?.ownership_generation===run.owner_generation);
-          if(prior?.state==='held'&&(!landed||prior.source_producer_seq===landed.seq)){
+          if(reserved(item)||item.meta.hold||item.meta.held||run.report.blockers?.length||(run.report.questions??run.report.extra?.questions)?.length){
+            receipt('line-service.source-completion-held',{reason:'held/reserved item or report blockers/questions',command_started:false});continue;
+          }
+          const proofFor=bound=>sourceCompletionProof({project,run:bound.run,events:bound.events,git:sourceGit,identify});
+          const present=Boolean(fs.lstatSync(run.workspace,{throwIfNoEntry:false}));
+          const bound=guardRun(run.id,{workspace:present});
+          let proof;
+          try{proof=proofFor(bound);}catch(error){receipt('line-service.source-completion-held',{reason:error.message,command_started:false});continue;}
+          const legacy=preEffectSourceHold(prior);
+          const landed=bound.events.findLast(e=>e.type==='change.landed'&&e.project===project.identity&&e.run===run.id&&e.item===item.id&&e.landed_at&&e.producer?.ownership_generation===run.owner_generation);
+          if(prior?.state==='held'&&!legacy&&(!landed||prior.source_producer_seq===landed.seq)){
             effects.outcome_decisions??={};
             effects.outcome_decisions[key]??=queueOutcomeDecision({repo,org,env:childEnv,check:{key,subject:{item:item.id,run:run.id,report:run.report.sha256},defect:'Retained source completion has no linked actual landing producer; no timer, recheck or replay.'}});save();continue;
           }
-          const completed=effect(key, () => {
-            const bound = guardRun(run.id), ownership = requireController(readOwnedRun(org, run.id), 'brain');
-            if (bound.item.closed) return { retained: 'already source-complete' };
-            if (bound.run.report.outcome !== 'done' || reserved(bound.item) || bound.item.meta.hold || bound.item.meta.held ||
-                bound.run.report.blockers?.length || (bound.run.report.questions ?? bound.run.report.extra?.questions)?.length) throw Error('T2 source completion needs supervisor judgment: current item/report scope changed');
-            const head = sourceGit(run.workspace, ['rev-parse', 'HEAD']), tip = sourceGit(repo, ['rev-parse', 'HEAD']);
-            if (sourceGit(run.workspace, ['status', '--porcelain=v1', '--untracked-files=all']) || sourceGit(repo, ['status', '--porcelain=v1', '--untracked-files=all'])) throw Error('T2 source completion needs supervisor judgment: source/canonical worktree is not clean');
-            try { sourceGit(repo, ['merge-base', '--is-ancestor', head, tip]); }
-            catch { throw Error(`T2 source completion needs supervisor judgment: reported source ${head} is not integrated at ${tip}`); }
-            const fresh = guardRun(run.id);
-            assertOwner(readOwnedRun(org, run.id), ownership);
-            if (fresh.run.report.sha256 !== run.report.sha256 || sourceGit(run.workspace, ['rev-parse', 'HEAD']) !== head || sourceGit(repo, ['rev-parse', 'HEAD']) !== tip) throw Error('T2 source completion needs supervisor judgment: owner/report/source boundary changed');
-            const args = ['close', item.id, '--if-current-run', run.id, '--note',
-              `Routine conditional source completion of current done report ${run.id} (${run.report.sha256}); clean source ${head} integrated at ${tip}. Preserve existing independent review/verdict holds, callbacks, HOLD, archives and next final-release/Major-correction obligations; physical cleanup is separate.`];
-            return { source_head: head, integrated_tip: tip, report_sha256: run.report.sha256, ownership,
-              command: [process.execPath, path.join(sourceRoot, 'bin/org.mjs'), ...args], close: cli('bin/org.mjs', args, { receipt: true }) };
-          },undefined,undefined,true,Boolean(landed));
+          const held=bound.events.findLast(e=>e.type==='line-service.source-completion-held'&&e.run===run.id&&e.report_sha256===run.report.sha256);
+          const completionKey=legacy?`source-complete-readmitted:${digest([key,prior])}`:key;
+          if((legacy||held)&&!effects.actions[completionKey])receipt('line-service.source-completion-readmitted',{
+            original_key:key,recovery_key:completionKey,held_seq:held?.seq??null,original_sha256:legacy?digest(prior):null,proof,command_started:false});
+          const completed=effect(completionKey,()=>{
+            const bound=guardRun(run.id,{workspace:proof.allocation==='present'}),ownership=requireController(readOwnedRun(org,run.id),'brain');
+            if(bound.item.closed)return{retained:'already source-complete'};
+            if(bound.run.report.sha256!==run.report.sha256||bound.run.report.outcome!=='done'||reserved(bound.item)||bound.item.meta.hold||bound.item.meta.held||
+                bound.run.report.blockers?.length||(bound.run.report.questions??bound.run.report.extra?.questions)?.length)throw Error('T2 source completion needs supervisor judgment: current item/report scope changed');
+            if(JSON.stringify(proofFor(bound))!==JSON.stringify(proof))throw Error('T2 source completion needs supervisor judgment: source boundary changed before conditional close');
+            assertOwner(readOwnedRun(org,run.id),ownership);
+            const args=['close',item.id,'--if-current-run',run.id,'--note',
+              `Routine conditional source completion of current done report ${run.id} (${run.report.sha256}); immutable source ${proof.source_head} integrated at ${proof.integrated_tip}; allocation ${proof.allocation}. Preserve independent review/verdict holds, callbacks, HOLD, archives and final-release/Major-correction obligations; physical cleanup is separate.`];
+            return{...proof,report_sha256:run.report.sha256,ownership,command:[process.execPath,path.join(sourceRoot,'bin/org.mjs'),...args],close:cli('bin/org.mjs',args,{receipt:true})};
+          },undefined,undefined,!legacy,Boolean(landed));
           if(completed&&landed){completed.source_producer_seq=landed.seq;save();}
-        } catch (e) { note(`source-complete:${run.id}`, `T2 source completion needs supervisor judgment: ${e.message}`); }
+        }catch(error){note(`source-complete:${run.id}`,`T2 source completion needs supervisor judgment: ${error.message}`);}
       }
       // Consume original typed answers, but do not manufacture fresh judgment
       // sessions from blocked work. The owning supervisor answers actual questions.
@@ -474,7 +489,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         if (reserved(item) || hold) { note(`dispatch:${item.id}`, 'held or reserved ready item needs judgment',hold?{subject:hold.subject}:{}); continue; }
         try {
           const key = `dispatch:${item.id}:${input}`;
-          let continuation,retryAdmission,briefRecovery,dispatchKey=key;
+          let continuation,retryAdmission,briefRecovery,sourceRecovery,dispatchKey=key;
           if (effects.actions[key]) {
             const original=effects.actions[key];
             dispatchKey=original.prejournal_recovery?.key??key;
@@ -493,7 +508,8 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
                   const route=routeFor(item,config),brief=path.join(directory,`${digest(key)}.ask.md`);
                   return createWorkerBrief({item,ask:brief,askText:fs.readFileSync(brief,'utf8'),project:repo,org,lane:`line-${item.id.toLowerCase()}-${item.runs.length+1}`,route,harness:resolveLaunchRoute(config,{route}).kind,reviewRoute:reviewQueueRoute(config),exception:projectExceptionAddress(repo,config,route,childEnv)});
                 };
-                briefRecovery=initialBriefRefusal({entry:prior,contract,events:snapshot.events,item:item.id,outcome:prior.original_outcome});
+                sourceRecovery=initialSourceRootRefusal({entry:prior,events:snapshot.events,item:item.id,outcome:prior.original_outcome,release:bundleRelease(),env:childEnv});
+                briefRecovery=sourceRecovery??initialBriefRefusal({entry:prior,contract,events:snapshot.events,item:item.id,outcome:prior.original_outcome});
                 if(briefRecovery)dispatchKey=`dispatch-recovered:${digest([key,briefRecovery])}`;
               }
             }
@@ -505,7 +521,17 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
           const dispatched = effect(continuation?`dispatch-preflight:${continuation.token}:${continuation.key}`:dispatchKey, fresh => {
             const current = fresh.state.items.get(item.id);
             if (!current || !queueSelected(current) || obsoleteDecision(current,fresh) || itemLaunchHold(fresh.state,item.id,fresh.events) || dispatchInput({...fresh,item:current,org,identity:project.identity}) !== input || reserved(current) || (!continuation&&(reviewTarget ? reviewQueueRoute(config, current, fresh.state) : routeFor(current, config)) !== route)) throw Error('dispatch readiness or route changed');
-            if(briefRecovery){effects.actions[key].prejournal_recovery={...briefRecovery,key:dispatchKey,at:now()};save();log({action:'prejournal-recovery',key,recovery:effects.actions[key].prejournal_recovery});}
+            if(briefRecovery){
+              if(sourceRecovery){
+                const proof=initialSourceRootRefusal({entry:effects.actions[key],events:fresh.events,item:item.id,outcome:originalDispatchOutcome({repo,org,common:project.identity,item:item.id,brief:path.join(directory,`${digest(key)}.ask.md`),events:fresh.events}),release:bundleRelease(),env:childEnv});
+                if(JSON.stringify(proof)!==JSON.stringify(sourceRecovery))throw Error('original zero-effect source refusal changed before re-admission');
+                transact(org,events=>{
+                  if(events.some(e=>e.type==='run.started'&&e.item===item.id&&Date.parse(e.at)>=Date.parse(effects.actions[key].at)))throw Error('run started before dispatch re-admission');
+                  return{add:[{type:'line-service.dispatch-readmitted',project:project.identity,org,item:item.id,key,recovery_key:dispatchKey,proof}]};
+                },{actor:'line-service',strictTail:true});
+              }
+              effects.actions[key].prejournal_recovery={...briefRecovery,key:dispatchKey,at:now()};save();log({action:'prejournal-recovery',key,recovery:effects.actions[key].prejournal_recovery});
+            }
             if(continuation){
               const checked=preflightContinuation({journal:continuation.journal,repo,org,common:project.identity,root:fs.realpathSync(sourceRoot),events:fresh.events});
               if(!checked||checked.request_sha256!==continuation.request_sha256||checked.capability!==continuation.capability)throw Error('original preflight progress/source changed before continuation');
@@ -583,7 +609,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       return { result: 'pass-complete', directory };
     } finally { try{checkpointNotices?.();}finally{try{heartbeat('finished');}finally{release();}} }
   }
-  return { pass, closeout, directory, log };
+  return { pass, closeout, directory, log, acquirePass };
 }
 
 // The existing launchd schedule stays finite while the general pass runs in
@@ -591,7 +617,17 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
 // pass.lock and the existing action journal still serialize all general work.
 export function wakeLineService({service,launch}){
   const closeout=service.closeout();
-  const general=fs.existsSync(path.join(service.directory,'pass.lock'))?{already_running:true}:launch();
+  let general,release;
+  try{release=(service.acquirePass??(()=>noticeLock(path.join(service.directory,'pass.lock'))))();}
+  catch(error){
+    if(!error.message.startsWith('locked:'))throw error;
+    // A stale heartbeat never grants authority over a live/unidentified PID.
+    // Keep it visible for its owner; only noticeLock's repeated ESRCH proof
+    // permits recovery. A later child still acquires this same lock itself.
+    service.log?.({action:'general-pass-held',schema:'line-pass-lock-held/v1',reason:error.message});
+    general={already_running:true,reason:error.message};
+  }
+  if(release){release();general=launch();}
   return{result:'line-wake-complete',closeout,general};
 }
 

@@ -4,6 +4,11 @@ Read this page and your item brief before starting. Supervisors use
 [PROTOCOL](supervisor/PROTOCOL.md); technical references are consulted when the
 task needs them, not as another admission stage.
 
+Load procedures on demand from the [shared skills](skills/README.md):
+`project-preflight`, `project-deliver`, `project-review`, `project-release`,
+and `project-troubleshoot`. Both harnesses use the same source. These skills
+do not grant authority or replace the guarded project tools.
+
 ## Build
 
 - Use pinned Node **20.19.4**. Keep the product dependency-free; removed console/MCP

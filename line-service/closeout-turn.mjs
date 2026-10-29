@@ -85,7 +85,10 @@ function closeoutTurn({project,org,cli,guard,env=process.env,maxSteps=8,budgetMs
       ingested++;delete state.pending;save();
     }
     observed=read();
-    const backlog=reconcileCloseoutBacklog({project,org,events:observed.events,guard:()=>{guard();code.verify();}});
+    const backlogStarted=clock();
+    const backlog=reconcileCloseoutBacklog({project,org,events:observed.events,state:observed.state,expired,
+      guard:()=>{guard();code.verify();}});
+    state.backlog_reconcile_ms=Math.max(0,clock()-backlogStarted);
     // Re-publish exact committed envelopes only. No re-binding a namesake.
     const sources=unpublishedCloseoutSources(project.identity,org,observed.events);
     if(sources.length)publishCloseoutEvents({cwd:project.canonical,org,env,added:sources,start:false});
@@ -186,6 +189,7 @@ function closeoutTurn({project,org,cli,guard,env=process.env,maxSteps=8,budgetMs
     state.completed_at=new Date(now()).toISOString();state.errors=errors;state.continuation={
       ingest:Math.max(0,pending.length-ingested),closeout:Math.max(0,scheduled.length-steps),reconcile_committed_sources:true};
     save();fault('before-ack');
-    return{result:'closeout-turn-complete',ingested,steps,backlog_classified:backlog.length,errors,continuation:state.continuation};
+    return{result:'closeout-turn-complete',ingested,steps,backlog_classified:backlog.length,
+      backlog_reconcile_ms:state.backlog_reconcile_ms,errors,continuation:state.continuation};
   }finally{release();}
 }

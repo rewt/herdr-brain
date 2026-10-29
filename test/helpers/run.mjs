@@ -319,8 +319,17 @@ if (worker) {
       // exempted merely because its command looks like a cleanup helper.
       timing({ kind: 'fixture-guard-drain', phase: 'start', files,
         guards: result.survivors.filter(row => row.ppid === 1 && exitedGuards.has(row.command)) });
-      draining.then(() => teardown(code, auditGroup(owner)), error => {
-        console.error(error); teardown(1, auditGroup(owner));
+      // A real fixture observed before the wait is already a failure, even
+      // if it exits while the selected guards drain. Keep that observation.
+      const survivors = result.survivors.filter(row => row.ppid !== 1 || !exitedGuards.has(row.command));
+      const afterDrain = code => {
+        const final = auditGroup(owner);
+        const current = final.survivors ?? [];
+        teardown(code, { ...final, survivors: [...survivors.filter(first => !current.some(row =>
+          row.pid === first.pid && row.identity === first.identity && row.command === first.command)), ...current] });
+      };
+      draining.then(() => afterDrain(code), error => {
+        console.error(error); afterDrain(1);
       });
     } else teardown(code, result);
   }

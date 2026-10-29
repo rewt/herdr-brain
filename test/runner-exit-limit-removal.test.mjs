@@ -74,6 +74,8 @@ async function coordinator({ failedSink } = {}) {
     '../../lib/processes.mjs': { parseProcessLookup: unused, lookupProcess: pid => {
       if (pid !== undefined) {
         if (pid === guard.pid) return { ok: true, value: guard };
+        if (pid === state.drainGuard?.pid) return state.drainFailure
+          ? { ok: false, error: 'injected drain failure' } : { ok: true, value: null };
         assert.equal(pid, leader.pid);
         trace.push('lookup');
         return { ok: true, value: state.current };
@@ -83,7 +85,8 @@ async function coordinator({ failedSink } = {}) {
         : { ok: true, value: new Map([state.current, ...state.survivors].filter(Boolean).map(row => [row.pid, row])) };
     } },
     './offline-herdr.mjs': { offlineHerdr: () => () => trace.push('cleanupHerdr') },
-    './fixture-lifetime.mjs': { exitedLifetimeGuardCommands: () => new Set(), ownFixtureLifetime: () => {
+    './fixture-lifetime.mjs': { lifetimeGuardExitCommand: () => undefined,
+      exitedLifetimeGuardCommands: () => new Set(state.drainGuard ? [state.drainGuard.command] : []), ownFixtureLifetime: () => {
       Object.assign(proc.env, { HERDR_FIXTURE_LIFETIME_EXECUTABLE: '/fixture-guard',
         HERDR_FIXTURE_LIFETIME_FIFO: '/fixture/alive', HERDR_FIXTURE_LIFETIME_SECONDS: '60' });
       return null;
@@ -158,8 +161,8 @@ if (typeof SourceTextModule !== 'function') {
     const result = await waitForExit(child);
     assert.equal(result.signal, null, result.stderr);
     assert.equal(result.code, 0, result.stdout + result.stderr);
-    assert.match(result.stdout, /# tests 16\b/);
-    assert.match(result.stdout, /# pass 16\b/);
+    assert.match(result.stdout, /# tests 17\b/);
+    assert.match(result.stdout, /# pass 17\b/);
     assert.match(result.stdout, /# fail 0\b/);
   });
 } else {
@@ -229,6 +232,26 @@ test('failed audit and reported survivors still use freshly confirmed owned tear
     assert.deepEqual(h.trace.slice(-teardown.length), teardown);
     assert.deepEqual(h.signals, [[-4242, 'SIGKILL']]);
     assert.match(h.errors.join('\n'), kind === 'audit error' ? /injected audit failure/ : /Surviving fixture: PID 4243, command controlled-descendant\. Files: controlled\.test\.mjs/);
+    h.exit(); h.finished(1);
+  }
+});
+
+test('first-audit fixture failures survive guard drain completion and failure', async () => {
+  for (const outcome of ['gone', 'present', 'audit failure', 'drain failure']) {
+    const h = await coordinator(); h.ready();
+    const fixture = { ...h.state.current, pid: 4243, ppid: 1, command: 'controlled-descendant' };
+    h.state.drainGuard = { ...fixture, pid: 4244, command: 'controlled-exited-guard' };
+    h.state.drainFailure = outcome === 'drain failure';
+    h.state.survivors = [h.state.drainGuard, fixture];
+    h.complete();
+    assert.ok(h.trace.includes('fixture-guard-drain'));
+    h.state.survivors = outcome === 'present' ? [fixture] : [];
+    h.state.auditError = outcome === 'audit failure';
+    await Promise.resolve();
+    h.pending();
+    assert.equal(h.errors.filter(value => String(value).includes('Surviving fixture: PID 4243,')).length, 1,
+      `${outcome}: the first-audit fixture must be reported exactly once`);
+    assert.deepEqual(h.signals, [[-4242, 'SIGKILL']]);
     h.exit(); h.finished(1);
   }
 });

@@ -27,7 +27,9 @@ export function lifetimeGuardExitCommand({ executable = process.env.HERDR_FIXTUR
 
 // These are candidates to JOIN, never exemptions from the survivor audit. The
 // native --watch entry validates its original direct parent before watching;
-// reparenting therefore proves that target has exited. Include nested runner
+// reparenting to PID 1 therefore proves that target has exited. Selection
+// assumes PID 1 adopts orphans; guards adopted by a subreaper remain survivors.
+// Include nested runner
 // owners as well as files, all using this suite's source-bound cached binary
 // and private lifetime writers. A stuck or changed guard must still fail.
 export function exitedLifetimeGuardCommands(rows, { executable = process.env.HERDR_FIXTURE_LIFETIME_EXECUTABLE,

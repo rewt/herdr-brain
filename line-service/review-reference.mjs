@@ -93,6 +93,10 @@ export function resolveReviewReference({repo,org,runId,resolution,decisionSeq,id
       }
       publishLandedReviewEvidence(target);
       const proof=referenceProof({events,state,repo:c.repo,org:c.org,item:item.id,run:runId,target,input:request});
+      if(proof.kind==='producer-record-no-attempt'){
+        const retained=reviewAttempt(item,{repo:c.repo,org:c.org,identity:c.identity,events,state,target,capturedRun:runId,ignoredReferences:[input.reference]});
+        if(retained)throw Error('producer retains another review attempt/UNKNOWN: '+retained);
+      }
       const original=reviewPlain(input.reference),bytes=Buffer.from(JSON.stringify({request,proof,original:original.toString('base64')},null,2)+'\n');
       const file=path.join(c.org,'evidence/review-references',`${id}.json`);fs.mkdirSync(path.dirname(file),{recursive:true});
       try{const fd=fs.openSync(file,'wx',0o444);try{fs.writeFileSync(fd,bytes);fs.fsyncSync(fd);}finally{fs.closeSync(fd);}}catch(e){if(e.code!=='EEXIST'||hash(reviewPlain(file))!==hash(bytes))throw e;}

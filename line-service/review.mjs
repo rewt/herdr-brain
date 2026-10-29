@@ -14,7 +14,7 @@ import {canonical} from '../messages/schema.mjs';
 import {effectiveWorkerIdentity} from '../lib/worker-identity.mjs';
 import {additionalTarget,disjointCapture,captureEvidence} from './review-targets.mjs';
 import {producerReviewObservation} from './review-observation.mjs';
-import {resolvedReference} from './review-reference-proof.mjs';
+import {producerReportHandoff,resolvedReference} from './review-reference-proof.mjs';
 
 const codeRoot = fs.realpathSync(fileURLToPath(new URL('../', import.meta.url)));
 const capabilityFiles = ['line-service/review.mjs','line-service/review-reference-proof.mjs','line-service/review-observation.mjs','line-service/review-targets.mjs','line-service/review-group.mjs', 'settle/settle.mjs', 'supervisor/supervisor.mjs'];
@@ -32,6 +32,9 @@ const missingJournal = Symbol('missing service journal');
 // A path/name is a locator, not a native attempt. Only readable typed content
 // can retain its captured subject. Current effect-journal loading stays strict.
 export const typedReviewAttempt = v => Boolean(v&&typeof v==='object'&&!Array.isArray(v)&&(
+  // Producer handoffs remain fenced until their guarded disposition. Their
+  // producing worker is attributed by type when proving no queue was attempted.
+  producerReportHandoff(v)||
   v.native_launch_attempted===true||v.worker||v.reviewer||v.launchProcess||
   ['settle','review','reviewer'].includes(v.kind)||
   typeof v.stage==='string'&&(v.run||v.item||v.head)||
@@ -72,8 +75,8 @@ const namesCommit=(text,head)=>{
   return false;
 };
 
-function changeReviewAttempt(item,{org,identity,events,state,repo,effects,target,ignoreService,ignoreQueue,capturedRun,capturedOriginal=false,ignoreQueues=[],references=[]}) {
-  const reference=file=>{references.push(file);try{return read(file);}catch{return null;}};
+function changeReviewAttempt(item,{org,identity,events,state,repo,effects,target,ignoreService,ignoreQueue,capturedRun,capturedOriginal=false,ignoreQueues=[],references=[],ignoredReferences=[]}) {
+  const reference=file=>{if(ignoredReferences.includes(file))return null;references.push(file);try{return read(file);}catch{return null;}};
   const resolution=reviewResolution({events,org,item:item.id,head:target.head}),archivedItems=new Set(resolution?.event.archived_review_items??[]);
   capturedRun??=target.source_group?.run;
   const disposed=file=>resolvedReference({events,state,repo,org,identity,item:item.id,run:capturedRun,target,file});
@@ -190,8 +193,8 @@ function changeReviewAttempt(item,{org,identity,events,state,repo,effects,target
   return null;
 }
 
-export function reviewAttempt(item, { org, identity, events, state, repo, effects, cache = new Map(), ignoreService, ignoreQueue, capturedRun,target,capturedOriginal,ignoreQueues,references }) {
-  if(target)return changeReviewAttempt(item,{org,identity,events,state,repo,effects,target,ignoreService,ignoreQueue,capturedRun,capturedOriginal,ignoreQueues,references});
+export function reviewAttempt(item, { org, identity, events, state, repo, effects, cache = new Map(), ignoreService, ignoreQueue, capturedRun,target,capturedOriginal,ignoreQueues,references,ignoredReferences }) {
+  if(target)return changeReviewAttempt(item,{org,identity,events,state,repo,effects,target,ignoreService,ignoreQueue,capturedRun,capturedOriginal,ignoreQueues,references,ignoredReferences});
   const cached = (kind, file, fn) => { const key = `${kind}:${file}`; if (!cache.has(key)) cache.set(key, fn()); return cache.get(key); };
   const readFile = file => cached('file', file, () => reference(file));
   const list = file => cached('directory', file, () => entries(file));

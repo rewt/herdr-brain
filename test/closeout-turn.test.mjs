@@ -59,7 +59,8 @@ test('retained dirty work permits original binding refresh on each of three fini
   const prior=f.drain({keys:[target.key],retrySafe:true}).evaluated[0];
   assert.equal(prior.condition.kind,'dirty-work');assert.equal(prior.resources.folder.status,'kept');
   const actions=f.read().actions;
-  const originalEffects=events(f).filter(e=>e.type==='closeout.effect'&&e.key===target.key);
+  const effects=()=>events(f).filter(e=>e.type==='closeout.effect'&&e.key===target.key&&e.outcome.action!=='allocation-absent');
+  const originalEffects=effects();
   const unbound=f.lane+'-unbound';f.git(['worktree','add','-qb','lane/unbound-report',unbound,f.head]);
   f.append([{type:'item.added',id:'ENG-2',role:'engineer',title:'Missing original allocation'},
     {type:'run.started',id:'R-2',item:'ENG-2',workspace:unbound,meta:{dispatch_project:f.common}},
@@ -87,7 +88,7 @@ test('retained dirty work permits original binding refresh on each of three fini
     assert.equal(fs.readFileSync(dirty,'utf8'),bytes);
     assert.equal(f.git(['rev-parse','refs/heads/lane/topic']),target.head);
     assert.deepEqual(f.read().actions,actions,'no duplicate native or Git effect on the dirty allocation');
-    assert.deepEqual(events(f).filter(e=>e.type==='closeout.effect'&&e.key===target.key),originalEffects);
+    assert.deepEqual(effects(),originalEffects,'fresh absence observations cannot repeat an effect command');
   }
   assert.deepEqual(calls,['drain','refresh','drain','refresh','drain','refresh']);
 });

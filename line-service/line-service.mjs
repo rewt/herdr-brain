@@ -43,6 +43,8 @@ import {queueOutcomeDecision,observeOutcomeDecisions} from './outcome-decision.m
 import {registerCloseoutWait,closeoutWait,closeoutWaitState,closeoutNextStage} from '../lib/closeout-status.mjs';
 import {runCloseoutTurn,CLOSEOUT_TURN_BUDGET_MS} from './closeout-turn.mjs';
 import {transact} from '../lib/store.mjs';
+import {readReviewAdmission,reviewAdmissionSubject} from './review-admission.mjs';
+import {reviewAdmissionHold} from '../lib/review-admission.mjs';
 export { reviewAttempt } from './review.mjs';
 
 export const sourceRoot = fileURLToPath(new URL('../', import.meta.url));
@@ -237,6 +239,14 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       };
       log({ action: 'pass-start', pid: process.pid, identity: project.identity, source: sourceRoot,source_head:bundleRelease().commit??sourceGit(sourceRoot,['rev-parse','HEAD']) });
       try { snapshot = current(); } catch (e) { log({ action: 'pass-held', reason: e.message }); return { held: e.message, directory }; }
+      const admissionPolicy=readReviewAdmission(repo,childEnv);
+      effects.review_admission={schema:'review-admission-pass/v1',policy:admissionPolicy,held:[]};save();
+      const admit=(subject,stage,fresh=false)=>{
+        const hold=reviewAdmissionHold(fresh?readReviewAdmission(repo,childEnv):admissionPolicy,reviewAdmissionSubject(subject));
+        if(!hold)return true;
+        const row={stage,item:subject.item?.id,run:subject.run?.id,head:subject.target?.head??subject.item?.meta.review_target?.head,...reviewAdmissionSubject(subject),...hold};
+        effects.review_admission.held.push(row);noticesDirty=true;log({action:'review-admission-held',...row});return false;
+      };
       snapshot=current();
       let cutoff;try{cutoff=phase0Boundary(snapshot.events,{repo,org,identity:project.identity});}catch{
         try{checkpointNotices();ensureReviewBoundary({repo,org,env:childEnv});stale=true;snapshot=current();cutoff=phase0Boundary(snapshot.events,{repo,org,identity:project.identity});}catch(e){note('review-cutoff',e.message);}
@@ -255,10 +265,11 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         const observed=observeReviewProgress({state:snapshot.state,org,identity:project.identity,pass:effects.pass_number,previous:effects.review_progress});effects.review_progress=observed.progress;save();let recoveries=0;
         for(const id of observed.candidates){
           if(expired()||recoveries>=maxStepsPerStage)break;const q=snapshot.state.items.get(id),target=q.meta.review_target;
+          if(!admit({item:q},'recovery',true))continue;
           const held=effects.review_recovery_holds?.[id],capability='original-scope-continuation/v2',productHold=held&&/partial\/ambiguous producer|historical\/partial target/.test(held.reason);
           if(held?.signature===observed.progress[id].signature&&!(productHold&&held.capability!==capability))continue;
           try{checkpointNotices();const result=recoverServiceReview({repo,org,reviewId:id,env:childEnv,call:(_exe,args)=>JSON.stringify({result:native(args)})});log({action:'review-progress-resolution',item:id,...result});if(['review_queued','original_prestart_ready','original_review_ready'].includes(result.result))stale=true;
-            if(result.result==='original_review_ready')effect(`review-original:${id}:${result.proof}`,()=>JSON.parse(cli('dispatch/dispatch.mjs',['--retry',result.journal,'--repo',repo,'--org',org,'--continue-review'])));
+            if(result.result==='original_review_ready')effect(`review-original:${id}:${result.proof}`,()=>JSON.parse(cli('dispatch/dispatch.mjs',['--retry',result.journal,'--repo',repo,'--org',org,'--continue-review'])),undefined,undefined,false,false,()=>admit({item:q},'recovery-launch',true));
           }
           catch(e){effects.review_recovery_holds??={};if(/EPERM|EACCES|native refusal|identity|reserved|HOLD|STOP|UNKNOWN|partial|ambiguous/i.test(e.message))effects.review_recovery_holds[id]={signature:observed.progress[id].signature,reason:e.message,capability};save();note(`review-progress:${id}`,e.message,{item:id,review:true});}
           recoveries++;
@@ -270,6 +281,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       let reviewSteps=0;
       for(const {item,run,target}of discovered.changes){
         if(expired()||reviewSteps>=maxStepsPerStage)break;
+        if(!admit({item,run,target},'queue'))continue;
         const key=`review:${item.id}:${target.head}`;let reviewLock;
         try{
           reviewLock=noticeLock(path.join(directory,`review-change-${digest([item.id,target.head])}.lock`),{recover:false});
@@ -287,12 +299,13 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
             if(!checked||JSON.stringify(checked.target)!==JSON.stringify(target))throw Error('immutable landed target/evidence changed before queue mutation');
             queueConsumer({run:checked.run,env:childEnv});
             return JSON.parse(cli('bin/org.mjs',['queue-review',run.id,'--head',target.head,'--base',target.base]));
-          },target,'record-queue',true);
+          },target,'record-queue',true,false,()=>admit({item,run,target},'queue-mutation',true));
         }catch(e){note(key,e.message,{item:item.id,run:run.id,head:target.head});}
         finally{reviewLock?.();}
       }
       for(const {selector,target}of discovered.unattributed??[]){
         if(expired()||reviewSteps>=maxStepsPerStage)break;
+        if(!admit({selector,target},'queue'))continue;
         const key=`review:${selector}`;let reviewLock;
         try{
           reviewLock=noticeLock(path.join(directory,`review-change-${digest(selector)}.lock`),{recover:false});reviewSteps++;
@@ -300,7 +313,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
             const fresh=observe(),checked=discoverChanges({events:fresh.events,state:fresh.state,repo,org,identity:project.identity}).unattributed?.find(c=>c.selector===selector);
             if(!checked||JSON.stringify(checked.target)!==JSON.stringify(target))throw Error('immutable canonical target/evidence changed before queue mutation');
             return JSON.parse(cli('bin/org.mjs',['queue-review',selector,'--head',target.head,'--base',target.base]));
-          },target,'record-queue',true);
+          },target,'record-queue',true,false,()=>admit({selector,target},'queue-mutation',true));
         }catch(e){note(key,e.message,{head:target.head,review:true});}
         finally{reviewLock?.();}
       }
@@ -428,6 +441,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         snapshot=current();
         if(JSON.stringify(queuePolicy(snapshot.state))!==JSON.stringify(standing)||queueSelection(snapshot.state)!==selection){log({action:'queue-selection-changed'});break;}
         if(!queueSelected(snapshot.state.items.get(item.id)))continue;
+        if(!admit({item:snapshot.state.items.get(item.id)},'launch'))continue;
         if(obsoleteDecision(snapshot.state.items.get(item.id),snapshot)){timings.outcome_decisions_deferred++;continue;}
         const input=dispatchInput({...snapshot,item:snapshot.state.items.get(item.id),org,identity:project.identity});
         if(!input)continue;
@@ -487,6 +501,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
             writeFileAtomic(brief, target ? reviewQueueBrief(current) : isDecision(current) ? decisionBrief(current) : `# ${current.title}\n\n${current.accept.join('\n')}\n\n${correction?.brief ?? ''}Work from the existing item fields/notes and accepted directions. The generated execution brief supplies role guidance and project routing.\n`, 0o600);
             return JSON.parse(cli('dispatch/dispatch.mjs', [item.id, '--repo', repo, '--org', org, '--lane', `${target ? 'review' : 'line'}-${item.id.toLowerCase()}-${current.runs.length + 1}`, '--route', route, '--brief', brief, ...(target ? ['--base', target.head] : correction ? ['--base', correction.base] : []),'--detach']));
           },undefined,undefined,Boolean(retryAdmission),Boolean(retryAdmission),fresh=>{
+            if(!admit({item:fresh.state.items.get(item.id)},'launch-mutation',true))return false;
             if(queueSelection(fresh.state)===selection)return true;
             log({action:'queue-selection-changed',item:item.id,stage:'after-capacity'});
             return false;
@@ -506,7 +521,8 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       admitItems(ordered);
       // Detached acknowledgements and review activity are not engineering
       // progress. This is the end of a completed pass, under the same lock.
-      try {
+      const latestAdmission=readReviewAdmission(repo,childEnv);
+      if(!latestAdmission.enabled||!latestAdmission.hold_ordinary)try {
         snapshot=observe();
         const observation=haltObservation({...snapshot,org,identity:project.identity,config,actions:effects.actions,occupancy:latestOccupancy});
         {

@@ -1,5 +1,53 @@
 # Minimal line service
 
+## Scoped review admission
+
+`review_admission` is a project lane policy, default off. Set the whole object
+atomically through the existing owning project's `record config set` writer;
+identity defaults and standalone routing files cannot carry this setting.
+
+```sh
+record config set review_admission '{"enabled":true,"producer_groups":["ENG-16:R-32:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],"canonical_commits":["bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"],"hold_ordinary":true}' --who-asked 'owning recorded selection'
+record config --json
+node "$ACCEPTED_ROOT/line-service/review-admission.mjs" --repo /OWN/CANONICAL --org /OWN/RECORD
+```
+
+Replace the example group and commit with the exact selectors returned by the
+read-only inspection command. Producer groups normally have the form
+`ENG-n:R-n:64_HEX_EVIDENCE_HASH`; explicit supplemental captures have the exact
+`supplemental-review/v1:64_HEX_EVIDENCE_HASH` key. Canonical selectors in the view
+are full commit IDs, without the `canonical:` prefix. No prefixes, item-wide
+selectors, inheritance, globs or implicit inclusion of later captures apply.
+For BCH's freeze, its owner selects exactly its sixteen producer group keys and
+the full commit corresponding to `canonical:a94dfb72`, with `hold_ordinary:true`.
+Those project-private values must come from BCH's own inspection and recorded
+selection, not another project's record. Both arrays are required when enabled;
+empty arrays intentionally hold that entire review category.
+
+The line checks new producer/canonical queueing, existing queued review launches,
+and saved review recovery/continuation. It rereads the project policy at effect
+admission, including after capacity observation. Optional `hold_ordinary` holds
+new ordinary selections (including repair dispatch) while existing reports,
+verdicts and physical cleanup continue. An intentional review-only hold does not
+create an engineering-idle repair. This policy does not stop a running worker,
+change an immutable target, clear another hold, override caps/native ownership,
+or grant authority to a manual caller. Disabling it resumes existing selection:
+
+```sh
+record config set review_admission '{"enabled":false}' --who-asked 'owning recorded selection'
+```
+
+Excluded debt stays discoverable and queued records keep their original attempts.
+Each pass retains typed `REVIEW_ADMISSION_PRODUCER_NOT_ALLOWED`,
+`REVIEW_ADMISSION_CANONICAL_NOT_ALLOWED`, `REVIEW_ADMISSION_BINDING_UNKNOWN`, or
+`REVIEW_ADMISSION_ORDINARY_HELD` rows in `passes.jsonl` and
+`effects.json.review_admission.held` under the existing project service directory.
+These are expected selection holds, separate from review errors and verdicts.
+The read-only view shows exact selectors, policy holds and independent source
+holds without queueing or dispatching anything. An allowed row still needs every
+existing readiness, source, STOP/HOLD, cap and native check. No record event or
+fold change is required; old folds continue to read the record unchanged.
+
 ## Standing order and explicit selection
 
 The existing record's single open `meta.queue_order` owner declares the operator's

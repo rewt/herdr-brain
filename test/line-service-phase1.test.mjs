@@ -32,6 +32,8 @@ import {canonicalSelector} from '../line-service/review-targets.mjs';
 import {fold as historicalFold} from './fixtures/state-pre-session-bind.mjs';
 import {canonical} from '../messages/schema.mjs';
 import {nativeCloseoutWait,closeoutWaitState} from '../lib/closeout-status.mjs';
+import {setConfig} from '../lib/config-command.mjs';
+import {inspectReviewAdmission} from '../line-service/review-admission.mjs';
 
 const hash=b=>createHash('sha256').update(b).digest('hex');
 function fixture(t,{reported=true,role='engineer'}={}){
@@ -83,6 +85,75 @@ function installedService(f){
   fs.mkdirSync(f.directory,{recursive:true});fs.writeFileSync(path.join(f.directory,'installation.json'),JSON.stringify({at:'2026-10-27T00:00:00Z',repo:f.cwd,org:f.org,source:sourceRoot,node:process.execPath,file:path.join(f.directory,'service.plist'),target:`gui/${process.getuid()}/dev.herdr.line.${path.basename(f.directory)}`}));
   const env={...f.env};for(const k of ['HERDR_ENV','HERDR_PANE_ID','CODEX_THREAD_ID'])delete env[k];return env;
 }
+
+function admissionService(f,extra={}){
+  const calls=[],env=installedService(f);
+  const service=createLineService({repo:f.cwd,org:f.org,to:'supervisor-test',env,haltAfter:1,recordNotice:d=>({id:d.id,state:'record-only'}),
+    capacity:()=>({count:0,cap:4}),command:(exe,args,options)=>{
+      calls.push(args);if(args[1]==='queue-review')return spawnSync(exe,args,options);
+      return{status:0,stdout:'{}',stderr:''};
+    },...extra});
+  return{calls,pass:()=>{const cwd=process.cwd();process.chdir(f.cwd);try{return service.pass();}finally{process.chdir(cwd);}}};
+}
+const admissionPolicy=(f,policy)=>setConfig('review_admission',JSON.stringify({enabled:true,producer_groups:[],canonical_commits:[],hold_ordinary:true,...policy}),{cwd:f.cwd,env:f.env,who:'review admission fixture'});
+
+test('review admission queues and launches only exact allowlisted producer groups and canonical commits, visibly retaining every exclusion',t=>{
+  const f=fixture(t);independentProducer(f);
+  const canonical=[];for(const n of [1,2]){fs.writeFileSync(path.join(f.cwd,'unattributed'),String(n));f.git(['add','.'],f.cwd);f.git(['commit','-qm','Canonical source'],f.cwd);canonical.push(f.git(['rev-parse','HEAD'],f.cwd));}
+  f.add([{type:'item.closed',id:'ENG-1',as:'done'},{type:'item.closed',id:'ENG-2',as:'done'},{type:'item.added',id:'ENG-99',role:'engineer',title:'Ordinary work'}]);
+  const changes=discoverChanges(f.context()).changes,key=changes.find(c=>c.item.id==='ENG-2').target.source_group.key;
+  admissionPolicy(f,{producer_groups:[key],canonical_commits:[canonical[0]]});
+  const before=f.context().events,view=inspectReviewAdmission({repo:f.cwd,org:f.org,env:f.env});
+  assert.deepEqual(f.context().events,before,'inspection writes no record events');
+  assert.ok(view.candidates.some(c=>c.item==='ENG-1'&&c.hold.code==='REVIEW_ADMISSION_PRODUCER_NOT_ALLOWED'));
+  assert.ok(view.candidates.some(c=>c.head===canonical[1]&&c.hold.code==='REVIEW_ADMISSION_CANONICAL_NOT_ALLOWED'));
+  const s=admissionService(f);s.pass();
+  const queues=[...f.context().state.items.values()].filter(q=>q.role==='reviewer');
+  assert.equal(queues.length,2);assert.ok(queues.some(q=>q.meta.review_source_item==='ENG-2'));assert.ok(queues.some(q=>q.meta.review_source_selector==='canonical:'+canonical[0]));
+  assert.equal(s.calls.filter(a=>a[0].endsWith('/dispatch/dispatch.mjs')).length,2);
+  assert.equal(s.calls.some(a=>a[1]==='ENG-99'),false);
+  const held=JSON.parse(fs.readFileSync(path.join(f.directory,'effects.json'))).review_admission.held;
+  for(const code of ['PRODUCER_NOT_ALLOWED','CANONICAL_NOT_ALLOWED','ORDINARY_HELD'])assert.ok(held.some(h=>h.code==='REVIEW_ADMISSION_'+code));
+  assert.equal([...f.context().state.items.values()].some(i=>i.meta.halt_repair),false,'intentional review-only selection does not manufacture an idle repair');
+  assert.ok(discoverChanges(f.context()).changes.some(c=>c.item.id==='ENG-1'),'excluded debt remains discoverable');
+});
+
+test('review admission holds pre-existing reviews unchanged, then resumes only under the selected policy',t=>{
+  const f=fixture(t),c=f.context(),mutation=queueReviewMutation({...c,runId:'R-1',head:f.heads[1],base:f.base,env:{...installedService(f),ORG_ACTOR:'line-service'}});f.add(mutation.add);
+  const q=f.context().state.items.get(mutation.result.review_item),target=structuredClone(q.meta.review_target),key=target.source_group.key;
+  admissionPolicy(f,{});
+  const s=admissionService(f);s.pass();s.pass();
+  assert.equal(s.calls.some(a=>a[0].endsWith('/dispatch/dispatch.mjs')),false);
+  assert.deepEqual(f.context().state.items.get(q.id).meta.review_target,target);assert.deepEqual(f.context().state.items.get(q.id).runs,[]);
+  admissionPolicy(f,{producer_groups:[key]});s.pass();
+  assert.equal(s.calls.filter(a=>a[0].endsWith('/dispatch/dispatch.mjs')&&a[1]===q.id).length,1);
+  assert.deepEqual(f.context().state.items.get(q.id).meta.review_target,target);
+});
+
+test('review admission retains an existing UNKNOWN launch and legacy review without replacing either attempt',t=>{
+  const f=fixture(t),c=f.context(),mutation=queueReviewMutation({...c,runId:'R-1',head:f.heads[1],base:f.base,env:{...installedService(f),ORG_ACTOR:'line-service'}});f.add(mutation.add);
+  const q=f.context().state.items.get(mutation.result.review_item),target=structuredClone(q.meta.review_target);
+  f.add([{type:'item.added',id:'REV-99',role:'reviewer',title:'Old manual review'}]);
+  const input=dispatchInput({...f.context(),item:q}),key=`dispatch:${q.id}:${input}`,original={state:'started',owner:'line-service',error:'UNKNOWN original native outcome',receipt:{status:null,stdout:'original evidence'}};
+  fs.writeFileSync(path.join(f.directory,'effects.json'),JSON.stringify({identity:f.identity,org:f.org,actions:{[key]:original}}));
+  admissionPolicy(f,{});const s=admissionService(f);s.pass();s.pass();
+  admissionPolicy(f,{producer_groups:[target.source_group.key]});s.pass();
+  assert.equal(s.calls.some(a=>a[0].endsWith('/dispatch/dispatch.mjs')),false);
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(f.directory,'effects.json'))).actions[key],original);
+  assert.deepEqual(f.context().state.items.get(q.id).meta.review_target,target);
+  assert.ok(diagnostics(f).some(r=>r.action==='review-admission-held'&&r.item==='REV-99'&&r.code==='REVIEW_ADMISSION_BINDING_UNKNOWN'));
+  assert.equal([...f.context().state.items.values()].filter(i=>i.role==='reviewer').length,2);
+});
+
+test('review admission rereads changed policy after capacity before launch without recording a failed or UNKNOWN attempt',t=>{
+  const f=fixture(t);f.add([{type:'item.closed',id:'ENG-1',as:'done'}]);
+  const key=discoverChanges(f.context()).changes[0].target.source_group.key;admissionPolicy(f,{producer_groups:[key]});
+  let changed=false;const s=admissionService(f,{capacity:()=>{if(!changed){changed=true;admissionPolicy(f,{});}return{count:0,cap:4};}});s.pass();
+  assert.equal(changed,true);assert.equal(s.calls.some(a=>a[0].endsWith('/dispatch/dispatch.mjs')),false);
+  const effects=JSON.parse(fs.readFileSync(path.join(f.directory,'effects.json')));
+  assert.equal(Object.keys(effects.actions).some(k=>k.startsWith('dispatch:')),false);
+  assert.ok(effects.review_admission.held.some(h=>h.stage==='launch-mutation'));
+});
 
 function assertFiniteRefresh(f,args){
   assert.deepEqual(args.slice(0,6),[path.join(sourceRoot,'supervisor/closeout.mjs'),'refresh','--repo',f.cwd,'--org',f.org]);

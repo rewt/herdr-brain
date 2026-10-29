@@ -13,6 +13,7 @@ import {fold} from '../../lib/state.mjs';
 import {gitProject} from '../../lib/project.mjs';
 import {createLineService, serviceDirectory} from '../../line-service/line-service.mjs';
 import {runCloseoutTurn} from '../../line-service/closeout-turn.mjs';
+import {developmentRoot} from '../../line-service/cutoff.mjs';
 import {stopOwnedInbox} from './inbox.mjs';
 
 const source=fs.realpathSync(fileURLToPath(new URL('../../',import.meta.url)));
@@ -56,6 +57,17 @@ export function notificationFixture(t, {startFail=false,topic='topic'}={}) {
   };
   const cli=(file,args)=>{const r=execute(file,args,{...f.env,ORG_ACTOR:'line-service'});
     assert.equal(r.status,0,r.stderr+r.stdout);return r.stdout;};
+  const queueCanonicalReview=head=>{
+    // Canonical queueing requires the installation binding of the code under
+    // test, including in isolated release checkouts. Keep it only for this
+    // synchronous call so report hints cannot start competing closeout turns.
+    const installation=path.join(directory,'installation.json');
+    fs.writeFileSync(installation,JSON.stringify({repo:f.repo,org:f.org,source:developmentRoot,
+      node:process.execPath,file:path.join(directory,'service.plist'),
+      target:`gui/${process.getuid()}/dev.herdr.line.${path.basename(directory)}`}),{flag:'wx'});
+    try{return execute('bin/org.mjs',['queue-review',`canonical:${head}`],{...f.env,ORG_ACTOR:'line-service'});}
+    finally{fs.rmSync(installation);}
+  };
   const turn=()=>runCloseoutTurn({project,org:f.org,env:f.env,guard:()=>{},maxSteps:1,cli,measure:()=>{}});
   const commands=[];
   const pass=()=>createLineService({repo:f.repo,org:f.org,to:'supervisor-test',env:f.env,
@@ -92,6 +104,6 @@ export function notificationFixture(t, {startFail=false,topic='topic'}={}) {
     assert.ok(native.calls().some(a=>a[0]==='worktree'&&a[1]==='open'));
     assert.equal(f.git(['rev-parse','--abbrev-ref','HEAD'],lane),`lane/${topic}`);
   };
-  return{...f,lane,native,events,state,project,directory,add,execute,turn,pass,commands,job,
+  return{...f,lane,native,events,state,project,directory,add,execute,queueCanonicalReview,turn,pass,commands,job,
     patchNative,writeReport,watch,watchUntil,assertOpened};
 }

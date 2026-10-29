@@ -24,7 +24,8 @@ function queueReview(f,{priorHistory=false}={}){
   if(priorHistory)fs.mkdirSync(path.join(f.org,'dispatch'),{recursive:true});
   fs.writeFileSync(path.join(f.repo,'reviewed-source'),'new canonical source');
   f.git(['add','reviewed-source']);f.git(['commit','-qm','Source to review']);const head=f.git(['rev-parse','HEAD']);
-  const q=f.execute('bin/org.mjs',['queue-review',`canonical:${head}`],{...f.env,ORG_ACTOR:'line-service'});
+  const q=f.queueCanonicalReview(head);
+  assert.equal(fs.existsSync(path.join(f.directory,'installation.json')),false,'queue setup leaves no installed background owner');
   assert.equal(q.status,0,q.stderr+q.stdout);const review=JSON.parse(q.stdout).review_item;
   const launch=()=>f.dispatch([review,'--lane','review-notification','--base',head,'--route','reviewer','--brief',f.brief]);
   return{review,launch};

@@ -131,7 +131,7 @@ test('stopped uncertain install migrates with an append-only observation and pre
   assert.equal(fs.readFileSync(f.stop,'utf8'),f.original.stop);
   assert.equal(fs.readFileSync(path.join(f.org,'dispatch/retained.json'),'utf8'),f.original.jobs);
   assert.equal(fs.readFileSync(path.join(f.directory,'effects.json'),'utf8'),f.original.effects);
-  const {installedContext}=await f.module('line-service/cutoff.mjs');assert.equal(installedContext(f.cwd,f.org).installation.phase,'uncertain-or-refused');
+  const {installedContext}=await f.module('line-service/cutoff.mjs');assert.equal(installedContext(f.cwd,f.org).installation.phase,'installed');
   const events=fs.readFileSync(path.join(f.org,'events.jsonl'),'utf8');assert.equal(f.migrate().existing,true);
   assert.equal(fs.readFileSync(path.join(f.org,'events.jsonl'),'utf8'),events);
   assert.equal(f.calls.some(c=>c.args[0]==='bootstrap'||c.args[0]==='bootout'),false);
@@ -535,7 +535,14 @@ for(const missing of [false,true])test(`release source completion ${missing?'use
     assert.equal(closes,0);assert.equal(loadRecord(f.org).state.items.get('ENG-1').closed,null);
     assert.equal(loadEvents(f.org).events.filter(e=>e.type==='line-service.source-completion-held').length,1);
     service.pass();assert.equal(loadEvents(f.org).events.filter(e=>e.type==='line-service.source-completion-held').length,1);
+    const file=path.join(f.directory,'effects.json'),saved=JSON.parse(fs.readFileSync(file)),key='source-complete:R-1:finished-report';
+    const legacy={state:'held',at:'2026-10-27T00:00:00Z',error:`T2 source completion needs supervisor judgment: reported source ${head} is not integrated at ${base}`,failure:{code:'OUTCOME_UNKNOWN',kind:'unknown'}};
+    saved.actions[key]=legacy;fs.writeFileSync(file,JSON.stringify(saved));
+    const {preEffectSourceHold}=await f.module('line-service/source-completion.mjs');
+    assert.equal(preEffectSourceHold(legacy),true);assert.equal(preEffectSourceHold({...legacy,receipt:{status:1}}),false);
+    assert.equal(preEffectSourceHold({...legacy,history:[{state:'started'}]}),false);
     f.git('merge','--ff-only',head);service.pass();
+    assert.deepEqual(JSON.parse(fs.readFileSync(file)).actions[key],legacy);
     assert.equal(loadEvents(f.org).events.filter(e=>e.type==='line-service.source-completion-readmitted').length,1);
   }
   assert.equal(loadRecord(f.org).state.items.get('ENG-1').closed.as,'done',fs.readFileSync(path.join(f.directory,'passes.jsonl'),'utf8'));

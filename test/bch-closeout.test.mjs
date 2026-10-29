@@ -177,7 +177,7 @@ async function releaseCloseout(t,options={}){
   const f=setup(t,{direct:true,bound:true,merged:true,...options}),installation=selectCurrentCleanup(f);
   const bundle=path.join(f.scratch,'accepted-release');copyProduct(process.cwd(),bundle);
   fs.writeFileSync(path.join(bundle,'.release-commit'),'1'.repeat(40)+'\n');
-  const summary=path.join(bundle,'.release-acceptance.json');fs.writeFileSync(summary,JSON.stringify({ready:true,candidateCommit:'1'.repeat(40),counts:{PASS:1,FAIL:0,PENDING:0,SKIP:0}}));
+  const summary=path.join(bundle,'.release-acceptance.json');fs.writeFileSync(summary,JSON.stringify({ready:true,candidateCommit:'1'.repeat(40),elapsedSeconds:1,counts:{PASS:1,FAIL:0,PENDING:0,SKIP:0}}));
   const manifest=spawnSync(process.execPath,[path.resolve('herdr/releases.mjs'),'manifest',bundle,summary],{cwd:f.repo,env:f.env,encoding:'utf8'});
   assert.equal(manifest.status,0,manifest.stderr);
   fs.writeFileSync(installation.file,JSON.stringify({...installation.receipt,source:bundle}));
@@ -197,10 +197,12 @@ async function releaseCloseout(t,options={}){
   return{...f,turn,refresh,bundle};
 }
 
-for(const obstruction of [null,'UNKNOWN','refusal','identity','claim','HOLD'])
+for(const obstruction of [null,'branch-absent','UNKNOWN','refusal','identity','claim','HOLD'])
 test(`release line closes a proven original tab after folder removal: ${obstruction??'success'}`,async t=>{
   const f=await releaseCloseout(t),[source]=f.report(),original=source.closeout_targets[0];
   f.git(['worktree','remove',f.lane]);
+  const success=!obstruction||obstruction==='branch-absent';
+  if(obstruction==='branch-absent')f.git(['branch','-d','lane/topic']);
   if(obstruction==='UNKNOWN')f.append([{type:'closeout.effect',identity:f.common,key:original.key,run:'R-1',source:{seq:source.seq,type:source.type},
     effect:'original-unknown',producer:'native-closeout/v2',outcome:{action:'agent-exit-requested',pane:'w:p'}}]);
   if(obstruction==='refusal')f.append([{type:'closeout.evaluated',identity:f.common,key:original.key,run:'R-1',source:{seq:source.seq,type:source.type},
@@ -211,7 +213,7 @@ test(`release line closes a proven original tab after folder removal: ${obstruct
   const before=events(f);
   if(obstruction==='HOLD')assert.throws(f.refresh,/STOP\/HOLD/);
   else f.turn();
-  if(!obstruction){
+  if(success){
     const target=currentCloseoutEntries(f.common,f.org,events(f)).find(e=>e.cleanup?.native_only);
     assert.ok(target,JSON.stringify(events(f).slice(before.length)));
     f.turn();f.turn();
@@ -222,6 +224,8 @@ test(`release line closes a proven original tab after folder removal: ${obstruct
   }else{
     assert.equal(f.read().tabs.length,1);assert.deepEqual(f.read().actions,[]);
   }
-  assert.equal(fs.existsSync(f.lane),false);assert.equal(f.git(['rev-parse','lane/topic']),f.head);
+  assert.equal(fs.existsSync(f.lane),false);
+  if(obstruction==='branch-absent')assert.equal(f.git(['branch','--list','lane/topic']),'');
+  else assert.equal(f.git(['rev-parse','lane/topic']),f.head);
   assert.deepEqual(events(f).slice(0,before.length),before);
 });

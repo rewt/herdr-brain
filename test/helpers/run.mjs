@@ -18,7 +18,7 @@ const { TIMINGS_ENV, startTiming, timing } = timingJournal;
 const cleanupHerdr = offlineHerdr();
 // Chain coordinator -> suite leader -> test file -> product fixture. Native
 // writer death covers abrupt exits even when JS/IPC cleanup cannot execute.
-ownFixtureLifetime();
+const lifetimeGuard = ownFixtureLifetime();
 
 const script = fileURLToPath(import.meta.url);
 const policy = fileURLToPath(new URL('./fixture-policy.mjs', import.meta.url));
@@ -230,7 +230,7 @@ if (worker) {
     if (process.connected) process.send({ complete: true, code, outputFlushed }, error => { if (error) cleanup(); });
     // Keep IPC referenced: the coordinator audits and kills this live leader.
   });
-  process.send({ ready: true }, error => { if (error) cleanup(); });
+  process.send({ ready: true, lifetimeGuard }, error => { if (error) cleanup(); });
 } else {
   // Isolated file groups are execution details of the enclosing suite. Keep
   // its file timing IDs/depth and one suite finish, rather than nesting suites.
@@ -247,7 +247,7 @@ if (worker) {
   const child = spawn(process.execPath, [script, '--worker', ...argv.filter(arg => !arg.startsWith('--load-factor=')), `--load-factor=${factor}`], {
     detached: true, stdio: ['ignore', 'pipe', 'pipe', 'ipc'], env,
   });
-  let owner, finished = false, watcher, timedOutFile;
+  let owner, workerLifetimeGuard, finished = false, watcher, timedOutFile;
   const fileArtifacts = new Map(), fileCompletions = new Map();
   function recoverFileTiming(completion) {
     const native = completion.native_exit;
@@ -311,6 +311,11 @@ if (worker) {
       const result = auditGroup(owner);
       if (!result.ok) code = 1;
       for (const row of result.survivors ?? []) {
+        // This exact birth/command was verified before admitting any files.
+        // Its target is the still-live suite leader; group teardown ends both.
+        // Other guards, changed identities and fixture survivors remain red.
+        if (workerLifetimeGuard && row.pid === workerLifetimeGuard.pid && row.ppid === owner.pid &&
+            row.identity === workerLifetimeGuard.identity && row.command === workerLifetimeGuard.command) continue;
         timing({ kind: 'fixture-survivor', depth: 0, fixture: row, files });
         console.error(`Surviving fixture: PID ${row.pid}, command ${row.command}. Files: ${files.join(', ')}`);
         code = 1;
@@ -414,7 +419,15 @@ if (worker) {
     }
     if (finished) return;
     if (message.ready) {
-      try { owner = registerProcess(child.pid, true); child.send('start'); }
+      try {
+        owner = registerProcess(child.pid, true);
+        const command = [process.env.HERDR_FIXTURE_LIFETIME_EXECUTABLE, '--watch',
+          process.env.HERDR_FIXTURE_LIFETIME_FIFO, process.env.HERDR_FIXTURE_LIFETIME_SECONDS, String(child.pid)].join(' ');
+        if (message.lifetimeGuard?.command !== command) throw Error('Suite lifetime guard receipt differs from coordinator ownership');
+        workerLifetimeGuard = registerProcess(message.lifetimeGuard.pid, false, { suite: owner, command });
+        if (!workerLifetimeGuard) throw Error('Suite lifetime guard is absent before file admission');
+        child.send('start');
+      }
       catch (error) { console.error(error); finish(1); }
     } else if (message.timeout) {
       // fixture-policy keeps the file and leader alive for this coordinator's

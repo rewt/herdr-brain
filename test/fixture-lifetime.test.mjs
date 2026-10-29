@@ -258,6 +258,18 @@ test('live fixture victim',async t=>{
   });
 }
 
+test('a successful runner accounts for its verified parent-lifetime guard', async t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'fixture-runner-complete-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const file = path.join(root, 'complete.test.mjs');
+  fs.writeFileSync(file, `import test from ${JSON.stringify(local('./helpers/bounded-test.mjs'))};
+test('completed fixture',()=>{});`);
+  const child = spawnChild(t, process.execPath, [local('./helpers/run.mjs'), file]);
+  const result = await waitForExit(child);
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.doesNotMatch(result.stderr, /Surviving fixture/);
+});
+
 for (const target of ['suite leader', 'coordinator with suspended leader']) {
   test(`abrupt ${target} death stops a blocked test file and its orphan inbox owner`, async t => {
     const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'fixture-runner-death-')));

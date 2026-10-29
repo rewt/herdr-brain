@@ -16,9 +16,11 @@ const nativeSpawn = ChildProcess.prototype.spawn;
 let lifetime;
 
 function watchLifetime(owner) {
+  const args = ['--watch', owner.fifo, owner.seconds, String(process.pid)];
   const guard = cp.spawn(owner.executable,
-    ['--watch', owner.fifo, owner.seconds, String(process.pid)], { stdio: 'ignore' });
+    args, { stdio: 'ignore' });
   guard.unref();
+  return { pid: guard.pid, command: [owner.executable, ...args].join(' ') };
 }
 
 function closed(child) {
@@ -93,16 +95,16 @@ function nativeGuard(root) {
 // Called once by each runner/file owner after offline isolation. Children that
 // only load this preload inherit that writer without acquiring another one.
 export function ownFixtureLifetime() {
-  if (lifetime) return;
+  if (lifetime) return lifetime.parentGuard;
   // Keep the enclosing runner's writer as a cancellation boundary before
   // acquiring this process's writer. A killed suite leader cannot run its
   // IPC cleanup, and a stuck test file otherwise keeps its inbox owners alive.
   // The native guard also works while this process is blocked or suspended.
-  if (process.env.HERDR_FIXTURE_LIFETIME_EXECUTABLE) watchLifetime({
+  const parentGuard = process.env.HERDR_FIXTURE_LIFETIME_EXECUTABLE ? watchLifetime({
     executable: process.env.HERDR_FIXTURE_LIFETIME_EXECUTABLE,
     fifo: process.env.HERDR_FIXTURE_LIFETIME_FIFO,
     seconds: process.env.HERDR_FIXTURE_LIFETIME_SECONDS,
-  });
+  }) : null;
   const standalone = !process.env.HERDR_TEST_OFFLINE_ROOT;
   // A shared offline root can outlive a PID; never reuse its previous FIFO.
   const root = standalone ? fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'fixture-lifetime-')) :
@@ -115,11 +117,12 @@ export function ownFixtureLifetime() {
   // O_RDWR avoids a blocking open. The descriptor is deliberately retained
   // until process exit, and Node does not inherit it into children.
   fs.openSync(fifo, fs.constants.O_RDWR | fs.constants.O_NONBLOCK);
-  lifetime = { executable, fifo, seconds: String(Math.ceil(loadTimeout(60000) / 1000)) };
+  lifetime = { executable, fifo, seconds: String(Math.ceil(loadTimeout(60000) / 1000)), parentGuard };
   process.env.HERDR_FIXTURE_LIFETIME_EXECUTABLE = executable;
   process.env.HERDR_FIXTURE_LIFETIME_FIFO = fifo;
   process.env.HERDR_FIXTURE_LIFETIME_SECONDS = lifetime.seconds;
   if (standalone) process.once('exit', () => fs.rmSync(root, { recursive: true, force: true }));
+  return parentGuard;
 }
 
 function inherited(env = process.env) {

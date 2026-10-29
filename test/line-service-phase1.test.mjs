@@ -84,6 +84,13 @@ function installedService(f){
   const env={...f.env};for(const k of ['HERDR_ENV','HERDR_PANE_ID','CODEX_THREAD_ID'])delete env[k];return env;
 }
 
+function assertFiniteRefresh(f,args){
+  assert.deepEqual(args.slice(0,6),[path.join(sourceRoot,'supervisor/closeout.mjs'),'refresh','--repo',f.cwd,'--org',f.org]);
+  assert.equal(args.length,8);assert.equal(args[6],'--deadline');
+  const deadline=Number(args[7]),now=Date.now();
+  assert.ok(Number.isSafeInteger(deadline)&&deadline>now&&deadline<=now+15000,'refresh retains its finite original-binding allowance');
+}
+
 function recoveryFixture(t,{verdict,kind='never-created'}={}){
   const f=fixture(t),a=f.observation.agents[0],head=f.heads[0],attempt=path.join(f.org,'settle/old-review.json');fs.mkdirSync(path.dirname(attempt),{recursive:true});
   fs.writeFileSync(attempt,JSON.stringify({run:'R-1',head,stage:verdict?'complete':'reviewing',...(verdict?{review:{verdict}}:{})}));
@@ -539,7 +546,7 @@ function originalPartialFixture(t){
 test('original REV4-shaped continuation preserves its disjoint PASS peer and zero-native journal then uses one same-request native launch without replacement',async t=>{
   const f=originalPartialFixture(t),before=f.context(),original=fs.readFileSync(f.journal),verdict=before.events.find(e=>e.type==='change.reviewed'),calls=[],refreshes=[];
   const service=createLineService({repo:f.cwd,org:f.org,to:'brain-chat',env:f.env,maxStarts:1,capacity:()=>({cap:3,count:0}),recordNotice:d=>({id:d.id,state:'record-only'}),command:(exe,args)=>{
-    if(args[0]===path.join(sourceRoot,'supervisor/closeout.mjs')){assert.deepEqual(args,[path.join(sourceRoot,'supervisor/closeout.mjs'),'refresh','--repo',f.cwd,'--org',f.org]);refreshes.push(args);return{status:0,stdout:'{"created":[]}',stderr:''};}
+    if(args[0]===path.join(sourceRoot,'supervisor/closeout.mjs')){assertFiniteRefresh(f,args);refreshes.push(args);return{status:0,stdout:'{"created":[]}',stderr:''};}
     calls.push(args);if(exe==='herdr')return{status:0,stdout:'{"result":{"agents":[]}}',stderr:''};
     assert.equal(args[0],path.join(sourceRoot,'dispatch/dispatch.mjs'));assert.equal(args[args.indexOf('--retry')+1],f.journal);assert.ok(args.includes('--continue-preflight'));return f.d.dispatch(args.slice(1),{env:{...f.d.env,HERDR_BRAIN_ROOT:fs.realpathSync(sourceRoot)}});
   }});service.pass();
@@ -709,7 +716,7 @@ test('original worker continuation refuses UNKNOWN native flags changed claim re
 test('permanent health and missing review producers stay diagnostic without spawning a decision or replaying the failed attempt',t=>{
   const f=fixture(t),env=installedService(f);f.add([{type:'item.closed',id:'ENG-1',as:'done'}]);const bytes=fs.readFileSync(path.join(f.org,'events.jsonl'));
   let calls=0,refreshes=0;const service=()=>createLineService({repo:f.cwd,org:f.org,to:'brain-chat',env,haltAfter:100,capacity:()=>{throw Object.assign(Error('decision pool occupied'),{code:'DISPATCH_DECISION_CAP'});},command:(_exe,args)=>{
-    if(args[0]===path.join(sourceRoot,'supervisor/closeout.mjs')){assert.deepEqual(args,[path.join(sourceRoot,'supervisor/closeout.mjs'),'refresh','--repo',f.cwd,'--org',f.org]);refreshes++;return{status:0,stdout:'{"created":[]}',stderr:''};}
+    if(args[0]===path.join(sourceRoot,'supervisor/closeout.mjs')){assertFiniteRefresh(f,args);refreshes++;return{status:0,stdout:'{"created":[]}',stderr:''};}
     calls++;assert.equal(args[1],'queue-review');return{status:1,stdout:'',stderr:'selected helper cannot certify immutable review target'};
   }});
   for(let n=0;n<5;n++)service().pass();const health=diagnosticHealth(f),rows=diagnostics(f);
@@ -723,6 +730,7 @@ test('permanent health and missing review producers stay diagnostic without spaw
   assert.ok(rows.some(r=>r.boundary===`outcome:review:ENG-1:${f.heads[1]}`&&r.scope.failure.kind==='unknown'));
   assert.equal(health.gap_passes,5);assert.equal(health.owed,1);assert.equal(health.owed_commits,2);assert.equal(health.queued,0);
   assert.equal(rows.filter(r=>r.boundary==='review-gap'&&r.inspection_due).length,1);assert.equal(calls,1);assert.equal(refreshes,5);
+  assert.deepEqual(closeoutCheckpoint(f).errors,[],'all five finite refreshes completed without a swallowed fixture refusal');
   const digest=morningDigest({events:f.context().events,diagnostics:rows});assert.ok(digest.review_errors.occurrences>=5);assert.equal(digest.review_health.pass_id,health.pass_id);
   assert.equal(fs.existsSync(path.join(f.org,'supervisor/inbox.log')),false);
 });
@@ -766,7 +774,7 @@ test('continuity base notices retain identity and recorded state across recurren
   const file=path.join(f.directory,'effects.json'),audit=path.join(f.directory,'passes.jsonl'),prior={first_at,reason,scope,state:'recorded',id,count:4,record:{id,state:'record-only'}};
   fs.writeFileSync(file,JSON.stringify({identity:f.identity,org:f.org,actions:{},record_notices:{[key]:prior},notice_audit_offset:0}));
   let calls=0,deliveries=0,refreshes=0;const service=createLineService({repo:f.cwd,org:f.org,to:'brain-chat',env,haltAfter:100,capacity:()=>{throw Object.assign(Error('decision pool occupied'),{code:'DISPATCH_DECISION_CAP'});},recordNotice:d=>{if(d.id===id){deliveries++;throw Error('recorded notice must not redeliver');}return{id:d.id,state:'record-only'};},command:(_exe,args)=>{
-    if(args[0]===path.join(sourceRoot,'supervisor/closeout.mjs')){assert.deepEqual(args,[path.join(sourceRoot,'supervisor/closeout.mjs'),'refresh','--repo',f.cwd,'--org',f.org]);refreshes++;return{status:0,stdout:'{"created":[]}',stderr:''};}
+    if(args[0]===path.join(sourceRoot,'supervisor/closeout.mjs')){assertFiniteRefresh(f,args);refreshes++;return{status:0,stdout:'{"created":[]}',stderr:''};}
     calls++;assert.equal(args[1],'queue-review');return{status:1,stdout:'',stderr:reason};
   }});
   // Simulate interruption after the compact fsync but before the journal

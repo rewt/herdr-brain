@@ -38,6 +38,57 @@ test('exited guard drain waits for exact orphan identities without signalling or
   assert.equal(h.tracker.drainExitedGuards(rows, new Set([command + ' changed']), { drainMs: 100 }), null);
 });
 
+for (const initial of ['argv', 'kernel']) {
+  test(`exited guard drain joins ${initial} evidence through kernel-only exit without signalling`, async () => {
+    const h = harness(), exitCommand = '[17f859a4bccd76ec]';
+    const guard = row(303, 'guard birth', initial === 'argv' ? '/fixture-guard --watch /suite/alive 60 404' : exitCommand,
+      { pgid: 101 });
+    h.rows.set(303, { ...guard });
+    let pauses = 0;
+    await h.tracker.drainExitedGuards([guard], new Set([guard.command]), { drainMs: 100, exitCommand,
+      now: () => 0, pause: async () => {
+        if (++pauses === 1) h.rows.get(303).command = exitCommand;
+        else h.rows.delete(303);
+      } });
+    assert.equal(pauses, 2);
+    assert.deepEqual(h.queries, [303, 303, 303]);
+    assert.deepEqual(h.signals, []);
+  });
+}
+
+for (const failure of ['birth', 'command', 'failed', 'stuck', 'exec']) {
+  test(`exited guard drain kernel-only evidence still fails closed on ${failure}`, async () => {
+    const h = harness(), exitCommand = '[17f859a4bccd76ec]';
+    const guard = row(303, 'guard birth', exitCommand, { pgid: 101 });
+    h.rows.set(303, { ...guard });
+    if (failure === 'birth') h.rows.get(303).identity = 'replacement';
+    if (failure === 'command') h.rows.get(303).command = '[different]';
+    if (failure === 'exec') h.rows.get(303).command = '/fixture-guard --watch /suite/alive 60 404';
+    if (failure === 'failed') h.hooks.individual = () => ({ ok: false, error: 'argv read refused' });
+    let now = 0, pauses = 0;
+    await assert.rejects(h.tracker.drainExitedGuards([guard], new Set([guard.command]), {
+      drainMs: 100, exitCommand, now: () => now, pause: async () => { pauses++; now += 100; },
+    }), /identity changed|argv read refused|drain exceeded/);
+    if (failure !== 'stuck') assert.equal(pauses, 0, 'failed evidence must stop the drain immediately');
+    if (failure === 'failed') assert.deepEqual(h.queries, [303], 'a refused read must not be retried');
+    assert.deepEqual(h.signals, []);
+  });
+}
+
+test('exited guard drain rejects a return to argv after kernel-only exit evidence', async () => {
+  const h = harness(), exitCommand = '[17f859a4bccd76ec]';
+  const guard = row(303, 'guard birth', '/fixture-guard --watch /suite/alive 60 404', { pgid: 101 });
+  h.rows.set(303, { ...guard });
+  let pauses = 0;
+  await assert.rejects(h.tracker.drainExitedGuards([guard], new Set([guard.command]), {
+    drainMs: 100, exitCommand, now: () => 0, pause: async () => {
+      h.rows.get(303).command = ++pauses === 1 ? exitCommand : guard.command;
+    },
+  }), /identity changed/);
+  assert.equal(pauses, 2);
+  assert.deepEqual(h.signals, []);
+});
+
 for (const failure of ['birth', 'command', 'parent', 'group', 'incomplete', 'failed', 'thrown', 'stuck']) {
   test(`exited guard drain fails closed on ${failure} evidence`, async () => {
     const h = harness(), guard = row(303, 'guard birth', 'exact guard', { pgid: 101 });

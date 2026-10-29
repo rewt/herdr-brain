@@ -61,11 +61,11 @@ export function createProcessTracker({
       return entryFor(result.value, group);
     },
     killProcess: signal,
-    drainExitedGuards(rows, commands, { drainMs, now = Date.now,
+    drainExitedGuards(rows, commands, { drainMs, exitCommand, now = Date.now,
       pause = () => new Promise(resolve => setTimeout(resolve, 20)) } = {}) {
-      // Only exact source-bound native --watch commands with departed parents
-      // may drain. Live-parent guards and arbitrary fixtures still fail.
-      const pending = rows.filter(row => row.ppid === 1 && commands.has(row.command));
+      // Only selected source-bound guards with departed parents may drain.
+      // Live-parent guards and arbitrary fixtures still fail.
+      const pending = rows.filter(row => row.ppid === 1 && commands.has(row.command)).map(row => ({ ...row }));
       if (!pending.length) return null;
       return (async () => {
         const end = now() + drainMs;
@@ -78,10 +78,16 @@ export function createProcessTracker({
               pending.splice(index, 1);
               continue;
             }
-            if (!complete(current.value) || current.value.pid !== entry.pid || !same(entry, current.value) ||
+            // One-way argv loss is an exit observation only for the selected
+            // native guard. Birth, parent and group must still match, and the
+            // final group audit must confirm absence rather than exempt it.
+            const commandMatches = current.value?.command === entry.command ||
+              (exitCommand !== undefined && current.value?.command === exitCommand);
+            if (!complete(current.value) || current.value.pid !== entry.pid || entry.identity !== current.value.identity || !commandMatches ||
                 current.value.ppid !== 1 || current.value.pgid !== entry.pgid) {
               throw Error(`fixture guard PID ${entry.pid} identity changed during drain`);
             }
+            entry.command = current.value.command;
           }
           if (!pending.length) return;
           if (now() >= end) throw Error(`fixture guard drain exceeded ${drainMs}ms: ${pending.map(row => row.pid).join(', ')}`);

@@ -15,18 +15,31 @@ const nativeSync = cp.spawnSync;
 const nativeSpawn = ChildProcess.prototype.spawn;
 let lifetime;
 
+// Darwin can lose argv during exit before its kernel row becomes a zombie.
+// The cached executable is named by the full source digest; p_comm retains its
+// first 16 characters. This name only licenses a bounded wait in an audited
+// suite group, never an exemption, signal or fallback for a refused argv read.
+export function lifetimeGuardExitCommand({ executable = process.env.HERDR_FIXTURE_LIFETIME_EXECUTABLE,
+  platform = process.platform } = {}) {
+  const name = executable && path.basename(executable);
+  return platform === 'darwin' && /^[a-f0-9]{64}$/.test(name ?? '') ? `[${name.slice(0, 16)}]` : undefined;
+}
+
 // These are candidates to JOIN, never exemptions from the survivor audit. The
 // native --watch entry validates its original direct parent before watching;
 // reparenting therefore proves that target has exited. Include nested runner
 // owners as well as files, all using this suite's source-bound cached binary
 // and private lifetime writers. A stuck or changed guard must still fail.
 export function exitedLifetimeGuardCommands(rows, { executable = process.env.HERDR_FIXTURE_LIFETIME_EXECUTABLE,
-  root = process.env.HERDR_TEST_OFFLINE_ROOT } = {}) {
+  root = process.env.HERDR_TEST_OFFLINE_ROOT, platform = process.platform } = {}) {
   const commands = new Set();
   if (!executable || !root) return commands;
+  const exitCommand = lifetimeGuardExitCommand({ executable, platform });
   const prefix = `${executable} --watch ${root}/lifetime-`;
   for (const row of rows) {
-    if (row.ppid !== 1 || !row.command.startsWith(prefix)) continue;
+    if (row.ppid !== 1) continue;
+    if (row.command === exitCommand) { commands.add(row.command); continue; }
+    if (!row.command.startsWith(prefix)) continue;
     const match = /^([1-9]\d*)-[A-Za-z0-9]+\/alive ([1-9]\d*) ([1-9]\d*)$/.exec(row.command.slice(prefix.length));
     if (match && Number(match[1]) > 1 && Number(match[3]) > 1 && Number(match[3]) <= 2147483647)
       commands.add(row.command);

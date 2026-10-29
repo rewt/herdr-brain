@@ -7,7 +7,7 @@ import { pipeline } from 'node:stream/promises';
 import { fileURLToPath } from 'node:url';
 import { registerProcess, killProcess, auditGroup, drainExitedGuards } from './processes.mjs';
 import { offlineHerdr } from './offline-herdr.mjs';
-import { ownFixtureLifetime, exitedLifetimeGuardCommands } from './fixture-lifetime.mjs';
+import { ownFixtureLifetime, exitedLifetimeGuardCommands, lifetimeGuardExitCommand } from './fixture-lifetime.mjs';
 import { runnerLimits } from './runner-limits.mjs';
 import path from 'node:path';
 import { watchRun } from '../../test-slot/watch.mjs';
@@ -311,7 +311,8 @@ if (worker) {
     finished = true; watcher?.stop();
     const result = audit && owner ? auditGroup(owner) : null;
     const exitedGuards = result?.ok ? exitedLifetimeGuardCommands(result.survivors) : new Set();
-    const draining = result?.ok && drainExitedGuards(result.survivors, exitedGuards, { drainMs: outputDrainMs });
+    const draining = result?.ok && drainExitedGuards(result.survivors, exitedGuards,
+      { drainMs: outputDrainMs, exitCommand: lifetimeGuardExitCommand() });
     if (draining) {
       // A file's native exit can precede its orphan guard's next scheduling
       // turn. Join only those exact identities, then audit again: nothing is

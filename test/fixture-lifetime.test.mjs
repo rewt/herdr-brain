@@ -9,7 +9,7 @@ import { createProcessTracker } from './helpers/processes.mjs';
 import { loadTimeout } from '../lib/deadline.mjs';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { spawnFixtureExec, exitedLifetimeGuardCommands } from './helpers/fixture-lifetime.mjs';
+import { spawnFixtureExec, exitedLifetimeGuardCommands, lifetimeGuardExitCommand } from './helpers/fixture-lifetime.mjs';
 
 const local = file => fileURLToPath(new URL(file, import.meta.url));
 const tracker = createProcessTracker();
@@ -46,6 +46,20 @@ test('exited lifetime guard selection requires the exact binary, private writer 
     { ...row, command: command + ' extra' },
     { ...row, command: command.replace('--watch', '--exec') },
   ]) assert.deepEqual([...exitedLifetimeGuardCommands([other], owner)], []);
+});
+
+test('exited lifetime guard selection bounds Darwin kernel-only exit evidence to the source digest and departed parent', () => {
+  const digest = '17f859a4bccd76ec902662527f408faee6e86302781472e354b6b12b5072ba08';
+  const owner = { executable: `/private/fixture-cache/${digest}`, root: '/private/suite', platform: 'darwin' };
+  const command = '[17f859a4bccd76ec]', row = { ppid: 1, command };
+  assert.equal(lifetimeGuardExitCommand(owner), command);
+  assert.deepEqual([...exitedLifetimeGuardCommands([row], owner)], [command]);
+  for (const other of [{ ...row, ppid: 505 }, { ...row, command: '[other-guard]' },
+    { ...row, command: command + ' extra' }])
+    assert.deepEqual([...exitedLifetimeGuardCommands([other], owner)], []);
+  for (const override of [{ platform: 'linux' }, { executable: '/private/fixture-cache/helper' },
+    { executable: '/private/fixture-cache/' + 'f'.repeat(64) }, { root: '' }])
+    assert.deepEqual([...exitedLifetimeGuardCommands([row], { ...owner, ...override })], []);
 });
 
 test('a stale PID-named FIFO in the shared offline root does not block a new lifetime owner', async t => {
@@ -287,8 +301,9 @@ test('completed fixture',()=>{});`);
   assert.doesNotMatch(result.stderr, /Surviving fixture/);
 });
 
-for (const resume of [true, false]) {
-  test(`an exited file's delayed native guard ${resume ? 'drains before the survivor audit' : 'still fails when it cannot drain'}`, async t => {
+for (const evidence of ['argv', 'kernel']) for (const resume of [true, false]) {
+  test(`an exited file's delayed native guard (${evidence}) ${resume ? 'drains before the survivor audit' : 'still fails when it cannot drain'}`, async t => {
+    if (evidence === 'kernel' && process.platform !== 'darwin') return t.skip('Darwin kernel argv-loss observation');
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'fixture-guard-drain-'));
     const file = path.join(root, 'complete.test.mjs'), ready = path.join(root, 'ready.json');
     const release = path.join(root, 'finish'), journal = path.join(root, 'timings.jsonl');
@@ -305,8 +320,31 @@ test('completed file with a delayed guard',async()=>{
   fs.writeFileSync(${JSON.stringify(ready)},JSON.stringify({file:process.pid,guard:ownFixtureLifetime()}));
   while(!fs.existsSync(${JSON.stringify(release)}))await new Promise(resolve=>setTimeout(resolve,10));
 });`);
-    const child = spawnScenarioChild(t, process.execPath, [local('./helpers/run.mjs'), file],
-      { env: { ...process.env, MONITOR_TEST_TIMINGS_PATH: journal } });
+    const env = { ...process.env, MONITOR_TEST_TIMINGS_PATH: journal };
+    if (evidence === 'kernel') {
+      // Deterministically expose the saved Darwin exit observation while the
+      // real guard is stopped. Never synthesize absence, birth or argv refusal:
+      // the actual process must disappear before the runner can pass.
+      const adapter = path.join(root, 'kernel-command.mjs');
+      fs.writeFileSync(adapter, `import cp from 'node:child_process';
+import fs from 'node:fs'; import path from 'node:path';
+import {syncBuiltinESMExports} from 'node:module';
+const original=cp.spawnSync;
+cp.spawnSync=function(command,...args){
+  const result=original.call(this,command,...args);
+  if(command.includes('/process-source-')&&result.status===0&&fs.existsSync(${JSON.stringify(ready)})){
+    const receipt=JSON.parse(fs.readFileSync(${JSON.stringify(ready)}));
+    const rows=result.stdout.trimEnd().split('\\n').map(JSON.parse);
+    for(const row of rows)if(row.pid===receipt.guard.pid&&row.ppid===1&&row.command===receipt.guard.command)
+      row.command='['+path.basename(process.env.HERDR_FIXTURE_LIFETIME_EXECUTABLE).slice(0,16)+']';
+    result.stdout=rows.map(row=>JSON.stringify(row)).join('\\n')+'\\n';
+  }
+  return result;
+};
+syncBuiltinESMExports();`);
+      env.NODE_OPTIONS = `${env.NODE_OPTIONS ?? ''} --import=${JSON.stringify(adapter)}`;
+    }
+    const child = spawnScenarioChild(t, process.execPath, [local('./helpers/run.mjs'), file], { env });
     let finished;
     waitForExit(child).then(result => { finished = result; });
     await until(() => fs.existsSync(ready) || finished, 'file did not publish its guard');
@@ -323,6 +361,9 @@ test('completed file with a delayed guard',async()=>{
       'runner did not join the exited file guard');
     assert.ok(timings().some(row => row.kind === 'fixture-guard-drain' && row.guards.some(row => row.pid === guard.pid)),
       finished?.stdout + finished?.stderr);
+    const observed = timings().find(row => row.kind === 'fixture-guard-drain').guards.find(row => row.pid === guard.pid);
+    assert.equal(observed.command, evidence === 'kernel' ?
+      `[${path.basename(process.env.HERDR_FIXTURE_LIFETIME_EXECUTABLE).slice(0, 16)}]` : guard.command);
     assert.equal(snapshot().get(guard.pid)?.ppid, 1);
     assert.equal(finished, undefined, 'runner completed before the stopped guard drained');
     if (resume) assert.equal(tracker.killProcess(owned[0], 'SIGCONT').signaled, true);
@@ -334,7 +375,7 @@ test('completed file with a delayed guard',async()=>{
       assert.match(result.stderr, new RegExp(`Surviving fixture: PID ${guard.pid}, command `));
     }
     await until(() => !alive(owned).length, 'runner did not reap its delayed guard');
-    t.diagnostic(JSON.stringify({ resumed: resume, exit_code: result.code, guard: guard.pid,
+    t.diagnostic(JSON.stringify({ evidence, resumed: resume, exit_code: result.code, guard: guard.pid,
       drain_observed: true }));
   });
 }

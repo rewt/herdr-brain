@@ -186,6 +186,7 @@ test('engineering-idle shares closeout deferrals and rechecks current cleanup de
   for(const id of ['DEC-1','DEC-2','DEC-3','DEC-4','DEC-5','DEC-6'])assert.ok(dispatchInput({state,events,item:state.items.get(id),org:f.org,identity}),id);
   assert.deepEqual(observation.ready,['DEC-5','DEC-6'],'only the current cleanup defect and ordinary manual decision count');
   const options={repo:f.repo,org:f.org,env:f.env,observation,route:'engineer',after:1,audit:'fixture audit',effects:'fixture effects'};
+  const release=noticeLock(path.join(f.service().directory,'pass.lock'));t.after(release);
   const result=completeHaltPass({...options,pass:'current-defect'});
   assert.equal(result.dispatch,true,'the transactional recheck uses the same closeout policy');
   const repair=fold(loadEvents(f.org).events).items.get(result.item);assert.match(repair.meta.scope,/ready items DEC-5, DEC-6/);

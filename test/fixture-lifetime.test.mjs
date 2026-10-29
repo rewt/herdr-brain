@@ -317,7 +317,9 @@ for (const evidence of ['argv', 'kernel']) for (const resume of [true, false]) {
 import fs from 'node:fs';
 import {ownFixtureLifetime} from ${JSON.stringify(local('./helpers/fixture-lifetime.mjs'))};
 test('completed file with a delayed guard',async()=>{
-  fs.writeFileSync(${JSON.stringify(ready)},JSON.stringify({file:process.pid,guard:ownFixtureLifetime()}));
+  // Publish complete JSON before the runner's process-source adapter can read it.
+  fs.writeFileSync(${JSON.stringify(ready + '.tmp')},JSON.stringify({file:process.pid,guard:ownFixtureLifetime()}));
+  fs.renameSync(${JSON.stringify(ready + '.tmp')},${JSON.stringify(ready)});
   while(!fs.existsSync(${JSON.stringify(release)}))await new Promise(resolve=>setTimeout(resolve,10));
 });`);
     const env = { ...process.env, MONITOR_TEST_TIMINGS_PATH: journal };

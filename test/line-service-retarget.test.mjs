@@ -130,8 +130,20 @@ test('recipient history survives migration, later retargets, upgrade and rollbac
 });
 
 test('new installs default to their actual canonical supervisor and validate an explicit recipient',async t=>{
-  const f=await fixture(t);fs.unlinkSync(f.file);fs.unlinkSync(f.installationFile);fs.unlinkSync(f.stop);
-  const args=['install','--repo',f.cwd,'--org',f.org,'--herdr','/saved/bin/herdr','--socket','/saved/native.sock'];
-  assert.throws(()=>f.main([...args,'--to','absent-agent'],f.options),/recipient/);assert.equal(fs.existsSync(f.file),false);
-  const result=f.main(args,f.options);assert.equal(result.recipient,f.agent.name);assert.equal(parsePlist(f.file).ProgramArguments[8],f.agent.name);
+  // Start genuinely fresh: deleting an installation while retaining its
+  // cutoff/UNKNOWN effects is no longer an authorized initialization path.
+  const f=configFixture(t,{custom:true}),org=f.env.ORG_DIR;
+  fs.writeFileSync(path.join(f.cwd,'.herdr-release.json'),'{"release":"compatible"}\n');f.git('add','.herdr-release.json');f.git('commit','-qm','Accept release');
+  const agent=f.observation.agents[0],directory=lineDirectory(org,gitProject(f.cwd).identity),file=path.join(directory,'service.plist');
+  const options={cwd:f.cwd,home:f.installationHome,
+    env:{...f.env,HERDR_ENV:'1',HERDR_PANE_ID:agent.pane_id,HERDR_WORKSPACE_ID:agent.workspace_id,CODEX_THREAD_ID:agent.agent_session.value},
+    call:(_exe,args)=>JSON.stringify({result:{agent:[agent.pane_id,agent.name].includes(args[2])?agent:null}}),
+    command:(_exe,args)=>args[0]==='print'?{status:113,stderr:'Could not find service in domain'}:{status:0,stdout:''}};
+  const {main}=await import(pathToFileURL(path.join(f.bundle,'line-service/launchd.mjs')).href);
+  const args=['install','--repo',f.cwd,'--org',org,'--id','recipient-install','--herdr','/saved/bin/herdr','--socket','/saved/native.sock'];
+  assert.throws(()=>main([...args,'--to','absent-agent','--dry-run'],options),/recipient/);assert.equal(fs.existsSync(directory),false);
+  const preview=main([...args,'--dry-run'],options),explicit=main([...args,'--to',agent.name,'--dry-run'],options);
+  assert.equal(preview.expected_plan,explicit.expected_plan);assert.equal(fs.existsSync(directory),false);
+  const result=main([...args,'--to',agent.name,'--expected-plan',explicit.expected_plan],options);
+  assert.equal(result.installation.recipient,agent.name);assert.equal(parsePlist(file).ProgramArguments[8],agent.name);
 });

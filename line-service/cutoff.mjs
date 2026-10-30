@@ -35,7 +35,7 @@ export function lineContext(repo,org) {
 export function installedContext(repo,org) {
   const c=lineContext(repo,org),file=path.join(c.directory,'installation.json'),installation=regularJSON(file);
   if(!installation||installation.repo!==c.repo||installation.org!==c.org||fs.realpathSync(installation.source)!==developmentRoot||installation.file!==path.join(c.directory,'service.plist')||installation.node!==process.execPath||installation.target!==`gui/${process.getuid()}/dev.herdr.line.${path.basename(c.directory)}`)throw Error('service installation binding is UNKNOWN');
-  if(installation.migration)serviceCutoff(loadEvents(c.org).events,{repo:c.repo,org:c.org,identity:c.identity});
+  if(installation.migration||installation.fresh_install)serviceCutoff(loadEvents(c.org).events,{repo:c.repo,org:c.org,identity:c.identity});
   return {...c,installation,installationFile:file};
 }
 const reject=message=>{throw Object.assign(Error(message),{code:'REVIEW_CUTOFF'});};
@@ -46,7 +46,7 @@ export function serviceCutoff(events,{repo,org,identity}) {
   if(e.repo!==repo||!Number.isSafeInteger(e.seq)||e.seq<1||!e.id||!/^[a-f0-9]{40}(?:[a-f0-9]{24})?$/.test(e.canonical_head??'')||!e.main)reject('service cutover binding is UNKNOWN');
   const directory=lineDirectory(org,identity),installation=regularJSON(path.join(directory,'installation.json'));
   const changes=recipientChanges(events,{repo,org,identity,directory});
-  if(e.source!==developmentRoot||installation?.migration||events.some(row=>row.type==='line-service.runtime-upgraded'&&row.project===identity&&row.org===org)){
+  if(e.mode==='accepted-release-install'||e.source!==developmentRoot||installation?.migration||events.some(row=>row.type==='line-service.runtime-upgraded'&&row.project===identity&&row.org===org)){
     if(!installation||installation.source!==developmentRoot||installation.repo!==repo||installation.org!==org)reject('service cutover binding is UNKNOWN');
     migratedCutover(events,{repo,org,identity,directory,installation,cutover:e});
   }else if(changes.length){

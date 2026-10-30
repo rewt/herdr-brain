@@ -15,6 +15,8 @@ import {nativeSender} from '../messages/operator-inbox.mjs';
 import {noticeLock} from '../supervisor/notice-lock.mjs';
 import {acquireLock} from '../lanes/promotion-lock.mjs';
 import {retargetService,liveRecipient} from './retarget.mjs';
+import {installRelease} from './install.mjs';
+import {bundleRelease} from '../lib/releases.mjs';
 
 import {launchPlist} from './plist.mjs';
 export {launchPlist} from './plist.mjs';
@@ -30,9 +32,14 @@ export function main(argv = process.argv.slice(2), { command = spawnSync,call:na
     } });
   const action = positionals[0];
   if (positionals.length !== 1 || !['install','migrate','upgrade','retarget', 'restart', 'status', 'stop', 'revert'].includes(action) || !v.repo) throw Error('name install|migrate|upgrade|retarget|restart|status|stop|revert and --repo CANONICAL');
-  if(!['migrate','upgrade'].includes(action)&&(v.id||v['expected-plan']))throw Error('--id/--expected-plan apply only to migrate/upgrade');
-  if(!['migrate','upgrade','retarget'].includes(action)&&v['dry-run'])throw Error('--dry-run applies only to migrate/upgrade/retarget');
+  if(!['install','migrate','upgrade'].includes(action)&&(v.id||v['expected-plan']))throw Error('--id/--expected-plan apply only to install/migrate/upgrade');
+  if(!['install','migrate','upgrade','retarget'].includes(action)&&v['dry-run'])throw Error('--dry-run applies only to install/migrate/upgrade/retarget');
   if(action!=='upgrade'&&(v['from-root']||v['target-root']||v.rollback))throw Error('--from-root/--target-root/--rollback apply only to upgrade');
+  if(action==='install'&&(bundleRelease().commit||v['dry-run']||v.id||v['expected-plan'])){
+    if(v.commit)throw Error('install does not accept revert commits');
+    return installRelease({repo:v.repo,org:v.org??findOrgDir({cwd:v.repo,env:{...env,ORG_DIR:''}}),id:v.id,to:v.to,herdr:v.herdr,socket:v.socket,interval:v.interval,
+      dryRun:v['dry-run'],expectedPlan:v['expected-plan'],command,call:nativeCall,home,cwd,env});
+  }
   if(action==='retarget'){
     if(!v.to||v.herdr||v.socket||v.interval||v.commit)throw Error('retarget needs --to and preserves all other saved bindings');
     return retargetService({repo:v.repo,org:v.org??findOrgDir({cwd:v.repo,env:{...env,ORG_DIR:''}}),to:v.to,dryRun:v['dry-run'],command,call:nativeCall,home,cwd,env});

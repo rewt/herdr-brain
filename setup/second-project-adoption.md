@@ -10,11 +10,10 @@ directory, record, native supervisor, workspace, line and saved watchers.
 | --- | --- | --- | --- |
 | Q1: workspace and standard-slot enrollment | `record adopt` enrolls the existing invoking canonical native supervisor and its workspace, with KEEP plus observed-adoption controller evidence. It does not create the workspace or enroll arbitrary other occupied tabs. Missing chat creation has a separate scoped authorization. | `node "$ADOPTION_PRODUCT/bin/org.mjs" adopt . --inspect --expires "$ADOPTION_EXPIRY"`, then `adopt . --scope "$ADOPTION_SCOPE" --decision "$ADOPTION_ANSWER"` | Existing command in rc-20261030-98002dc75c. Native bootstrap / additional occupied-slot selection gap: ENG-1093, no carrying release yet. |
 | Q2: default triage holds | No native enforcement/materialization/activation adapter can satisfy these requirements today. A committed home Workspace containing only chat/supervisor is a supported narrower scope; existing explicit resources remain requirements. | Generate the composition below, commit it, then `node "$ADOPTION_PRODUCT/setup/setup.mjs" plan --project "$ADOPTION_PROJECT"` | Scoping already in rc-20261030-98002dc75c. Automatic initial scope: ENG-1094, no carrying release yet. |
-| Q3: canonical native owner and line recipient | An actual distinct native supervisor in the new canonical project is required. A name, shell `cd`, actor or inherited pane is insufficient. Existing install accepts that owner / a same-project live recipient, but there is no Brain native bootstrap or fresh release-only line initialization. | After its supported development-source cutover, `node "$ADOPTION_PRODUCT/line-service/launchd.mjs" install --repo "$ADOPTION_PROJECT" --org "$ORG_DIR" --to "$ADOPTION_SUPERVISOR" --herdr "$ADOPTION_HERDR" --socket "$HERDR_SOCKET_PATH"`; see limits below | Ownership/install guards in rc-20261030-98002dc75c. Bootstrap: ENG-1093. Release-only initialization/install preview: ENG-1095. Neither fix has a carrying release yet. |
+| Q3: canonical native owner and line recipient | An actual distinct native supervisor in the new canonical project is required. A name, shell `cd`, actor or inherited pane is insufficient. Fresh release installation now has an exact plan/apply path; apply records the actual canonical cutoff and starts one job. | `launchd.mjs install --id initial-line --dry-run`, then the identical command with `--expected-plan SHA256`; exact bindings below | ENG-1095 source extension; requires a qualified READY release containing it. The audited rc-20261030-98002dc75c does not contain it. Native bootstrap remains ENG-1093. |
 
-This documentation correction ships in the next qualified release containing
-its landed commit. It adds no runtime onboarding capability. The follow-ups are
-filed, unselected work, not a promise that a later release already implements them.
+Use a qualified release containing each required extension. Source changes and
+fixture checks do not prove live adoption or acceptance of a carrying release.
 
 ## Enroll an existing supervisor
 
@@ -164,29 +163,52 @@ bch-cloak session for the rehearsal repo. Omit `--to` to select the installing
 canonical native owner, or explicitly name a real same-project recipient.
 Preserve all old project sessions, recipients, watchers and jobs.
 
-There is **no supported fresh release-only line install sequence** on the audited
-release. `launchd install` requires `serviceCutoff`; `cutoff --initialize` rejects
-installed bundles and requires matching canonical development source. For an
-owner separately authorized to use development source, the existing initializer
-is (run inside the new project's actual canonical native session):
+For Q3, select the exact accepted READY installed release containing ENG-1095,
+then run inside the new project's actual canonical native supervisor session.
+The audited release named above predates this extension. Do not set a development
+source override or run `cutoff --initialize` to simulate a release installation.
+The project must have clean canonical main, an accepted explicit release pin,
+no project STOP/HOLD, no retained service configuration, cutoff or UNKNOWN
+installation, and no loaded job for this project's exact launchd target.
 
 ```sh
-HERDR_BRAIN_ROOT=/Users/rewt/development/rewt/herdr-brain \
-  "$ADOPTION_NODE" /Users/rewt/development/rewt/herdr-brain/line-service/cutoff.mjs \
-  --repo "$ADOPTION_PROJECT" --org "$ORG_DIR" \
-  --id rehearsal-initial-line-boundary --initialize
+ADOPTION_PRODUCT=/ABS/installed/releases/QUALIFIED_RELEASE_WITH_ENG_1095
+"$ADOPTION_NODE" "$ADOPTION_PRODUCT/line-service/launchd.mjs" install \
+  --repo "$ADOPTION_PROJECT" --org "$ORG_DIR" --id initial-line \
+  --herdr "$ADOPTION_HERDR" --socket "$HERDR_SOCKET_PATH" --interval 30 \
+  --dry-run > /tmp/rehearsal-line-plan.json
+ADOPTION_LINE_PLAN=$("$ADOPTION_NODE" --input-type=module -e \
+  'import fs from "node:fs"; console.log(JSON.parse(fs.readFileSync(process.argv[1],"utf8")).expected_plan)' \
+  /tmp/rehearsal-line-plan.json)
+# Inspect the full plan and its recipient, transport, runtime and cutoff first.
+"$ADOPTION_NODE" "$ADOPTION_PRODUCT/line-service/launchd.mjs" install \
+  --repo "$ADOPTION_PROJECT" --org "$ORG_DIR" --id initial-line \
+  --herdr "$ADOPTION_HERDR" --socket "$HERDR_SOCKET_PATH" --interval 30 \
+  --expected-plan "$ADOPTION_LINE_PLAN"
+"$ADOPTION_NODE" "$ADOPTION_PRODUCT/line-service/launchd.mjs" status \
+  --repo "$ADOPTION_PROJECT" --org "$ORG_DIR"
 ```
 
-That command records an immutable actual canonical-main boundary and starts no
-runtime. The owner would then install with the **same development source** using
-the table's install command with `ADOPTION_PRODUCT` set to that source, and later
-use the supported [stopped-service migration](../line-service/README.md#move-a-stopped-development-source-service-to-an-accepted-release)
-to its accepted release. This is a development bootstrap, not a release-only
-solution or authorization to start it. No such effects were performed here.
+Omitting `--to` selects that actual native owner. If selecting another live
+same-project recipient, add the same `--to NAME` to both commands. Preview reads
+the exact target's launchd status but writes no config, receipt, lock, record or
+service directory and performs no launchd mutation. The redirected JSON file
+above is a caller-owned inspection artifact, not an installation receipt.
+
+Apply rechecks the plan under control, pass, promotion and record locks. The
+supported writer retains an exclusive immutable install intent and records
+`line-service.cutover` at actual canonical main, then writes bindings and calls
+bootstrap once. No historical/Phase0 boundary or development migration is
+invented. A changed record, source, native owner/recipient, transport or plan
+refuses apply; capture a new preview only if there is no retained attempt.
+Partial or refused installs remain fenced, with the original intent and any
+cutoff/config/STOP retained. Do not replace them, retry under another ID, edit
+receipts or replay bootstrap. Completed fresh installs use the existing
+stop/restart, retarget and release-upgrade controls; no migration is needed.
+Saved workers/watchers, pins, other project lines and UNKNOWN jobs are untouched.
+Only disposable fixtures were exercised for this change; no live adoption or
+release build was performed.
 
 `fleet join` has no dry run and only registers discovery/config; it does not
-create native ownership or standard-slot enrollment. `launchd install --dry-run`
-is rejected; dry-run exists only for migrate/upgrade/retarget. Do not use a real
-join or install as a preview, invent an installation/cutover event, or pretend
-an existing stopped-service migration initializes a fresh project. ENG-1095
-owns the smallest release-only initialization and install-preview extension.
+create native ownership or standard-slot enrollment. The new install preview
+does not enroll sessions, change pins or authorize any other project's effects.

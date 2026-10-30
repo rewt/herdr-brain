@@ -131,9 +131,11 @@ restart either stopped line service.
 For a fresh second project, read the
 [adoption runbook](../setup/second-project-adoption.md#canonical-native-owner-and-line-installation)
 before installing. An existing supervisor in another repository cannot authorize
-the new project's install. `install` has no dry run and requires a recorded
-cutover; the current cutover initializer requires development source, so a fresh
-release-only installation is not yet supported.
+the new project's install. A fresh accepted READY release supports
+`install --id ID --dry-run`, followed by the identical binding options and
+`--expected-plan SHA256`. Its supported apply writer records the actual canonical
+landing cutoff and bootstraps once, without a development-source migration.
+The runbook gives exact commands; use a qualified release containing ENG-1095.
 
 The operator approved the whole Phase1 implementation on 2026-10-26. Source
 landing and offline checks do not claim live acceptance. Brain must first prove
@@ -143,12 +145,14 @@ Then BCH's own supervisor performs the same proof. No Fera or public effects.
 
 Each model-free launchd pass uses the existing record, native dispatch, route,
 claim, closeout queue and transport. It never promotes another owner's work or
-calls a model API. The supervisor installs from committed canonical development
-source with pinned Node20.19.4, actual native path/socket and its own project.
+calls a model API. The supervisor uses its accepted installed release (or the
+existing committed canonical development-source controls), pinned Node20.19.4,
+actual native path/socket and its own project.
 BCH effects belong only to BCH's supervisor. No pins, saved consumers, old
 watchers, claims or retained ambiguous/native-refused attempts are replaced.
 
 ```sh
+# Existing development-source install after its supported cutoff initialization:
 node line-service/launchd.mjs install --repo /OWN/CANONICAL --org /OWN/RECORD --to PROJECT_SUPERVISOR --herdr /ABS/herdr --socket /ACTUAL/herdr.sock
 node line-service/launchd.mjs status --repo /OWN/CANONICAL
 node line-service/launchd.mjs stop --repo /OWN/CANONICAL
@@ -158,6 +162,13 @@ node line-service/launchd.mjs restart --repo /OWN/CANONICAL
 For a new install, omitting `--to` selects the actual canonical native supervisor
 performing the install. An explicit recipient must also resolve to a live named
 agent in that project through the selected Herdr executable and socket.
+Release install preview writes nothing and requires fresh service state. Apply
+retains `installs/ID.json` before any configuration or launchd effect, under the
+existing control/pass/promotion/record guards. A partial or refused attempt is
+UNKNOWN and cannot be replaced or replayed, including under another ID. It keeps
+its intent, cutoff, configuration and STOP; source landing/fixtures do not grant
+live activation authority. Completed fresh installs participate directly in
+runtime and recipient history, including later upgrades and rollback.
 
 Stop writes this service's STOP and boots out its exact saved job. Restart proves
 the saved job absent and archives its STOP before one bootstrap. Refusal or

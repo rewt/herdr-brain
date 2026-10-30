@@ -9,6 +9,7 @@ import {setup,events,effects,selectCurrentCleanup} from './helpers/closeout-fixt
 import {refreshCloseouts} from '../lib/closeout-consumer.mjs';
 import {currentCloseoutEntries,unresolvedCloseoutEffect} from '../lib/closeout.mjs';
 import {reconcileCloseoutBacklog} from '../lib/closeout-backlog.mjs';
+import {settleVacantCloseouts} from '../lib/closeout-vacancy.mjs';
 import {gitProject} from '../lib/project.mjs';
 import {fold} from '../lib/state.mjs';
 import {runCloseoutTurn,CLOSEOUT_TURN_BUDGET_MS} from '../line-service/closeout-turn.mjs';
@@ -50,6 +51,21 @@ test('BCH old bound missing-folder hold settles current vacancy while keeping hi
   assert.equal(row.completed,true);assert.equal(row.completion_kind,'current-vacancy');assert.equal(row.native_completion,false);
   assert.equal(row.resources.folder.preservation,'UNKNOWN');assert.deepEqual(effects(f),[]);
   assert.deepEqual(f.drain({keys:[target.key],retrySafe:true}).evaluated,[]);
+});
+
+test('BCH legacy target at another cwd does not bind an absent allocation',t=>{
+  const f=setup(t,{occupied:false,direct:true,merged:true});selectCurrentCleanup(f);f.report();
+  const rows=events(f),run=rows.find(e=>e.type==='run.started'),target=rows.find(e=>e.type==='report.ingested').closeout_targets[0];
+  assert.equal(run.meta.dispatch_project,undefined);assert.equal(rows.some(e=>e.type==='run.claimed'),false);
+  assert.equal(target.run,run.id);assert.equal(target.cwd,run.workspace);
+  target.cwd=path.join(f.scratch,'another-allocation');
+  fs.writeFileSync(f.eventFile,rows.map(e=>JSON.stringify(e)+'\n').join(''));
+  f.git(['worktree','remove',f.lane]);f.git(['branch','-d','lane/topic']);f.state.workspaces=[];f.save();
+  const before=fs.readFileSync(f.eventFile),calls=f.herdrCalls(),actions=f.read().actions;
+  assert.deepEqual(settleVacantCloseouts({project:gitProject(f.repo),org:f.org,events:rows,state:fold(rows),guard:()=>{},
+    observe:()=>assert.fail('an unbound run must not reach native observation')}),[]);
+  assert.deepEqual(fs.readFileSync(f.eventFile),before);
+  assert.deepEqual(f.herdrCalls(),calls);assert.deepEqual(f.read().actions,actions);assert.deepEqual(effects(f),[]);
 });
 
 test('BCH legacy project claim settles an absent allocation without a dispatch binding or target',t=>{

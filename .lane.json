@@ -84,6 +84,13 @@
       "effort": "high",
       "args": [],
       "use": "Legacy name retained for Claude Opus high review; no default max or xhigh review."
+    },
+    "plan-review-max": {
+      "kind": "claude",
+      "model": "opus",
+      "effort": "max",
+      "args": [],
+      "use": "Claude Opus max review of a written plan, only when the operator asks for it (operator 2026-10-29 21:2x, ENG-1045); no suites. Never a routine code review default."
     }
   }
 }

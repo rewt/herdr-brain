@@ -160,6 +160,47 @@ test('ordinary admission selected wave starts concurrently up to the build pool 
   for(const item of ['ENG-13','ENG-90','ENG-91'])assert.equal(f.context().state.items.get(item).closed,null);
 });
 
+test('ordinary admission recovery starts the next selected item as the line while held reserved and backlog work stay pending',t=>{
+  const f=fixture(t,{reported:false});
+  f.add([{type:'item.closed',id:'ENG-1',as:'done'},
+    {type:'item.added',id:'G-9',kind:'goal',title:'Held branch',meta:{hold:true}},
+    {type:'item.added',id:'ENG-10',role:'engineer',title:'Next selected',meta:{queue_selected:true}},
+    {type:'item.added',id:'ENG-11',role:'engineer',title:'Own hold',priority:99,meta:{queue_selected:true,hold:true}},
+    {type:'item.added',id:'ENG-12',role:'engineer',title:'Reserved',priority:98,meta:{queue_selected:true,operator_reserved:true}},
+    {type:'item.added',id:'ENG-13',role:'engineer',parent:'G-9',title:'Inherited hold',priority:97,meta:{queue_selected:true}},
+    {type:'item.added',id:'ENG-90',role:'engineer',title:'Unflagged backlog',priority:999},
+    {type:'item.added',id:'ENG-91',role:'engineer',title:'Explicit veto',priority:998,meta:{queue_selected:false}}]);
+  ordinaryPolicy(f,{});admissionPolicy(f,{});
+  const before=inspectReviewAdmission({repo:f.cwd,org:f.org,env:f.env}),launches=[];
+  const s=admissionService(f,{haltAfter:100,command:(_exe,args,options)=>{
+    if(!args[0].endsWith('/dispatch/dispatch.mjs'))return{status:0,stdout:'{}',stderr:''};
+    assert.equal(options.env.ORG_ACTOR,'line-service');
+    launches.push(args[1]);assert.equal(args[1],'ENG-10');
+    // Native launching is an adapter here. Record the start using the actor the
+    // line actually passes to dispatch; this is never a live-consumer start.
+    transact(f.org,()=>({add:[{type:'run.started',id:'R-10',item:args[1],workspace:f.cwd,
+      meta:{dispatch_project:f.identity}}]}),{actor:options.env.ORG_ACTOR});
+    return{status:0,stdout:JSON.stringify({result:'dispatched',run:'R-10'}),stderr:''};
+  }});
+  s.pass();assert.deepEqual(launches,[]);
+  assert.ok(diagnostics(f).some(row=>row.item==='ENG-10'&&row.code==='REVIEW_ADMISSION_ORDINARY_HELD'));
+  setConfig('review_admission.hold_ordinary','false',{cwd:f.cwd,env:f.env,who:'fixture owner releases ordinary hold'});
+  const after=inspectReviewAdmission({repo:f.cwd,org:f.org,env:f.env});
+  assert.deepEqual(after.policy,{...before.policy,hold_ordinary:false},'exact review allowlists are retained');
+  s.pass();assert.deepEqual(launches,['ENG-10']);
+  const {events,state}=f.context(),starts=events.filter(e=>e.type==='run.started'&&e.id==='R-10');
+  assert.equal(starts.length,1);assert.equal(starts[0].by,'line-service');
+  for(const id of ['ENG-11','ENG-12','ENG-13','ENG-90','ENG-91']){
+    const item=state.items.get(id);assert.equal(item.closed,null,id);assert.deepEqual(item.runs,[],id);
+    assert.ok(after.candidates.some(row=>row.item===id),`${id} remains visible in inspection`);
+  }
+  const held=JSON.parse(fs.readFileSync(path.join(f.directory,'effects.json'))).ordinary_admission.held;
+  assert.ok(held.some(row=>row.item==='ENG-90'&&row.code==='ORDINARY_ADMISSION_NOT_SELECTED'));
+  assert.ok(held.some(row=>row.item==='ENG-91'&&row.code==='ORDINARY_ADMISSION_DESELECTED'));
+  t.diagnostic(JSON.stringify({witness:'ordinary-admission-recovery',starts:starts.map(({id,item,by})=>({id,item,by})),
+    retained:['ENG-11','ENG-12','ENG-13','ENG-90','ENG-91'],native:'stubbed; installed consumer recovery remains unrun'}));
+});
+
 test('ordinary admission rereads policy and selection after capacity without starting a stale or failed attempt',t=>{
   for(const change of ['policy','flag','ancestor']){
     const f=fixture(t,{reported:false});f.add([{type:'item.closed',id:'ENG-1',as:'done'},

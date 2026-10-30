@@ -111,6 +111,40 @@ Disable or unset `ordinary_admission` to restore the legacy selection rule,
 including unflagged non-proposal items. No new record event or fold change is
 needed; older folds continue reading the same item metadata.
 
+### Diagnosing few automatic starts
+
+Bind the diagnosis to the consumer's installed runtime and owning config home,
+then follow an actual `review-admission-held` row in `passes.jsonl` to the
+corresponding policy decision. `REVIEW_ADMISSION_ORDINARY_HELD` is an explicit
+project freeze, even when an item's own selection flag is true. Queue class and
+priority change ordering; they cannot override that freeze. Removing a scheduling
+delay cannot remove it either.
+
+Older releases without `ordinary_admission` select unflagged non-proposal
+backlog by default. A consumer waiting for selected-only support may therefore
+deliberately retain the blanket ordinary hold. The compatible fix is the
+default-off selected-only policy above, followed by the owning consumer's
+authorized policy application. A preview that still shows the review hold is
+evidence of the remaining freeze; it does not authorize lifting it. Inspect all
+own `queue_selected:true` items before application: `items` is additive to those
+flags, so a named set cannot cap stale explicit selections.
+
+Separate three observations: installed-release refusal, isolated source recovery,
+and actual installed consumer recovery. The focused `ordinary admission recovery`
+control records a start with the actor passed by the line to its dispatch adapter,
+while own/inherited holds, reserved work and excluded backlog stay pending. Its
+native launch is stubbed; it cannot stand for a consumer's real start or soak.
+Keep scheduling evidence with its owner instead of repeating unrelated checks.
+
+For a live comparison, use the lifecycle measurement's fixed window and explicit
+actor declarations. Count actual `run.started` events by their actor, and retain
+unknown actors and allocated-but-unbound starts separately. A supervisor start
+does not become a line start because the line later closes it. Over the next
+roughly ten ordinary units, report both the all-start denominator and the eligible
+selected cohort, with every hold, capacity wait and manual rescue explained.
+The share alone cannot distinguish a deliberate freeze from scheduler starvation.
+Consumer pin/activation and that live witness remain with their existing owners.
+
 ## Scheduling and owned commands
 
 `pass.lock` protects scheduling and the single `effects.json` writer. Before

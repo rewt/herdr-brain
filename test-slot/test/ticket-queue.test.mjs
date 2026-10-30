@@ -230,7 +230,7 @@ firing('2: SIGKILL leaves a gone head that ESRCH removes even with denied start-
   assert.deepEqual(f.queue(), []);
 });
 
-firing('3: an EPERM/unknown head blocks until its own expiresAt', async t => {
+test('3: an EPERM/unknown head blocks until its own expiresAt', async t => {
   const f = fixture(t);
   const peer = f.start(['-e', `require('fs').writeFileSync(${JSON.stringify(f.file('peer-ready'))},'ready');setInterval(()=>{},1000);`]);
   await until(() => fs.existsSync(f.file('peer-ready')), 'peer process');
@@ -242,8 +242,17 @@ firing('3: an EPERM/unknown head blocks until its own expiresAt', async t => {
   const status = await f.start(['--input-type=module', '-e', `import fs from 'node:fs';${denySource(peer.child.pid, { eperm: true })}
     process.argv = [process.execPath, ${JSON.stringify(CLI)}, 'status', '--lock-path', ${JSON.stringify(f.lock)}];await import(${JSON.stringify(MODULE)});`]).done;
   assert.equal(JSON.parse(status.stdout).queue[0].state, 'unknown');
-  await until(() => fs.existsSync(next.ready), 'expired head to stop blocking');
-  assert.ok(Date.parse(JSON.parse(fs.readFileSync(next.ready, 'utf8')).acquiredAt) >= expires, 'no separate shorter unknown-ticket cap');
+  // This fixture writes directly: existence can precede the complete JSON.
+  // Wait for the content without a wall cap, but fail if its writer exits.
+  let acquired;
+  for (;;) {
+    try { acquired = JSON.parse(fs.readFileSync(next.ready, 'utf8')); break; }
+    catch (error) { if (error.code !== 'ENOENT' && !(error instanceof SyntaxError)) throw error; }
+    assert.equal(next.child.exitCode, null, 'next worker exited before publishing its holder');
+    assert.equal(next.child.signalCode, null, 'next worker was signalled before publishing its holder');
+    await sleep(10);
+  }
+  assert.ok(Date.parse(acquired.acquiredAt) >= expires, 'no separate shorter unknown-ticket cap');
   assert.equal(f.queue().includes(head.name), false);
   assert.equal(peer.child.exitCode, null, 'expiration works while the pid still exists');
   await f.stop(next);

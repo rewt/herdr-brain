@@ -433,7 +433,9 @@ test('phase1 owes every landed build commit after the boundary even after item c
 
 test('phase1 settled-history scan uses two Git index reads for thousands of old reports',t=>{
   const f=fixture(t),c=f.context(),state=fold(c.events),old=c.run;
-  state.runs.clear();for(let n=1;n<=2035;n++)state.runs.set(`R-${n}`,{...old,id:`R-${n}`,report:{...old.report,artifacts:[`Commit: ${f.base}`]}});
+  const boundary=phase0Boundary(c.events,c);
+  // Settled history predates adoption; a new report citing old source remains diagnostic.
+  state.runs.clear();for(let n=1;n<=2035;n++)state.runs.set(`R-${n}`,{...old,id:`R-${n}`,report:{...old.report,seq:boundary.seq-1,artifacts:[`Commit: ${f.base}`]}});
   let reads=0;const found=discoverChanges({...c,state,readGit:(repo,args)=>{reads++;return f.git(args,repo);}});
   assert.equal(found.changes.length,0);assert.equal(found.holds.length,0);assert.equal(reads,2);
 });

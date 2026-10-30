@@ -362,6 +362,9 @@ test('new reuse is refused; a saved fix round can reuse a stopped worker, fresh 
   const continued=f.show(second.run),previous=f.show(first.run);
   assert.equal(continued.meta.continuation_of,first.run);assert.equal(continued.meta.same_session,true);
   assert.equal(continued.meta.agent_session_id,previous.meta.agent_session_id);
+  r=f.start();assert.equal(r.status,1,r.stderr);assert.equal(JSON.parse(r.stdout).code,'DISPATCH_LANE_OCCUPIED');
+  assert.deepEqual(f.show(f.item).runs,[first.run,second.run],'an open fix round still owns the lane');
+  fs.writeFileSync(report,`---\nrun: ${second.run}\noutcome: done\nsummary: Fix round complete\n---\n`);f.rec(['ingest',report]);
   r=f.start();assert.equal(r.status,0,r.stderr);assert.notEqual(JSON.parse(r.stdout).agent,first.agent);
   fs.writeFileSync(path.join(f.repo,'.lane.json'),JSON.stringify({routes:{engineer:{kind:'codex',model:'changed',effort:'high'}}}));
   const changed=savedReuse(f,first.run),runs=f.show(f.item).runs,calls=f.calls().length,jobs=f.jobs().length;

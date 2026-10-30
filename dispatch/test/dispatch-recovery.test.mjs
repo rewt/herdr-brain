@@ -71,7 +71,12 @@ process.exit(result.status??1);
     fs.writeFileSync(hook.PAUSE_RELEASE, 'go');
     await until(() => fs.existsSync(ready));
     const writer = JSON.parse(fs.readFileSync(ready));
-    assert.equal(writer.parent, first.child.pid);
+    // Mutation helpers now keep the record writer below a measured-activity
+    // foreground owner. Killing its coordinator must still retain the child.
+    const foreground=lookupProcess(writer.parent);
+    assert.equal(foreground.ok,true,foreground.error);
+    assert.equal(foreground.value?.ppid,first.child.pid);
+    assert.match(foreground.value.command,/foreground-command\.mjs --owned-command/);
     journal = f.jobs().find(file => JSON.parse(fs.readFileSync(file)).item === f.item);
     const pending = JSON.parse(fs.readFileSync(journal));
     assert.equal(pending.stage, 'starting'); assert.equal(pending.run, null);
@@ -350,9 +355,13 @@ test('retry pins routes across config edits and detects a replaced occupant',t=>
   r=f.dispatch(['--retry',job.run]);assert.equal(r.status,1);assert.match(r.stderr,/occupant identity changed/);assert.equal(promptCalls(f).length,1);
 });
 test('base moves a clean reused lane only by fast-forward; dirty lane is preserved',t=>{
-  const f=fixture(t);assert.equal(f.start().status,0);
+  const f=fixture(t),first=f.start();assert.equal(first.status,0,first.stderr);
+  const finish=run=>{const report=path.join(f.root,'base-report.md');
+    fs.writeFileSync(report,`---\nrun: ${run}\noutcome: done\nsummary: Base round complete\n---\n`);f.rec(['ingest',report]);};
+  finish(JSON.parse(first.stdout).run);
   fs.writeFileSync(path.join(f.repo,'second'),'second');f.git(['add','second']);f.git(['commit','-m','base advance']);
   let r=f.start(['--base','main']);assert.equal(r.status,0,r.stderr);assert.equal(f.git(['rev-parse','HEAD'],path.join(f.root,'lane')),f.git(['rev-parse','main']));
+  finish(JSON.parse(r.stdout).run);
   fs.writeFileSync(path.join(f.root,'lane','dirty'),'dirty');r=f.start(['--base','main']);assert.equal(r.status,1);assert.match(r.stderr,/clean lane/);
 });
 test('lost record start result is visible and recovered without starting a second run',t=>{

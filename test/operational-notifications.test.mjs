@@ -105,13 +105,13 @@ test('operational report left before intake is reconciled without a watcher avai
   assert.ok(notes(f,job.run).some(s=>s.includes('[org-report]')&&s.includes('outcome=blocked')));
 });
 
-test('operational older report gets a visible current-run refusal without being assigned to its successor',t=>{
+test('operational older report ingests on its original run while its successor remains unreported',t=>{
   const f=notificationFixture(t),job=start(f),report=f.writeReport(job.run),bytes=fs.readFileSync(report);
   f.add([{type:'run.started',id:'R-2',item:f.item,workspace:f.lane}]);
-  const turn=f.turn();assert.ok(turn.errors.some(e=>e.run===job.run&&/current run changed/.test(e.reason)));
-  assert.equal(f.state().runs.get(job.run).report,null);assert.equal(f.state().runs.get('R-2').report,null);
+  const turn=f.turn();assert.deepEqual(turn.errors,[]);assert.equal(turn.ingested,1);
+  assert.equal(f.state().runs.get(job.run).report.outcome,'done');assert.equal(f.state().runs.get('R-2').report,null);
   const checkpoint=JSON.parse(fs.readFileSync(path.join(f.directory,'closeout-turn.json')));
-  assert.ok(checkpoint.errors.some(e=>e.run===job.run&&e.stage==='ingest'&&/current run changed/.test(e.reason)));
+  assert.deepEqual(checkpoint.errors,[]);
   assert.deepEqual(fs.readFileSync(report),bytes);assert.ok(fs.existsSync(f.lane));
 });
 

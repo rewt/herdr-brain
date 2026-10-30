@@ -138,7 +138,7 @@ function closeoutTurn({project,org,cli,guard,env=process.env,maxSteps=8,budgetMs
     if(state.turn%4===0){refresh();observed=read();}
     // The finite owner also owns missing-producer/refusal visibility. Register
     // exact waits before selection; an owned next stage remains ordinary progress.
-    planTransaction(org,events=>{
+    if(!expired())planTransaction(org,events=>{
       guard();code.verify();
       const owned=currentCloseoutEntries(project.identity,org,events,{onInvalid:()=>{}});
       return{add:owned.flatMap(entry=>{

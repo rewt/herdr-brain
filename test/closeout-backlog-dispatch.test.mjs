@@ -14,6 +14,7 @@ import {createLineService} from '../line-service/line-service.mjs';
 
 test('held closeout classification preserves its queued resolver and the line open-unknown count',t=>{
   const f=setup(t,{direct:true,bound:true});selectCurrentCleanup(f);f.report();
+  fs.writeFileSync(path.join(f.scratch,'.identity-root'),'fixture\n');
   const entry=currentCloseoutEntries(f.common,f.org,events(f))[0];
   const [evaluation]=f.append([{type:'closeout.evaluated',identity:f.common,key:entry.key,source:entry.source,
     run:entry.run,item:entry.item,revision:entry.source.seq,completed:false,
@@ -22,7 +23,8 @@ test('held closeout classification preserves its queued resolver and the line op
     run:entry.run,item:entry.item,revision:evaluation.revision,wait_id:closeoutWaitId(entry,evaluation),
     waiting:{owner:'line-service',defect:'Recorded native refusal has stopped this effect',producers:[]}}]);
   f.append([{type:'item.added',id:'DEC-1',role:'decision',title:'Resolve the original cleanup refusal',
-    meta:{queue_selected:true,route:'unblock',uncertain_outcome:{check:{key:`closeout:${entry.key}`,
+    meta:{queue_selected:true,route:'unblock',uncertain_outcome:{
+      key:createHash('sha256').update(JSON.stringify([f.common,f.org,`closeout:${entry.key}`])).digest('hex'),check:{key:`closeout:${entry.key}`,
       subject:{key:entry.key,source:entry.source,item:entry.item}}}}}]);
   const before=events(f),bytes=fs.readFileSync(f.eventFile),calls=f.herdrCalls(),gitCalls=f.gitCalls(),actions=f.read().actions;
   const rows=reconcileCloseoutBacklog({project:gitProject(f.repo),org:f.org,events:before,guard:()=>{}});
@@ -46,6 +48,8 @@ test('held closeout classification preserves its queued resolver and the line op
   const pass=log.findLast(e=>e.action==='pass-complete');
   assert.equal(pass.unknown_open,1);assert.equal(pass.unknown_settled,0);assert.equal(pass.classified_retained,0);
   assert.equal(pass.starts,0);assert.ok(commands.every(({exe,args})=>exe===process.execPath&&args[0].endsWith('/supervisor/closeout.mjs')&&args[1]==='refresh'),JSON.stringify(commands));
+  assert.deepEqual([...fold(events(f)).items.values()].filter(i=>i.meta.uncertain_outcome).map(i=>i.id),['DEC-1'],
+    'the existing resolver is reused without creating a duplicate');
   assert.deepEqual(JSON.parse(fs.readFileSync(path.join(service.directory,'closeout-turn.json'),'utf8')).errors,[]);
   assert.deepEqual(fs.readFileSync(f.eventFile).subarray(0,bytes.length),bytes,'all original rows remain byte-identical');
   assert.deepEqual(events(f).slice(0,before.length),before);

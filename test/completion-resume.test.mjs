@@ -12,6 +12,7 @@ import { fold } from '../lib/state.mjs';
 import { fold as olderFold } from './fixtures/state-v0.mjs';
 import { sessionBindFact } from './helpers/session-bind.mjs';
 import { readReport } from '../lib/report.mjs';
+import { spawnChild, waitForExit } from './helpers/child.mjs';
 
 const session = '01a173a6-8116-7051-a945-b630511218dd';
 const source = path.resolve(import.meta.dirname, '..');
@@ -52,7 +53,8 @@ for (const harness of ['codex', 'claude']) for (const late of [false, true]) {
 // Native adapters assert Brain's original-cwd/UUID contract while retaining a
 // transcript. Git, record intake, retirement, lane reopening, dispatch guards
 // and prompt/watch orchestration below are the actual product code. No models.
-function resumeAdapters(f, harness, transcript, nullNative) {
+function resumeAdapters(t, f, harness, transcript, nullNative) {
+  const watcher=spawnChild(t,process.execPath,['-e','setInterval(()=>{},1000)'],{stdio:'ignore'});
   const calls = path.join(f.scratch, 'resume-calls.jsonl'), worker = path.join(f.scratch, 'resumed-worker.json');
   const common = `import fs from 'node:fs';import {spawnSync} from 'node:child_process';
 const a=process.argv.slice(2),calls=${JSON.stringify(calls)},file=${JSON.stringify(worker)};
@@ -97,13 +99,13 @@ if(a[0]==='agent'&&a[1]==='prompt'){
   const watch = path.join(f.scratch, 'resume-watch.mjs');
   fs.writeFileSync(watch, `#!${process.execPath}\n` + common + `
 const {ownerIdentity}=await import(${JSON.stringify(new URL('../lib/process-owner.mjs', import.meta.url).href)});
-emit({pid:process.ppid,identity:ownerIdentity(process.ppid),log:${JSON.stringify(path.join(f.scratch, 'watch.log'))}});
+emit({pid:${watcher.pid},identity:ownerIdentity(${watcher.pid}),log:${JSON.stringify(path.join(f.scratch, 'watch.log'))}});
 `, { mode: 0o755 });
-  return { lane, watch, calls };
+  return { lane, watch, calls, watcher };
 }
 
 for (const harness of ['codex', 'claude']) for (const integrated of [false, true]) {
-  test(`${harness}: close and resume at the recorded path from ${integrated ? 'main' : 'the kept branch'}, delivering the new task and supervisor watch`, t => {
+  test(`${harness}: close and resume at the recorded path from ${integrated ? 'main' : 'the kept branch'}, delivering the new task and supervisor watch`, async t => {
     const f = setup(t, { direct: true, merged: integrated });
     const all = events(f), run = all.find(e => e.type === 'run.started');
     Object.assign(run.meta, { harness, agent_session_id: session });
@@ -138,7 +140,7 @@ for (const harness of ['codex', 'claude']) for (const integrated of [false, true
     assert.throws(() => resumeSource({ ...input, harness: harness === 'codex' ? 'claude' : 'codex' }), /harness differs/);
     assert.throws(() => resumeSource({ ...input, lane: 'another' }), /original recorded lane/);
     assert.throws(() => resumeSource({ ...input, item: { id: 'ENG-2' } }), /another item/);
-    const adapters = resumeAdapters(f, harness, transcript, integrated);
+    const adapters = resumeAdapters(t, f, harness, transcript, integrated);
     const brief = path.join(f.scratch, 'resume-ask.md'); fs.writeFileSync(brief, 'Resume task sentinel');
     const dispatch = spawnSync(process.execPath, [path.join(source, 'dispatch/dispatch.mjs'), 'ENG-1', '--repo', f.repo,
       '--org', f.org, '--lane', 'topic', '--route', 'engineer', '--brief', brief, '--resume-session', session,
@@ -167,6 +169,7 @@ for (const harness of ['codex', 'claude']) for (const integrated of [false, true
     assert.ok(calls.indexOf(watcher)<calls.indexOf(ai),'supervisor watcher precedes command-line delivery');
     fs.writeFileSync(path.join(f.lane, 'unsaved'), 'keep owner changes');
     assert.throws(() => resumeSource({ ...input, events: events(f) }), /unsaved author work/);
+    const stopped=waitForExit(adapters.watcher);assert.equal(adapters.watcher.kill('SIGTERM'),true);await stopped;
   });
 }
 

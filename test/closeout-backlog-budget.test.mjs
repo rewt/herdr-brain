@@ -36,6 +36,8 @@ test('backlog reconciliation shares the turn deadline, keeps partial progress an
   assert.ok(result.backlog_reconcile_ms>0);
   assert.equal(JSON.parse(fs.readFileSync(path.join(directory,'closeout-turn.json'))).backlog_reconcile_ms,result.backlog_reconcile_ms);
   assert.equal(events(f).some(e=>e.type==='closeout.wait-classified'),false);
+  assert.deepEqual(events(f).filter(e=>e.type==='closeout.waiting'),before.filter(e=>e.type==='closeout.waiting'),
+    'an expired turn cannot register another wait after skipping backlog reconciliation');
 
   // Spend the allowance during one completed observation. Commit that row,
   // then stop before inspecting the next wait or folding allocations again.

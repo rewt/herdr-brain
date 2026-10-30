@@ -189,7 +189,8 @@ test('a reaped general-pass owner recovers on wake while live and unidentified o
 });
 
 for(const registered of [true,false])test(`finite refusal decision is owned once across turns and general passes (${registered?'registered':'missing'} wait)`,t=>{
-  const f=fixture(t);fs.writeFileSync(path.join(f.scratch,'.identity-root'),'fixture');f.report();
+  const f=fixture(t);fs.writeFileSync(path.join(f.scratch,'.identity-root'),'fixture');
+  fs.writeFileSync(f.file,JSON.stringify({...f.receipt,at:new Date().toISOString()}));f.report();
   const entry=currentCloseoutEntries(f.common,f.org,events(f))[0];
   const [refusal]=f.append([{type:'closeout.evaluated',identity:f.common,key:entry.key,source:entry.source,
     run:entry.run,item:entry.item,revision:closeoutRevision(entry,events(f)),completed:false,reason:'EPERM native refusal'}]);

@@ -157,7 +157,7 @@ test('dispatch journals memory and final admission gates and mirrors allowlisted
   assert.deepEqual(extra, admission.map(e => ({ ...e, run: job.run })));
   for (const e of [...metadata, ...extra]) {
     assert.deepEqual(Object.keys(e), ['at', 'run', 'item', 'lane', 'kind', 'outcome']);
-    assert.equal(e.item, f.item); assert.equal(e.lane, 'topic');
+    assert.equal(e.item, f.item); assert.equal(e.lane, `topic-${f.item.toLowerCase()}`);
   }
 });
 

@@ -17,6 +17,7 @@ import { createRetirement } from '../lib/retire-runtime.mjs';
 import { readyLane } from '../lib/closeout.mjs';
 import { retirementHold } from '../lib/retire-hold.mjs';
 import { recordInitialShell, claimInitialShell, initialShellLock, recordLaneOpen } from '../lib/initial-shell.mjs';
+import { dispatchTabLabel } from '../lib/lane-name.mjs';
 import { loadTimeout, admissionDeadline } from '../lib/deadline.mjs';
 import { waitForMemory } from '../lib/memory.mjs';
 import { waitForProvingHold, RESERVATION_WAIT_EXPIRED_CODE } from '../test-slot/reservations.mjs';
@@ -1279,7 +1280,7 @@ async function dispatch(topic, promptText, options = {}) {
   catch (error) { process.stderr.write(`${error.message}; dispatch will use a separate tab\n`); initial = undefined; }
   let pane = initial?.pane, tabId = initial?.tabId;
   if (initial === undefined) {
-    const tabArgs = ["tab", "create", "--workspace", workspaceId, "--label", `agent:${topic}`, "--no-focus"];
+    const tabArgs = ["tab", "create", "--workspace", workspaceId, "--label", dispatchTabLabel(topic, launchRequest?.item), "--no-focus"];
     if (options.capturedHead || options.expectedHead) tabArgs.push('--cwd', path);
     for (const pair of resolved.env) tabArgs.push("--env", pair);
     checkLaunch();
@@ -1576,7 +1577,7 @@ async function dispatch(topic, promptText, options = {}) {
   }
   // A retained failed dispatch must still look like the initial shell. Rename
   // only after environment readiness, agent/cwd checks, delivery and recording.
-  if (initial !== undefined && herdrJson(["tab", "rename", tabId, `agent:${topic}`], { deadline: options.deadline }) === undefined) {
+  if (initial !== undefined && herdrJson(["tab", "rename", tabId, dispatchTabLabel(topic, launchRequest?.item)], { deadline: options.deadline }) === undefined) {
     fail(`partial success: live agent '${agentName}' was recorded, but initial tab ${tabId} could not be renamed; do not replay dispatch`);
   }
   if (!options.silent) {

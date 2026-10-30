@@ -38,6 +38,7 @@ import { createWorkerBrief, validateWorkerBrief, validateLineExecution, compatib
 import {outcomeFailure} from '../lib/uncertain-outcome.mjs';
 import {claimRetirementOwner} from '../lib/closeout.mjs';
 import {recordDispatchCompletion} from './completion.mjs';
+import { dispatchLaneName } from '../lib/lane-name.mjs';
 
 const local = (file) => fileURLToPath(new URL(file, import.meta.url));
 const { values: opt, positionals } = parseArgs({ usage: "Usage: node dispatch/dispatch.mjs ITEM --lane TOPIC --route ROUTE --brief FILE [OPTIONS] | --retry R-n|JOURNAL | --status R-n|JOURNAL\nAdmission counts running native workers/reviewers and durable uncertain starts under dispatch.max_sessions. Unlanded lifecycle history is diagnostic only. --from-run retains same-item/current-run guards; --unblocks records a genuine landing dependency and never bypasses native capacity.", allowPositionals: true, options: {
@@ -488,6 +489,8 @@ async function main() {
     // Validate item, target and launch route before opening a lane or starting a run.
     const item = json(record(['show', positionals[0], '--json']));
     if (Object.hasOwn(item, 'item') || !Array.isArray(item.runs)) throw new Error('dispatch ITEM must be an item, not a run');
+    const existingLanes = new Set(git(['for-each-ref', '--format=%(refname)', 'refs/heads/lane/'], repo).split('\n'));
+    opt.lane = dispatchLaneName(opt.lane, item.id, { existing: Boolean(opt['resume-session']) || existingLanes.has(`refs/heads/lane/${opt.lane}`) });
     let reviewQueue;
     if (isQueueReview(item)) {
       if (opt.reuse || opt['from-run'] || opt.unblocks) throw Error('queued review cannot replace/reuse a source item review');

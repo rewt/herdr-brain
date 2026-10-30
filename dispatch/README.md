@@ -35,6 +35,16 @@ short landing line. Routine unmarked landings stay silent. Retry keeps the recor
 metadata and does not re-arm a notification cleared with `meta.notify=none`;
 these flags belong only to a new dispatch request.
 
+For a new lane, dispatch appends the owning item ID to `--lane` when it is
+missing: `--lane dispatch` on `ENG-71` becomes `dispatch-eng-71`. An ID already
+present as a complete hyphen-delimited component is kept (for example
+`line-eng-71-1`). Long topics are shortened with a topic digest while retaining
+the full item ID and the lane length limit. Existing lane branches keep their
+names; saved requests, retries and resumed allocations keep their recorded
+lane identity. Newly launched Herdr tabs show `agent:<lane> [ENG-71]` on both
+the initial-tab and separate-tab paths, including launches into older lanes.
+Existing tabs, worktrees and branches are never renamed by this policy.
+
 `--base REF` opens from that ref and fast-forwards a reused lane only when clean.
 It never rebases, pushes, or makes merge commits. `lane prepare` runs for both new
 and reused lanes. Git common-directory identity owns the request; no registry

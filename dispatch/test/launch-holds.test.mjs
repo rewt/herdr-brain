@@ -7,6 +7,7 @@ import {fixture,promptCalls,RECORD} from './dispatch-fixture.mjs';
 import {makeFixture,ignoreLaneState,openLane,writeFakeHerdr,lane,git} from '../../lanes/test/lane-fixture.mjs';
 import {bundleRelease} from '../../lib/releases.mjs';
 import {launchDigest} from '../launch-guard.mjs';
+import {initialShellFile} from '../../lib/initial-shell.mjs';
 
 const addParent=(f)=>{
   const ancestor=f.rec(['add','Ancestor','--goal']).match(/G-\d+/)[0];
@@ -115,10 +116,10 @@ test('a superseding run after watcher preparation prevents the old prompt',t=>{
   assert.equal(effects(f).length,1);assert.equal(promptCalls(f).length,0);
 });
 
-function nativeFixture(t,{staleClaim=false}={}){
+function nativeFixture(t,{staleClaim=false,initial=false,topic='launch-holds'}={}){
   const f=makeFixture({main:'main',validate:'true',routes:{engineer:{kind:'codex'}}});
   t.after(()=>f.cleanup());ignoreLaneState(f);
-  const topic='launch-holds',workspace=openLane(f,topic),org=path.join(f.root,'org');
+  const workspace=openLane(f,topic),org=path.join(f.root,'org');
   f.env.ORG_DIR=org;
   const rec=args=>{
     const r=spawnSync(process.execPath,[RECORD,...args],{cwd:f.repo,env:f.env,encoding:'utf8'});
@@ -137,7 +138,11 @@ function nativeFixture(t,{staleClaim=false}={}){
   if(staleClaim)rec(['claim',run,'--controller','other','--transfer-from','brain','--why','Fixture transfer before the pending intent',
     '--expected-owner',JSON.stringify(job.ownership.owner),'--expected-generation',String(job.ownership.generation)]);
   const bytes=JSON.stringify(job);fs.writeFileSync(journal,bytes);
-  const fake=writeFakeHerdr(f,{lanePath:workspace,branch:`lane/${topic}`,initiallyOpened:true});
+  const fake=writeFakeHerdr(f,{lanePath:workspace,branch:`lane/${topic}`,initiallyOpened:!initial});
+  if(initial){
+    f.env.FAKE_HERDR_INITIAL_RECEIPT='1';
+    f.env.FAKE_HERDR_INITIAL_FILE=initialShellFile(common,'w-lane:t1');
+  }
   const dispatch=(prompt)=>lane(f,['dispatch',topic,'--route','engineer','--json','--dispatch-journal',journal,'--dispatch-sha256',launchDigest(bytes),...(prompt?['Deliver once']:[])]);
   const mutate=(marker,commands)=>{
     const file=path.join(f.bin,'herdr'),source=fs.readFileSync(file,'utf8');assert.ok(source.includes(marker));
@@ -146,6 +151,20 @@ function nativeFixture(t,{staleClaim=false}={}){
   };
   return {f,rec,ancestor,item,run,job,journal,fake,dispatch,mutate};
 }
+
+for(const initial of [false,true])for(const topic of ['launch-holds','launch-holds-eng-1'])
+test(`record dispatch labels the ${initial?'initial':'separate'} tab with its item in lane ${topic}`,t=>{
+  const x=nativeFixture(t,{initial,topic}),before=git(x.job.workspace,['branch','--show-current']);
+  const result=x.dispatch();assert.equal(result.status,0,result.stderr);
+  const calls=x.fake.calls(),label=`agent:${topic} [${x.item}]`;
+  if(initial)assert.deepEqual(calls.find(a=>a[0]==='tab'&&a[1]==='rename'),['tab','rename','w-lane:t1',label]);
+  else{
+    const created=calls.find(a=>a[0]==='tab'&&a[1]==='create');
+    assert.equal(created[created.indexOf('--label')+1],label);
+  }
+  assert.equal(git(x.job.workspace,['branch','--show-current']),before);
+  assert.equal(JSON.parse(fs.readFileSync(x.journal)).lane,topic);
+});
 
 for(const change of ['hold','close','reserved'])test(`native agent start rechecks an ancestor ${change} after shell setup`,t=>{
   const x=nativeFixture(t),args=change==='close'?['close',x.ancestor]:['set',x.ancestor,`meta.${change==='hold'?'hold':'reserved'}=true`];

@@ -324,7 +324,7 @@ for (const configured of [false, true]) test(`worker prompt preserves the final 
   fs.writeFileSync(configFile, JSON.stringify({ ...config, archive: { dirs: ['docs/reports', '../evidence'] } }));
   const r=f.start(['--report','docs/reports/round.md','--extra','Fix round: inspect the review.']);assert.equal(r.status,0,r.stderr);
   const result=JSON.parse(r.stdout),run=f.show(result.run);
-  assert.deepEqual([run.meta.route,run.meta.harness,run.meta.model,run.meta.effort,run.meta.lane],['engineer','codex','model-a','high','topic']);
+  assert.deepEqual([run.meta.route,run.meta.harness,run.meta.model,run.meta.effort,run.meta.lane],['engineer','codex','model-a','high',`topic-${f.item.toLowerCase()}`]);
   assert.equal(run.meta.agent,result.agent);assert.equal(run.meta.pane,result.pane);
   assert.equal(run.report_path,path.join(f.root,'lane','docs/reports/round.md'));
   assert.equal(run.meta.watcher_pid,result.watcher.pid);
@@ -336,7 +336,7 @@ for (const configured of [false, true]) test(`worker prompt preserves the final 
   assert.equal(Object.hasOwn(JSON.parse(fs.readFileSync(job.routeConfig)), 'archive'), false, 'route snapshots stay routing-only');
   const calls=f.calls(),watch=calls.findIndex(x=>x.type==='watch'),prompt=calls.findIndex(x=>x.a[1]==='prompt');assert.ok(watch<prompt);
   assert.equal(job.base, f.git(['rev-parse','HEAD']), 'new requests freeze their resolved source base');
-  assert.deepEqual(calls.find(x=>x.type==='lane'&&x.a[0]==='open').a, ['open','topic',job.base,'--git-only']);
+  assert.deepEqual(calls.find(x=>x.type==='lane'&&x.a[0]==='open').a, ['open',run.meta.lane,job.base,'--git-only']);
   assert.match(promptCalls(f)[0].a[3],new RegExp(result.run));assert.ok(promptCalls(f)[0].a[3].includes(run.brief_path));
   assert.ok(promptCalls(f)[0].a[3].includes(run.report_path));assert.match(promptCalls(f)[0].a[3],/Fix round/);
   assert.match(promptCalls(f)[0].a[3], /Run only the ask's or explicit --extra scope's focused check selection once through.*check --cmd 'COMMAND' on the clean committed candidate/);

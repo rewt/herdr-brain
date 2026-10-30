@@ -166,7 +166,7 @@ for (const scenario of [
   f.fail('');
   if (scenario.allocated) {
     const lane = path.join(f.root, 'lane');
-    f.git(['worktree', 'add', '-b', 'lane/topic', lane, 'HEAD']);
+    f.git(['worktree', 'add', '-b', `lane/${job.lane}`, lane, 'HEAD']);
     job.workspace = fs.realpathSync(lane);
     if (scenario.stage === 'open') {
       f.git(['commit', '--allow-empty', '-m', 'requested base advances']);

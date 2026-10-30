@@ -30,7 +30,7 @@ function save() {
 }
 function result(r) { process.stdout.write(JSON.stringify(r)+'\\n'); }
 function git(args) { const r=spawnSync('git',args,{encoding:'utf8'}); if(r.status) throw new Error(r.stderr); return r.stdout.trim(); }
-const entry=()=>git(['worktree','list','--porcelain']).split('\\n\\n').find(x=>x.includes('branch refs/heads/lane/topic'))?.split('\\n')[0].slice(9);
+const entry=()=>git(['worktree','list','--porcelain']).split('\\n\\n').find(x=>x.split('\\n').includes('branch refs/heads/lane/'+a[1]))?.split('\\n')[0].slice(9);
 if(type==='org') {
  if(fail==='after-prompt' && a[0]==='note' && a[2]?.startsWith('Dispatch: prompt sent')) {console.error('lost process after saved delivery');process.exit(1);}
  if(process.env.TEST_TIMING_FAILURE && a[0]==='set' && /^(dispatch_waits|dispatch_admission_waits)=/.test(a[2]??'')) { console.error('injected timing set failure');process.exit(1); }
@@ -39,7 +39,7 @@ if(type==='org') {
  process.exit(r.status??1);
 } else if(type==='lane') {
  if(fail===a[0]) { console.error('injected '+fail); process.exit(1); }
- if(a[0]==='open') git(['worktree','add','-b','lane/'+a[1],path.join(root,'lane'),a.slice(2).find(x=>!x.startsWith('--'))??'HEAD']);
+ if(a[0]==='open') git(['worktree','add','-b','lane/'+a[1],path.join(root,fs.existsSync(path.join(root,'lane'))?'lane-'+a[1]:'lane'),a.slice(2).find(x=>!x.startsWith('--'))??'HEAD']);
  if(a[0]==='prepare' && !entry()) process.exit(1);
  if(a[0]==='prepare' && process.env.TEST_MEMORY_WORKER_PRESSURE) fs.writeFileSync(process.env.TEST_MEMORY_FILE,JSON.stringify({available:128*1024**2,swap_used:0}));
  if(a[0]==='dispatch') {
@@ -228,6 +228,9 @@ function sessionCapSetting(f, cap) {
 // before lane preparation, with its reuse run as that dispatcher persisted it;
 // --retry then exercises the retained saved-request reuse contract.
 function savedReuse(f, reuse, args = [f.item, '--lane', 'topic', '--route', 'engineer', '--brief', f.brief]) {
+  // Reuse scenarios target the original allocation, including cross-item ones.
+  args = [...args];
+  if (args[args.indexOf('--lane') + 1] === 'topic') args[args.indexOf('--lane') + 1] = f.show(reuse).meta.lane;
   const before = new Set(fs.existsSync(path.join(f.org, 'dispatch')) ? f.jobs() : []);
   f.fail('prepare'); const r = f.dispatch(args); f.fail('');
   assert.equal(r.status, 1, r.stderr);

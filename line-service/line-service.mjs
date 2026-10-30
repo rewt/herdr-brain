@@ -106,6 +106,16 @@ export function routeFor(item, config) {
   return route;
 }
 
+function closeoutOrHold(closeout, log) {
+  try { return closeout(); }
+  catch (error) {
+    const evidence = { ...(error.code !== undefined ? { code: error.code } : {}),
+      ...(error.receipt !== undefined ? { receipt: error.receipt } : {}) };
+    log({ action: 'closeout-held', reason: error.message, ...evidence });
+    return { held: error.message, ...evidence };
+  }
+}
+
 export function createLineService({ repo, org, to, herdr = 'herdr', env = process.env, command = foregroundCommand,
   recordNotice = recordLineNotice, wakeDecision = enqueueNamedDecision, capacity, identify = gitProject, now = () => new Date().toISOString(),
   childTimeoutMs=120000,maxStarts,maxStepsPerStage=8,passBudgetMs=480000,alertAfter=3,haltAfter=Number(env.HERDR_LINE_HALT_PASSES??3),workClock=()=>performance.now(),runtimeHome,closeoutMeasure }) {
@@ -177,7 +187,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
   function pass() {
     const closeoutStarted=workClock();
     let closeout_ms;
-    try { closeout(); } catch(error) { log({action:'closeout-held',reason:error.message}); }
+    try { closeoutOrHold(closeout, log); }
     finally {
       closeout_ms=Math.max(0,workClock()-closeoutStarted);
       log({action:'closeout-timing',duration_ms:closeout_ms,budget_ms:CLOSEOUT_TURN_BUDGET_MS});
@@ -622,7 +632,9 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
 // its own finite child. Every wake reconciles closeout even during long review.
 // pass.lock and the existing action journal still serialize all general work.
 export function wakeLineService({service,launch}){
-  const closeout=service.closeout();
+  // A held closeout grants no authority over its effect. The general child
+  // retains its own fresh identity, STOP/HOLD, source and admission guards.
+  const closeout=closeoutOrHold(()=>service.closeout(),row=>service.log(row));
   let general,release;
   try{release=(service.acquirePass??(()=>noticeLock(path.join(service.directory,'pass.lock'))))();}
   catch(error){

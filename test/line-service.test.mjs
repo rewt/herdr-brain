@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { createLineService, sourceRoot, reviewAttempt, serviceDirectory, routeFor } from '../line-service/line-service.mjs';
+import { createLineService, wakeLineService, sourceRoot, reviewAttempt, serviceDirectory, routeFor } from '../line-service/line-service.mjs';
 import { launchPlist } from '../line-service/launchd.mjs';
 import { noticeLock } from '../supervisor/notice-lock.mjs';
 import { gitProject } from '../lib/project.mjs';
@@ -430,6 +430,61 @@ test('STOP, HOLD and an incomplete tail prevent all effects', t => {
   fs.mkdirSync(path.join(f.repo, '.lane/supervisor'), { recursive: true }); fs.writeFileSync(path.join(f.repo, '.lane/supervisor/HOLD'), 'hold'); assert.match(s.pass().held, /HOLD/);
   fs.unlinkSync(path.join(f.repo, '.lane/supervisor/HOLD')); fs.appendFileSync(path.join(f.org, 'events.jsonl'), '{'); assert.match(s.pass().held, /tail/);
   assert.equal(f.calls.length, 0);
+});
+test('wake closeout failure is durable before independent admission in the same invocation', t => {
+  const f=fixture(t),ready=f.add('Independent ready work'),s=f.service({closeoutMeasure:()=>{}});
+  const checkpoint=path.join(s.directory,'closeout-turn.json'),bytes='{';fs.writeFileSync(checkpoint,bytes);
+  const audit=()=>fs.readFileSync(path.join(s.directory,'passes.jsonl'),'utf8').trim().split('\n').map(JSON.parse);
+  let launches=0;
+  const wake=wakeLineService({service:s,launch:()=>{
+    launches++;
+    assert.equal(audit().filter(row=>row.action==='closeout-held').length,1,'failure is durable before admission');
+    return s.pass();
+  }});
+  assert.equal(launches,1);assert.equal(wake.result,'line-wake-complete');assert.match(wake.closeout.held,/JSON/);
+  assert.equal(wake.general.result,'pass-complete');assert.deepEqual(f.calls.map(call=>call.args[1]),[ready]);
+  assert.equal(audit().filter(row=>row.action==='closeout-held'&&row.reason===wake.closeout.held).length,2,'wake and pass share error handling');
+  assert.equal(fs.readFileSync(checkpoint,'utf8'),bytes,'failed closeout checkpoint stays unchanged');
+});
+test('wake closeout failure retains its original code and command receipt before considering admission', t => {
+  const f=fixture(t),s=f.service({closeoutMeasure:()=>{}}),receipt={status:1,signal:null,stdout:'',stderr:'original native refusal',error:'EACCES'};
+  let closeouts=0,launches=0;
+  s.closeout=()=>{closeouts++;throw Object.assign(Error('closeout native refusal'),{code:'EACCES',receipt});};
+  const wake=wakeLineService({service:s,launch:()=>{
+    launches++;
+    const rows=fs.readFileSync(path.join(s.directory,'passes.jsonl'),'utf8').trim().split('\n').map(JSON.parse);
+    assert.deepEqual(rows.filter(row=>row.action==='closeout-held').map(({at,...row})=>row),
+      [{action:'closeout-held',reason:'closeout native refusal',code:'EACCES',receipt}]);
+    return{considered:true};
+  }});
+  assert.equal(closeouts,1,'the refused closeout is not retried');assert.equal(launches,1);
+  assert.deepEqual(wake.closeout,{held:'closeout native refusal',code:'EACCES',receipt});assert.equal(wake.general.considered,true);
+});
+for(const fence of ['STOP','HOLD','identity'])test(`wake closeout failure leaves the ${fence} admission fence effective`, t => {
+  const f=fixture(t);f.add('Fenced ready work');let changed=false;
+  const s=f.service({closeoutMeasure:()=>{},identify:repo=>{
+    const project=gitProject(repo);return changed?{...project,identity:project.identity+'-foreign'}:project;
+  }});
+  if(fence==='identity')changed=true;
+  else if(fence==='STOP')fs.writeFileSync(path.join(s.directory,'STOP'),'original stop');
+  else{fs.mkdirSync(path.join(f.repo,'.lane/supervisor'),{recursive:true});fs.writeFileSync(path.join(f.repo,'.lane/supervisor/HOLD'),'original hold');}
+  const reason=fence==='identity'?/identity changed/:/STOP\/HOLD/;
+  const wake=wakeLineService({service:s,launch:()=>s.pass()});
+  assert.match(wake.closeout.held,reason);assert.match(wake.general.held,reason);
+  assert.equal(f.calls.length,0);assert.equal(f.refreshes.length,0);
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(s.directory,'effects.json'))).actions,{});
+});
+test('wake closeout failure keeps an original native refusal while admitting independent work', t => {
+  const f=fixture(t),refused=f.add('Refused own effect',20),s=f.service({closeoutMeasure:()=>{}});
+  f.setFailure(JSON.stringify({error:{code:'EACCES',message:'original native refusal'}}));s.pass();
+  const journal=path.join(s.directory,'effects.json'),actions=()=>JSON.parse(fs.readFileSync(journal)).actions;
+  const key=Object.keys(actions()).find(key=>key.startsWith(`dispatch:${refused}:`)),original=actions()[key];
+  assert.equal(original.state,'held');assert.equal(original.failure.kind,'fence');assert.equal(original.failure.code,'EACCES');
+  f.setFailure(undefined);const ready=f.add('Independent eligible work');
+  fs.writeFileSync(path.join(s.directory,'closeout-turn.json'),'{');
+  const wake=wakeLineService({service:s,launch:()=>s.pass()});
+  assert.match(wake.closeout.held,/JSON/);assert.equal(wake.general.result,'pass-complete');
+  assert.deepEqual(f.calls.map(call=>call.args[1]),[refused,ready]);assert.deepEqual(actions()[key],original,'original refused effect and receipt stay immutable');
 });
 test('a real command refusal is recorded once and never re-executed on restart', t => {
   const f = fixture(t); f.add('Ready'); f.setFailure('native permission refused'); const s = f.service(); s.pass(); f.service().pass(); f.service().pass();

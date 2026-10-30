@@ -58,6 +58,13 @@ Capability holds on a `keep` row still make the plan outcome `held` (exit 1),
 while preserving that live session. Only unsupported missing logs layouts skip
 their capability requirements; native trust remains a separate advisory.
 
+For a second project, see the [adoption runbook](second-project-adoption.md):
+`record adopt` can enroll an existing canonical native supervisor. A committed
+Workspace can select chat/supervisor without declaring unsupported triage;
+neither operation supplies the missing triage adapters or bootstraps a native
+workspace. The runbook distinguishes these supported paths from release-only
+line-installation gaps.
+
 Plan outcomes are `planned`, `unchanged`, `held` or `refused`. Both commands exit
 0 for a ready/planned/unchanged result and 1 for a held/refused result or invalid
 invocation. Exit 1 often means a prerequisite needs owner attention, not a

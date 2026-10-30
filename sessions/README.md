@@ -6,8 +6,11 @@ starting adopted panes or creating never-adopted chat/supervisor positions.
 Node built-ins only. `inspect` and `plan` never mutate the controller or panes;
 owning config reads may append config-audit events after adoption. `authorize` writes only a
 scope receipt; `apply` can act only on an explicitly enrolled workspace with a
-valid receipt and fresh matching saved plan. There is no enrollment CLI, default
-apply workspace in this CLI, controller loop, background process, or record writer.
+valid receipt and fresh matching saved plan. This CLI has no enrollment verb;
+the owning canonical native supervisor can enroll its existing position through
+[`record adopt`](../setup/second-project-adoption.md#enroll-an-existing-supervisor).
+There is no default apply workspace in this CLI, controller loop, background
+process, or record writer.
 [`setup apply`](../setup/README.md#apply) composes bounded create/start steps from
 a saved workspace dry run and defaults its workspace reference to `home`.
 All model work is declared as a Herdr session on the subscription; the service
@@ -210,9 +213,12 @@ bindings or fencing other slots.
 
 `receipts.mjs` exports `readStandardSlots(common)`, `slotReceiptFile(common)` and
 `recordStandardSlot({cwd, action, uid, actor, why, slot?})`. These are offline
-storage helpers, with **no live enrollment CLI**. A future authorized enrollment
-must first prove native workspace/tab/pane ownership using the existing checks.
-Nothing in this lane writes a real receipt.
+storage helpers, not a live enrollment CLI. The foreground `record adopt`
+command uses them only after fresh native workspace/tab/pane proof and an
+attributed owner answer for its exact saved scope. Its public CLI selects the
+invoking canonical supervisor; it does not enroll arbitrary other standard tabs.
+Never call these helpers to manufacture a live enrollment receipt. See the
+[adoption runbook](../setup/second-project-adoption.md).
 
 History lives at `<git-common-dir>/sessions/standard-slots.json`, outside the
 display registry and tracked manifests. Schema `standard-slot-history/v1`

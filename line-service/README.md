@@ -128,6 +128,13 @@ restart either stopped line service.
 
 ## Phase1 source contract
 
+For a fresh second project, read the
+[adoption runbook](../setup/second-project-adoption.md#canonical-native-owner-and-line-installation)
+before installing. An existing supervisor in another repository cannot authorize
+the new project's install. `install` has no dry run and requires a recorded
+cutover; the current cutover initializer requires development source, so a fresh
+release-only installation is not yet supported.
+
 The operator approved the whole Phase1 implementation on 2026-10-26. Source
 landing and offline checks do not claim live acceptance. Brain must first prove
 one existing small item through start, land, report, review, verdict, source close,

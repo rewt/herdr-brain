@@ -5,7 +5,7 @@ import path from 'node:path';
 import { fixture, hold } from './helpers/retire-fixture.mjs';
 import { initOrg } from '../lib/store.mjs';
 import { handoffCloseout } from '../lib/closeout-handoff.mjs';
-import { publishCloseoutEvents, readCloseoutEntries, retryCloseout, retirementOwnerLock } from '../lib/closeout.mjs';
+import { publishCloseoutEvents, readCloseoutEntries, retryCloseout, retirementOwnerLock, retirementAllocationLock } from '../lib/closeout.mjs';
 import { reconcile } from '../supervisor/reconcile.mjs';
 import { acquireLock } from '../lanes/promotion-lock.mjs';
 import { closer, lanes, events, waitForChange, setup, evaluations, effects, assertRemoved, child } from './helpers/closeout-fixture.mjs';
@@ -50,7 +50,7 @@ test('an active consumer skips an unhanded landing and explicit event replay can
   f.drain(); assert.deepEqual(events(f), before);
 });
 
-test('native observation, exit and preservation preflight hold only consumer/retirement claims; Git removal alone excludes promotion', t => {
+test('native observation, exit and preservation preflight hold only consumer/allocation claims; Git removal alone excludes promotion', t => {
   const f = setup(t), command = f.options.command, log = f.options.log;
   f.report(); initOrg(f.org);
   const manifest = path.join(f.scratch, 'replay-manifest.json'), prepared = path.join(f.scratch, 'replay-prepared.json'), gate = path.join(f.scratch, 'replay-gate.log');
@@ -64,7 +64,8 @@ test('native observation, exit and preservation preflight hold only consumer/ret
   const phases = new Set();
   const checkUnlocked = phase => {
     assert.ok(fs.existsSync(path.join(f.common, 'closeout/consumer.lock')));
-    assert.ok(fs.existsSync(retirementOwnerLock(f.common)));
+    assert.equal(fs.existsSync(retirementOwnerLock(f.common)),false);
+    assert.ok(fs.existsSync(retirementAllocationLock(f.common,'lane/topic')));
     assert.equal(fs.existsSync(path.join(f.org, 'lock')), false, phase);
     assert.equal(fs.existsSync(path.join(f.common, 'lane-promote.lock')), false, phase);
     if (!phases.has(phase)) assert.equal(finish().replayed, true);

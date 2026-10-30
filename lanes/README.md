@@ -425,6 +425,25 @@ and can be replaced by a new creation with a different terminal or shell birth.
 Guarded cleanup prunes them only after fresh native absence checks; a malformed
 receipt keeps its filename-bound tab instead of the project.
 
+The closeout drain holds the project retirement owner lock only for admission
+and fresh ownership/policy checks. History scans, native exit waits and Git
+preservation/removal run under the consumer claim and a branch allocation lock
+in `retirement/allocations/`. Dispatch takes that same allocation lock before
+the project lock: a retiring branch refuses reuse with its exact lock path,
+while unrelated lanes can open and launch. Live or unknown owners are retained;
+dead-owner recovery still needs the existing process-birth proof. Releasing a
+claim never resolves an uncertain native or Git effect.
+
+For the consumer canary, retain a nonempty missing-binding backlog and delay a
+drain's native observation until an unrelated dispatch has opened and bound its
+worker. Record launch time and the drain's `owner_lock` hold timings, then rerun
+the finite turn: already classified source identities must add zero binding
+observations. Distinct old sources may each need their first observation; event
+volume alone does not establish repeated facts. Also retain a same-branch
+refusal, a live/unknown owner refusal and the proven-dead recovery control.
+`test/closeout-launch-contention.test.mjs` is the offline source witness; actual
+installed consumer/native acceptance remains with the canary/release owner.
+
 ## Commands
 
 | Command | Purpose |

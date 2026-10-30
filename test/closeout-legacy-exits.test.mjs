@@ -68,13 +68,13 @@ for(const kind of ['ordinary-unknown','unknown-git','refused'])test(`backlog ret
 
 for(const vacant of [false,true])test(`original completion between selection and evaluation reaches observation-only ${vacant?'absence':'exit'} reconciliation`,t=>{
   const f=fixture(t,{vacant}),original=events(f),rmdir=fs.rmdirSync;
-  let completed=false;
+  let completed=false,releases=0;
   // Publish the original producer's receipt immediately after selection releases
-  // queue.lock, while the drain still holds its retirement ownership lock.
+  // queue.lock. The initial queue release only publishes the consumer claim.
   const hook=t.mock.method(fs,'rmdirSync',function(directory,...args){
     const result=rmdir.call(this,directory,...args);
-    if(!completed&&directory===path.join(f.common,'closeout/queue.lock')&&
-        fs.existsSync(path.join(f.common,'retirement/owner.lock'))){
+    if(directory===path.join(f.common,'closeout/queue.lock'))releases++;
+    if(!completed&&releases===2&&directory===path.join(f.common,'closeout/queue.lock')){
       completed=true;
       assert.ok(unresolvedCloseoutEffect(f.entry,events(f)));
       f.append([{type:'closeout.effect',identity:f.common,key:f.entry.key,source:f.entry.source,

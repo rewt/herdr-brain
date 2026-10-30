@@ -116,7 +116,7 @@ function correction(t) {
   fs.writeFileSync(execution, JSON.stringify({ command_started: true, exit_code: 0, signal: null, attempts: 1 }));
   const command = 'node test/helpers/run.mjs test/codec.test.mjs';
   const gate = { schema: 'lane-validation/v1', head, command, executed: true, exit_code: 0, signal: null, outcome: 'green',
-    log: output, log_hash: createHash('sha256').update(fs.readFileSync(output)).digest('hex'), execution_receipt: execution };
+    tap_totals: [], log: output, log_hash: createHash('sha256').update(JSON.stringify(fs.readFileSync(output, 'utf8'))).digest('hex'), execution_receipt: execution };
   const save = () => { fs.writeFileSync(receipt, JSON.stringify(gate)); return createHash('sha256').update(fs.readFileSync(receipt)).digest('hex'); };
   const rows = stamp([...seed(), ...judge('FAIL'),
     { type: 'item.added', id: 'ENG-4', role: 'engineer', parent: 'REV-1', from_run: 'R-2', meta: { review_fix_of: `ENG-1:${head}`,
@@ -140,8 +140,8 @@ test('correction discharge consumes original findings and actual green receipts;
   for (const patch of [{ result: 'unrun' }, { result: undefined }, { sha256: '0'.repeat(64) }, { head: base }, { requirement: 'Unrelated control' }, { key: 'other' }]) {
     const original = { ...f.finding }; Object.assign(f.finding, patch); assert.deepEqual(intake(), [], JSON.stringify(patch)); Object.assign(f.finding, original);
   }
-  for (const patch of [{ executed: false }, { exit_code: 1 }, { outcome: 'red' }, { tap_totals: { fail: 1 } }]) {
-    const original = { ...f.gate }; Object.assign(f.gate, patch); f.finding.sha256 = f.save(); assert.deepEqual(intake(), []); Object.assign(f.gate, original); delete f.gate.tap_totals; f.finding.sha256 = f.save();
+  for (const patch of [{ executed: false }, { exit_code: 1 }, { outcome: 'red' }, { tap_totals: [{ fail: 1 }] }, { tap_totals: [{ fail: 0, cancelled: 1 }] }, { tap_totals: { fail: 0 } }]) {
+    const original = { ...f.gate }; Object.assign(f.gate, patch); f.finding.sha256 = f.save(); assert.deepEqual(intake(), []); Object.assign(f.gate, original); f.finding.sha256 = f.save();
   }
   fs.writeFileSync(f.output, 'changed'); assert.deepEqual(intake(), []);
 });

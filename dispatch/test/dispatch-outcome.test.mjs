@@ -43,12 +43,12 @@ if(process.argv[1]===${JSON.stringify(RECORD)}&&process.argv[2]==='start'&&${JSO
   };
 }
 if(process.argv[1]===${JSON.stringify(DISPATCH)}){
-  const read=fs.readFileSync;
-  fs.readFileSync=function(file,...args){
+  const open=fs.openSync;
+  fs.openSync=function(file,...args){
     if(${JSON.stringify(mode)}==='readback-unavailable'&&String(file)===${JSON.stringify(path.join(f.org, 'events.jsonl'))}&&
        fs.existsSync(${JSON.stringify(path.join(f.root, 'readback-unavailable'))})&&new Error().stack.includes('at requestStarts '))
       throw Error('injected unavailable start readback');
-    return read.call(this,file,...args);
+    return open.call(this,file,...args);
   };
   const original=cp.spawnSync;
   cp.spawnSync=function(exe,args,options){

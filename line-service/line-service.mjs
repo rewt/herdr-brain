@@ -416,11 +416,11 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
           if(reserved(item)||item.meta.hold||item.meta.held||run.report.blockers?.length||(run.report.questions??run.report.extra?.questions)?.length){
             receipt('line-service.source-completion-held',{reason:'held/reserved item or report blockers/questions',command_started:false});continue;
           }
-          const proofFor=bound=>sourceCompletionProof({project,run:bound.run,events:bound.events,git:sourceGit,identify});
+          const proofFor=bound=>sourceCompletionProof({project,org,run:bound.run,events:bound.events,state:bound.state,git:sourceGit,identify});
           const present=Boolean(fs.lstatSync(run.workspace,{throwIfNoEntry:false}));
           const bound=guardRun(run.id,{workspace:present});
           let proof;
-          try{proof=proofFor(bound);}catch(error){receipt('line-service.source-completion-held',{reason:error.message,command_started:false});continue;}
+          try{proof=proofFor(bound);}catch(error){receipt('line-service.source-completion-held',{reason:error.message,...(error.source_provenance?{source_provenance:error.source_provenance}:{}),command_started:false});continue;}
           const legacy=preEffectSourceHold(prior);
           const landed=bound.events.findLast(e=>e.type==='change.landed'&&e.project===project.identity&&e.run===run.id&&e.item===item.id&&e.landed_at&&e.producer?.ownership_generation===run.owner_generation);
           if(prior?.state==='held'&&!legacy&&(!landed||prior.source_producer_seq===landed.seq)){

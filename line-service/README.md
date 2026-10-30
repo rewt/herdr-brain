@@ -1039,3 +1039,29 @@ original producer commit authorized abandonment only with positive pre-native
 or bound unprompted evidence. Uncertain launch/delivery stays retained. New
 allocation uses the same birth-aware retirement exclusion. These source changes
 do not restart an installation, change pins, release, or prove live latency.
+
+Delivered source carries `brain.dispatch-source/v1` in the existing post-FF
+receipt: actual Git common directory, owning record, original dispatch attempt,
+workspace, run, claim generation and immutable landing base/head. Self-landing
+compares the immutable dispatch binding under the existing native/claim fence.
+No report, test or review readiness requirement is added to landing.
+
+The `brain.delivered-source/v1` read projection labels each claimed report range
+`covered`, `external` or `unknown`; `none` means no code delivery is claimed.
+Only matching typed guarded receipts cover a range. Hash containment, a matching
+remote and a clean original allocation do not prove the producing repository.
+An optional `source: HEAD; base: BASE; repository: /absolute/source/path` artifact
+retains an external repository explicitly; that text cannot grant coverage.
+Every additional explicit commit claim is checked too. Reports remain ingestible,
+and report-closeout evidence keeps the classification and original owner without
+blocking the independent guarded resource-cleanup path. A post-FF receipt failure
+keeps the actual Git landing with coverage/timing unknown; it never replays FF.
+
+Canonical diff review and guarded source coverage are separate facts. New review
+targets/verdicts carry source provenance, unknown claims do not create a
+`change.landed`, and external ranges stay held with their evidence and owner.
+Review health exposes `guarded_commits` and `uncovered_source` independently of
+diff-review totals. Existing immutable captures/receipts are retained without
+historical reattribution. Source completion holds external/unknown claimed ranges;
+planning reports need no synthetic source receipt. Release coverage remains the
+release coordinator's responsibility.

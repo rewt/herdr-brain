@@ -520,9 +520,16 @@ for(const missing of [false,true])test(`release source completion ${missing?'use
   if(missing){f.git('merge','--ff-only',head);f.git('worktree','remove',workspace);f.git('branch','-d','lane/finished');}
   const {loadRecord}=await f.module('lib/store.mjs');
   transact(f.org,()=>({add:[{type:'item.added',id:'ENG-1',kind:'work',role:'engineer',title:'Finished source',meta:{}},
-    {type:'run.started',id:'R-1',item:'ENG-1',workspace,meta:{lane:'finished',dispatch_project:f.identity}},
+    {type:'run.started',id:'R-1',item:'ENG-1',workspace,meta:{lane:'finished',dispatch_project:f.identity,dispatch_record:f.org,dispatch_attempt:'finished',dispatch_journal:path.join(f.org,'dispatch/finished.json'),agent:'finished-worker',pane:'finished-pane',worker_workspace:'finished-workspace',terminal_id:'finished-terminal',agent_session_id:'finished-session'}},
     {type:'run.claimed',run:'R-1',project:f.identity,record:f.org,owner:{controller:'brain',legacy:false,release:{id:'compatible',root:f.bundle,commit:'1'.repeat(40),identity:null}}},
     {type:'report.ingested',run:'R-1',file:'runs/R-1/report.md',sha256:'finished-report',report:{outcome:'done',artifacts:[`source: ${head}; base: ${base}`]}}]}));
+  const recordLanding=async()=>{
+    const {dispatchSourceBinding}=await f.module('lib/source-provenance.mjs'),events=loadEvents(f.org).events,run=loadRecord(f.org).state.runs.get('R-1');
+    const source={...dispatchSourceBinding({run,events,identity:f.identity,org:f.org}),base,head};
+    transact(f.org,()=>({add:[{type:'change.landed',project:f.identity,run:'R-1',item:'ENG-1',head,base,previous_main:base,landing_tip:head,landed_at:new Date().toISOString(),source,
+      producer:{agent:'finished-worker',pane:'finished-pane',terminal:'finished-terminal',session:'finished-session',ownership_generation:run.owner_generation}}]}));
+  };
+  if(missing)await recordLanding();
   const {createLineService}=await f.module('line-service/line-service.mjs');let closes=0;
   const service=createLineService({repo:f.cwd,org:f.org,to:'fixture-supervisor',runtimeHome:f.installationHome,env:f.env,maxStarts:0,haltAfter:100,closeoutMeasure:()=>{},
     recordNotice:d=>({id:d.id,state:'record-only'}),command:(exe,args,options)=>{
@@ -541,7 +548,7 @@ for(const missing of [false,true])test(`release source completion ${missing?'use
     const {preEffectSourceHold}=await f.module('line-service/source-completion.mjs');
     assert.equal(preEffectSourceHold(legacy),true);assert.equal(preEffectSourceHold({...legacy,receipt:{status:1}}),false);
     assert.equal(preEffectSourceHold({...legacy,history:[{state:'started'}]}),false);
-    f.git('merge','--ff-only',head);service.pass();
+    f.git('merge','--ff-only',head);await recordLanding();service.pass();
     assert.deepEqual(JSON.parse(fs.readFileSync(file)).actions[key],legacy);
     assert.equal(loadEvents(f.org).events.filter(e=>e.type==='line-service.source-completion-readmitted').length,1);
   }

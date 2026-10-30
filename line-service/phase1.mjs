@@ -4,6 +4,7 @@ import {observeGit} from '../lib/record-observation.mjs';
 import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
+import {deliveredSourceProof,guardedLanding} from '../lib/source-provenance.mjs';
 import {reviewScope,claimedCommitTokens,declaredSourceRanges} from '../settle/review-range.mjs';
 import {fold,extendFold,itemStatus,blockersOf,releases,isDeclined} from '../lib/state.mjs';
 import {roleIs} from '../lib/roles.mjs';
@@ -84,9 +85,12 @@ export function ensureReviewBoundary({repo,org,env=process.env}){
 // Unclaimed/unreported changes stay visible instead of vanishing from the index.
 export function canonicalReviewIndex({events,state,repo,org,identity,boundary,readGit=git}){
   boundary??=phase0Boundary(events,{repo,org,identity});
-  const tip=readGit(repo,['rev-parse',`refs/heads/${boundary.main}`]),graphRows=readGit(repo,['rev-list','--parents',`${boundary.canonical_head}..${tip}`]).split('\n').filter(Boolean),parents=new Map(graphRows.map(row=>{const [head,...p]=row.split(' ');return[head,p];})),heads=[...parents.keys()],headSet=new Set(heads),landed=new Map(),claims=new Map();
+  const tip=readGit(repo,['rev-parse',`refs/heads/${boundary.main}`]),graphRows=readGit(repo,['rev-list','--parents',`${boundary.canonical_head}..${tip}`]).split('\n').filter(Boolean),parents=new Map(graphRows.map(row=>{const [head,...p]=row.split(' ');return[head,p];})),heads=[...parents.keys()],headSet=new Set(heads),landed=new Map(),claims=new Map(),guardedHeads=new Set();
   const add=(map,head,item,run)=>{const list=map.get(head)??[];if(!list.some(v=>v.item===item&&v.run===run))list.push({item,run});map.set(head,list);};
-  for(const e of events)if(e.type==='change.landed'&&e.project===identity&&headSet.has(e.head))add(landed,e.head,e.item,e.run);
+  for(const e of events)if(e.type==='change.landed'&&e.project===identity&&headSet.has(e.head)){
+    add(landed,e.head,e.item,e.run);
+    if(e.source&&guardedLanding({event:e,run:state.runs.get(e.run),events,state,identity,org}))guardedHeads.add(e.head);
+  }
   const resolve=token=>{const found=[...heads,boundary.canonical_head].filter(h=>h.startsWith(token));return found.length===1?found[0]:null;};
   for(const run of state.runs.values())if(run.report&&roleIs(state.items.get(run.item),'ENG')){
     for(const token of claimedCommitTokens(run.report.artifacts??[])){const head=resolve(token);if(head&&headSet.has(head))add(claims,head,run.item,run.id);}
@@ -104,7 +108,7 @@ export function canonicalReviewIndex({events,state,repo,org,identity,boundary,re
   const entries=heads.map(head=>{
     const owners=landed.get(head)??claims.get(head)??[],owner=owners.length===1?owners[0]:null,item=owner&&state.items.get(owner.item),run=owner&&state.runs.get(owner.run),fix=item&&(item.meta.review_fix_of||roleIs(state.items.get(item.parent),'REV'));
     const native=owner&&nativeGroups.get(`${owner.item}:${owner.run}`);
-    return{head,item:owner?.item??null,run:owner?.run??null,key:owner?`${owner.item}:${head}`:null,group_key:owner?(native??producerGroupKey(owner.item,owner.run,run?.report?.sha256)??`producer-pending:${owner.item}:${owner.run}`):`unattributed:${head}`,attribution:owner?(landed.has(head)?'landed-producer':'report-claim'):owners.length?'ambiguous':'missing',producer_report:!!run?.report,native_evidence:Boolean(native),
+    return{head,item:owner?.item??null,run:owner?.run??null,key:owner?`${owner.item}:${head}`:null,group_key:owner?(native??producerGroupKey(owner.item,owner.run,run?.report?.sha256)??`producer-pending:${owner.item}:${owner.run}`):`unattributed:${head}`,attribution:owner?(landed.has(head)?'landed-producer':'report-claim'):owners.length?'ambiguous':'missing',producer_report:!!run?.report,native_evidence:Boolean(native),source_status:owner&&guardedHeads.has(head)?'covered':'unknown',
       ...(fix?{exemption:{reason:'linked formal correction retains its original review; no re-review chain',review_key:item.meta.review_fix_of??null}}:{})};
   });
   return{boundary,tip,heads,graphRows,entries};
@@ -133,7 +137,7 @@ export function reviewHealth({events,state,index}){
     if(owned.every(r=>doneCommits.has(r.head)))done.add(key);
   }
   const missing=[...groups].filter(([key])=>!queued.has(key)&&!done.has(key)),uncovered=rows.filter(r=>!queuedCommits.has(r.head)&&!doneCommits.has(r.head));
-  return{owed:groups.size,owed_commits:rows.length,queued:queued.size,queued_commits:queuedCommits.size,running:running.size,running_unknown:unknownRunning,done:done.size,done_commits:doneCommits.size,ambiguous_groups:ambiguousGroups,missing_queue:missing.length,retained_issues:retainedIssues,coverage_gaps:uncovered.map(r=>({head:r.head,item:r.item,run:r.run,group:r.group_key,retained:retained.has(r.group_key)})),
+  return{guarded_commits:rows.filter(r=>r.source_status==='covered').length,uncovered_source:rows.filter(r=>r.source_status!=='covered').map(r=>({head:r.head,item:r.item,run:r.run,status:r.source_status??'unknown'})),owed:groups.size,owed_commits:rows.length,queued:queued.size,queued_commits:queuedCommits.size,running:running.size,running_unknown:unknownRunning,done:done.size,done_commits:doneCommits.size,ambiguous_groups:ambiguousGroups,missing_queue:missing.length,retained_issues:retainedIssues,coverage_gaps:uncovered.map(r=>({head:r.head,item:r.item,run:r.run,group:r.group_key,retained:retained.has(r.group_key)})),
     attribution_gaps:rows.filter(r=>r.attribution==='missing'||r.attribution==='ambiguous'||!r.producer_report&&!r.native_evidence).map(r=>({head:r.head,item:r.item,run:r.run,reason:r.attribution==='missing'||r.attribution==='ambiguous'?`${r.attribution} source attribution`:'immutable producer report pending'})),
     missing:missing.map(([key,owned])=>({group:key,heads:owned.map(r=>r.head),item:owned[0].item,run:owned[0].run})),exemptions:index.entries.filter(r=>r.exemption).map(r=>({head:r.head,item:r.item,run:r.run,...r.exemption})),
     scope:'Canonical commit coverage grouped by immutable producer report. A retained partial target is not full coverage; independent verdicts and linked-fix exemptions remain scoped.'};
@@ -148,17 +152,18 @@ function landedProducerTarget({events,state,repo,org,identity,item,run,dispatch,
   if(!/^[a-f0-9]{40}(?:[a-f0-9]{24})?$/.test(dispatch.base??'')||!fs.lstatSync(file).isFile()||fs.realpathSync(file)!==file)throw Error('original native source baseline/evidence is UNKNOWN or redirected');
   const sequence=captured?.landed_evidence?.landings?.map(e=>e.seq),all=events.filter(e=>e.type==='change.landed'&&e.project===identity&&e.item===item.id&&e.run===run.id&&index.heads.includes(e.head)&&(!sequence||sequence.includes(e.seq)));
   if(!all.length||sequence&&all.length!==sequence.length)throw Error('positive native landed source receipts missing/changed');
-  for(const e of all){const p=e.producer;if(!e.landed_at||!p||!p.agent||!p.pane||!p.terminal||!p.session||p.agent!==worker.agent||p.pane!==worker.pane||p.terminal!==worker.terminal_id||p.session!==worker.agent_session_id||p.ownership_generation!==run.owner_generation)throw Error('native landed source ownership receipt is unqualified/changed');}
+  for(const e of all){const p=e.producer;if(!captured&&!guardedLanding({event:e,run,events,state,identity,org})||!e.landed_at||!p||!p.agent||!p.pane||!p.terminal||!p.session||p.agent!==worker.agent||p.pane!==worker.pane||p.terminal!==worker.terminal_id||p.session!==worker.agent_session_id||p.ownership_generation!==run.owner_generation)throw Error('native landed source ownership receipt is unqualified/changed');}
   const heads=[...new Set(all.map(e=>e.head))],tips=git(repo,['merge-base','--independent',...heads]).split('\n').filter(Boolean);
   if(tips.length!==1||tips[0]===dispatch.base)throw Error('native landed source has no unique changed non-admission target');
   const head=tips[0];git(repo,['merge-base','--is-ancestor',dispatch.base,head]);
   const ordered=git(repo,['rev-list','--reverse',`${dispatch.base}..${head}`]).split('\n').filter(Boolean),owned=ordered.filter(h=>heads.includes(h));
   if(owned.length!==heads.length||events.some(e=>e.type==='change.landed'&&e.project===identity&&heads.includes(e.head)&&(e.run!==run.id||e.item!==item.id)))throw Error('native landed producer range is foreign/ambiguous');
   const base=git(repo,['rev-parse',`${owned[0]}^1`]),range=git(repo,['rev-list','--reverse',`${base}..${head}`]).split('\n').filter(Boolean),diff=git(repo,['diff','--no-ext-diff','--no-textconv',base,head]);if(!diff)throw Error('native landed source has an empty delta');
-  const document={schema:'native-landings/v1',item:item.id,run:run.id,project:identity,org,owner:run.owner,owner_generation:run.owner_generation,
+  const provenance=captured?.source_provenance??(!captured?deliveredSourceProof({project:{identity,canonical:repo},org,run,events,state,git,artifacts:owned.map(h=>`Commit: ${h}`)}):null);
+  const document={schema:'native-landings/v1',...(provenance?{source_provenance:provenance}:{}),item:item.id,run:run.id,project:identity,org,owner:run.owner,owner_generation:run.owner_generation,
     dispatch:{file,token:dispatch.token,item:dispatch.item,run:dispatch.run,common:dispatch.common,org:dispatch.org,workspace:dispatch.workspace,base:dispatch.base},
     original_ask:{started_seq:run.started.seq,brief:run.brief_path??null},base,head,owned_commits:owned,landings:all,producer_report:null,validation:'No test or final-release PASS inferred from landing.'};
-  const reportHash=hash(JSON.stringify(document,null,2)+'\n'),evidence=path.join(org,'evidence',item.id,run.id,`review-source-${reportHash}.json`),group=producerGroupKey(item.id,run.id,reportHash),target={head,base,reportHash,evidence,evidence_kind:'native-landings/v1',landed_evidence:document,diff_sha256:hash(diff),dispatch:file,scope:{base,commits:range,claims:owned,unresolved:[],deferred:false},source_group:{key:group,run:run.id,report_sha256:null,evidence_sha256:reportHash,owned_commits:owned}};
+  const reportHash=hash(JSON.stringify(document,null,2)+'\n'),evidence=path.join(org,'evidence',item.id,run.id,`review-source-${reportHash}.json`),group=producerGroupKey(item.id,run.id,reportHash),target={head,base,reportHash,evidence,...(provenance?{source_provenance:provenance}:{}),evidence_kind:'native-landings/v1',landed_evidence:document,diff_sha256:hash(diff),dispatch:file,scope:{base,commits:range,claims:owned,unresolved:[],deferred:false},source_group:{key:group,run:run.id,report_sha256:null,evidence_sha256:reportHash,owned_commits:owned}};
   if(captured){
     if(JSON.stringify(captured)!==JSON.stringify(target))throw Error('captured native landed evidence/claim/source changed');
     const stat=fs.lstatSync(evidence);if(!stat.isFile()||fs.realpathSync(evidence)!==evidence||hash(fs.readFileSync(evidence))!==reportHash)throw Error('immutable native landed evidence changed');
@@ -238,6 +243,11 @@ export function discoverChanges({events,state,repo,org,identity,boundary,readGit
           if(claims.some(h=>eligible.has(h)&&h!==dispatch.base&&!foreign(h)&&!ownedCommits.includes(h)))throw Error('whole producer range omits delivered source; no partial review');const diff=git(repo,['diff','--no-ext-diff','--no-textconv',base,head]);if(!diff)throw Error('whole producer source has an empty delta; no code review target');
           target={head,base,reportHash:run.report.sha256,evidence:reportFile,diff_sha256:hash(diff),dispatch:file,scope:{base,commits:range,claims:ownedCommits,unresolved:[],deferred:false},source_group:{key:group,run:run.id,report_sha256:run.report.sha256,owned_commits:ownedCommits}};
         }
+        if(!nativeEvidence){
+          const provenance=deliveredSourceProof({project:{identity,canonical:repo},org,run,events,state,git});
+          if(provenance.status==='external')throw Object.assign(Error('external delivered source retained for its original owner; no guarded review target'),{source_provenance:provenance});
+          target={...target,source_provenance:provenance};
+        }
         const retained=queues.filter(q=>!archived.has(q.id)&&sameProducerQueue(q,item.id,run.id)),cutoff={id:boundary.id,seq:boundary.seq,head:boundary.canonical_head,main:boundary.main??'main',time_qualification:boundary.time_qualification??'intended source boundary; exact adoption-time head UNKNOWN'};
         if(!pendingOnly||!retained.length&&!events.some(e=>e.type==='change.reviewed'&&e.item===item.id&&e.head===target.head))changes.push({item,run,target,...(authorization?{authorization}:{}),cutoff});
         if(retained.length&&!authorization){
@@ -247,7 +257,7 @@ export function discoverChanges({events,state,repo,org,identity,boundary,readGit
           const extra=supplementalTarget({events,state,repo,org,identity,index,item,run,queues:retained});
           if(extra)changes.push({item,run,target:extra,cutoff});
         }
-    }catch(e){holds.push({item:item.id,run:run.id,reason:e.message});}
+    }catch(e){holds.push({item:item.id,run:run.id,reason:e.message,...(e.source_provenance?{source_provenance:e.source_provenance}:{})});}
   }
   for(const row of index.entries)if(row.attribution==='missing'){
     const selector=canonicalSelector(row.head),retained=queues.filter(q=>q.meta.review_source_selector===selector);
@@ -351,6 +361,7 @@ export function reviewResultEvents({state,events,run,report,sha256,body=report.b
   for(const line of String(body).split('\n')){const m=/^\s*[-*]\s*\[(Major|Minor)\]\s*(.+)$/i.exec(line);if(m&&!structuredSeverities.has(m[1].toLowerCase()))findings.push({severity:m[1].toLowerCase(),text:m[2].trim()});}
   const corrections=reviewCorrectionEvents({state,events,run,review,report,findings,verdict,sha256,usedIds});
   return [{type:'change.reviewed',item:source,head:target.head,base:target.base,review_key:key,review_group_key:queueProducerGroup(review),covered_commits:capturedReviewCommits(target),review_item:review.id,review_run:run.id,verdict,
+    source_provenance:target.source_provenance??{status:'unknown',qualification:'Retained historical review; no guarded-source reattribution.'},
     verdict_evidence:{frontmatter:report.extra?.verdict!==undefined,body_lines:bodyLines},findings:corrections.findings,report_sha256:sha256},...corrections.add];
 }
 

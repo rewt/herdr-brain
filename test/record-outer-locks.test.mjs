@@ -92,7 +92,7 @@ test('claim planning and owner reservation preserve the exact generation at thei
 });
 test('native own promotion observes its worker outside the record lock and refuses a raced claim',t=>{
   const f=fixture(t,{git:true}),identity=path.join(f.root,'.git'),native={name:'worker',pane_id:'pane',workspace_id:'workspace',terminal_id:'term',cwd:f.root,agent_session:{value:'sid'}};
-  transact(f.org,()=>({add:[{type:'item.added',id:'ENG-1',kind:'work',role:'engineer',title:'Fixture'},{type:'run.started',id:'R-1',item:'ENG-1',workspace:f.root,meta:{lane:'topic',agent:'worker',pane:'pane',worker_workspace:'workspace',terminal_id:'term',agent_session_id:'sid'}},{type:'run.claimed',run:'R-1',record:f.org,project:identity,owner:{controller:'brain',legacy:false,release:{id:'source',root:f.root,commit:null,identity}}}]}));
+  transact(f.org,()=>({add:[{type:'item.added',id:'ENG-1',kind:'work',role:'engineer',title:'Fixture'},{type:'run.started',id:'R-1',item:'ENG-1',workspace:f.root,meta:{dispatch_project:identity,dispatch_record:f.org,dispatch_attempt:'fixture',dispatch_journal:path.join(f.org,'dispatch/fixture.json'),lane:'topic',agent:'worker',pane:'pane',worker_workspace:'workspace',terminal_id:'term',agent_session_id:'sid'}},{type:'run.claimed',run:'R-1',record:f.org,project:identity,owner:{controller:'brain',legacy:false,release:{id:'source',root:f.root,commit:null,identity}}}]}));
   let calls=0;const guard=ownWorktreeGuard({canonical:f.root,identity,workspace:f.root,topic:'topic',env:{...process.env,ORG_DIR:f.org,HERDR_ENV:'1',HERDR_PANE_ID:'pane',HERDR_WORKSPACE_ID:'workspace',CODEX_THREAD_ID:'sid'},call:()=>{calls++;assert.equal(fs.existsSync(f.lock),false);return JSON.stringify({result:{agent:native}});}});
   guard(()=>assert.equal(fs.existsSync(f.lock),true));assert.equal(calls,2);
   atLock(t,f,()=>fs.appendFileSync(f.file,JSON.stringify({seq:4,type:'item.updated',id:'ENG-1',fields:{meta:{hold:true}}})+'\n'));
@@ -107,7 +107,7 @@ test('native own promotion and landing receipts retain the newest non-abandoned 
     env={...process.env,ORG_DIR:f.org,HERDR_ENV:'1',HERDR_PANE_ID:'pane',HERDR_WORKSPACE_ID:'workspace',CODEX_THREAD_ID:'sid'},
     call=()=>{assert.equal(fs.existsSync(f.lock),false);return JSON.stringify({result:{agent:native}});};
   transact(f.org,()=>({add:[{type:'item.added',id:'ENG-1',kind:'work',role:'engineer',title:'Fixture'},
-    {type:'run.started',id:'R-1',item:'ENG-1',workspace:f.root,meta:{lane:'topic',agent:'worker',pane:'pane',worker_workspace:'workspace',terminal_id:'term',agent_session_id:'sid'}},
+    {type:'run.started',id:'R-1',item:'ENG-1',workspace:f.root,meta:{dispatch_project:identity,dispatch_record:f.org,dispatch_attempt:'fixture',dispatch_journal:path.join(f.org,'dispatch/fixture.json'),lane:'topic',agent:'worker',pane:'pane',worker_workspace:'workspace',terminal_id:'term',agent_session_id:'sid'}},
     {type:'run.claimed',run:'R-1',record:f.org,project:identity,owner},
     {type:'run.started',id:'R-2',item:'ENG-1',workspace:f.root},
     {type:'run.abandoned',id:'R-2',why:'Duplicate abandoned without replacing the actual worker'}]}));
@@ -131,7 +131,7 @@ test('native own preflight tolerates concurrent index refresh while full source 
     native={name:'worker',pane_id:'pane',workspace_id:'workspace',terminal_id:'term',cwd:f.root,agent_session:{value:'sid'}},
     env={...process.env,ORG_DIR:f.org,HERDR_ENV:'1',HERDR_PANE_ID:'pane',HERDR_WORKSPACE_ID:'workspace',CODEX_THREAD_ID:'sid'};
   transact(f.org,()=>({add:[{type:'item.added',id:'ENG-1',kind:'work',role:'engineer',title:'Fixture'},
-    {type:'run.started',id:'R-1',item:'ENG-1',workspace:f.root,meta:{lane:'topic',agent:'worker',pane:'pane',worker_workspace:'workspace',terminal_id:'term',agent_session_id:'sid'}},
+    {type:'run.started',id:'R-1',item:'ENG-1',workspace:f.root,meta:{dispatch_project:identity,dispatch_record:f.org,dispatch_attempt:'fixture',dispatch_journal:path.join(f.org,'dispatch/fixture.json'),lane:'topic',agent:'worker',pane:'pane',worker_workspace:'workspace',terminal_id:'term',agent_session_id:'sid'}},
     {type:'run.claimed',run:'R-1',record:f.org,project:identity,owner:{controller:'brain',legacy:false,release:{id:'source',root:f.root,commit:null,identity}}}]}));
   let calls=0;
   const index=path.join(identity,'index'),before=fs.readFileSync(index);

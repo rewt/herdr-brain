@@ -135,7 +135,7 @@ export function queueReviewMutation({ state, events, org, repo, runId, head, bas
   const id = nextItemId(state, { kind: 'work', role: 'reviewer' });
   // The source reference is metadata, not a blocking review-child edge: source
   // completion/build admission must not wait for this post-code review.
-  const landing=events.some(e=>e.type==='change.landed'&&e.item===item.id&&e.head===target.head)?[]:[{
+  const landing=target.source_provenance?.status!=='covered'||events.some(e=>e.type==='change.landed'&&e.item===item.id&&e.head===target.head)?[]:[{
     type:'change.landed',item:item.id,run:run.id,head:target.head,base:target.base,project:identity,landed_at:null,observed_at:new Date().toISOString(),evidence:target.evidence,time_qualification:'Canonical containment observed; exact historical landing time UNKNOWN.'
   }];
   return { ...(deferCommit ? { commit: validate => { verifyProducer(); validate(); publishLandedReviewEvidence(target); } } : {}), add: [...landing,{ type: 'item.added', id, kind: 'work', role: 'reviewer', capability: 'review', parent: item.parent, priority: item.priority,

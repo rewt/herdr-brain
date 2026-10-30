@@ -49,7 +49,7 @@ function fixture(t,{reported=true,role='engineer'}={}){
   const events=[{type:'line-service.cutover',id:'old-service',project:identity,repo:f.cwd,org,source:sourceRoot,main:'main',canonical_head:base},
     {type:'line-service.phase0',id:'phase0',project:identity,repo:f.cwd,org,source:sourceRoot,main:'main',canonical_head:base,cutoff_at:'2026-10-26T23:55:00.000Z'},
     {type:'item.added',id:'ENG-1',title:'Build',role},
-    {type:'run.started',id:'R-1',item:'ENG-1',workspace,report_path:path.join(org,'runs/R-1/report.md'),meta:{lane:'source',dispatch_project:identity,dispatch_journal:dispatch,dispatch_attempt:'source'}},
+    {type:'run.started',id:'R-1',item:'ENG-1',workspace,report_path:path.join(org,'runs/R-1/report.md'),meta:{lane:'source',dispatch_record:org,dispatch_project:identity,dispatch_journal:dispatch,dispatch_attempt:'source'}},
     {type:'run.claimed',run:'R-1',record:org,project:identity,owner:{controller:'brain',legacy:false,release:{id:'source',root:sourceRoot,commit:null,identity:gitProject(sourceRoot).identity}}}];
   if(reported)events.push({type:'report.ingested',run:'R-1',item:'ENG-1',file:'reports/R-1.md',sha256:hash(report),report:{run:'R-1',outcome:'done',summary:'Actual source',artifacts:heads.map(h=>`Commit: ${h}`),extra:{},blockers:[],proposals:[]}});
   transact(org,()=>({add:events}));
@@ -349,8 +349,8 @@ test('phase1 post-FF landing attributes a same-session continuation to its one o
   const meta={agent:actor.name,pane:actor.pane_id,worker_workspace:actor.workspace_id,terminal_id:actor.terminal_id,agent_session_id:actor.agent_session.value};
   const {type,record,project,owner}=f.context().events.find(e=>e.type==='run.claimed'),claim=run=>({type,run,record,project,owner});
   f.add([{type:'run.updated',id:'R-1',meta},{type:'item.added',id:'ARCH-2',title:'Continuation',role:'architect'},
-    {type:'run.started',id:'R-2',item:'ARCH-2',workspace:f.workspace,meta:{lane:'source',...meta}},claim('R-2'),
-    {type:'item.added',id:'REV-3',title:'Second open owner',role:'reviewer'},{type:'run.started',id:'R-3',item:'REV-3',workspace:f.workspace,meta:{lane:'source',...meta}},claim('R-3')]);
+    {type:'run.started',id:'R-2',item:'ARCH-2',workspace:f.workspace,meta:{lane:'source',dispatch_record:f.org,dispatch_project:f.identity,dispatch_attempt:'continuation',dispatch_journal:path.join(f.org,'dispatch/continuation.json'),...meta}},claim('R-2'),
+    {type:'item.added',id:'REV-3',title:'Second open owner',role:'reviewer'},{type:'run.started',id:'R-3',item:'REV-3',workspace:f.workspace,meta:{lane:'source',dispatch_record:f.org,dispatch_project:f.identity,dispatch_attempt:'continuation',dispatch_journal:path.join(f.org,'dispatch/continuation.json'),...meta}},claim('R-3')]);
   const env={...f.env,HERDR_ENV:'1',HERDR_PANE_ID:actor.pane_id,HERDR_WORKSPACE_ID:actor.workspace_id,CODEX_THREAD_ID:actor.agent_session.value};
   const args={canonical:f.cwd,workspace:f.workspace,base:f.base,head:f.heads[1],landedAt:'2026-10-27T01:30:00Z',env,call:()=>JSON.stringify({result:{agent:actor}})};
   assert.throws(()=>recordOwnLanding(args),/ambiguous/,'two open runs on one native tuple stay ambiguous');

@@ -6,7 +6,7 @@ const TOKEN = /(?<![A-Za-z0-9/._~-])[a-f0-9]{7,64}(?![A-Za-z0-9/._~-])/gi;
 const CLAIM_LABEL = /^(?:commit|head|branch\s+head|source)\s*(?:[:=]\s*|\s+)[`"']?$/i;
 const BARE = /^[`"']?[a-f0-9]{7,64}[`"']?(?:\s+on\s+lane\/[a-z0-9][a-z0-9-]*)?$/i;
 export function declaredSourceRanges(artifacts=[]){
-  return artifacts.flatMap(value=>{const m=/^source\s*[:=]\s*[`"']?([a-f0-9]{7,64})[`"']?\s*;\s*base\s*[:=]\s*[`"']?([a-f0-9]{7,64})[`"']?(?:\s*;|\s*$)/i.exec(String(value).trim());return m?[{head:m[1].toLowerCase(),base:m[2].toLowerCase()}]:[];});
+  return artifacts.flatMap(value=>{const m=/^source\s*[:=]\s*[`"']?([a-f0-9]{7,64})[`"']?\s*;\s*base\s*[:=]\s*[`"']?([a-f0-9]{7,64})[`"']?(?:\s*;|\s*$)/i.exec(String(value).trim());const repository=/(?:^|;)\s*repository\s*[:=]\s*(.+?)\s*$/i.exec(String(value));return m?[{head:m[1].toLowerCase(),base:m[2].toLowerCase(),...(repository?{repository:repository[1]}:{})}]:[];});
 }
 
 export function claimedCommitTokens(artifacts=[]) {

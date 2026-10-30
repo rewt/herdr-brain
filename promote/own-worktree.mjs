@@ -5,6 +5,7 @@ import { findOrgDir, withRecordGuard } from '../lib/store.mjs';
 import { openQuestionsFor } from '../lib/state.mjs';
 import { effectiveWorkerIdentity } from '../lib/worker-identity.mjs';
 import { readOwnedRun, requireController, assertOwner } from '../lib/run-owner-guard.mjs';
+import { dispatchSourceBinding } from '../lib/source-provenance.mjs';
 import { nativeSender } from '../messages/operator-inbox.mjs';
 
 const tuple = b => [b.project.identity, b.project.canonical, b.project.checkout, b.org,
@@ -35,6 +36,7 @@ export function ownWorktreeGuard({ canonical, identity, workspace, topic, env = 
     });
     if (matches.length !== 1) throw Error('self-promotion requires one active owning native worker/run; nothing merged');
     const run = readOwnedRun(org, matches[0].id, events), owner = requireController(run, 'brain');
+    dispatchSourceBinding({run,events,identity,org,workspace});
     let item = state.items.get(run.item);
     while (item) {
       if (item.meta.hold) throw Error(`self-promotion HOLD on ${item.id}; nothing merged`);

@@ -456,6 +456,7 @@ function amendAccept(argv) {
       if (!fs.statSync(file).isFile()) throw new UserError(`acceptance file ${file} is not a regular file`);
       accept = [fs.readFileSync(file, 'utf8')];
     } catch (error) {
+      if (error instanceof UserError) throw error;
       throw new UserError(`cannot read acceptance file ${file}: ${error.message}`);
     }
   }

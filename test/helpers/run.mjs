@@ -10,11 +10,21 @@ import { offlineHerdr } from './offline-herdr.mjs';
 import { ownFixtureLifetime, exitedLifetimeGuardCommands, lifetimeGuardExitCommand } from './fixture-lifetime.mjs';
 import { runnerLimits } from './runner-limits.mjs';
 import path from 'node:path';
+import fs from 'node:fs';
+import os from 'node:os';
+import { SCRATCH_JOURNAL, evidenceDirectory, recoverScratch } from './scratch.mjs';
 import { watchRun } from '../../test-slot/watch.mjs';
 import { silenceNotice } from '../../test-slot/watch-notice.mjs';
 import * as timingJournal from '../../test-slot/timings.mjs';
 const { TIMINGS_ENV, startTiming, timing } = timingJournal;
 
+// The coordinator retains ownership evidence beside TAP, outside all fixtures.
+if (!process.env[SCRATCH_JOURNAL]) {
+  const directory = evidenceDirectory(path.join(process.env[TIMINGS_ENV]
+    ? path.dirname(path.resolve(process.env[TIMINGS_ENV])) : os.tmpdir(), 'test-scratch-'));
+  process.env[SCRATCH_JOURNAL] = path.join(directory, 'owned.jsonl');
+  fs.writeFileSync(process.env[SCRATCH_JOURNAL], '', { flag: 'wx', mode: 0o600 });
+}
 const cleanupHerdr = offlineHerdr();
 // Chain coordinator -> suite leader -> test file -> product fixture. Native
 // writer death covers abrupt exits even when JS/IPC cleanup cannot execute.
@@ -91,7 +101,7 @@ if (worker) {
     // Independent reporter streams retain each admitted file before copying
     // completed TAP to the build log.
     // Keep artifacts beside the durable journal, outside disposable fixtures.
-    const directory = fs.mkdtempSync(path.join(process.env[TIMINGS_ENV]
+    const directory = evidenceDirectory(path.join(process.env[TIMINGS_ENV]
       ? path.dirname(path.resolve(process.env[TIMINGS_ENV])) : tmpdir(), 'test-file-tap-'));
     let code = 0;
     let next = 0, allFilesDone = false, wakeOutput, copyingFileOutput = false;
@@ -379,6 +389,14 @@ if (worker) {
               file_timeout_ms: fileTimeout });
           }
         }
+        try {
+          const recovery = recoverScratch(process.env[SCRATCH_JOURNAL], {
+            joined: Boolean(teardown.ok && teardown.signaled && (child.exitCode !== null || child.signalCode !== null)), suite: owner });
+          const receipt = `${process.env[SCRATCH_JOURNAL]}.${child.pid}.recovery.json`;
+          fs.writeFileSync(receipt, JSON.stringify(recovery) + '\n', { flag: 'wx', mode: 0o600 });
+          console.error(`SCRATCH_RECOVERY: ${JSON.stringify({ receipt, created: recovery.created, removed: recovery.removed, absent: recovery.absent, retained: recovery.retained })}`);
+          if (recovery.results.some(row => row.owner?.pgid === owner?.pid && row.status === 'retained')) result = 1;
+        } catch (error) { console.error(`Scratch recovery failed: ${error.stack ?? error}`); result = 1; }
         finishTiming({ exit_code: result, ...(watcher ? watcher.snapshot() : {}) });
         cleanupHerdr();
         child.stdout.destroy(); child.stderr.destroy(); child.unref();

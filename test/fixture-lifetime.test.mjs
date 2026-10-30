@@ -6,6 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnScenarioChild, spawnChild, waitForExit } from './helpers/child.mjs';
 import { createProcessTracker } from './helpers/processes.mjs';
+import { waitForFile } from './helpers/file-wait.mjs';
 import { loadTimeout } from '../lib/deadline.mjs';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -216,6 +217,7 @@ for (const cancellation of ['SIGKILL', 'SIGTERM']) {
     fs.writeFileSync(file, `import test from ${JSON.stringify(cancellation === 'SIGKILL' ? 'node:test' : local('./helpers/bounded-test.mjs'))};
 import fs from 'node:fs';
 import path from 'node:path';
+import {waitForFile} from ${JSON.stringify(local('./helpers/file-wait.mjs'))};
 import {fixture as settleFixture} from ${JSON.stringify(local('../settle/test/fixture.mjs'))};
 import {fixture as gateFixture} from ${JSON.stringify(local('../test-slot/test/helpers/gate-profile.mjs'))};
 import {resumeInbox} from ${JSON.stringify(local('../supervisor/prompt-supervisor.mjs'))};
@@ -232,10 +234,7 @@ test('live fixture victim',async t=>{
   const nestedOwner=Number(launched.stdout.trim());
   const nestedMetadata=JSON.parse(fs.readFileSync(nestedInbox+'.owner.lock/owner.json'));
   const host=gate.asyncRun();
-  while(!fs.existsSync(${JSON.stringify(gateReady)})){
-    if(host.exitCode!==null||host.signalCode!==null)throw Error(JSON.stringify(await waitForExit(host)));
-    await new Promise(r=>setTimeout(r,20));
-  }
+  await waitForFile(${JSON.stringify(gateReady)},text=>{try{return Number.isSafeInteger(JSON.parse(text).pid);}catch{return false;}},{signal:t.signal});
   const temporary=${JSON.stringify(receipt + '.tmp')};
   fs.writeFileSync(temporary,JSON.stringify({suite:process.pid,owner,nestedOwner,nestedMetadata,host:host.pid,leaf:JSON.parse(fs.readFileSync(${JSON.stringify(gateReady)})).pid,roots:[settle.root,gate.root]}));
   fs.renameSync(temporary,${JSON.stringify(receipt)});
@@ -249,7 +248,7 @@ test('live fixture victim',async t=>{
     const child = spawnScenarioChild(t, process.execPath, args, { env });
     let finished;
     waitForExit(child).then(result => { finished = result; });
-    await until(() => fs.existsSync(receipt) || finished, 'nested suite did not publish its live fixtures');
+    await waitForFile(receipt, text => { try { return Array.isArray(JSON.parse(text).roots); } catch { return false; } });
     assert.ok(fs.existsSync(receipt), finished?.stdout + finished?.stderr);
     const evidence = JSON.parse(fs.readFileSync(receipt, 'utf8'));
     scratchRoots.push(...evidence.roots);

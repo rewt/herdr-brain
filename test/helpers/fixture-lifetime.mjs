@@ -9,6 +9,9 @@ import { syncBuiltinESMExports } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { loadTimeout } from '../../lib/deadline.mjs';
 
+import { installScratchTracking } from './scratch.mjs';
+installScratchTracking();
+
 const preload = fileURLToPath(import.meta.url);
 const source = fileURLToPath(new URL('./fixture-lifetime.c', import.meta.url));
 const nativeSync = cp.spawnSync;
@@ -161,6 +164,7 @@ export function ownFixtureLifetime() {
 
 function inherited(env = process.env) {
   const result = { ...env };
+  if (process.env.HERDR_TEST_SCRATCH_JOURNAL) result.HERDR_TEST_SCRATCH_JOURNAL = process.env.HERDR_TEST_SCRATCH_JOURNAL;
   if (process.env.BRAIN_SHADOW_ROOT) result.BRAIN_SHADOW_ROOT ||= process.env.BRAIN_SHADOW_ROOT;
   const owner = lifetime ?? {
     executable: process.env.HERDR_FIXTURE_LIFETIME_EXECUTABLE,

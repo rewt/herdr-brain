@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { installScratchTracking } from './scratch.mjs';
 import { isolateGateHistory } from './gate-history.mjs';
 import { ownFixtureLifetime } from './fixture-lifetime.mjs';
 
@@ -18,6 +19,7 @@ export function fixtureFleet(t, scratch) {
 // Shared by the bounded runner and direct test-file execution. Fixtures may
 // put their own fake before this refusal adapter, but never inherit live IDs.
 export function offlineHerdr() {
+  installScratchTracking();
   isolateGateHistory();
   // Even a fixture that forgets its own override cannot scan host scratch.
   process.env.HERDR_TEST_SCRATCH_ROOTS = '[]';

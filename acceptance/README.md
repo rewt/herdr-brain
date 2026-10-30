@@ -93,3 +93,23 @@ preservation was proved for that move. Sixty seconds covers the observed
 Harness visits, unchanged samples and returns from harness panes never renew the
 window. Attributed moves, forbidden focus attempts and incomplete traces still
 fail or remain pending as before; no later operator activity erases a failure.
+
+The reusable installed-consumer witness is
+`node test/helpers/run.mjs acceptance/test/installed-cycle.test.mjs` (pinned Node
+20.19.4, macOS). Set `INSTALLED_CYCLE_EVIDENCE=/absolute/archive` to retain its
+per-case config, manifests, command/stage logs, record and cleanup receipts outside
+the disposable folders. It replays exact ENG-1020 pre-fix/fixed payloads, then
+runs the current committed payload through installed dispatch, source landing,
+watcher/report intake, one record-queued review after producer-folder removal,
+review completion and cleanup. A separate lost-prompt-reply action must retain
+its original journal, input count and folder on another line pass.
+
+Each case has private Git objects, org, HOME/XDG/config/release homes, in-process
+and child fleet, a nonexistent development source and a refusal-only socket.
+`sandbox-exec` denies network and the real account home except the pinned Node
+directory, with both in-process and child denial probes before product calls.
+Only native UI/model responses and a fixture acceptance input are scripted;
+real installed record, lane, dispatcher, watcher and finite line code run. The
+fixture binding creates no launchd job, and its synthetic READY input certifies
+no release coverage. These results prove mechanics, never independent model
+judgment, live adoption or final-release readiness. Failed scratch is retained.

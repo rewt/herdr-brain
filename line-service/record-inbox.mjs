@@ -25,7 +25,9 @@ export function serviceRecordBinding({repo,org,env=process.env,owner='pass'}) {
   if(lock?.pid!==process.pid||owner==='closeout-turn'&&(!lock.identity||lock.identity!==ownerIdentity(process.pid)))
     throw Error(`service inbox requires its actual owned ${owner} lock`);
   const root=identityRootAt(c.identity);if(!root)throw Error('service identity root is UNKNOWN');
-  return {...c,identityName:path.basename(root),epoch:digest({identity:c.identity,org:c.org,installed_at:c.installation.at,source:c.installation.source,node:c.installation.node,target:c.installation.target})};
+  // Fresh accepted-release installs have no wall-clock `at` field. Keep that
+  // absence explicit without changing the epoch of older dated installations.
+  return {...c,identityName:path.basename(root),epoch:digest({identity:c.identity,org:c.org,installed_at:c.installation.at??null,source:c.installation.source,node:c.installation.node,target:c.installation.target})};
 }
 export function recordLineNotice({repo,org,id,boundary,reason,scope={},first_at,audit,counts,env=process.env,kind='question',question}) {
   // Routine notices and error counts already have a durable diagnostic delta.

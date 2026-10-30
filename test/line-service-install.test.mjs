@@ -61,6 +61,13 @@ test('fresh accepted release previews without effects, records actual cutoff and
   assert.equal(fs.statSync(result.archive.file).mode&0o777,0o444);
   const {installedContext,postCutoffLanding}=await f.module('line-service/cutoff.mjs');
   assert.equal(installedContext(f.cwd,f.org).installation.phase,'installed');
+  // The fresh installer intentionally has no wall-clock timestamp. Its actual
+  // installed receipt must still support the non-session record producer.
+  assert.equal(result.installation.at,undefined);
+  const {serviceRecordBinding}=await f.module('line-service/record-inbox.mjs');
+  const release=noticeLock(path.join(f.directory,'pass.lock'));
+  try{assert.match(serviceRecordBinding({repo:f.cwd,org:f.org,env:{...f.env,HERDR_ENV:'',HERDR_PANE_ID:''}}).epoch,/^[a-f0-9]{64}$/);}
+  finally{release();}
   assert.throws(()=>postCutoffLanding({events,repo:f.cwd,org:f.org,identity:f.identity,head}),/at\/before/);
   fs.writeFileSync(path.join(f.cwd,'later'),'actual later landing');f.git('add','later');f.git('commit','-qm','Land later source');
   assert.equal(postCutoffLanding({events,repo:f.cwd,org:f.org,identity:f.identity,head:f.git('rev-parse','HEAD')}).head,head);

@@ -11,6 +11,25 @@ import {currentCloseoutEntries} from '../lib/closeout.mjs';
 import {closeoutWaitId,closeoutWaitState} from '../lib/closeout-status.mjs';
 import {obsoleteOutcomeDecision} from '../line-service/outcome-decision.mjs';
 import {createLineService} from '../line-service/line-service.mjs';
+import {serviceRecordBinding} from '../line-service/record-inbox.mjs';
+import {canonical} from '../messages/schema.mjs';
+import {noticeLock} from '../supervisor/notice-lock.mjs';
+
+test('service record epochs accept timestamp-free installations and preserve dated installation epochs',t=>{
+  const f=setup(t,{direct:true,bound:true}),{directory,file,receipt}=selectCurrentCleanup(f);
+  fs.writeFileSync(path.join(f.scratch,'.identity-root'),'fixture\n');
+  const release=noticeLock(path.join(directory,'pass.lock'));
+  try{
+    for(const at of [null,'2026-10-30T00:00:00.000Z']){
+      fs.writeFileSync(file,JSON.stringify({...receipt,...(at?{at}:{})}));
+      const binding=serviceRecordBinding({repo:f.repo,org:f.org,env:f.env});
+      const expected=createHash('sha256').update(canonical({identity:f.common,org:f.org,installed_at:at,
+        source:receipt.source,node:receipt.node,target:receipt.target})).digest('hex');
+      assert.equal(binding.epoch,expected);
+      assert.equal(serviceRecordBinding({repo:f.repo,org:f.org,env:f.env}).epoch,binding.epoch);
+    }
+  }finally{release();}
+});
 
 test('held closeout classification preserves its queued resolver and the line open-unknown count',t=>{
   const f=setup(t,{direct:true,bound:true});selectCurrentCleanup(f);f.report();

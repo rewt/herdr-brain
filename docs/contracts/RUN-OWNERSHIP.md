@@ -86,3 +86,35 @@ for transferred runs; explicitly inventory in-flight runs with `--legacy` before
 switching. Byte-identical `contrib/settle-watch.mjs` remains effectful only on
 old-owned jobs. The supervisor submits this contract for acceptance; writing it
 does not activate a controller, release or project switch.
+
+## Source provenance for pre-guard landings
+
+`deliveredSourceProof` supports the transition from original native post-FF
+`change.landed` receipts without a `source` field. This is a read-only projection:
+it does not rewrite old events, append replacement landings, replay promotions,
+adopt ownership, or authorize an effect. Older folds keep the original history.
+
+The first source-bearing landing for the same repository fixes the transition;
+that receipt must still pass `guardedLanding`. A missing or invalid first receipt
+is not skipped in favor of a later boundary. Historical evidence must predate it
+in record sequence and landing time, and its complete promotion tip must be an
+ancestor of that transition's previous main.
+
+Proof requires the unchanged original dispatch project/record/workspace and
+current Brain claim, matching native producer/session/claim generation and event
+actor, and the actual repository common directory matching `dispatch_project`.
+Every commit in the exact `previous_main..landing_tip` must have one matching
+original native receipt and its actual first parent as `base`; missing,
+conflicting, foreign or unavailable evidence refuses coverage. A clean allocation,
+equal hashes in a clone, or an author assertion cannot substitute for this proof.
+
+Each untyped receipt remains visible in `legacy_landings`, with its sequence,
+`next_owner`, `guarded: false`, and either `legacy-proven` or `legacy-unproven`.
+Failures retain a typed `code` and reason. Proven ranges can be `covered` with
+`coverage: legacy-proven` (or `mixed` alongside guarded ranges); unresolved
+claims keep overall status `unknown`. This does not mark a historical landing
+guarded or increase the canonical index's guarded-commit count. Source completion
+and archived report context carry the qualification; completion evidence uses
+`legacy-delivered-range` or `mixed-delivered-range` instead of asserting a guard.
+The existing record queue remains the sole review path, and saved UNKNOWN or
+refused effect attempts retain their original owners and receipts.

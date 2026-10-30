@@ -8,7 +8,7 @@ import {fixtureFleet} from './helpers/offline-herdr.mjs';
 import {gitProject} from '../lib/project.mjs';
 import {fold} from '../lib/state.mjs';
 import {initOrg,transact,loadEvents} from '../lib/store.mjs';
-import {dispatchSourceBinding,deliveredSourceProof} from '../lib/source-provenance.mjs';
+import {dispatchSourceBinding,deliveredSourceProof,guardedLanding} from '../lib/source-provenance.mjs';
 import {sourceCompletionProof,queueSourceException} from '../line-service/source-completion.mjs';
 import {recordOwnLanding} from '../lib/landing-receipt.mjs';
 import {ownWorktreeGuard} from '../promote/own-worktree.mjs';
@@ -42,6 +42,83 @@ function fixture(t){
   const ingest=()=>transact(org,()=>({add:[{type:'report.ingested',run:'R-1',file:'runs/R-1/report.md',sha256:createHash('sha256').update(report).digest('hex'),report:{outcome:'done',artifacts}}]}));
   return{scratch,repo,workspace,clone,base,head,project,org,artifacts,context,args,land,ingest};
 }
+
+// R-1499's shape: the same run lands once before source was recorded, then
+// again after the guard. Both original native promotion receipts are retained.
+function transitionFixture(t){
+  const f=fixture(t),c=f.context(),w=c.run.meta;
+  git(f.repo,['merge','--ff-only',f.head]);
+  transact(f.org,()=>({add:[{type:'change.landed',item:'ENG-1',run:'R-1',project:f.project.identity,
+    head:f.head,base:f.base,previous_main:f.base,landing_tip:f.head,landed_at:new Date(Date.now()-2000).toISOString(),
+    producer:{agent:w.agent,pane:w.pane,terminal:w.terminal_id,session:w.agent_session_id,ownership_generation:c.run.owner_generation}}]}),{actor:w.agent});
+  fs.writeFileSync(path.join(f.workspace,'after'),'guarded');git(f.workspace,['add','.']);git(f.workspace,['commit','-qm','After guard']);
+  const after=git(f.workspace,['rev-parse','HEAD']);git(f.repo,['merge','--ff-only',after]);
+  recordOwnLanding({...f.args,base:f.head,head:after,landedAt:new Date(Date.now()-1000).toISOString()});
+  const artifacts=[...f.artifacts,`source: ${after}; base: ${f.head}`];
+  const report=`---\nrun: R-1\noutcome: done\nsummary: Delivered both ranges.\nartifacts:\n${artifacts.map(a=>`  - "${a}"`).join('\n')}\n---\n`;
+  fs.writeFileSync(path.join(f.org,'runs/R-1/report.md'),report);
+  transact(f.org,()=>({add:[{type:'report.ingested',run:'R-1',file:'runs/R-1/report.md',sha256:createHash('sha256').update(report).digest('hex'),report:{outcome:'done',artifacts}}]}));
+  return{...f,after};
+}
+
+test('pre-guard native receipts transition to legacy proof beside guarded coverage without rewriting history',t=>{
+  const f=transitionFixture(t),c=f.context(),before=JSON.stringify(c.events),proof=deliveredSourceProof(c);
+  assert.equal(proof.status,'covered');assert.equal(proof.coverage,'mixed');
+  assert.deepEqual(proof.ranges.map(r=>r.coverage),['legacy-proven','guarded']);
+  const legacy=proof.legacy_landings[0];assert.equal(legacy.status,'legacy-proven');assert.equal(legacy.guarded,false);
+  assert.equal(legacy.next_owner,'R-1');assert.deepEqual(legacy.promotion,{base:f.base,head:f.head});
+  const landing=c.events.find(e=>e.seq===legacy.landing_seq);
+  assert.equal(landing.source,undefined);assert.equal(guardedLanding({...c,event:landing,identity:f.project.identity}),false);
+  const completed=sourceCompletionProof(c);assert.equal(completed.evidence.kind,'mixed-delivered-range');
+  const archive=preserveReportContext({run:'R-1',org:f.org,project:f.repo,common:f.project.identity,cwd:f.workspace,head:f.after,branch:'refs/heads/lane/source',source:{type:'report.ingested'}},c.events);
+  assert.equal(JSON.parse(fs.readFileSync(archive.packet)).source_provenance.coverage,'mixed');
+  assert.equal(reviewHealth({...c,index:canonicalReviewIndex(c)}).guarded_commits,1,'legacy coverage is never counted as guarded');
+  assert.equal(JSON.stringify(c.events),before,'the append-only event log is unchanged');
+  assert.equal(JSON.stringify(loadEvents(f.org).events),before);
+  git(f.repo,['worktree','remove',f.workspace]);
+  assert.equal(sourceCompletionProof(f.context()).source_provenance.coverage,'mixed','proof survives allocation retirement');
+  const onlyLegacy=sourceCompletionProof({...f.context(),run:{...c.run,report:{artifacts:f.artifacts}}});
+  assert.equal(onlyLegacy.evidence.kind,'legacy-delivered-range');
+});
+
+test('pre-guard legacy proof retains typed reasons and owner for incomplete native, dispatch and exact range evidence',t=>{
+  const f=transitionFixture(t),c=f.context();
+  const cases=[
+    ['native-receipt',(x,e)=>delete e.producer],
+    ['native-receipt',(x,e)=>e.producer.session='foreign'],
+    ['native-receipt',(x,e)=>e.producer.ownership_generation++],
+    ['native-receipt',(x,e)=>e.by='another-worker'],
+    ['native-receipt',(x,e)=>e.project=gitProject(f.clone).identity],
+    ['dispatch-binding',x=>delete x.events.find(e=>e.type==='run.started').meta.dispatch_record],
+    ['dispatch-binding',x=>x.run.owner_generation++],
+    ['landed-range',(x,e)=>e.base=f.head],
+    ['landed-range',(x,e)=>e.previous_main=f.head],
+    ['landed-range',(x,e)=>e.landing_tip=f.after],
+    ['landed-range',(x,e)=>x.events.push({...e,seq:e.seq+0.5,run:'R-other'})],
+  ];
+  for(const [code,mutate]of cases){
+    const x=structuredClone({events:c.events,run:c.run}),e=x.events.find(e=>e.type==='change.landed'&&!e.source);mutate(x,e);
+    const proof=deliveredSourceProof({...c,...x});assert.equal(proof.status,'unknown',code);
+    assert.equal(proof.legacy_landings[0].status,'legacy-unproven',code);assert.equal(proof.legacy_landings[0].code,code);
+    assert.equal(proof.legacy_landings[0].next_owner,'R-1');assert.ok(proof.legacy_landings[0].reason);
+  }
+  const unavailable=deliveredSourceProof({...c,identify:()=>{throw Error('repository unavailable');}});
+  assert.equal(unavailable.legacy_landings[0].code,'repository-unavailable');assert.equal(unavailable.status,'unknown');
+});
+
+test('missing source after the guard or without a valid first transition never gains legacy coverage',t=>{
+  const f=transitionFixture(t),c=f.context();
+  for(const mutation of [
+    x=>{delete x.events.filter(e=>e.type==='change.landed').at(-1).source;},
+    x=>{x.events.find(e=>e.source).source.claim_generation++;},
+    x=>{const e=x.events.find(e=>e.type==='change.landed'&&!e.source);e.seq=x.events.at(-1).seq+1;},
+  ]){
+    const x=structuredClone({events:c.events,run:c.run});mutation(x);
+    const proof=deliveredSourceProof({...c,...x});assert.equal(proof.status,'unknown');
+    assert.equal(proof.legacy_landings[0].status,'legacy-unproven');
+    assert.ok(['post-guard-missing-source','guard-boundary-unavailable'].includes(proof.legacy_landings[0].code));
+  }
+});
 
 test('source provenance compares equal hashes in distinct clones and the unchanged registered lane without borrowing coverage',t=>{
   const f=fixture(t);assert.equal(git(f.clone,['rev-parse','HEAD']),f.head);assert.notEqual(gitProject(f.clone).identity,f.project.identity);

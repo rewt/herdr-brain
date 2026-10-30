@@ -14,16 +14,18 @@ export function sourceCompletionProof({project,run,org=run.meta?.dispatch_record
   const provenance=deliveredSourceProof({project,org,run,events,state,git,identify});
   if(['external','unknown'].includes(provenance.status))throw Object.assign(
     Error(`claimed delivered source is ${provenance.status}: ${provenance.ranges.map(r=>r.reason).filter(Boolean).join('; ')}; next owner ${run.id}`),{source_provenance:provenance});
+  const kind=provenance.status==='none'?'no-source-claim':provenance.coverage==='legacy-proven'?'legacy-delivered-range':
+    provenance.coverage==='mixed'?'mixed-delivered-range':'guarded-delivered-range';
   let head,evidence;
   if(present){
     if(identify(run.workspace).identity!==project.identity)throw Error('foreign run workspace');
     head=git(run.workspace,['rev-parse','HEAD']);
     if(git(run.workspace,['status','--porcelain=v1','--untracked-files=all']))throw Error('source worktree is not clean');
-    evidence={kind:provenance.status==='none'?'no-source-claim':'guarded-delivered-range',workspace:run.workspace};
+    evidence={kind,workspace:run.workspace};
   }else{
     if(run.meta.dispatch_project!==project.identity)throw Error('original run project binding is missing/foreign');
     if(provenance.status==='none')return{source_head:null,integrated_tip:tip,allocation:'absent',evidence:{kind:'no-source-claim'},source_provenance:provenance};
-    head=provenance.ranges.at(-1).head;evidence={kind:'guarded-delivered-range'};
+    head=provenance.ranges.at(-1).head;evidence={kind};
   }
   // Check every delivered head, independently of the registered allocation.
   for(const range of provenance.ranges)try{git(project.canonical,['merge-base','--is-ancestor',range.head,tip]);}

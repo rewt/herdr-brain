@@ -8,10 +8,11 @@ import { contentDigest, policyLocation } from '../lib/config-home.mjs';
 import { selectRelease } from '../lib/releases.mjs';
 import { productFiles, releaseMetadata } from '../lib/product-files.mjs';
 import { ROUTE_PRESET } from '../lanes/preset.mjs';
+import { loadDiscoveredRoutes, resolveLaunchRoute } from '../lanes/routes.mjs';
 
 // Offline record admission only. Adoption's native observer and human answer
 // are isolated fixture inputs, not a live owner's authorization or acceptance.
-test('one audited project route revision reaches the next record brief on the same release and rolls back', async t => {
+test('one audited project route revision reaches the next record admission on the same release and rolls back', async t => {
   const f = configFixture(t);
   const repoFile = path.join(f.cwd, '.lane.json');
   const policy = JSON.parse(fs.readFileSync(repoFile));
@@ -40,6 +41,8 @@ test('one audited project route revision reaches the next record brief on the sa
   const view = () => JSON.parse(cli('config', '--json').stdout);
   const row = snapshot => snapshot.values.find(value => value.key === 'routes.engineer.effort');
   const before = view();
+  const launch = () => resolveLaunchRoute(loadDiscoveredRoutes({ cwd: f.cwd, env: f.env }).config, { route: 'engineer' });
+  const originalLaunch = launch();
   assert.equal(before.binding, binding.file);
   assert.deepEqual([row(before).value, row(before).source, row(before).source_key, row(before).scope],
     ['high', file, 'routes.engineer.effort', 'project']);
@@ -53,7 +56,8 @@ test('one audited project route revision reaches the next record brief on the sa
   };
   const old = admit('Work admitted before the operating revision');
   assert.equal(old.run.meta.effort, 'high');
-  assert.ok(old.brief.includes('codex · gpt-6.1-sol · high'));
+  assert.ok(old.brief.includes(`# Brief: run ${old.id} on ${old.run.item}`));
+  assert.equal(originalLaunch.effort, 'high');
   const oldEvent = f.events().find(event => event.type === 'run.started' && event.id === old.id);
   const who = 'ENG-1041 offline fixture owner: raise engineer effort';
   const edit = cli('config', 'set', 'routes.engineer.effort', 'xhigh', '--expect', revision, '--who-asked', who, '--json');
@@ -72,7 +76,8 @@ test('one audited project route revision reaches the next record brief on the sa
   assert.equal(audit.origin, 'command');
   const fresh = admit('Work admitted after the operating revision');
   assert.notEqual(fresh.id, old.id); assert.equal(fresh.run.meta.effort, 'xhigh');
-  assert.ok(fresh.brief.includes('codex · gpt-6.1-sol · xhigh'));
+  assert.ok(fresh.brief.includes(`# Brief: run ${fresh.id} on ${fresh.run.item}`));
+  assert.deepEqual(launch(), { ...originalLaunch, effort: 'xhigh' });
   assert.deepEqual(selectRelease(f.cwd, f.installationHome), selected);
   assert.deepEqual(JSON.parse(cli('show', old.id, '--json').stdout), old.run);
   assert.deepEqual(fs.readFileSync(old.run.brief_path), old.brief);
@@ -84,6 +89,7 @@ test('one audited project route revision reaches the next record brief on the sa
   assert.deepEqual(fs.readFileSync(file), original);
   const restored = view();
   assert.deepEqual(values(restored), values(before)); assert.deepEqual(restored.warnings, before.warnings);
+  assert.deepEqual(launch(), originalLaunch);
   assert.deepEqual(JSON.parse(cli('show', fresh.id, '--json').stdout), fresh.run);
   assert.deepEqual(fs.readFileSync(fresh.run.brief_path), fresh.brief);
   assert.deepEqual(JSON.parse(cli('show', old.id, '--json').stdout), old.run);

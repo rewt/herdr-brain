@@ -17,11 +17,14 @@ inputs authorize only disposable fixture data; they are not actual owner proof.
 The single effective change is project `routes.engineer.effort`, `high` to
 `xhigh`. The control checks source/key/scope provenance, the precise audit diff
 and owner Git identity, unchanged old run/event/brief bytes, the next record
-run's changed settings and brief, unchanged release ID and full installed
+run's changed settings and its own generated brief, the normal launch projection,
+unchanged release ID and full installed
 runtime/metadata digests, visible divergence from the retained repo copy, and
 an audited digest-checked rollback. Both runs remain open in the fixture while
 the policy changes; rollback preserves both captured settings. No native
-session is launched. Fixture teardown removes only fixture data.
+session is launched. Ordinary record briefs identify their run/item; the
+captured effort is verified in run metadata and the launch projection, not
+inferred from brief prose. Fixture teardown removes only fixture data.
 
 Live acceptance remains pending. The project supervisor recorded on ENG-1041
 on 2026-10-30 that Brain currently uses development source and has no adopted

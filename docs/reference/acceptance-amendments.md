@@ -29,6 +29,12 @@ and reason; `record show ID --json` exposes them in `accept_history`. No old eve
 or note is rewritten or truncated in that history. Identity, selection, holds,
 dependencies, status and run facts do not change.
 
+Closed items, including items closed as done, can also be amended unless they
+are reserved. An amendment replaces their current folded `item.accept` without
+reopening them or changing their recorded closure. Later consumers of that field,
+including the acceptance fallback in a correction brief, see the amended text;
+the original acceptance remains in history. Closure does not freeze acceptance.
+
 Newly dispatched runs get the latest acceptance in their generated brief. Saved
 briefs remain immutable: `record brief R-n` returns the saved bytes, even after an
 amendment. If a missing brief is regenerated, it uses the current acceptance.

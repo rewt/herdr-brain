@@ -86,6 +86,27 @@ test('file amendment preserves prompt bytes, new briefs use it, and saved briefs
   assert.doesNotMatch(regenerated, /Superseded acceptance/);
 });
 
+test('closed done items accept amendments while retaining closure and original acceptance history', t => {
+  const f = fixture(t), original = 'Acceptance when completed';
+  const id = f.ok(['add', 'Completed slice', '--accept', original]).trim();
+  f.ok(['close', id, '--note', 'Completed against the original acceptance']);
+  const beforeEvents = f.events(), before = fold(beforeEvents), beforeItem = structuredClone(before.items.get(id));
+  assert.equal(itemStatus(before, id), 'done');
+  f.ok(['amend-accept', id, '--accept', 'Current acceptance for later consumers', '--why', 'Clarify the completed slice']);
+  const events = f.events(), after = fold(events), item = after.items.get(id);
+  assert.deepEqual(events.slice(0, beforeEvents.length), beforeEvents);
+  assert.deepEqual(events.slice(beforeEvents.length).map(e => e.type), ['item.acceptance-amended']);
+  assert.deepEqual(item.accept, ['Current acceptance for later consumers']);
+  assert.deepEqual(item.accept_history.map(r => r.accept), [[original], item.accept]);
+  const { accept, accept_history, ...otherFacts } = item;
+  const { accept: ignored, ...oldFacts } = beforeItem;
+  assert.deepEqual(otherFacts, oldFacts, 'closure and all other item facts remain intact');
+  assert.equal(itemStatus(after, id), 'done');
+  const shown = f.json(['show', id, '--json']);
+  assert.deepEqual(shown.accept, item.accept);
+  assert.deepEqual(shown.closed, beforeItem.closed);
+});
+
 test('amending an item without initial acceptance retains an empty original revision', t => {
   const f = fixture(t), id = f.ok(['add', 'Previously unspecified']).trim();
   f.ok(['amend-accept', id, '--accept', 'Now specified', '--why', 'Define the result']);

@@ -53,13 +53,22 @@ test('detached driver receipt reader waits for complete appends and retains term
 });
 
 test('detached driver receipt reader waits for request cleanup after a terminal row without removing ownership evidence',async t=>{
-  const root=fs.mkdtempSync(path.join(os.tmpdir(),'phase1-cleanup-'));t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'phase1-cleanup-'));
   const journal=path.join(root,'request.json'),lock=journal+'.lock',directory=journal+'.locks',ticket=path.join(directory,'original');
+  let pending;
+  t.after(async()=>{
+    // Release the synthetic request even when an assertion fails, then drain
+    // the reader before removing its fixture so no rejection escapes the test.
+    fs.rmSync(lock,{force:true});fs.rmSync(ticket,{force:true});
+    await pending?.catch(()=>{});
+    fs.rmSync(root,{recursive:true,force:true});
+  });
   const failed={stage:'start',exit_code:1,native_launch_attempted:false,error:'injected prepare'};
   fs.mkdirSync(journal+'.driver');fs.mkdirSync(directory);fs.writeFileSync(lock,String(process.pid));fs.writeFileSync(ticket,'1');
   fs.writeFileSync(journal+'.driver/results.jsonl',JSON.stringify(failed)+'\n');
   await assert.rejects(driverResult(journal,{limit:0}),/got 1; request serialization held: true/);
-  let resolved=false;const pending=driverResult(journal).then(result=>{resolved=true;return result;});
+  let resolved=false;pending=driverResult(journal).then(result=>{resolved=true;return result;});
+  pending.catch(()=>{});
   await new Promise(resolve=>setImmediate(resolve));assert.equal(resolved,false,'terminal result does not release the request');
   assert.equal(fs.readFileSync(lock,'utf8'),String(process.pid));assert.equal(fs.readFileSync(ticket,'utf8'),'1');
   fs.unlinkSync(lock);

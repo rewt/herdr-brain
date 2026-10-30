@@ -9,7 +9,7 @@ import { discoverArchive } from '../lib/archive.mjs';
 import { checkFleetRecord, FleetError } from '../lib/fleet.mjs';
 import { forwardRelease, bundleRelease, projectEnvironment } from '../lib/releases.mjs';
 import {
-  UserError, findOrgDir, initOrg, isOrgDir, loadEvents, loadRecord, now as clock, readConfig, transact, planTransaction, writeFileAtomic, writer,
+  UserError, findOrgDir, initOrg, isOrgDir, loadEvents, loadRecord, loadRecordReader, now as clock, readConfig, transact, planTransaction, writeFileAtomic, writer,
 } from '../lib/store.mjs';
 import {
   BUDGET_KEYS, attention, blockedBy, blockersOf, fold, isResolved, itemStatus, laterRuns, nextItemId, nextRunId, openRuns,
@@ -122,7 +122,7 @@ Runs and reports
 Views (zero inference)
   record status [--json]                  one-screen overview
   record snapshot                         markdown state for a fresh session of any harness
-  record show <ID> [--json]               an item or run with its reports and history
+  record show <ID> [--json] [--compact]   an item or run with its reports and history
   record log [--since 2h|09:00|DATE] [--limit N] [--json]
   record today [--json] [--parked]        what waits on the operator; --parked lists questions older than 7 days
   record summary [--json]                published summary freshness and age
@@ -165,7 +165,7 @@ function cliString(dir) {
   return `ORG_DIR=${shq(dir)} node ${shq(BIN)}`;
 }
 
-function openOrg({ readOnly = false } = {}) {
+function openOrg({ readOnly = false, compact = false } = {}) {
   let dir = findOrgDir();
   if (!dir && !process.env.ORG_DIR && !readOnly) {
     try { const project = gitProject(); ignoreRuntime(project); dir = path.join(project.canonical, '.org'); }
@@ -176,6 +176,14 @@ function openOrg({ readOnly = false } = {}) {
     throw new UserError(dir
       ? `${dir} is not an initialized record (run: record init ${dir})`
       : 'no record found: run record init, or set ORG_DIR');
+  }
+  if (compact) {
+    const reader = loadRecordReader(dir);
+    // The show renderer requests only matching history. Do not materialize the
+    // archive to provide its existing filter contract.
+    const events = { filter(predicate) { const selected = []; for (const event of reader.events()) if (predicate(event)) selected.push(event); return selected; } };
+    try { return { dir, events, state: reader.state, tornTail: reader.tornTail, config: readConfig(dir), now: clock(), close: () => reader.close() }; }
+    catch (error) { reader.close(); throw error; }
   }
   const { events, tornTail, state } = loadRecord(dir);
   return { dir, events, tornTail, state, config: readConfig(dir), now: clock() };
@@ -1058,16 +1066,18 @@ function snapshot(argv) {
 }
 
 function show(argv) {
-  const { values, positionals } = args(argv, { json: { type: 'boolean' } }, { min: 1, max: 1, usage: 'record show <ID> [--json]' });
-  const ctx = openOrg();
-  const id = positionals[0];
-  if (ctx.state.items.has(id)) {
-    out(values.json ? JSON.stringify(itemJson(ctx.state, id), null, 2) + '\n' : renderShowItem(ctx.state, id, view(ctx)));
-  } else if (ctx.state.runs.has(id)) {
-    out(values.json ? JSON.stringify(ctx.state.runs.get(id), null, 2) + '\n' : renderShowRun(ctx.state, id, view(ctx)));
-  } else {
-    throw new UserError(`unknown item or run ${id}`);
-  }
+  const { values, positionals } = args(argv, { json: { type: 'boolean' }, compact: { type: 'boolean' } }, { min: 1, max: 1, usage: 'record show <ID> [--json] [--compact]' });
+  const ctx = openOrg({ readOnly: true, compact: values.compact });
+  try {
+    const id = positionals[0];
+    if (ctx.state.items.has(id)) {
+      out(values.json ? JSON.stringify(itemJson(ctx.state, id), null, 2) + '\n' : renderShowItem(ctx.state, id, view(ctx)));
+    } else if (ctx.state.runs.has(id)) {
+      out(values.json ? JSON.stringify(ctx.state.runs.get(id), null, 2) + '\n' : renderShowRun(ctx.state, id, view(ctx)));
+    } else {
+      throw new UserError(`unknown item or run ${id}`);
+    }
+  } finally { ctx.close?.(); }
   return 0;
 }
 

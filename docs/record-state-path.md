@@ -1,5 +1,84 @@
 # Record snapshots and short transactions
 
+## Compact read-only view
+
+`loadRecordReader(dir)` in `lib/store.mjs` is an opt-in read-only alternative
+for consumers that retain selected current work. `record show ID --compact`
+uses it for an individual item or run, with the same text/JSON result as `show`.
+It does not change service runtimes, watchers, mutation planners or their guards.
+
+```js
+const reader = loadRecordReader(dir);
+try {
+  const run = reader.state.runs.get(runId);
+  const item = reader.state.items.get(run.item);
+  // Keep selected facts, not Array.from(reader.state.items.values()).
+  const position = reader.position;
+  reader.verify(); // throws RECORD_READER_STALE if the log has changed
+} finally {
+  reader.close();
+}
+```
+
+The state maps implement `get`, `has`, `size`, `keys`, `values`, `entries` and
+iteration. Each lookup returns an independent exact folded value, including all
+notes, revisions, ownership generations and reports. They are not writable Maps;
+object identity across lookups is not part of this contract. Iteration decodes
+one subject at a time. Consumers that collect all values still pay for all facts.
+Graph/status renderers may collect those values and perform repeated lookups;
+the compact flag is a control, not a promise of faster full-history rendering.
+
+`reader.events({afterSeq})` streams complete authoritative events, including
+unknown types. It scans the captured log prefix; it is not an indexed tail seek.
+An event without a numeric sequence is conservatively included even with a
+cursor. Finish or close an iterator before using its result: source changes
+during a scan throw, rather than declaring a mixed view current. A torn EOF is
+ignored and reported; malformed complete lines refuse. Valid EOF JSON remains
+visible without a trailing newline.
+
+The position contains reader/fold/runtime version, real source identity and
+nanosecond signature, full-prefix digest, byte position, complete-line position,
+valid EOF flag, event count, last sequence and last timestamp. `fresh()` checks
+the current source signature; `verify()` throws on any append, replacement,
+rewrite, truncation or missing source. An already-open view's indexed facts stay
+at its captured position even after another reader replaces the projection.
+These are observation controls for ENG-1032/1033, never mutation authority.
+Fresh native, claim, source, CAS, STOP/HOLD and locked checks remain mandatory
+through their existing mutation APIs.
+
+`record.reader` is disposable. Its independently hashed subject blobs and
+checksummed index are bound to the reader version, source identity and verified
+log-prefix digest. A missing, stale-version, foreign or corrupt file rebuilds
+from the append log; prefix rewrites cannot hide behind a projection. Compatible
+appends extend the folded state. Rebuilds stream events and spill touched
+subjects between batches of 128 events, without splitting an event's dependency
+set. Publication replaces an immutable generation atomically; concurrent cold
+readers can build independently, and an older publication only causes a later
+reader to apply more tail. No cache lock confers authority. Read-only cache paths
+fall back to a temporary generation removed on close.
+
+Resident decoded history is bounded by a batch's subjects (or one large event's
+dependencies), the largest subject/line, graph/category arrays, and what the
+consumer explicitly retains. The in-memory ID/offset index still scales with
+the number of subjects; this is not a constant-space claim. Rebuild scratch and
+the on-disk projection scale with history/current facts. Close readers promptly:
+each owns two descriptors, and an open old generation retains its disk blocks.
+There is no unbounded process cache, background loop or live migration.
+
+The focused measurement is `test/record-reader-measure.test.mjs`, selected with
+`RECORD_READER_MEASURE_SOURCE` (an isolated captured JSONL file) and
+`RECORD_READER_MEASURE_OUTPUT` (durable JSON evidence). It compares one parent
+and two concurrent transient children at two history sizes with identical
+folded facts and active subjects. The larger input replays resettable real
+historical payloads before the original log. Both sizes verify all folded facts
+and all events against the legacy reader. It records warm aggregate idle RSS,
+sampled aggregate peak, conservative summed process high-water marks, read
+latency, reader counts and separate cold rebuild costs. This replay is not a live
+service census or evidence of reduced installed-service memory. Consumers and
+ENG-1038 can use its costs; adoption belongs to their separately selected work.
+
+## Existing full-history reader
+
 `events.jsonl` is still the single authoritative record and write order. No log
 format, sequence or claim-generation rule changes. Existing and pinned writers
 can append as before. `loadEvents` retains its public `{ events, tornTail }`

@@ -75,8 +75,8 @@ function queueImplementation(env){
 }
 function source({ state, events, org, repo, identity, runId, head, base,env=process.env,originalCapture }) {
   const run = state.runs.get(runId), item = run && state.items.get(run.item);
-  if (!run || !item || !roleIs(item, 'ENG')) throw Error('review queue needs an owned immutable landed build source');
-  if (roleIs(state.items.get(item.parent), 'REV')) throw Error('linked formal correction retains its original review; no automatic re-review chain');
+  if (!run || !item) throw Error('review queue needs an owned immutable landed source');
+  if (roleIs(state.items.get(item.parent), 'REV') || item.meta.review_fix_of) throw Error('linked formal correction retains its original review; no automatic re-review chain');
   const current = readOwnedRun(org, run.id);
   requireController(current, 'brain'); assertOwner(current, { owner: run.owner, generation: run.owner_generation });
   queueConsumer({ run,env });

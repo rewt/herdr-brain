@@ -197,13 +197,15 @@ export function discoverChanges({events,state,repo,org,identity,boundary,readGit
   }
   for(const run of state.runs.values()) {
     const item=state.items.get(run.item);
-    if(!item||!roleIs(item,'ENG')||roleIs(state.items.get(item.parent),'REV')||item.meta.review_fix_of)continue;
+    // Non-engineer reports can cite reviewed/researched source. Only positive
+    // own-landing receipts make those runs producers, never report references.
+    if(!item||!roleIs(item,'ENG')&&!landed.has(run.id)||roleIs(state.items.get(item.parent),'REV')||item.meta.review_fix_of)continue;
     const group=producerGroupKey(item.id,run.id,run.report?.sha256),backfills=[...authorized.values()].filter(e=>e.run===run.id&&e.item===item.id),tokens=claimedCommitTokens(run.report?.artifacts??[]),nativeQueues=queues.filter(q=>!archived.has(q.id)&&sameProducerQueue(q,item.id,run.id)&&q.meta.review_target?.evidence_kind==='native-landings/v1');
     // Settled history remains two batched Git index reads, no per-report disk
     // or native inventory. An immutable report's intermediate heads are one group.
     if(!(landed.get(run.id)??[]).length&&!backfills.length&&!tokens.some(token=>index.heads.some(head=>head.startsWith(token))))continue;
     try {
-        const nativeEvidence=!run.report||nativeQueues.length>0||backfills.some(e=>e.target.evidence_kind==='native-landings/v1'),reportFile=run.report&&path.resolve(org,run.report.file??'');
+        const nativeEvidence=!roleIs(item,'ENG')||!run.report||nativeQueues.length>0||backfills.some(e=>e.target.evidence_kind==='native-landings/v1'),reportFile=run.report&&path.resolve(org,run.report.file??'');
         if(!nativeEvidence&&(!reportFile.startsWith(path.resolve(org)+path.sep)||hash(fs.readFileSync(reportFile))!==run.report.sha256))throw Error('immutable producer report bytes changed/missing');
         const start=events.find(e=>e.type==='run.started'&&e.id===run.id),file=start?.meta?.dispatch_journal;
         if(!file||!path.resolve(file).startsWith(path.join(path.resolve(org),'dispatch')+path.sep))throw Error('original dispatch/source attribution missing');

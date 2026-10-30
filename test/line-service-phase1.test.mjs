@@ -413,6 +413,34 @@ function partialReview(f,id,{head,base,run,verdict,held=false}){
   f.add(rows);return target;
 }
 
+for(const role of ['architect','researcher','reviewer'])for(const reported of [false,true])test(`phase1 post-FF ${role} non-engineer review covers own landings ${reported?'after':'before'} report once`,t=>{
+  const f=fixture(t,{role,reported});
+  assert.equal(discoverChanges(f.context()).changes.length,0,'report references alone never establish non-engineer production');
+  unreportedNativeLandings(f);
+  const found=discoverChanges(f.context());assert.deepEqual(found.holds,[]);assert.deepEqual(found.unattributed,[]);assert.equal(found.changes.length,1);
+  const {target}=found.changes[0];assert.equal(target.evidence_kind,'native-landings/v1');assert.deepEqual(target.source_group.owned_commits,f.heads);assert.equal(target.base,f.base);assert.equal(target.head,f.heads[1]);
+  const before=process.cwd(),env={...installedService(f),ORG_ACTOR:'line-service'};process.chdir(f.cwd);
+  try{
+    const result=queueReviewMutation({...f.context(),runId:'R-1',head:target.head,base:target.base,env});f.add(result.add);
+    const c=f.context(),q=c.state.items.get(result.result.review_item);
+    assert.equal(q.meta.review_round_cap,1);assert.deepEqual(validateQueuedReview({...c,item:q}),q.meta.review_target);
+    assert.equal([...c.state.items.values()].filter(i=>i.meta.review_source_run==='R-1').length,1);
+    assert.equal(queueReviewMutation({...c,runId:'R-1',env}).add.length,0);assert.equal(discoverChanges({...c,pendingOnly:true}).changes.length,0);
+    const health=reviewHealth({...c,index:canonicalReviewIndex(c)});assert.equal(health.owed,1);assert.equal(health.queued,1);assert.equal(health.queued_commits,2);assert.equal(health.missing_queue,0);assert.deepEqual(health.coverage_gaps,[]);assert.deepEqual(health.attribution_gaps,[]);
+  }finally{process.chdir(before);}
+});
+
+for(const link of ['parent','review_fix_of'])test(`phase1 post-FF non-engineer review preserves ${link} formal-correction exemption`,t=>{
+  const f=fixture(t,{role:'architect',reported:false});
+  f.add([{type:'item.added',id:'REV-99',title:'Original review',role:'reviewer'},
+    {type:'item.updated',id:'ENG-1',fields:link==='parent'?{parent:'REV-99'}:{meta:{review_fix_of:'original:key'}}}]);
+  unreportedNativeLandings(f);
+  const c=f.context(),found=discoverChanges(c),health=reviewHealth({...c,index:canonicalReviewIndex(c)});
+  assert.deepEqual(found.changes,[]);assert.deepEqual(found.unattributed,[]);assert.deepEqual(found.holds,[]);assert.equal(health.exemptions.length,2);assert.equal(health.owed,0);assert.equal(health.missing_queue,0);assert.deepEqual(health.coverage_gaps,[]);
+  const before=process.cwd(),env={...installedService(f),ORG_ACTOR:'line-service'};process.chdir(f.cwd);
+  try{assert.throws(()=>queueReviewMutation({...c,runId:'R-1',env}),/linked formal correction/);}finally{process.chdir(before);}
+});
+
 function unreportedNativeLandings(f){
   const actor=structuredClone(f.observation.agents[0]);actor.cwd=f.workspace;
   f.add([{type:'run.updated',id:'R-1',meta:{agent:actor.name,pane:actor.pane_id,worker_workspace:actor.workspace_id,terminal_id:actor.terminal_id,agent_session_id:actor.agent_session.value}}]);

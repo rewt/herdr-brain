@@ -89,7 +89,8 @@ test('a slow real record start commits before spawnSync ETIMEDOUT and returns ty
   const { receipt, saved } = assertUnknown(f, start(), 'starting', true);
   assert.equal(fs.readFileSync(path.join(f.root, 'committed'), 'utf8'), 'committed');
   assert.equal(receipt.receipt.error, 'ETIMEDOUT'); assert.equal(receipt.receipt.signal, 'SIGTERM');
-  assert.deepEqual(receipt.receipt, JSON.parse(fs.readFileSync(path.join(f.root, 'native-receipt'))));
+  const native = JSON.parse(fs.readFileSync(path.join(f.root, 'native-receipt')));
+  assert.deepEqual(receipt.receipt, { ...native, error: native.error.code });
   assert.equal(saved.run, null); assert.equal(saved.native_launch_attempted, false);
   assert.equal(f.calls().filter(c => c.type === 'lane' && c.a[0] === 'dispatch').length, 0);
   t.diagnostic('One committed run, original ETIMEDOUT/SIGTERM receipt, one retained unknown completion, zero launches or retry hints.');

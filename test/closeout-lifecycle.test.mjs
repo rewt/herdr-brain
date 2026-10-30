@@ -397,7 +397,7 @@ for (const [command, action, count] of [
   assert.equal(fs.existsSync(f.lane), !workspace);
   const intentId = original.find(e => e.type === 'closeout.effect' && e.outcome === intent).effect;
   const waits = events(f).filter(e => e.type === 'closeout.waiting' && e.key === entry.key &&
-    (e.waiting.defect || e.waiting.producers.some(p => p.kind === 'native-command' && p.intent === intentId)));
+    e.waiting.producers.some(p => p.kind === 'native-command' && p.intent === intentId));
   assert.ok(waits.length > 0, 'the original pending or failed producer remains durably linked');
   for (const wait of waits) assert.notEqual(closeoutWaitState(wait, events(f)), 'complete');
 });

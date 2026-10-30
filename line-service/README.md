@@ -111,6 +111,38 @@ Disable or unset `ordinary_admission` to restore the legacy selection rule,
 including unflagged non-proposal items. No new record event or fold change is
 needed; older folds continue reading the same item metadata.
 
+## Scheduling and owned commands
+
+`pass.lock` protects scheduling and the single `effects.json` writer. Before
+waiting for a foreground command the pass saves its intent and yields that lock.
+Another finite wake can then consider independent subjects. A subject lock spans
+the whole effect, including recovery; a changed input cannot replace a started
+action on the same subject. On return the pass reacquires the scheduling lock
+and reloads the journal in place before writing its result. Other passes' receipts
+are inherited. Productive command time does not consume the scheduling allowance.
+
+Each saved command names its consumer, completion wake fact and stuck owner.
+The foreground helper persists its exact terminal result before replying, even
+if the scheduling parent has exited. A missing result remains UNKNOWN, with no
+timer-based retry, deletion or native substitution. Independent work can proceed.
+Commands and their immutable results live in the existing service directory;
+the action points to their receipt, which retains the original intent after the
+active marker is removed. Recovery/decision operations keep their actual subject
+lock while using the existing installed-service, source and record guards.
+
+Maintenance still orders control, pass and promotion locks. While holding the
+pass lock it additionally checks active command intents for matching terminal
+receipts. An unfinished or UNKNOWN command refuses the transition, retaining its
+named owner. PID disappearance alone cannot prove a quiet point. This applies to
+forward/rollback, recipient changes, restart and cutoff/reference controls; no
+running service or saved pin is changed by source delivery.
+
+The pass audit reports `schedule-unlocked.duration_ms` per lock segment and total
+`pass_lock_ms`, maximum segment and `suspended_ms` on completion. Admission rows
+separate eligibility observation, decision, capacity observation and original
+dispatch acknowledgement. `event_to_wake_ms` remains null for ENG-1033 to supply;
+an acknowledgement is not a claim that the worker has finished native startup.
+
 ## Standing order and explicit selection
 
 The existing record's single open `meta.queue_order` owner declares the operator's

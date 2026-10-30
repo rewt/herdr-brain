@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import fs from 'node:fs';
+import {assertCommandQuiescence} from '../lib/command-receipt.mjs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
@@ -83,6 +84,7 @@ export function main(argv = process.argv.slice(2), { command = spawnSync,call:na
   try{
     if(action==='install'||action==='restart'){
       releasePass=noticeLock(path.join(directory,'pass.lock'),{recover:false});
+      assertCommandQuiescence(directory);
       releasePromotion=acquireLock(path.join(project.identity,'lane-promote.lock'));
     }
     return control();

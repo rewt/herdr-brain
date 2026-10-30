@@ -16,6 +16,7 @@ import {readPlainFile,plainDirectory,writeFileAtomic} from '../lib/files.mjs';
 import {noticeLock} from '../supervisor/notice-lock.mjs';
 import {acquireLock} from '../lanes/promotion-lock.mjs';
 import {loadDiscoveredRoutes} from '../lanes/routes.mjs';
+import {assertCommandQuiescence} from '../lib/command-receipt.mjs';
 
 const same=(a,b)=>canonical(a)===canonical(b);
 const git=(repo,args)=>execFileSync('git',['--no-optional-locks','-C',repo,...args],{encoding:'utf8',stdio:['ignore','pipe','pipe'],timeout:10000}).trim();
@@ -77,6 +78,7 @@ export function retargetService({repo,org,to,dryRun=false,cwd=process.cwd(),env=
   try{
     const releasePass=noticeLock(path.join(c.directory,'pass.lock'),{recover:false});
     try{
+      assertCommandQuiescence(c.directory);
       const releasePromotion=acquireLock(path.join(c.identity,'lane-promote.lock'));
       try{
         const result={target:saved.target,old_recipient:oldRecipient,new_recipient:to,stopped:true,runtime_started:false};

@@ -15,6 +15,7 @@ import { bundleRelease } from '../lib/releases.mjs';
 import {migratedCutover} from './runtime.mjs';
 import {recipientChanges,legacyRecipientHistory} from './recipient-history.mjs';
 import {readPlainFile} from '../lib/files.mjs';
+import {assertCommandQuiescence} from '../lib/command-receipt.mjs';
 
 export const developmentRoot=fs.realpathSync(fileURLToPath(new URL('../',import.meta.url)));
 const hash=v=>createHash('sha256').update(v).digest('hex');
@@ -89,6 +90,7 @@ export function establishCutover({repo,org,id,cutover=false,initialize=false,pha
   guard();fs.mkdirSync(c.directory,{recursive:true});
   const releasePass=noticeLock(path.join(c.directory,'pass.lock'));
   try{
+    assertCommandQuiescence(c.directory);
     const releasePromotion=acquireLock(path.join(c.identity,'lane-promote.lock'));
     try{
       const main=loadDiscoveredRoutes({cwd:c.repo,env}).config.main??'main';

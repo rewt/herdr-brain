@@ -21,7 +21,12 @@ export function serviceRecordBinding({repo,org,env=process.env,owner='pass'}) {
   const c=installedContext(repo,org);
   if(env.HERDR_ENV==='1'||env.HERDR_PANE_ID)throw Error('service inbox never borrows a native session context');
   if(!['pass','closeout-turn'].includes(owner))throw Error('unknown service record owner');
-  const lock=regularJSON(path.join(c.directory,`${owner}.lock`,'owner.json'));
+  let lock=regularJSON(path.join(c.directory,`${owner}.lock`,'owner.json'));
+  // A finite guarded operation can yield the scheduling lock while keeping
+  // its actual per-subject owner. Environment metadata alone grants nothing.
+  const subject=env.HERDR_LINE_SUBJECT;
+  if(owner==='pass'&&lock?.pid!==process.pid&&typeof subject==='string'&&subject.length&&subject.length<=512)
+    lock=regularJSON(path.join(c.directory,'subjects',createHash('sha256').update(JSON.stringify(subject)).digest('hex')+'.lock','owner.json'));
   if(lock?.pid!==process.pid||owner==='closeout-turn'&&(!lock.identity||lock.identity!==ownerIdentity(process.pid)))
     throw Error(`service inbox requires its actual owned ${owner} lock`);
   const root=identityRootAt(c.identity);if(!root)throw Error('service identity root is UNKNOWN');

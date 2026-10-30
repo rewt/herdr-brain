@@ -1,5 +1,6 @@
 // Supported owner disposition into the existing append-only record, no launch.
 import fs from 'node:fs';
+import {assertCommandQuiescence} from '../lib/command-receipt.mjs';
 import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
@@ -68,6 +69,7 @@ export function resolveReviewReference({repo,org,runId,resolution,decisionSeq,id
   let releasePass,releasePromotion;
   try{
     releasePass=noticeLock(path.join(c.directory,'pass.lock'),{recover:false});
+    assertCommandQuiescence(c.directory);
     releasePromotion=acquireLock(path.join(c.identity,'lane-promote.lock'));
     const guard=()=>{
       if(!same(tuple(bind()),tuple(native)))throw Error('native supervisor identity changed');

@@ -5,8 +5,10 @@ import {fileURLToPath} from 'node:url';
 import {watchRun} from '../test-slot/watch.mjs';
 import {readOwnerProcess} from '../lib/process-owner.mjs';
 import {isMain} from '../lib/cli-help.mjs';
+import {finishCommand,validateCommandIntent} from '../lib/command-receipt.mjs';
 
-export function executeForeground({exe,args,cwd,env=process.env},{launch=spawn,watch=watchRun,readProcess=readOwnerProcess}={}){
+export function executeForeground({exe,args,cwd,env=process.env,commandReceipt},{launch=spawn,watch=watchRun,readProcess=readOwnerProcess}={}){
+  if(commandReceipt)validateCommandIntent(commandReceipt,{exe,args,cwd});
   return new Promise(resolve=>{
     const child=launch(exe,args,{cwd,env,stdio:['ignore','pipe','pipe']});
     let stdout='',stderr='',error,signalSent=false,birth;
@@ -19,13 +21,16 @@ export function executeForeground({exe,args,cwd,env=process.env},{launch=spawn,w
     }});
     child.stdout.on('data',b=>{stdout+=b;watcher.output();});child.stderr.on('data',b=>{stderr+=b;watcher.output();});
     child.once('error',e=>{error={code:e.code??'COMMAND_FAILED',message:e.message};});
-    child.once('close',(status,signal)=>{watcher.stop();resolve({status,signal,stdout,stderr,...(error?{error}:{}),signal_sent:signalSent,activity:watcher.snapshot()});});
+    child.once('close',(status,signal)=>{watcher.stop();const result={status,signal,stdout,stderr,...(error?{error}:{}),signal_sent:signalSent,activity:watcher.snapshot()};
+      // Persist before replying. Parent death must not discard the real exit.
+      try{if(commandReceipt)finishCommand(commandReceipt,result);resolve(result);}catch(error){resolve({status:null,stdout:'',stderr:error.message,error});}
+    });
   });
 }
 
 export function foregroundCommand(exe,args,options={}){
   const r=spawnSync(process.execPath,[fileURLToPath(import.meta.url),'--owned-command'],{cwd:options.cwd,env:options.env,encoding:'utf8',
-    input:JSON.stringify({exe,args,cwd:options.cwd}),maxBuffer:64*1024*1024,timeout:0});
+    input:JSON.stringify({exe,args,cwd:options.cwd,...(options.commandReceipt?{commandReceipt:options.commandReceipt}:{})}),maxBuffer:64*1024*1024,timeout:0});
   if(r.error||r.status!==0)return r;
   const result=JSON.parse(r.stdout);if(result.error)result.error=Object.assign(Error(result.error.message),{code:result.error.code});return result;
 }

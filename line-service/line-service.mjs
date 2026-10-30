@@ -50,6 +50,8 @@ import {transact} from '../lib/store.mjs';
 import {readReviewAdmission,readOrdinaryAdmission,reviewAdmissionSubject} from './review-admission.mjs';
 import {reviewAdmissionHold} from '../lib/review-admission.mjs';
 import {ordinaryAdmissionHold} from '../lib/ordinary-admission.mjs';
+import {commandIntent,finishCommand,forgetActiveCommand,pendingSubjectCommand} from '../lib/command-receipt.mjs';
+import {refreshJournal,effectSubject} from './scheduling.mjs';
 export { reviewAttempt } from './review.mjs';
 
 export const sourceRoot = fileURLToPath(new URL('../', import.meta.url));
@@ -145,11 +147,12 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
   // A launchd controller has no pane/session identity. Never inherit an installer's.
   for (const key of Object.keys(childEnv)) if (/^(HERDR_(ENV|PANE_ID|TAB_ID|WORKSPACE_ID)|CODEX_(SESSION_ID|THREAD_ID)|GIT_.*|LANE_CONFIG)$/.test(key)) delete childEnv[key];
   delete childEnv.ORG_GUARD_OVERRIDE; // A routine line never inherits an explicit judgment override.
-  let timings;
+  let timings,commandTurn;
   const invoke = (exe, args, { receipt = false } = {}) => {
     const started = performance.now();
     let r;
-    try { r = command(exe, args, { cwd: repo, env: childEnv, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024,timeout:0 }); }
+    try { const options={ cwd: repo, env: childEnv, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024,timeout:0 };
+      r = commandTurn ? commandTurn(exe,args,options) : command(exe,args,options); }
     finally { if (timings) timings.effect_command_ms += performance.now() - started; }
     if (r.error || r.status !== 0) throw Object.assign(Error((r.stderr || r.stdout || r.error?.message || `exit ${r.status}`).trim()), { code:r.error?.code,receipt: { status: r.status, signal: r.signal, stdout: r.stdout, stderr: r.stderr,error:r.error?.code,...(r.activity?{activity:r.activity,signal_sent:r.signal_sent}:{}) } });
     return receipt ? { status: r.status, signal: r.signal ?? null, stdout: r.stdout ?? '', stderr: r.stderr ?? '' } : r.stdout?.trim() ?? '';
@@ -183,7 +186,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
   };
   const closeout=()=>runCloseoutTurn({project,org,env:childEnv,cli,guard:observe,maxSteps:maxStepsPerStage,budgetMs:CLOSEOUT_TURN_BUDGET_MS,clock:workClock,
     ...(closeoutMeasure?{measure:closeoutMeasure}:{})});
-  const acquirePass=()=>noticeLock(path.join(directory,'pass.lock'),{onRecovery:recovery=>{
+  const acquirePass=(options={})=>noticeLock(path.join(directory,'pass.lock'),{...options,onRecovery:recovery=>{
     observe();
     log({action:'general-pass-lock-recovery',schema:'line-pass-lock-recovery/v1',project:project.identity,org,...recovery});
   }});
@@ -195,14 +198,15 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       closeout_ms=Math.max(0,workClock()-closeoutStarted);
       log({action:'closeout-timing',duration_ms:closeout_ms,budget_ms:CLOSEOUT_TURN_BUDGET_MS});
     }
-    const release = acquirePass();
+    let release = acquirePass(),lockedAt=performance.now();
     let effects,checkpointNotices;
     const passAt=now(),heartbeat=phase=>writeFileAtomic(path.join(directory,'heartbeat.json'),JSON.stringify({at:now(),started_at:passAt,project:project.identity,source:sourceRoot,phase,pid:process.pid})+'\n',0o600);
     heartbeat('starting');
     try {
       const passStarted = performance.now();
       let workStarted=workClock();const maintenanceStarted=workStarted,expired=()=>workClock()-workStarted>=passBudgetMs;
-      timings = { closeout_ms,snapshots: 0, record_snapshot_ms: 0, effect_command_ms: 0, historical_intake_skipped: 0, historical_review_skipped: 0, closeout_retained: 0,outcome_decisions_deferred:0,effects_journal_writes:0,notice_record_attempts:0 };
+      timings = { closeout_ms,snapshots: 0, record_snapshot_ms: 0, effect_command_ms: 0, historical_intake_skipped: 0, historical_review_skipped: 0, closeout_retained: 0,outcome_decisions_deferred:0,effects_journal_writes:0,notice_record_attempts:0,
+        pass_lock_ms:0,pass_lock_max_segment_ms:0,suspended_ms:0 };
       effects = readServiceJournal(journal) ?? { identity: project.identity, org, actions: {}, notices: {} };
       if (effects.identity !== project.identity || effects.org !== org) throw Error('effect journal project binding changed');
       const audit=path.join(directory,'passes.jsonl'),restored=replayNoticeAudit(audit,effects);let noticesDirty=false;
@@ -210,12 +214,72 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       // Older unbound rows remain visible and unchanged; they grant no effect.
       timings.review_error_unbound=0;
       for(const [key,e]of Object.entries(effects.record_notices??{}))if(e.review){try{noticeBoundary(key,e);}catch{timings.review_error_unbound++;}}
-      const save = () => {effects.notice_audit_offset=fs.statSync(audit,{throwIfNoEntry:false})?.size??0;writeFileAtomic(journal, JSON.stringify(effects, null, 2) + '\n', 0o600);timings.effects_journal_writes++;noticesDirty=false;};
+      const save = () => {if(!release)throw Error('journal mutation requires the scheduling lock');effects.notice_audit_offset=fs.statSync(audit,{throwIfNoEntry:false})?.size??0;writeFileAtomic(journal, JSON.stringify(effects, null, 2) + '\n', 0o600);timings.effects_journal_writes++;noticesDirty=false;};
       checkpointNotices=()=>{if(noticesDirty)save();};
       if(effects.pass_number!==undefined&&(!Number.isSafeInteger(effects.pass_number)||effects.pass_number<0))throw Error('service pass counter is inconsistent');
       effects.pass_number=(effects.pass_number??0)+1;save();
       let snapshot, stale = true, reviewCache = new Map();
       const current = () => { if (stale) { snapshot = observe(); stale = false; reviewCache = new Map(); } return snapshot; };
+      let activeSubject,activeKey,parentCommand;
+      const subjectLock=subject=>path.join(directory,'subjects',digest(subject)+'.lock');
+      const withSubject=(key,operation)=>{
+        const subject=effectSubject(key,current().state);
+        if(activeSubject===subject)return operation();
+        const pending=pendingSubjectCommand(directory,subject);
+        if(pending){log({action:'subject-held',subject,key,original:pending.command,reason:'original command remains active or UNKNOWN',owner:pending.intent.stuck_owner});return;}
+        const unknown=Object.entries(effects.actions).find(([other,entry])=>other!==key&&entry.state==='started'&&
+          (entry.execution_subject??effectSubject(other,current().state))===subject);
+        if(unknown){log({action:'subject-held',subject,key,original:unknown[0],reason:'original started action retained; no replacement'});return;}
+        let unlock;try{unlock=noticeLock(subjectLock(subject),{onRecovery:recovery=>log({action:'subject-lock-recovery',subject,...recovery})});}
+        catch(error){if(!error.message.startsWith('locked:'))throw error;log({action:'subject-held',subject,key,reason:error.message});return;}
+        const previous={activeSubject,activeKey,subject:childEnv.HERDR_LINE_SUBJECT};
+        activeSubject=subject;activeKey=key;childEnv.HERDR_LINE_SUBJECT=subject;
+        try{return operation();}finally{activeSubject=previous.activeSubject;activeKey=previous.activeKey;
+          if(previous.subject===undefined)delete childEnv.HERDR_LINE_SUBJECT;else childEnv.HERDR_LINE_SUBJECT=previous.subject;unlock();}
+      };
+      const binding=()=>({project:project.identity,org,subject:activeSubject??null,key:activeKey??null,
+        consumer:'line-service',wake_fact:'terminal command receipt on the next line wake',stuck_owner:to,...(parentCommand?{parent:parentCommand.receipt}:{})});
+      const unlockSchedule=()=>{
+        const duration_ms=performance.now()-lockedAt;timings.pass_lock_ms+=duration_ms;
+        timings.pass_lock_max_segment_ms=Math.max(timings.pass_lock_max_segment_ms,duration_ms);
+        log({action:'schedule-unlocked',pass:passAt,pid:process.pid,duration_ms});
+        const unlock=release;release=null;unlock();
+      };
+      const yieldWork=(exe,args,operation)=>{
+        const ref=commandIntent(directory,{exe,args,cwd:repo,...binding()});
+        if(activeKey&&effects.actions[activeKey]){effects.actions[activeKey].commands??=[];effects.actions[activeKey].commands.push(ref);}
+        checkpointNotices();save();heartbeat('executing');
+        const pausedAt=performance.now(),pausedWork=workClock(),previous=parentCommand;parentCommand=ref;
+        unlockSchedule();
+        try{return operation(ref);}
+        finally{
+          // This is allocation waiting, never a timeout or permission to stop A.
+          // No journal write is allowed until the current writer hands it back.
+          while(!release)try{release=acquirePass({waitMs:1000});}
+          catch(error){if(!error.message.startsWith('locked:'))throw error;}
+          lockedAt=performance.now();
+          const latest=readServiceJournal(journal);
+          if(!latest||latest.identity!==project.identity||latest.org!==org)throw Error('journal binding changed while scheduling was yielded');
+          refreshJournal(effects,latest);stale=true;noticesDirty=false;parentCommand=previous;
+          timings.suspended_ms+=performance.now()-pausedAt;workStarted+=workClock()-pausedWork;
+          // A helper publishes its result before replying. Missing completion
+          // remains UNKNOWN and fences maintenance, without blocking other work.
+          try{forgetActiveCommand(ref);}catch(error){log({action:'command-outcome-retained',command:ref,reason:error.message,owner:to});}
+          heartbeat('scheduling');
+        }
+      };
+      commandTurn=(exe,args,options)=>{
+        const execute=ref=>{const result=command(exe,args,{...options,commandReceipt:ref});finishCommand(ref,result);return result;};
+        if(release)return yieldWork(exe,args,execute);
+        // A direct guarded operation can make several finite commands while
+        // outside scheduling. Its still-pending parent fences maintenance.
+        const ref=commandIntent(directory,{exe,args,cwd:repo,...binding()});
+        try{return execute(ref);}finally{try{forgetActiveCommand(ref);}catch{/* original intent remains */}}
+      };
+      const outside=(name,key,operation)=>withSubject(key,()=>yieldWork('line-operation',[name,key],ref=>{
+        try{const result=operation();finishCommand(ref,{status:0,stdout:JSON.stringify(result??null)});return result;}
+        catch(error){finishCommand(ref,{status:1,stderr:error.message,error});throw error;}
+      }));
       const note = (boundary, reason, scope = {}, force = false, row = {}) => {
         scope=Object.fromEntries(Object.entries(scope).filter(([,value])=>value!==undefined));
         const scoped=scope.item??/^dispatch:([A-Z]+-\d+)/.exec(boundary)?.[1],review=scope.review===true||/^review|DISPATCH_REVIEW/i.test(boundary)||roleIs(snapshot?.state.items.get(scoped),'REV');
@@ -229,7 +293,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         // fsynced delta, never native intents or a SENT/consumed assertion.
         log({action:'hold',...row,boundary,reason,canonical_key:key,scope,...(alert?{inspection_due:true}:{}),notice_record:{key,entry}});
       };
-      const effect = (key, run, binding, operation, safe=false, outcomeReadback=false, before) => {
+      const effectBody = (key, run, binding, operation, safe=false, outcomeReadback=false, before) => {
         const retain=prior=>{
           log({ action: 'effect-retained', key, state: prior.state });
           if (prior.state !== 'complete') note(key, prior.error ?? 'prior failed/uncertain effect retained; inspect its existing receipt, do not replay');
@@ -255,7 +319,9 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         const prior=effects.actions[key],history=prior?[...(prior.history??[]),Object.fromEntries(Object.entries(prior).filter(([k])=>k!=='history'))]:[];
         const continuation=prior&&typeof outcomeReadback==='function'?outcomeReadback(fresh):null;
         if(prior&&typeof outcomeReadback==='function'&&!continuation)return retain(prior);
-        const entry = effects.actions[key] = { state: 'started',owner:'line-service',subject:key, at: now(),...(history.length?{history}:{}),...(continuation?{queue_recovery:continuation}:{}), ...(binding ? { review_target: binding, review_operation: operation } : {}) }; save();
+        const entry = effects.actions[key] = { state: 'started',owner:'line-service',subject:key,execution_subject:activeSubject,attempt:randomUUID(),
+          consumer:'line-service',wake_fact:'original command completion or next line wake',stuck_owner:to,at: now(),...(history.length?{history}:{}),...(continuation?{queue_recovery:continuation}:{}), ...(binding ? { review_target: binding, review_operation: operation } : {}) }; save();
+        log({action:'effect-intent',key,subject:activeSubject,attempt:entry.attempt});
         if(continuation)log({action:'review-queue-no-mutation',key,proof:continuation});
         try {
           entry.result = run(fresh); entry.state = 'complete';
@@ -272,6 +338,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         if (entry.state === 'held') note(key, entry.error);
         return entry;
       };
+      const effect=(...args)=>withSubject(args[0],()=>effectBody(...args));
       log({ action: 'pass-start', pid: process.pid, identity: project.identity, source: sourceRoot,source_head:bundleRelease().commit??sourceGit(sourceRoot,['rev-parse','HEAD']) });
       try { snapshot = current(); } catch (e) { log({ action: 'pass-held', reason: e.message }); return { held: e.message, directory }; }
       const admissionPolicy=readReviewAdmission(repo,childEnv);
@@ -303,8 +370,8 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         const run=bindings[(offset+n)%bindings.length];
         try{
           checkpointNotices();
-          const result=replaySessionBinding({journal:run.meta.dispatch_journal,org,project:project.identity,guard:observe,
-            record:journal=>cli('bin/org.mjs',['session-bind','--journal',journal])});
+          const result=outside('session-binding',`session-binding:${run.id}`,()=>replaySessionBinding({journal:run.meta.dispatch_journal,org,project:project.identity,guard:observe,
+            record:journal=>cli('bin/org.mjs',['session-bind','--journal',journal])}));
           stale=true;log({action:'session-binding-replay',run:run.id,result});
           if(result?.outcome==='refused')note(`session-binding:${run.id}`,result.error.message,{item:run.item,run:run.id});
         }catch(e){note(`session-binding:${run.id}`,e.message,{item:run.item,run:run.id});}
@@ -319,7 +386,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         const review=snapshot.state.items.get(run.item);
         if(run.report&&isQueueReview(review)&&!recordedReviews.has(run.id)){
           resultSteps++;
-          effect(`review-result:${run.id}:${run.report.sha256}`,()=>recordReviewResults({repo,org,runId:run.id,env:childEnv}),undefined,undefined,true);
+          effect(`review-result:${run.id}:${run.report.sha256}`,()=>outside('review-result',`review-result:${run.id}:${run.report.sha256}`,()=>recordReviewResults({repo,org,runId:run.id,env:childEnv})),undefined,undefined,true);
         }
       }
       snapshot=current();
@@ -330,7 +397,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
           if(!admit({item:q},'recovery',true))continue;
           const held=effects.review_recovery_holds?.[id],capability='original-scope-continuation/v2',productHold=held&&/partial\/ambiguous producer|historical\/partial target/.test(held.reason);
           if(held?.signature===observed.progress[id].signature&&!(productHold&&held.capability!==capability))continue;
-          try{checkpointNotices();const result=recoverServiceReview({repo,org,reviewId:id,env:childEnv,call:(_exe,args)=>JSON.stringify({result:native(args)})});log({action:'review-progress-resolution',item:id,...result});if(['review_queued','original_prestart_ready','original_review_ready'].includes(result.result))stale=true;
+          try{checkpointNotices();const result=outside('review-recovery',`review-progress:${id}`,()=>recoverServiceReview({repo,org,reviewId:id,env:childEnv,call:(_exe,args)=>JSON.stringify({result:native(args)})}));if(!result)continue;log({action:'review-progress-resolution',item:id,...result});if(['review_queued','original_prestart_ready','original_review_ready'].includes(result.result))stale=true;
             if(result.result==='original_review_ready')effect(`review-original:${id}:${result.proof}`,()=>JSON.parse(cli('dispatch/dispatch.mjs',['--retry',result.journal,'--repo',repo,'--org',org,'--continue-review'])),undefined,undefined,false,false,()=>admit({item:q},'recovery-launch',true));
           }
           catch(e){effects.review_recovery_holds??={};if(/EPERM|EACCES|native refusal|identity|reserved|HOLD|STOP|UNKNOWN|partial|ambiguous/i.test(e.message))effects.review_recovery_holds[id]={signature:observed.progress[id].signature,reason:e.message,capability};save();note(`review-progress:${id}`,e.message,{item:id,review:true});}
@@ -390,7 +457,8 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       }
       if(index)try{
         checkpointNotices();
-        const errors=Object.values(effects.record_notices??{}).filter(e=>e.review),health=observeReviewHealth({repo,org,index,passId:`${directory}:${effects.pass_number}`,errorCounts:{unique:errors.length,occurrences:errors.reduce((n,e)=>n+e.count,0)},prior:effects.review_health,env:childEnv});
+        const errors=Object.values(effects.record_notices??{}).filter(e=>e.review),health=outside('review-health','review-health',()=>observeReviewHealth({repo,org,index,passId:`${directory}:${effects.pass_number}`,errorCounts:{unique:errors.length,occurrences:errors.reduce((n,e)=>n+e.count,0)},prior:effects.review_health,env:childEnv}));
+        if(!health)throw Error('review health observation already owned');
         log({action:'review-health',health});effects.review_health=health;noticesDirty=true;
         for(const gap of health.attribution_gaps)note(`review-attribution:${gap.head}`,gap.reason,{item:gap.item,run:gap.run,head:gap.head,review:true});
         const attribution=new Set(health.attribution_gaps.map(g=>g.head));
@@ -404,7 +472,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       snapshot = current();
       for(const item of snapshot.state.items.values())if(isQueueReview(item)&&!item.closed){
         const run=snapshot.state.runs.get(item.runs.at(-1));if(!run?.report||run.report.outcome!=='done')continue;
-        try{const plan=reviewCompletionPlan({events:snapshot.events,state:snapshot.state,runId:run.id});effect(`review-complete:${run.id}:${plan.token}`,()=>recordReviewCompletion({repo,org,runId:run.id,env:childEnv}),undefined,undefined,true);}
+        try{const plan=reviewCompletionPlan({events:snapshot.events,state:snapshot.state,runId:run.id});effect(`review-complete:${run.id}:${plan.token}`,()=>outside('review-complete',`review-complete:${run.id}:${plan.token}`,()=>recordReviewCompletion({repo,org,runId:run.id,env:childEnv})),undefined,undefined,true);}
         catch(e){note(`review-complete:${run.id}`,e.message,{item:item.id,run:run.id});}
       }
       snapshot=current();
@@ -472,9 +540,9 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
           if(expired()||decisionSteps>=maxStepsPerStage)break;
           const run=snapshot.state.runs.get(item.runs.at(-1));if(!run?.report)continue;
           decisionSteps++;
-          effect(`decision-apply:${item.id}:${run.id}:${run.report.sha256}`,()=>applyDecision({repo,org,itemId:item.id,env:childEnv,native}));
+          effect(`decision-apply:${item.id}:${run.id}:${run.report.sha256}`,()=>outside('decision-apply',`decision-apply:${item.id}:${run.id}:${run.report.sha256}`,()=>applyDecision({repo,org,itemId:item.id,env:childEnv,native})));
         }
-        try{checkpointNotices();observeDecisionConsequences({repo,org,env:childEnv,native});stale=true;}catch(e){note('decision-consequence',e.message);}
+        try{checkpointNotices();outside('decision-consequence','decision-consequence',()=>observeDecisionConsequences({repo,org,env:childEnv,native}));stale=true;}catch(e){note('decision-consequence',e.message);}
       }
       // Only a real post-cutover
       // pending reserved question with an explicitly named decider may wake.
@@ -496,6 +564,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       // Failed cleanup/review never prevents considering independent ready work.
       snapshot = current();
       for(const [key,entry]of Object.entries(effects.actions))if(key.startsWith('dispatch:')&&(entry.state!=='complete'||entry.result?.result==='detached'&&entry.original_outcome?.status!=='dispatch-complete')){
+        if(entry.state==='started')continue; // The original command, live or UNKNOWN, owns its outcome.
         const item=key.split(':')[1];
         try{
           let status=entry.recorded_dispatch_status;
@@ -544,6 +613,9 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         if(obsoleteDecision(snapshot.state.items.get(item.id),snapshot)){timings.outcome_decisions_deferred++;continue;}
         const input=dispatchInput({...snapshot,item:snapshot.state.items.get(item.id),org,identity:project.identity});
         if(!input)continue;
+        const eligibleAt=now(),decisionStarted=performance.now();
+        log({action:'admission-eligible',item:item.id,input,source_seq:item.created.seq,source_at:item.created.at,
+          observed_at:eligibleAt,wake_owner:'line-service',event_to_wake_ms:null});
         // A saved request may finish through the original guarded continuation.
         // No new rule-generated review/dispatch or backlog attempt is admitted.
         if(!judgmentDispatchAllowed(item,input,effects.actions))continue;
@@ -584,7 +656,8 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
           }
           const reviewTarget = isQueueReview(item) ? validateQueuedReview({ item, state: snapshot.state, events: snapshot.events, org, repo,...(continuation?{allowJournal:continuation.journal}:{}) }) : null;
           const route = continuation?.job.route??(reviewTarget ? reviewQueueRoute(config, item, snapshot.state) : routeFor(item, config));
-          const occupancy = countCapacity(dispatchPool({item:snapshot.state.items.get(item.id),job:{reviewQueue:reviewTarget}}));latestOccupancy=occupancy; log({ action: 'capacity', ...occupancy });
+          const capacityStarted=performance.now(),occupancy = countCapacity(dispatchPool({item:snapshot.state.items.get(item.id),job:{reviewQueue:reviewTarget}}));latestOccupancy=occupancy; log({ action: 'capacity',item:item.id,observation_ms:performance.now()-capacityStarted,...occupancy });
+          log({action:'admission-decision',item:item.id,observed_at:eligibleAt,decision_ms:performance.now()-decisionStarted,capacity_wait_ms:0});
           const dispatched = effect(continuation?`dispatch-preflight:${continuation.token}:${continuation.key}`:dispatchKey, fresh => {
             const current = fresh.state.items.get(item.id);
             if (!current || !queueSelected(current,fresh.state,readOrdinaryAdmission(repo,childEnv)) || obsoleteDecision(current,fresh) || itemLaunchHold(fresh.state,item.id,fresh.events) || dispatchInput({...fresh,item:current,org,identity:project.identity}) !== input || reserved(current) || (!continuation&&(reviewTarget ? reviewQueueRoute(config, current, fresh.state) : routeFor(current, config)) !== route)) throw Error('dispatch readiness or route changed');
@@ -618,7 +691,8 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
           });
           // Each original detached journal reserves admission before returning.
           // The next candidate gets a fresh native count; no launch is replayed.
-          if (dispatched?.state === 'complete') starts++;
+          if (dispatched?.state === 'complete'){starts++;log({action:'admission-started',item:item.id,observed_at:eligibleAt,eligible_to_ack_ms:performance.now()-decisionStarted,
+            command_receipts:dispatched.commands??[],event_to_wake_ms:null});}
         } catch (e) {
           if(e.code==='REVIEW_CUTOFF'){timings.historical_review_skipped++;continue;}
           if(['DISPATCH_REVIEW_CAP','DISPATCH_DECISION_CAP'].includes(e.code)){log({action:'capacity-held',code:e.code,reason:e.message});note(`capacity:${e.code}`,e.message);continue;}
@@ -656,7 +730,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       checkpointNotices();
       if(performance.now()-passStarted>600000)note('long-pass','line pass exceeded ten minutes',{},true);
       checkpointNotices();const duration_ms = performance.now() - passStarted;
-      for(const [key,entry]of Object.entries(effects.actions))if((entry.failure??outcomeFailure(entry)).kind==='fence'||key.startsWith('review:')&&entry.state!=='complete'&&!entry.recorded_review_status)try{
+      for(const [key,entry]of Object.entries(effects.actions))if(entry.state!=='started'&&((entry.failure??outcomeFailure(entry)).kind==='fence'||key.startsWith('review:')&&entry.state!=='complete'&&!entry.recorded_review_status))try{
         if(key.startsWith('review:')&&entry.failure?.kind!=='fence'){
           const q=[...current().state.items.values()].find(q=>q.meta.review_source_item===key.split(':')[1]&&q.meta.review_target?.head===entry.review_target?.head);
           if(q){entry.recorded_review_status={item:q.id,created_seq:q.created.seq};save();continue;}
@@ -673,16 +747,21 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       log({ action: 'pass-complete', starts,unknown_open:pending.length,unknown_oldest_min:pending.length?Math.max(0,...pending.map(w=>(Date.parse(now())-Date.parse(w.at))/60000)):0,
         unknown_settled:statuses.filter(row=>row.status==='complete').length,
         classified_retained:statuses.filter(row=>row.status==='classified').length,unknown_escalated:Object.keys(effects.outcome_decisions??{}).length,
-        timing: { ...timings, duration_ms, other_scan_and_guard_ms: Math.max(0, duration_ms - timings.effect_command_ms - timings.record_snapshot_ms) } });
+        timing: { ...timings,pass_lock_ms:timings.pass_lock_ms+performance.now()-lockedAt,
+          pass_lock_max_segment_ms:Math.max(timings.pass_lock_max_segment_ms,performance.now()-lockedAt),duration_ms,
+          other_scan_and_guard_ms: Math.max(0, duration_ms - timings.effect_command_ms - timings.record_snapshot_ms) } });
       return { result: 'pass-complete', directory };
-    } finally { try{checkpointNotices?.();}finally{try{heartbeat('finished');}finally{release();}} }
+    } finally {commandTurn=undefined;try{if(release)checkpointNotices?.();}finally{try{heartbeat('finished');}finally{if(release){
+      log({action:'schedule-unlocked',pass:passAt,pid:process.pid,duration_ms:performance.now()-lockedAt});release();release=null;
+    }}} }
   }
   return { pass, closeout, directory, log, acquirePass };
 }
 
 // The existing launchd schedule stays finite while the general pass runs in
 // its own finite child. Every wake reconciles closeout even during long review.
-// pass.lock and the existing action journal still serialize all general work.
+// pass.lock serializes scheduling/journal writes; subject locks retain ongoing
+// commands while another finite wake can admit independent work.
 export function wakeLineService({service,launch}){
   // A held closeout grants no authority over its effect. The general child
   // retains its own fresh identity, STOP/HOLD, source and admission guards.

@@ -4,6 +4,7 @@ import path from 'node:path';
 import { noticeLock } from '../supervisor/notice-lock.mjs';
 import { acquireLock } from '../lanes/promotion-lock.mjs';
 import { transact } from '../lib/store.mjs';
+import {assertCommandQuiescence} from '../lib/command-receipt.mjs';
 
 export function withRuntimeLocks(c, { id, operation, dryRun, owner, validate }, action) {
   const onRecovery = recovery => {
@@ -25,6 +26,7 @@ export function withRuntimeLocks(c, { id, operation, dryRun, owner, validate }, 
   try {
     const releasePass = noticeLock(path.join(c.directory, 'pass.lock'), { onRecovery });
     try {
+      assertCommandQuiescence(c.directory);
       const releasePromotion = acquireLock(path.join(c.identity, 'lane-promote.lock'));
       try { return action(); } finally { releasePromotion(); }
     } finally { releasePass(); }

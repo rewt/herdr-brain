@@ -215,33 +215,35 @@ assert.equal(state().items.get(review.id).closed.as, 'done');
 assert.equal(loadRecord(org).events.filter(e => e.type === 'change.reviewed').length, 1);
 assert.equal(state().items.get(item).closed.as, 'done');
 stage('review-cleanup', { folderRemoved: true, verdicts: 1, sourceClosed: true, reviewClosed: true });
-// The next action really reaches scripted input and loses its reply. Observe
-// another pass without replacing its request, attempting input again or clearing it.
-// Queued canonical reviews may precede the added item; observe the line's own selection.
+// The next actions really reach scripted input and lose their replies. Observe
+// another pass without replacing a request, attempting input again or clearing it.
+// Queued canonical reviews may precede the added item, and only completed starts
+// consume the pass budget, so every attempted candidate is an uncertain attempt.
 record(['add', 'Retain an uncertain scratch action', '--role', 'engineer']);
 fs.writeFileSync(path.join(root, 'lose-prompt-reply'), 'lose the original reply');
 const beforeUncertain = new Set(journals().map(j => j.file));
 service(1).pass();
-const fresh = journals().filter(j => !beforeUncertain.has(j.file)); assert.equal(fresh.length, 1, audit());
-const unknown = fresh[0], uncertain = unknown.item;
-const bytes = fs.readFileSync(unknown.file), calls = fs.readFileSync(path.join(root, 'native-calls.jsonl'), 'utf8');
+const attempts = journals().filter(j => !beforeUncertain.has(j.file)); assert.ok(attempts.length >= 1, audit());
+const bytes = new Map(attempts.map(j => [j.file, fs.readFileSync(j.file)])), calls = fs.readFileSync(path.join(root, 'native-calls.jsonl'), 'utf8');
 service(1).pass();
-assert.deepEqual(fs.readFileSync(unknown.file), bytes);
-assert.equal(journals().filter(j => j.item === uncertain).length, 1);
-const prompts = text => text.split('\n').filter(Boolean).map(JSON.parse).filter(a => a[0] === 'agent' && a[1] === 'prompt' && a[2] === unknown.worker.agentName);
-assert.equal(prompts(calls).length, 1);
-assert.equal(prompts(fs.readFileSync(path.join(root, 'native-calls.jsonl'), 'utf8')).length, 1);
-assert.ok(fs.existsSync(unknown.worker.cwd));
-stage('uncertain-retained', { item: uncertain, run: unknown.run, journal: unknown.file, stage: unknown.stage, attempts: 1, prompts: 1, folderKept: true, error: unknown.error });
-write('outcome.json', { ready: false, scriptedMechanics: true, dispatch: 3, reports: 2, originalReviews: 1, verdicts: 1,
-  producerFoldersRemoved: 1, reviewFoldersRemoved: 1, uncertainAttemptsRetained: 1, base, head, roots: config });
+const prompts = (text, job) => text.split('\n').filter(Boolean).map(JSON.parse).filter(a => a[0] === 'agent' && a[1] === 'prompt' && a[2] === job.worker.agentName);
+for (const unknown of attempts) {
+  assert.deepEqual(fs.readFileSync(unknown.file), bytes.get(unknown.file));
+  assert.equal(journals().filter(j => j.item === unknown.item).length, 1);
+  assert.equal(prompts(calls, unknown).length, 1);
+  assert.equal(prompts(fs.readFileSync(path.join(root, 'native-calls.jsonl'), 'utf8'), unknown).length, 1);
+  assert.ok(fs.existsSync(unknown.worker.cwd));
+}
+stage('uncertain-retained', { attempts: attempts.map(j => ({ item: j.item, run: j.run, journal: j.file, stage: j.stage, prompts: 1, folderKept: true, error: j.error })) });
+write('outcome.json', { ready: false, scriptedMechanics: true, dispatch: 2 + attempts.length, reports: 2, originalReviews: 1, verdicts: 1,
+  producerFoldersRemoved: 1, reviewFoldersRemoved: 1, uncertainAttemptsRetained: attempts.length, base, head, roots: config });
 
-// The uncertain request stays untouched; terminate only its receipt-owned test
-// watcher after the retention observation, before archiving/removing scratch.
-if (unknown.watcher && ownerAlive(unknown.watcher)) process.kill(unknown.watcher.pid, 'SIGTERM');
-await until(() => !unknown.watcher || !ownerAlive(unknown.watcher), 'uncertain watcher shutdown');
+// The uncertain requests stay untouched; terminate only their receipt-owned test
+// watchers after the retention observation, before archiving/removing scratch.
+for (const unknown of attempts) if (unknown.watcher && ownerAlive(unknown.watcher)) process.kill(unknown.watcher.pid, 'SIGTERM');
+await until(() => attempts.every(unknown => !unknown.watcher || !ownerAlive(unknown.watcher)), 'uncertain watcher shutdown');
 await until(() => !fs.existsSync(path.join(directory, 'closeout-turn.lock')), 'finite closeout shutdown');
-assert.deepEqual(fs.readFileSync(unknown.file), bytes);
-stage('fixture-teardown', { uncertainJournalUnchanged: true, watcherStopped: true });
+for (const unknown of attempts) assert.deepEqual(fs.readFileSync(unknown.file), bytes.get(unknown.file));
+stage('fixture-teardown', { uncertainJournalsUnchanged: true, watchersStopped: true });
 const wakeLog = path.join(directory, 'closeout.log');
 if (fs.existsSync(wakeLog)) assert.doesNotMatch(fs.readFileSync(wakeLog, 'utf8'), /^line-closeout:/m, 'installed background wakes must also stay in scratch and succeed');

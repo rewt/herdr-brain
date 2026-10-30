@@ -317,16 +317,20 @@ execute Node20.19.4; it is retained rather than upgraded.
 
 An original install can retain `phase: "uncertain-or-refused"`: `install` writes
 that phase when its one `launchctl bootstrap` throws or returns nonzero.
+The saved Brain development receipt instead has `phase: "stopped"` and
+`stopped_at`, with no recipient or runtime fields. Migration admits that shape
+through the same verified stopped-state settlement, retaining `stopped_at` and
+the exact original receipt bytes in the archive.
 `restart` records its own uncertainty in `controls.jsonl`; it does not rewrite
 the installation phase. Do not edit that receipt or replay the install.
-Migration accepts the original uncertain install only with all the same guards,
+Migration accepts these original receipts only with all the same guards,
 including positive native absence and this service's unchanged STOP. Its
 immutable migration archive records a `line-stopped-installation/v1` observation,
 and the same record transaction appends `line-service.stopped-installation-verified`
 before the migration completion. Successful migration or forward upgrade also
 records `line-service.installation-settled` with its immutable archive and verified
 stopped-service proof, and sets the current phase to `installed`. The archive
-retains the original phase/error; no refused bootstrap is replayed or claimed
+retains the original phase/error/stop time; no original bootstrap is replayed or claimed
 successful. Partial intents and unknown service observations remain held.
 Dry-run leaves runtime bindings unchanged (dead-pass recovery is receipted as below).
 `starting`, other phases and partial/UNKNOWN

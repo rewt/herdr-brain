@@ -77,7 +77,7 @@ export function migrateRuntime({repo,org,id,dryRun=false,expectedPlan,cwd=proces
   requireRecordCompatibility(runtimeRoot,loaded.events);
   const savedBytes=readPlainFile(installationFile),saved=JSON.parse(savedBytes),plistBytes=readPlainFile(file);
   const recipientHistory=recipientChanges(loaded.events,c);
-  if(saved.repo!==c.repo||saved.org!==c.org||saved.file!==file||saved.target!==target||saved.node!==process.execPath||!['installed','uncertain-or-refused'].includes(saved.phase)||!path.isAbsolute(saved.source??''))throw Error('saved installation binding differs; retain it');
+  if(saved.repo!==c.repo||saved.org!==c.org||saved.file!==file||saved.target!==target||saved.node!==process.execPath||!['installed','uncertain-or-refused','stopped'].includes(saved.phase)||!path.isAbsolute(saved.source??''))throw Error('saved installation binding differs; retain it');
   const prior=loaded.events.filter(e=>e.type==='line-service.runtime-migrated'&&e.project===c.identity&&e.org===c.org);
   if(prior.length){
     serviceCutoff(loaded.events,c);
@@ -98,10 +98,10 @@ export function migrateRuntime({repo,org,id,dryRun=false,expectedPlan,cwd=proces
   legacyRecipientHistory(recipientHistory,{installation:saved,plist:plistBytes,cutover});
   const settlement=installationPhaseProof(saved,savedBytes,{target,service:snapshot.service,stop_sha256:snapshot.stop_sha256});
   const nextPlist=replacementPlist(c,saved,command),after=settledInstallation({...saved,source:runtimeRoot,runtime:snapshot.runtime},settlement);
-  // Observe the stopped state, never complete or replay the refused bootstrap.
-  // The immutable archive retains the original phase/error. The installed
+  // Observe the stopped state, never complete or replay the original bootstrap.
+  // The immutable archive retains the original phase/error/stop time. The installed
   // configuration names this separate stopped-state settlement.
-  const stoppedInstallation=saved.phase==='uncertain-or-refused'?{
+  const stoppedInstallation=['uncertain-or-refused','stopped'].includes(saved.phase)?{
     schema:'line-stopped-installation/v1',phase:saved.phase,installation_sha256:digest(savedBytes),
     target,service:snapshot.service,stop_sha256:snapshot.stop_sha256,bootstrap_replayed:false,
   }:null;

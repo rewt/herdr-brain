@@ -1,10 +1,10 @@
 // A stopped, verified configuration can become installed without asserting
-// that its original refused bootstrap ever succeeded.
+// that its original bootstrap ever succeeded or restarting the service.
 import {createHash} from 'node:crypto';
 const digest=bytes=>createHash('sha256').update(bytes).digest('hex');
 
 export function installationPhaseProof(saved,bytes,{target,service,stop_sha256}){
-  if(saved.phase!=='uncertain-or-refused')return null;
+  if(!['uncertain-or-refused','stopped'].includes(saved.phase))return null;
   if(service?.loaded!==false||typeof service.native!=='string'||!service.native||!stop_sha256)
     throw Error('installation settlement requires verified stopped service and STOP');
   return{schema:'line-installation-settlement/v1',previous_phase:saved.phase,installation_sha256:digest(bytes),

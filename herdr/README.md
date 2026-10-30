@@ -4,9 +4,14 @@ The product has no npm dependencies. Node.js 20+, Git, Bash, tar and npm are
 needed to build a release; npm runs the offline test scripts without installing
 packages. Herdr and native Codex or Claude supply agent panes when used.
 
+See the [routine/stable model and release-suite plan mapping](../docs/routine-release-model.md)
+for the operator decision, live-acceptance rationale and ENG-1125 slices 1–5.
+
 ```sh
-bash herdr/release.sh build TAG
-bash herdr/release.sh build TAG --live
+bash herdr/release.sh build TAG --landing-checks  # routine runtime update; full coverage UNRUN
+bash herdr/release.sh ship TAG --landing-checks   # routine build + activate + check; rollback on failure
+bash herdr/release.sh build TAG --live           # stable candidate: full offline + actual live acceptance
+bash herdr/release.sh build TAG                  # full offline preparation; live acceptance UNRUN
 bash herdr/release.sh activate TAG
 bash herdr/release.sh ship TAG   # build + activate + check; rolls back on failure
 bash herdr/release.sh rollback
@@ -18,14 +23,18 @@ bash herdr/release.sh pin-status /canonical/project --json
 bash herdr/release.sh exec supervisor/supervisor.mjs brief
 ```
 
-Agents release with `ship`. Activation moves the retired Brain watch LaunchAgent
+Only the canonical supervisor releases and activates. Workers land finished owned
+source, run only new or affected checks once and hand off one asynchronous capped
+diff/evidence review, then fix forward. Tests, review and reports do not gate main.
+The supervisor uses `ship TAG --landing-checks` for routine runtime updates.
+Activation moves the retired Brain watch LaunchAgent
 (`~/Library/LaunchAgents/com.rewt.herdr-brain.plist`) aside after stopping it, so no
 manual step precedes the first release.
 
 Builds and ships launched inside Herdr automatically add a background
 `Release TAG · running` tab under the **canonical project workspace**, including
 when the caller is a lane or a detached process with inherited Herdr context.
-The tab follows the full build log (offline suites and optional live acceptance),
+The tab follows the build log (including whichever checks actually run),
 then keeps the output and a `passed`, `failed` or `interrupted` title. It uses the
 existing workspace; no Git worktree, agent, extra gate or suite is created.
 The release still executes once in its original process cwd and isolated checkout.
@@ -50,14 +59,45 @@ does not stop the command; loss of the producer without a result displays
 change release readiness, replay an existing attempt or attach to a running build.
 Outside Herdr, releases keep their original output path and behavior.
 
-Build copies exactly `git archive TAG` into `releases/TAG.partial`, runs
+Both build modes capture one tagged commit, freeze its validation policy, create a
+genuine isolated checkout and copy exactly `git archive COMMIT` into
+`releases/TAG.partial`. They verify committed payload equality, runtime inventory
+and modes, seal read-only, verify the complete bundle and publish without rebuilding
+an existing tag. Identity, activation, rollback and pin guards remain in force.
+A failed or interrupted build retains its original checkout, evidence and partial
+directory; inspect it rather than retrying or replacing an uncertain attempt.
+
+`build TAG --landing-checks` skips the offline gate and live acceptance. Its sealed
+`.release-validation.json` records `releaseMode: "routine"` and
+`validation.routine.fullCoverage: "UNRUN"`, without inventing an execution receipt.
+The manifest records `release: {"kind":"routine","fullCoverage":"UNRUN"}` and
+`acceptance: {"ran":false,"ready":false}`. It is usable for routine global
+activation, never for stable adoption or a project pin. The flag cannot be combined
+with `--live`, `--coverage` or `--live-coverage`; even an arbitrary tag name cannot
+turn it into a stable release. `ship TAG --landing-checks` keeps the installed
+launcher check and automatic rollback on failure. This uses the producer's existing
+landing evidence; it neither replays landing checks nor certifies their completion.
+Keep their actual scope and failures in the owning record. A missing check stays
+unproven and does not become a new activation readiness gate.
+
+Per-candidate live acceptance follows the same rule as offline coverage: UNRUN for
+routine updates, required for the stable candidate that BCH adopts. Repeating the
+native harness for several internal updates each day would recreate the removed
+gate. Landing checks, fix forward, immutable bundles, rollback and separation from
+pinned consumers are the routine safety net. Full final coverage runs once before
+stable release; reuse valid completed evidence and rerun only failed, affected or
+unrun files with the existing groups and limits. Corrected Majors and actual live
+acceptance of the exact stable candidate remain required before stable adoption.
+An offline continuation never establishes live acceptance.
+
+Without `--landing-checks`, build runs
 the `release` command and its `timeout_seconds` (and optional
 `idle_timeout_seconds`) from the snapshot's `.lane.validation.json`, falling back
 to `npm run test:release` when no release command is declared. The foreground
-gate bounds the command and its children. Build then renames the snapshot and makes it
-read-only. A failed or interrupted build retains its partial directory for
-inspection and cannot be activated or rebuilt in place. `--live` adds the live
-acceptance harness after the offline gate; it is optional and never run in lanes.
+gate bounds the command and its children. `--coverage FILE` retains the existing
+`release-full-coverage/v1` verifier for reconciled complete evidence, without
+replaying a green whole command. `--live` adds the actual live acceptance harness
+after the offline gate or verified continuation; it is never run in lanes.
 Pin candidates require `--live`: the build retains its summary and records READY
 acceptance for the exact commit in the additive release manifest. Offline builds
 explicitly record acceptance did not run. `attest` supplies write-once installation
@@ -71,6 +111,8 @@ See [release pins](RELEASE-PINS.md) for acceptance, rollback, compatibility,
 operation inventory and the deferred BCH adapters. Existing regular
 files are refused before switching. Repeating activation preserves the previous
 release. Rollback selects it. The operator controls activation and publishing.
+Home-policy admission's existing READY requirement is also retained; a routine
+bundle does not bypass it for adopted projects that require READY `current`.
 The retired `rewt.herdr-monitor` plugin is unlinked if still registered; a failure
 warns. Complete releases and routing generations are retained; there is no pruning.
 

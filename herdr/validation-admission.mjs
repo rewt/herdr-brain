@@ -102,7 +102,8 @@ export async function verifyReleaseCoverage(file, { identity, frozen, canonical,
   return { kind: 'supervisor-reconciled-full-coverage', sha256, inputBase64: bytes.toString('base64'), certificate: coverage };
 }
 
-export function freezeReleaseValidation(cwd, tag, destination, env = process.env, { commit } = {}) {
+export function freezeReleaseValidation(cwd, tag, destination, env = process.env, { commit, mode = 'stable' } = {}) {
+  if (!['stable', 'routine'].includes(mode)) throw Error('invalid release mode');
   const project = releaseProject(cwd), selected = policyLocation(project.canonical, 'validation', env);
   const git = (args, encoding = 'utf8') => execFileSync('git', ['-C', project.canonical, ...args], { encoding,
     env: Object.fromEntries(Object.entries(env).filter(([key]) => !key.startsWith('GIT_'))), stdio: ['ignore', 'pipe', 'pipe'] });
@@ -121,7 +122,7 @@ export function freezeReleaseValidation(cwd, tag, destination, env = process.env
     }
   }
   const frozen = { schema: 'release-validation-admission/v1', common: project.identity, canonical: project.canonical, source, sha256: contentDigest(bytes), declaration,
-    payloadCommit: ref, inputBase64: Buffer.from(bytes).toString('base64') };
+    payloadCommit: ref, inputBase64: Buffer.from(bytes).toString('base64'), ...(mode === 'routine' ? { releaseMode: mode } : {}) };
   durableWrite(destination, frozen);
   return frozen;
 }

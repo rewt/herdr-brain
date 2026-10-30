@@ -18,9 +18,20 @@ groups and limits. No green replay, worker-wide release tier or reviewer suite.
 A changed validity input requires an explicit coverage disposition, not an invented
 green aggregate or automatic reuse of stale evidence.
 
-Resolve all Major correction obligations with their specific checks. Full offline
-coverage, actual live acceptance of the exact candidate, package sealing and
-installed-consumer readback must support the final activation/adoption decision.
+For Brain routine runtime updates, the authorized supervisor uses
+`herdr/release.sh build TAG --landing-checks` or `ship TAG --landing-checks`.
+These ship on landing checks, explicitly record full coverage and per-candidate
+live acceptance as UNRUN, and retain snapshot/sealing, identity, activation,
+installed-launcher checks, rollback and pin guards. They cannot qualify for stable
+adoption; do not add a full-suite or native acceptance gate to each internal update.
+Repeated per-candidate live runs would recreate the removed routine gate.
+This Brain choice does not change BCH's own release procedure or authority.
+
+Before a stable release that BCH adopts, resolve all Major correction obligations
+with their specific checks. One full offline coverage obligation, actual live
+acceptance of the exact stable candidate, package sealing and installed-consumer
+readback must support the stable activation/adoption decision. Brain's
+`build TAG --live` retains this path and the existing coverage continuations.
 Source inspection or a successful offline build alone cannot establish live
 acceptance. Keep failed, interrupted and UNKNOWN attempts and their evidence.
 

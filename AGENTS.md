@@ -80,8 +80,12 @@ do not grant authority or replace the guarded project tools.
 The core never calls a model or runs a background loop; services run the line.
 Status derives from events, budgets are advisory, older folds ignore new events.
 Do not restart services/watchers or edit saved runtimes/pins. Only the canonical
-supervisor starts housekeeping or releases. Full final-release coverage, actual
-live acceptance and corrected Majors precede activation. Publishing, secrets,
+supervisor starts housekeeping or releases. Routine runtime updates use landing
+checks, with full coverage and per-candidate live acceptance explicitly UNRUN;
+they may activate with the existing rollback and pin separation. Full coverage
+runs once before a stable release that BCH adopts, reusing valid evidence and
+rerunning only failed, affected or unrun controls. Actual live acceptance of that
+stable candidate and corrected Majors precede stable adoption. Publishing, secrets,
 funds and adoption retain their actual outward/native checks.
 Use [decision routing](supervisor/DECISION-ROUTING.md) for judgment boundaries.
 Automatic main-health reverts start only after Phase 2 is implemented; until then

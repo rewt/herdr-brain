@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Immutable local releases. The project supervisor ships them (see supervisor/PROTOCOL.md).
-# Usage: release.sh build TAG [--live] [--coverage FILE] [--live-coverage FILE] | activate TAG | ship TAG | rollback | status
+# Usage: release.sh build TAG [--landing-checks | --live] [--coverage FILE] [--live-coverage FILE]
+#        release.sh ship TAG [--landing-checks] | activate TAG | rollback | status
 #        release.sh pin TAG [PROJECT] | unpin [PROJECT] | pin-status [PROJECT] [--json]
 #        release.sh attest TAG SUMMARY.json | exec ENTRY [ARGS...]
-# ship = build (release gate in a genuine checkout) + activate + check the installed launchers; it rolls
+# ship = build (full gate or explicit routine mode) + activate + check the installed launchers; it rolls
 # back to the previous release if that check fails. Agents run it as one bare command. A built tag is
 # never rebuilt: after a failed ship cut a new tag; if a build succeeded but activation never ran,
 # run activate TAG.
@@ -36,7 +37,7 @@ absent_or_link() {
   [ ! -e "$1" ] || [ -L "$1" ] || die "$1 is not a link; refusing to replace it"
 }
 build() {
-  local tag=$1 dir="$HOME_DIR/releases/$1" live=${2:-} coverage=${3:-} live_coverage=${4:-} C work identity_hash
+  local tag=$1 dir="$HOME_DIR/releases/$1" live=${2:-} coverage=${3:-} live_coverage=${4:-} mode=${5:-stable} C work identity_hash
   valid_tag "$tag"
   [ -n "$REPO" ] || REPO=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
   C=$(git -C "$REPO" rev-parse -q --verify "refs/tags/$tag^{commit}") || die "no tag $tag in $REPO"
@@ -47,7 +48,7 @@ build() {
   mkdir -p "$HOME_DIR/builds"
   work="$(cd "$HOME_DIR/builds" && pwd -P)/$tag"
   mkdir "$work" || die "$work already exists; inspect the unfinished build"
-  node "$TOOLS" freeze-validation "$REPO" "$tag" "$work/validation.json" "$C"
+  node "$TOOLS" freeze-validation "$REPO" "$tag" "$work/validation.json" "$C" "$mode"
   identity_hash=$(node "$TOOLS" checkout "$REPO" "$C" "$work/checkout" "$work/identity.json" "$work/validation.json")
   for file in bin/org.mjs lanes/lane.mjs contrib/settle-watch.mjs lib/cli-help.mjs verify/verify.mjs verify/execute.mjs verify/expectations.mjs; do
     [ -f "$work/checkout/$file" ] || die "release is missing $file"
@@ -56,7 +57,9 @@ build() {
   # project's gate holds it; an explicit setting (0 refuses at once) wins. Agents ship with one bare
   # command, so they cannot set this themselves. This bounds admission, never test execution.
   export MONITOR_TEST_SLOT_WAIT_SECONDS=${MONITOR_TEST_SLOT_WAIT_SECONDS:-${BCH_CLOAK_TEST_SLOT_WAIT_SECONDS:-3600}}
-  if [ -n "$coverage" ]; then
+  if [ "$mode" = routine ]; then
+    say "routine update: using landing checks; full coverage UNRUN; live acceptance UNRUN; not eligible for stable adoption"
+  elif [ -n "$coverage" ]; then
     # Full coverage was completed across retained native attempts and specific
     # corrections. Verify that distinct evidence; do not replay a whole command
     # or manufacture a successful execution.json for it.
@@ -146,8 +149,8 @@ verify_installed() {
   out=$(node --check "$HOME_DIR/current/contrib/settle-watch.mjs" 2>&1) || { echo "release: installed settle-watch does not load: $(printf '%s' "$out" | tail -3)" >&2; return 1; }
 }
 ship() {
-  local tag=$1 earlier
-  build "$tag"
+  local tag=$1 mode=${2:-stable} earlier
+  build "$tag" '' '' '' "$mode"
   earlier=$(readlink "$HOME_DIR/previous" 2>/dev/null || true)
   activate "$tag"
   if verify_installed; then say "shipped $tag"; return 0; fi
@@ -194,20 +197,26 @@ status() {
 }
 case "${1:-}" in
   build)
-    [ $# -ge 2 ] || die "usage: release.sh build TAG [--live] [--coverage FILE] [--live-coverage FILE]"
-    tag=$2; shift 2; live=; coverage=; live_coverage=
+    [ $# -ge 2 ] || die "usage: release.sh build TAG [--landing-checks | --live] [--coverage FILE] [--live-coverage FILE]"
+    tag=$2; shift 2; live=; coverage=; live_coverage=; mode=stable
     while [ $# -gt 0 ]; do
       case "$1" in
         --live) [ -z "$live" ] || die "duplicate --live"; live=--live; shift ;;
+        --landing-checks) [ "$mode" = stable ] || die "duplicate --landing-checks"; mode=routine; shift ;;
         --coverage) [ $# -ge 2 ] && [ -z "$coverage" ] || die "supply one coverage file"; coverage=$2; shift 2 ;;
         --live-coverage) [ $# -ge 2 ] && [ -z "$live_coverage" ] || die "supply one live coverage file"; live_coverage=$2; shift 2 ;;
-        *) die "usage: release.sh build TAG [--live] [--coverage FILE] [--live-coverage FILE]" ;;
+        *) die "usage: release.sh build TAG [--landing-checks | --live] [--coverage FILE] [--live-coverage FILE]" ;;
       esac
     done
     [ -z "$live_coverage" ] || [ "$live" = --live ] || die "live coverage requires --live"
-    build "$tag" "$live" "$coverage" "$live_coverage" ;;
+    [ "$mode" != routine ] || { [ -z "$live" ] && [ -z "$coverage" ] && [ -z "$live_coverage" ]; } || die "--landing-checks cannot be combined with live acceptance or full coverage"
+    build "$tag" "$live" "$coverage" "$live_coverage" "$mode" ;;
   activate) [ $# -eq 2 ] || die "usage: release.sh activate TAG"; activate "$2" ;;
-  ship) [ $# -eq 2 ] || die "usage: release.sh ship TAG"; ship "$2" ;;
+  ship)
+    [ $# -ge 2 ] && [ $# -le 3 ] || die "usage: release.sh ship TAG [--landing-checks]"
+    mode=stable
+    if [ $# -eq 3 ]; then [ "$3" = --landing-checks ] || die "usage: release.sh ship TAG [--landing-checks]"; mode=routine; fi
+    ship "$2" "$mode" ;;
   rollback) [ $# -eq 1 ] || die "usage: release.sh rollback"; rollback ;;
   status) [ $# -eq 1 ] || die "usage: release.sh status"; status ;;
   pin) [ $# -ge 2 ] && [ $# -le 3 ] || die "usage: release.sh pin TAG [PROJECT]"; node "$TOOLS" pin "$HOME_DIR" "${3:-$PWD}" "$2" ;;
@@ -223,5 +232,5 @@ case "${1:-}" in
     done
     node "$TOOLS" pin-status "$HOME_DIR" "$project" ${json:+"$json"} ;;
   exec) [ $# -ge 2 ] || die "usage: release.sh exec ENTRY [ARGS...]"; shift; node "$TOOLS" run "$@" ;;
-  *) die "usage: release.sh build TAG [--live] | activate TAG | ship TAG | rollback | status | pin TAG [PROJECT] | unpin [PROJECT] | attest TAG SUMMARY.json | pin-status [PROJECT] [--json] | exec ENTRY [ARGS...]" ;;
+  *) die "usage: release.sh build TAG [--landing-checks | --live] | activate TAG | ship TAG [--landing-checks] | rollback | status | pin TAG [PROJECT] | unpin [PROJECT] | attest TAG SUMMARY.json | pin-status [PROJECT] [--json] | exec ENTRY [ARGS...]" ;;
 esac

@@ -10,6 +10,7 @@ import { freezeReleaseValidation, releaseCoverageFiles, verifyReleaseCoverage } 
 import { createHash } from 'node:crypto';
 import { configFixture } from './helpers/config-home-fixture.mjs';
 import { policyLocation, contentDigest } from '../lib/config-home.mjs';
+import { checkBundle } from '../lib/releases.mjs';
 
 const SCRIPT = path.resolve(import.meta.dirname, '../herdr/release.sh');
 function scratch(t, beforeCleanup = () => {}) {
@@ -64,6 +65,8 @@ test('build gates a genuine tagged checkout once, then publishes an equal read-o
   assert.equal(fs.existsSync(path.join(f.checkout('t1'), '.release-commit')), false);
   const proof = JSON.parse(fs.readFileSync(path.join(f.release('t1'), '.release-validation.json'))).validation;
   assert.equal(proof.cwd, f.checkout('t1')); assert.equal(proof.commit, f.git('rev-parse', 't1').trim());
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(f.release('t1'), '.release-manifest.json'))).release,
+    { kind: 'stable', fullCoverage: 'PASS' });
   assert.equal(fs.statSync(path.join(f.release('t1'), 'bin/org.mjs')).mode & 0o222, 0);
   assert.match(fs.readFileSync(path.join(f.release('t1'), '.release-commit'), 'utf8'), /^[a-f0-9]{40}\n$/);
   const receipts = path.join(f.repo, '.git/lane-validation');
@@ -74,6 +77,85 @@ test('build gates a genuine tagged checkout once, then publishes an equal read-o
   assert.match(f.run(['build', 't1']).stderr, /already exists/);
   assert.match(f.run(['build', 'main']).stderr, /no tag/);
   assert.match(f.run(['build', '../escape']).stderr, /invalid release/);
+});
+test('routine build seals the captured payload with full coverage UNRUN and refuses stable adoption', t => {
+  const f = scratch(t);
+  f.write('bin/org.mjs', "console.log('uncommitted');");
+  const result = f.ok(['build', 't1', '--landing-checks'], { FIXTURE_GATE_FAIL: '1', FIXTURE_LIVE_FAIL: '1' });
+  assert.match(result.stdout, /full coverage UNRUN; live acceptance UNRUN/);
+  const root = f.release('t1'), work = path.join(f.home, 'builds/t1');
+  const proof = JSON.parse(fs.readFileSync(path.join(root, '.release-validation.json')));
+  const manifest = JSON.parse(fs.readFileSync(path.join(root, '.release-manifest.json')));
+  assert.equal(proof.payloadCommit, f.git('rev-parse', 't1').trim());
+  assert.equal(proof.releaseMode, 'routine');
+  assert.deepEqual(proof.validation.routine, { fullCoverage: 'UNRUN' });
+  assert.equal(proof.validation.execution, undefined); assert.equal(proof.validation.coverage, undefined);
+  assert.deepEqual(manifest.release, { kind: 'routine', fullCoverage: 'UNRUN' });
+  assert.deepEqual(manifest.acceptance, { ran: false, ready: false });
+  for (const file of ['execution.json', 'coverage.json', 'acceptance.json']) assert.equal(fs.existsSync(path.join(work, file)), false);
+  assert.equal(fs.existsSync(f.gateLog), false, 'neither offline nor live fixture executed');
+  assert.equal(fs.existsSync(path.join(f.repo, '.git/lane-validation')), false, 'no full gate receipt manufactured');
+  assert.equal(fs.readFileSync(path.join(root, 'bin/org.mjs'), 'utf8'), "console.log('t1');");
+  assert.equal(fs.statSync(path.join(root, 'bin/org.mjs')).mode & 0o222, 0);
+  assert.equal(checkBundle(root, { verifyFiles: true }).commit, proof.payloadCommit);
+  assert.match(f.run(['pin', 't1', f.repo]).stderr, /acceptance-not-ready/);
+  assert.equal(fs.existsSync(path.join(f.repo, '.herdr-release.json')), false);
+  assert.match(f.run(['attest', 't1', path.join(f.root, 'invented-summary.json')]).stderr, /acceptance-not-legacy/);
+  const live = spawnSync(process.execPath, [path.resolve(import.meta.dirname, '../herdr/releases.mjs'),
+    'manifest', root, path.join(f.root, 'invented-summary.json')], { env: f.env, encoding: 'utf8' });
+  assert.notEqual(live.status, 0); assert.match(live.stderr, /routine release cannot claim live acceptance/);
+  f.ok(['activate', 't1']);
+  assert.equal(fs.readlinkSync(path.join(f.home, 'current')), root);
+  assert.match(f.run(['build', 't1', '--landing-checks']).stderr, /already exists/);
+});
+test('routine options reject full or live evidence before creating an attempt', t => {
+  const f = scratch(t);
+  for (const args of [
+    ['--live'], ['--coverage', 'certificate.json'], ['--live', '--live-coverage', 'live.json'], ['--landing-checks'],
+  ]) assert.notEqual(f.run(['build', 't1', '--landing-checks', ...args]).status, 0);
+  assert.notEqual(f.run(['ship', 't1', '--live']).status, 0);
+  assert.equal(fs.existsSync(f.home), false); assert.equal(fs.existsSync(f.gateLog), false);
+});
+test('routine ship keeps installed-consumer checks and rollback without offline or live execution', t => {
+  const f = scratch(t);
+  f.ok(['ship', 't1', '--landing-checks']);
+  f.ok(['ship', 't2', '--landing-checks']);
+  assert.equal(fs.readlinkSync(path.join(f.home, 'previous')), f.release('t1'));
+  f.write('bin/org.mjs', 'process.exit(3);'); f.git('add', '.'); f.git('commit', '-qm', 'broken routine'); f.git('tag', 'broken');
+  const result = f.run(['ship', 'broken', '--landing-checks']);
+  assert.notEqual(result.status, 0); assert.match(result.stderr, /installed org failed to start/);
+  assert.match(result.stderr, /rolled back to t2/);
+  assert.equal(fs.readlinkSync(path.join(f.home, 'current')), f.release('t2'));
+  assert.equal(fs.readlinkSync(path.join(f.home, 'previous')), f.release('t1'));
+  assert.equal(fs.existsSync(f.gateLog), false);
+});
+test('routine activation refuses relabelled or damaged evidence before changing links or services', t => {
+  const f = scratch(t); f.ok(['build', 't1', '--landing-checks']);
+  fs.writeFileSync(f.plist, 'keep service');
+  const root = f.release('t1'); execFileSync('chmod', ['-R', 'u+w', root]);
+  const file = path.join(root, '.release-manifest.json'), original = fs.readFileSync(file);
+  for (const release of [undefined, { kind: 'stable', fullCoverage: 'PASS' }, { kind: 'routine', fullCoverage: 'PASS' }]) {
+    fs.writeFileSync(file, JSON.stringify({ ...JSON.parse(original), release }));
+    const refused = f.run(['activate', 't1']);
+    assert.notEqual(refused.status, 0); assert.match(refused.stderr, /validation evidence/);
+    assert.equal(fs.existsSync(path.join(f.home, 'current')), false);
+    assert.equal(fs.readFileSync(f.plist, 'utf8'), 'keep service'); assert.equal(fs.existsSync(f.calls), false);
+  }
+  fs.writeFileSync(file, original);
+  fs.appendFileSync(path.join(root, 'lib/state.mjs'), '\n// damaged runtime\n');
+  assert.notEqual(f.run(['activate', 't1']).status, 0);
+  assert.equal(fs.existsSync(path.join(f.home, 'current')), false);
+});
+test('routine packaging still refuses archive omissions and retains its original attempt', t => {
+  const f = scratch(t);
+  f.write('.gitattributes', 'lib/state.mjs export-ignore\n'); f.git('add', '.'); f.git('commit', '-qm', 'archive omission'); f.git('tag', 'omitted');
+  const result = f.run(['build', 'omitted', '--landing-checks']);
+  assert.notEqual(result.status, 0);
+  assert.equal(fs.existsSync(f.release('omitted')), false);
+  assert.equal(fs.existsSync(`${f.release('omitted')}.partial`), true);
+  assert.ok(fs.existsSync(f.checkout('omitted')));
+  assert.match(f.run(['build', 'omitted', '--landing-checks']).stderr, /inspect the unfinished build/);
+  assert.equal(fs.existsSync(f.gateLog), false);
 });
 test('a failed gate retains partial evidence and never makes an activatable release or reruns it', t => {
   const f = scratch(t), r = f.run(['build', 't1'], { FIXTURE_GATE_FAIL: '1' });

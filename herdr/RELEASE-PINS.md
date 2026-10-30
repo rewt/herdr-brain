@@ -49,6 +49,15 @@ commit, elapsed seconds and the summary's SHA-256. A build without `--live` reco
 `{"ran":false,"ready":false}` and cannot be pinned. Global activation and rollback
 remain available for unpinned callers; they do not certify acceptance.
 
+Routine `build TAG --landing-checks` / `ship TAG --landing-checks` snapshots
+explicitly record full coverage UNRUN and non-READY acceptance. They can update
+global `current` with rollback intact but cannot be pinned, attested into stable
+readiness or substituted for a stable release that BCH adopts. Full coverage runs
+once before stable adoption, with valid completed evidence reused and only failed,
+affected or unrun checks repeated. Corrected Majors and actual live acceptance of
+the stable candidate remain required. Existing home-policy READY admission also
+remains in force; routine global activation does not override it.
+
 Existing immutable protocol-1 bundles with no acceptance field have one explicit
 compatibility path, using an already retained live summary:
 

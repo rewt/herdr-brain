@@ -24,7 +24,7 @@ function requireExecRuntime() {
 try {
   if (action === 'freeze-validation') {
     const { freezeReleaseValidation } = await import('./validation-admission.mjs');
-    freezeReleaseValidation(home, target, rest[0], process.env, { commit: rest[1] });
+    freezeReleaseValidation(home, target, rest[0], process.env, { commit: rest[1], mode: rest[2] });
   } else if (action === 'checkout') {
     const identity = createProductCheckout({ source: home, commit: target, destination: rest[0], ownedRoot: path.dirname(rest[1]) });
     const frozen = readPlainFile(rest[2]);
@@ -50,7 +50,10 @@ try {
     if (payloadDigest(frozen) !== record.frozenSha256 || JSON.stringify(verifyProductCheckoutIsolation(captureProductCheckout(identity.root, identity.commit, { all: true }))) !== JSON.stringify(identity)) throw Error('validated source or declaration changed');
     const coverageFile = path.join(path.dirname(target), 'coverage.json');
     let completed;
-    if (fs.existsSync(coverageFile)) {
+    if (JSON.parse(frozen).releaseMode === 'routine') {
+      if (fs.existsSync(coverageFile) || fs.existsSync(path.join(path.dirname(target), 'execution.json'))) throw Error('routine release cannot claim full execution or coverage');
+      completed = { routine: { fullCoverage: 'UNRUN' } };
+    } else if (fs.existsSync(coverageFile)) {
       const { verifyReleaseCoverage } = await import('./validation-admission.mjs');
       completed = { coverage: await verifyReleaseCoverage(coverageFile, { identity, frozen: JSON.parse(frozen), canonical: JSON.parse(frozen).canonical }) };
     } else {
@@ -67,6 +70,11 @@ try {
     checkBundle(home, { verifyFiles: true });
   } else if (action === 'manifest') {
     const commit = fs.readFileSync(path.join(home, '.release-commit'), 'utf8').trim();
+    const validationFile = path.join(home, '.release-validation.json');
+    const frozen = fs.existsSync(validationFile) ? JSON.parse(readPlainFile(validationFile)) : null;
+    const release = frozen ? { kind: frozen.releaseMode === 'routine' ? 'routine' : 'stable',
+      fullCoverage: frozen.releaseMode === 'routine' ? 'UNRUN' : 'PASS' } : undefined;
+    if (release?.kind === 'routine' && target) throw Error('routine release cannot claim live acceptance or stable adoption');
     let acceptance = { ran: false, ready: false };
     if (target) {
       const bytes = fs.readFileSync(target);
@@ -79,7 +87,8 @@ try {
     // The shared home-aware policy reader was introduced with config-home.
     // Only the archived payload can claim it; newer tooling also builds legacy tags.
     const capability = Object.hasOwn(files, 'lib/config-policy.mjs') ? { config_home: 1 } : {};
-    fs.writeFileSync(path.join(home, '.release-manifest.json'), JSON.stringify({ schema: 'herdr-release/v1', protocol: 1, ...capability, commit, files, modes, acceptance }, null, 2) + '\n');
+    fs.writeFileSync(path.join(home, '.release-manifest.json'), JSON.stringify({ schema: 'herdr-release/v1', protocol: 1, ...capability, commit, files, modes, acceptance,
+      ...(release ? { release } : {}) }, null, 2) + '\n');
     const bundle = checkBundle(home, { verifyFiles: true });
     if (target && !releaseAcceptance(bundle).ready) throw Error('acceptance-invalid: manifest does not retain its READY summary');
   } else if (action === 'install') {

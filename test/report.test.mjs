@@ -54,7 +54,8 @@ test('the brief template becomes a valid report once outcome, summary and headli
   assert.equal(r.report.summary, 'Implemented it.');
   assert.equal(r.report.headline, 'It works');
   assert.deepEqual(r.report.proposals, []);
-  assert.equal(r.body, '(free-form details: evidence, dead ends, anything worth keeping)');
+  assert.match(r.body, /intended outcome, actual result, exact source\/evidence/);
+  assert.match(r.body, /checks and unrun limits, unresolved owner\/action/);
 });
 
 test('accepts lenient input and keeps unknown fields', () => {

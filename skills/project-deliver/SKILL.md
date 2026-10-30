@@ -50,6 +50,17 @@ decisions, named verifier/evidence, checks and unrun limits. The declared delive
 range artifact for the current Brain queue is `source: HEAD; base: BASE` with full
 commit IDs. Distinguish retained/unlanded evidence from that delivered range.
 
+Lead the summary with the concrete result and the next responsible owner and
+action, aiming to fit both in its first 400 characters: related briefs may show
+only that excerpt. Name genuinely unknown ownership as unresolved, with the
+recorded route that must assign it. Keep the intended outcome, material choices,
+original failures/superseded decisions, exact evidence, unrun limits and pending
+callbacks retrievable in the existing fields/body. Name each pending effect's
+owner and next event; optional transcript/session resume is context, never the
+only evidence. A persuasive summary or a done envelope does not prove acceptance.
+Use the [source and planning examples](references/handoff.md) when useful; their
+shape is guidance, not a new schema, checklist or completion gate.
+
 Leave the existing report watcher and its recipient intact. Report ingestion and
 the line own the single async queue-review path: cap1, zero reviewer suites. Do
 not start settle/lane reviews, wait for a verdict to land, or invoke supervisor

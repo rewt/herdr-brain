@@ -24,6 +24,12 @@ routine verification once; distinguish inherited evidence, independently observe
 facts and unsupported claims. Report a missing functional requirement specifically,
 not as generic uncertainty because you did not repeat a producer command.
 
+Assess the delivered result against the original intent and actual authority,
+using the complete report/evidence when its summary is truncated. Identify what
+the evidence establishes, missing or unrun proof, and who owns the next action.
+Keep useful cold-reader observations in this same review report; the summary is
+an assertion to assess, not its own acceptance. No additional review is needed.
+
 Follow the assigned output schema exactly, including required inherited-gate
 acknowledgments and an empty re-executed list. A PASS is a review verdict, never a
 claim that you ran tests. Make findings actionable: concrete trigger, changed code,

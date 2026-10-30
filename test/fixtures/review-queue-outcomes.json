@@ -1,0 +1,149 @@
+{
+  "source": "Brain retained outcome:review notices, read-only R-1433 inventory; no BCH records read",
+  "cases": [
+    {
+      "source_key": "review:ENG-632:e8a83cdbb0e7f6eda30d8bb9b5b7a61a58bad753",
+      "original_sha256": "f120d50e1ff7928db560a20d7595d6067002e9d4a5cc67f19ed79768ced5c83e",
+      "error": "file:///Users/rewt/development/rewt/herdr-brain/line-service/review-targets.mjs:18\n  if(!target?.base||!target.head||!owned.length||target.scope?.unresolved?.length||target.scope?.deferred)throw Error('retained review scope is UNKNOWN');\n                                                                                                                ^\n\nError: retained review scope is UNKNOWN\n    at capturedRange (file:///Users/rewt/development/rewt/herdr-brain/line-service/review-targets.mjs:18:113)\n    at disjointCapture (file:///Users/rewt/development/rewt/herdr-brain/line-service/review-targets.mjs:91:50)\n    at file:///Users/rewt/development/rewt/herdr-brain/line-service/review-queue.mjs:103:300\n    at Array.filter (<anonymous>)\n    at queueReviewMutation (file:///Users/rewt/development/rewt/herdr-brain/line-service/review-queue.mjs:103:202)\n    at file:///Users/rewt/development/rewt/herdr-brain/bin/org.mjs:380:53\n    at transact.at (file:///Users/rewt/development/rewt/herdr-brain/bin/org.mjs:191:129)\n    at withLock (file:///Users/rewt/development/rewt/herdr-brain/lib/store.mjs:178:19)\n    at withLock (file:///Users/rewt/development/rewt/herdr-brain/lib/store.mjs:269:20)\n    at transact (file:///Users/rewt/development/rewt/herdr-brain/lib/store.mjs:171:20)\n\nNode.js v20.19.4",
+      "receipt": {
+        "status": 1,
+        "signal": null,
+        "stdout": "",
+        "stderr": "file:///Users/rewt/development/rewt/herdr-brain/line-service/review-targets.mjs:18\n  if(!target?.base||!target.head||!owned.length||target.scope?.unresolved?.length||target.scope?.deferred)throw Error('retained review scope is UNKNOWN');\n                                                                                                                ^\n\nError: retained review scope is UNKNOWN\n    at capturedRange (file:///Users/rewt/development/rewt/herdr-brain/line-service/review-targets.mjs:18:113)\n    at disjointCapture (file:///Users/rewt/development/rewt/herdr-brain/line-service/review-targets.mjs:91:50)\n    at file:///Users/rewt/development/rewt/herdr-brain/line-service/review-queue.mjs:103:300\n    at Array.filter (<anonymous>)\n    at queueReviewMutation (file:///Users/rewt/development/rewt/herdr-brain/line-service/review-queue.mjs:103:202)\n    at file:///Users/rewt/development/rewt/herdr-brain/bin/org.mjs:380:53\n    at transact.at (file:///Users/rewt/development/rewt/herdr-brain/bin/org.mjs:191:129)\n    at withLock (file:///Users/rewt/development/rewt/herdr-brain/lib/store.mjs:178:19)\n    at withLock (file:///Users/rewt/development/rewt/herdr-brain/lib/store.mjs:269:20)\n    at transact (file:///Users/rewt/development/rewt/herdr-brain/lib/store.mjs:171:20)\n\nNode.js v20.19.4\n",
+        "activity": {
+          "duration_s": 8.5318076669937,
+          "longest_silence_s": 8.520028500002809,
+          "observations": [],
+          "activity_audits": {
+            "samples": 1,
+            "unavailable": 0,
+            "changes": 1
+          }
+        },
+        "signal_sent": false
+      },
+      "failure": null
+    },
+    {
+      "source_key": "review:ENG-900:b75a75acf0097fbb2004ab0ed7c8977fb8aa3484",
+      "original_sha256": "32715c859400f738b4f7c02fa10e3bd9388900c7ee475ab9c605cd6c3c373255",
+      "error": "file:///Users/rewt/development/rewt/herdr-brain/lib/record-observation.mjs:15\n  const error = Object.assign(new ErrorType(message), { code });\n                              ^\n\nError: record Git observation changed while planning: [\"/Users/rewt/development/rewt/herdr-brain\",[\"worktree\",\"list\",\"--porcelain\"],[]]\n    at recordSourceConflict (file:///Users/rewt/development/rewt/herdr-brain/lib/record-observation.mjs:15:31)\n    at observeGitQuery (file:///Users/rewt/development/rewt/herdr-brain/lib/record-observation.mjs:101:39)\n    at git (file:///Users/rewt/development/rewt/herdr-brain/lib/project.mjs:24:12)\n    at gitProject (file:///Users/rewt/development/rewt/herdr-brain/lib/project.mjs:37:19)\n    at recordProject (file:///Users/rewt/development/rewt/herdr-brain/lib/record-guard.mjs:23:21)\n    at protectRecordMutation (file:///Users/rewt/development/rewt/herdr-brain/lib/record-guard.mjs:152:15)\n    at transaction.at (file:///Users/rewt/development/rewt/herdr-brain/bin/org.mjs:206:66)\n    at file:///Users/rewt/development/rewt/herdr-brain/lib/store.mjs:265:65\n    at AsyncLocalStorage.run (node:async_hooks:346:14)\n    at captureReads (file:///Users/rewt/development/rewt/herdr-brain/lib/record-observation.mjs:81:24) {\n  code: 'RECORD_OBSERVATION_CONFLICT'\n}\n\nNode.js v20.19.4",
+      "receipt": {
+        "status": 1,
+        "signal": null,
+        "stdout": "",
+        "stderr": "file:///Users/rewt/development/rewt/herdr-brain/lib/record-observation.mjs:15\n  const error = Object.assign(new ErrorType(message), { code });\n                              ^\n\nError: record Git observation changed while planning: [\"/Users/rewt/development/rewt/herdr-brain\",[\"worktree\",\"list\",\"--porcelain\"],[]]\n    at recordSourceConflict (file:///Users/rewt/development/rewt/herdr-brain/lib/record-observation.mjs:15:31)\n    at observeGitQuery (file:///Users/rewt/development/rewt/herdr-brain/lib/record-observation.mjs:101:39)\n    at git (file:///Users/rewt/development/rewt/herdr-brain/lib/project.mjs:24:12)\n    at gitProject (file:///Users/rewt/development/rewt/herdr-brain/lib/project.mjs:37:19)\n    at recordProject (file:///Users/rewt/development/rewt/herdr-brain/lib/record-guard.mjs:23:21)\n    at protectRecordMutation (file:///Users/rewt/development/rewt/herdr-brain/lib/record-guard.mjs:152:15)\n    at transaction.at (file:///Users/rewt/development/rewt/herdr-brain/bin/org.mjs:206:66)\n    at file:///Users/rewt/development/rewt/herdr-brain/lib/store.mjs:265:65\n    at AsyncLocalStorage.run (node:async_hooks:346:14)\n    at captureReads (file:///Users/rewt/development/rewt/herdr-brain/lib/record-observation.mjs:81:24) {\n  code: 'RECORD_OBSERVATION_CONFLICT'\n}\n\nNode.js v20.19.4\n",
+        "activity": {
+          "duration_s": 1595.7365839580307,
+          "longest_silence_s": 1595.721369292005,
+          "observations": [
+            {
+              "kind": "silence",
+              "elapsed_s": 900.2336177920224,
+              "silence_s": 900.2336177920224,
+              "threshold_seconds": 900
+            }
+          ],
+          "activity_audits": {
+            "samples": 54,
+            "unavailable": 40,
+            "changes": 14
+          }
+        },
+        "signal_sent": false
+      },
+      "failure": {
+        "code": "OUTCOME_UNKNOWN",
+        "kind": "unknown"
+      }
+    },
+    {
+      "source_key": "review:ENG-915:1d73212e6369c3621caa94f8fbb0a94a21bf4b00",
+      "original_sha256": "58ce6031ce9e0168076266cc27ffbc15d87d98b97295139f52f846ee7d4e7193",
+      "error": "file:///Users/rewt/development/rewt/herdr-brain/line-service/review-queue.mjs:59\n    if (fs.existsSync(file)) throw Error('STOP/HOLD prevents review queue effect');\n                                   ^\n\nError: STOP/HOLD prevents review queue effect\n    at openBoundary (file:///Users/rewt/development/rewt/herdr-brain/line-service/review-queue.mjs:59:36)\n    at queueReviewMutation (file:///Users/rewt/development/rewt/herdr-brain/line-service/review-queue.mjs:109:3)\n    at file:///Users/rewt/development/rewt/herdr-brain/bin/org.mjs:396:53\n    at transaction.at (file:///Users/rewt/development/rewt/herdr-brain/bin/org.mjs:206:129)\n    at file:///Users/rewt/development/rewt/herdr-brain/lib/store.mjs:265:65\n    at AsyncLocalStorage.run (node:async_hooks:346:14)\n    at captureReads (file:///Users/rewt/development/rewt/herdr-brain/lib/record-observation.mjs:81:24)\n    at plannedAppend (file:///Users/rewt/development/rewt/herdr-brain/lib/store.mjs:265:46)\n    at file:///Users/rewt/development/rewt/herdr-brain/lib/store.mjs:240:88\n    at retryRecordPreparation (file:///Users/rewt/development/rewt/herdr-brain/lib/store.mjs:247:18)\n\nNode.js v20.19.4",
+      "receipt": {
+        "status": 1,
+        "signal": null,
+        "stdout": "",
+        "stderr": "file:///Users/rewt/development/rewt/herdr-brain/line-service/review-queue.mjs:59\n    if (fs.existsSync(file)) throw Error('STOP/HOLD prevents review queue effect');\n                                   ^\n\nError: STOP/HOLD prevents review queue effect\n    at openBoundary (file:///Users/rewt/development/rewt/herdr-brain/line-service/review-queue.mjs:59:36)\n    at queueReviewMutation (file:///Users/rewt/development/rewt/herdr-brain/line-service/review-queue.mjs:109:3)\n    at file:///Users/rewt/development/rewt/herdr-brain/bin/org.mjs:396:53\n    at transaction.at (file:///Users/rewt/development/rewt/herdr-brain/bin/org.mjs:206:129)\n    at file:///Users/rewt/development/rewt/herdr-brain/lib/store.mjs:265:65\n    at AsyncLocalStorage.run (node:async_hooks:346:14)\n    at captureReads (file:///Users/rewt/development/rewt/herdr-brain/lib/record-observation.mjs:81:24)\n    at plannedAppend (file:///Users/rewt/development/rewt/herdr-brain/lib/store.mjs:265:46)\n    at file:///Users/rewt/development/rewt/herdr-brain/lib/store.mjs:240:88\n    at retryRecordPreparation (file:///Users/rewt/development/rewt/herdr-brain/lib/store.mjs:247:18)\n\nNode.js v20.19.4\n",
+        "activity": {
+          "duration_s": 231.31812008400448,
+          "longest_silence_s": 231.30229016696103,
+          "observations": [],
+          "activity_audits": {
+            "samples": 8,
+            "unavailable": 6,
+            "changes": 2
+          }
+        },
+        "signal_sent": false
+      },
+      "failure": {
+        "code": "OUTCOME_UNKNOWN",
+        "kind": "unknown"
+      }
+    },
+    {
+      "source_key": "review:ENG-1022:adc33249825bddb34b1fe1cd18d7ff5c9bca971f",
+      "original_sha256": "0f02359690cd364cab1a5b8881a5560afe38f80859897cd9bd2af72200a47b19",
+      "error": "file:///Users/rewt/development/rewt/herdr-brain/line-service/review-queue.mjs:133\n  if (prior) throw Error(`item review already retained: ${prior}`);\n                   ^\n\nError: item review already retained: existing same-change service intent/result\n    at queueReviewMutation (file:///Users/rewt/development/rewt/herdr-brain/line-service/review-queue.mjs:133:20)\n    at file:///Users/rewt/development/rewt/herdr-brain/bin/org.mjs:399:53\n    at transaction.at (file:///Users/rewt/development/rewt/herdr-brain/bin/org.mjs:209:129)\n    at file:///Users/rewt/development/rewt/herdr-brain/lib/store.mjs:266:61\n    at AsyncLocalStorage.run (node:async_hooks:346:14)\n    at captureReads (file:///Users/rewt/development/rewt/herdr-brain/lib/record-observation.mjs:81:24)\n    at plannedAppend (file:///Users/rewt/development/rewt/herdr-brain/lib/store.mjs:266:42)\n    at file:///Users/rewt/development/rewt/herdr-brain/lib/store.mjs:241:88\n    at retryRecordPreparation (file:///Users/rewt/development/rewt/herdr-brain/lib/store.mjs:248:18)\n    at planTransaction (file:///Users/rewt/development/rewt/herdr-brain/lib/store.mjs:241:10)\n\nNode.js v20.19.4",
+      "receipt": {
+        "status": 1,
+        "signal": null,
+        "stdout": "",
+        "stderr": "file:///Users/rewt/development/rewt/herdr-brain/line-service/review-queue.mjs:133\n  if (prior) throw Error(`item review already retained: ${prior}`);\n                   ^\n\nError: item review already retained: existing same-change service intent/result\n    at queueReviewMutation (file:///Users/rewt/development/rewt/herdr-brain/line-service/review-queue.mjs:133:20)\n    at file:///Users/rewt/development/rewt/herdr-brain/bin/org.mjs:399:53\n    at transaction.at (file:///Users/rewt/development/rewt/herdr-brain/bin/org.mjs:209:129)\n    at file:///Users/rewt/development/rewt/herdr-brain/lib/store.mjs:266:61\n    at AsyncLocalStorage.run (node:async_hooks:346:14)\n    at captureReads (file:///Users/rewt/development/rewt/herdr-brain/lib/record-observation.mjs:81:24)\n    at plannedAppend (file:///Users/rewt/development/rewt/herdr-brain/lib/store.mjs:266:42)\n    at file:///Users/rewt/development/rewt/herdr-brain/lib/store.mjs:241:88\n    at retryRecordPreparation (file:///Users/rewt/development/rewt/herdr-brain/lib/store.mjs:248:18)\n    at planTransaction (file:///Users/rewt/development/rewt/herdr-brain/lib/store.mjs:241:10)\n\nNode.js v20.19.4\n",
+        "activity": {
+          "duration_s": 236.0462144999765,
+          "longest_silence_s": 235.97148804098833,
+          "observations": [],
+          "activity_audits": {
+            "samples": 8,
+            "unavailable": 5,
+            "changes": 3
+          }
+        },
+        "signal_sent": false
+      },
+      "failure": {
+        "code": "OUTCOME_UNKNOWN",
+        "kind": "unknown"
+      }
+    },
+    {
+      "source_key": "review:ENG-1023:326e3aabcaeb3c7ef2cc3c313c6d5b33f20f5d3e",
+      "original_sha256": "cd6955b20d6ddaf0cab0b1fe0257d045b1117851701a08cdeae18f8b5a6fff1c",
+      "error": "immutable landed target/evidence changed before queue mutation",
+      "receipt": null,
+      "failure": {
+        "code": "OUTCOME_UNKNOWN",
+        "kind": "unknown"
+      }
+    },
+    {
+      "source_key": "review:ENG-1054:63e66620ecc0dffb45caed77d0f349dc81b27ee1",
+      "original_sha256": "f4d53f964ac28aa090c06b5120818c528dd4192123343131a3d7da302e7511cc",
+      "error": "file:///Users/rewt/development/rewt/herdr-brain/line-service/review-queue.mjs:133\n  if (prior) throw Error(`item review already retained: ${prior}`);\n                   ^\n\nError: item review already retained: existing same-change service intent/result\n    at queueReviewMutation (file:///Users/rewt/development/rewt/herdr-brain/line-service/review-queue.mjs:133:20)\n    at file:///Users/rewt/development/rewt/herdr-brain/bin/org.mjs:401:53\n    at transaction.at (file:///Users/rewt/development/rewt/herdr-brain/bin/org.mjs:211:129)\n    at file:///Users/rewt/development/rewt/herdr-brain/lib/store.mjs:266:61\n    at AsyncLocalStorage.run (node:async_hooks:346:14)\n    at captureReads (file:///Users/rewt/development/rewt/herdr-brain/lib/record-observation.mjs:81:24)\n    at plannedAppend (file:///Users/rewt/development/rewt/herdr-brain/lib/store.mjs:266:42)\n    at file:///Users/rewt/development/rewt/herdr-brain/lib/store.mjs:241:88\n    at retryRecordPreparation (file:///Users/rewt/development/rewt/herdr-brain/lib/store.mjs:248:18)\n    at planTransaction (file:///Users/rewt/development/rewt/herdr-brain/lib/store.mjs:241:10)\n\nNode.js v20.19.4",
+      "receipt": {
+        "status": 1,
+        "signal": null,
+        "stdout": "",
+        "stderr": "file:///Users/rewt/development/rewt/herdr-brain/line-service/review-queue.mjs:133\n  if (prior) throw Error(`item review already retained: ${prior}`);\n                   ^\n\nError: item review already retained: existing same-change service intent/result\n    at queueReviewMutation (file:///Users/rewt/development/rewt/herdr-brain/line-service/review-queue.mjs:133:20)\n    at file:///Users/rewt/development/rewt/herdr-brain/bin/org.mjs:401:53\n    at transaction.at (file:///Users/rewt/development/rewt/herdr-brain/bin/org.mjs:211:129)\n    at file:///Users/rewt/development/rewt/herdr-brain/lib/store.mjs:266:61\n    at AsyncLocalStorage.run (node:async_hooks:346:14)\n    at captureReads (file:///Users/rewt/development/rewt/herdr-brain/lib/record-observation.mjs:81:24)\n    at plannedAppend (file:///Users/rewt/development/rewt/herdr-brain/lib/store.mjs:266:42)\n    at file:///Users/rewt/development/rewt/herdr-brain/lib/store.mjs:241:88\n    at retryRecordPreparation (file:///Users/rewt/development/rewt/herdr-brain/lib/store.mjs:248:18)\n    at planTransaction (file:///Users/rewt/development/rewt/herdr-brain/lib/store.mjs:241:10)\n\nNode.js v20.19.4\n",
+        "activity": {
+          "duration_s": 453.3003527079709,
+          "longest_silence_s": 453.25211366597796,
+          "observations": [],
+          "activity_audits": {
+            "samples": 16,
+            "unavailable": 9,
+            "changes": 7
+          }
+        },
+        "signal_sent": false
+      },
+      "failure": {
+        "code": "OUTCOME_UNKNOWN",
+        "kind": "unknown"
+      }
+    }
+  ]
+}

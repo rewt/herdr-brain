@@ -23,6 +23,7 @@ import { closeoutRevision, scheduleLineCloseouts,lineServiceOwnsCleanup } from '
 import { parseArgs, isMain } from '../lib/cli-help.mjs';
 import { reviewAttempt, readServiceJournal } from './review.mjs';
 import {referenceRevision} from './review-reference-proof.mjs';
+import {reviewQueueNoMutation} from './review-queue-outcome.mjs';
 import { queueConsumer, isQueueReview, validateQueuedReview, reviewQueueBrief, reviewQueueRoute } from './review-queue.mjs';
 import { roleIs } from '../lib/roles.mjs';
 import { recordLineNotice,canonicalFailure } from './record-inbox.mjs';
@@ -248,7 +249,10 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         // Existing failed/uncertain effects above keep their normal authority.
         if(before&&!before(fresh))return;
         const prior=effects.actions[key],history=prior?[...(prior.history??[]),Object.fromEntries(Object.entries(prior).filter(([k])=>k!=='history'))]:[];
-        const entry = effects.actions[key] = { state: 'started',owner:'line-service',subject:key, at: now(),...(history.length?{history}:{}), ...(binding ? { review_target: binding, review_operation: operation } : {}) }; save();
+        const continuation=prior&&typeof outcomeReadback==='function'?outcomeReadback(fresh):null;
+        if(prior&&typeof outcomeReadback==='function'&&!continuation)return prior;
+        const entry = effects.actions[key] = { state: 'started',owner:'line-service',subject:key, at: now(),...(history.length?{history}:{}),...(continuation?{queue_recovery:continuation}:{}), ...(binding ? { review_target: binding, review_operation: operation } : {}) }; save();
+        if(continuation)log({action:'review-queue-no-mutation',key,proof:continuation});
         try {
           entry.result = run(fresh); entry.state = 'complete';
           if (['escalate', 'failed', 'stopped', 'judge_promotion'].includes(entry.result?.result)) {
@@ -346,7 +350,14 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
             if(!checked||JSON.stringify(checked.target)!==JSON.stringify(target))throw Error('immutable landed target/evidence changed before queue mutation');
             queueConsumer({run:checked.run,env:childEnv});
             return JSON.parse(cli('bin/org.mjs',['queue-review',run.id,'--head',target.head,'--base',target.base]));
-          },target,'record-queue',true,false,()=>admit({item,run,target},'queue-mutation',true));
+          },target,'record-queue',true,fresh=>{
+            const proof=reviewQueueNoMutation({entry:effects.actions[key],key,...fresh,repo,org,identity:project.identity,item,run,target});
+            if(!proof)return null;
+            // A fresh inventory check under the existing pass/change locks
+            // precedes the durable continuation intent; ordinary queue-review
+            // still owns its record CAS, source/native/STOP guards and cap1.
+            return reviewAttempt(item,{...fresh,repo,org,identity:project.identity,effects,target,capturedRun:run.id,ignoreService})?null:proof;
+          },()=>admit({item,run,target},'queue-mutation',true));
         }catch(e){note(key,e.message,{item:item.id,run:run.id,head:target.head});}
         finally{reviewLock?.();}
       }

@@ -183,6 +183,25 @@ evidence and mapping at admission. The control serializes with the existing pass
 promotion and record locks and checks native supervisor, claim generation,
 source/canonical head and clean CAS, STOP/HOLD and held/reserved subjects.
 
+After a validated `needs-review` disposition, the next line pass can settle one
+specific old `record-queue` failure automatically: a completed exit-3 command
+with empty stdout, no signal/error, and the exact promotion-guard diagnostic
+`record changed repeatedly while preparing a consistent read; no mutation attempted`.
+That error comes from pure plan preparation before the record commit/append;
+it is not a native refusal or an unreadable queue authorization. The exact
+project queue path and whole diagnostic must match the saved receipt. No review
+item, run or verdict may exist for that source, and normal review inventory,
+landed target, claim, admission, STOP/HOLD and record CAS checks still apply.
+
+Before one ordinary queue continuation, the existing journal saves a typed
+`review-queue-no-mutation/v1` proof with original/receipt hashes, exact target,
+record checkpoint and reference resolution sequences. The entire failed entry
+stays in `history`; the proof stays in `queue_recovery` and the pass audit.
+A lost/uncertain continuation, another contention, a genuine refusal, a changed
+archive, an existing review, or any other UNKNOWN receipt cannot replay. No new
+supervisor command, replacement reviewer, service restart or delivery is needed.
+Brain's other retained outcome notes remain held unless their own proof fits.
+
 Leave the existing line and saved callbacks in place. Its next ordinary pass
 uses the normal record `queue-review` and dispatch path where eligible. Do not
 manually queue a replacement, restart a service, or retry an original UNKNOWN

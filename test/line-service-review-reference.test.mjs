@@ -15,6 +15,7 @@ import {reviewDigest as hash} from '../line-service/review-resolutions.mjs';
 import {reviewAttempt} from '../line-service/review.mjs';
 import {queueReviewMutation,validateQueuedReview} from '../line-service/review-queue.mjs';
 import {createLineService,sourceRoot} from '../line-service/line-service.mjs';
+import {reviewQueueNoMutation} from '../line-service/review-queue-outcome.mjs';
 
 const root=fs.realpathSync(sourceRoot);
 function fixture(t,{diffBytes=0}={}){
@@ -400,6 +401,92 @@ for(const producer of [false,true])test(`line reconsiders its remembered ${produ
   const key=`review:ENG-1:${f.head}`;assert.match(before.review_reference_observed[key].attempt,/UNKNOWN/);assert.equal(commands.length,0);
   resolveReviewReference(f.args());createLineService(options).pass();createLineService(options).pass();
   const after=JSON.parse(fs.readFileSync(file));assert.deepEqual(after.review_reference_observed[key],before.review_reference_observed[key]);assert.equal(commands.length,1);assert.equal(commands[0][1],'queue-review');
+});
+
+const contentionReceipt=f=>({status:3,signal:null,stdout:'',signal_sent:false,
+  stderr:`record: promotion write guard REFUSED (fail-closed): cannot read the project's promotion queue ${path.join(f.identity,'promote/queue.json')}: record changed repeatedly while preparing a consistent read; no mutation attempted. Stale entries never expire; repair/inspect the queue before writing. Write the information on an unguarded parent or in the supervisor digest meanwhile, and copy it to the member after landing and reconciliation.\n`});
+const failedQueue=(f,receipt=contentionReceipt(f))=>({state:'held',owner:'line-service',subject:`review:ENG-1:${f.head}`,
+  at:'2026-10-30T01:00:00Z',finished_at:'2026-10-30T01:01:00Z',review_target:f.context().target,review_operation:'record-queue',
+  error:receipt.stderr.trim(),receipt,failure:{kind:'unknown',code:'OUTCOME_UNKNOWN'}});
+const noMutation=(f,entry,context=f.context())=>reviewQueueNoMutation({...context,entry,key:`review:ENG-1:${f.head}`});
+
+for(const next of ['queued','unknown','contention'])test(`resolved reference settles only proven pre-append contention once; continuation ${next}`,t=>{
+  const f=fixture(t);resolveReviewReference(f.args());let calls=0;
+  const options={repo:f.repo,org:f.org,to:'fixture-supervisor',env:f.serviceEnv,command:(_exe,args)=>{
+    if(args[1]!=='queue-review')return{status:0,stdout:'{"created":[]}',stderr:''};
+    calls++;
+    if(calls===1||next==='contention')return contentionReceipt(f);
+    if(next==='unknown')return{status:1,signal:null,stdout:'',stderr:'reply lost after possible mutation',signal_sent:false};
+    return{status:0,stdout:JSON.stringify(f.queue()),stderr:''};
+  }};
+  createLineService(options).pass();const file=path.join(f.directory,'effects.json'),key=`review:ENG-1:${f.head}`;
+  const original=JSON.parse(fs.readFileSync(file)).actions[key];assert.equal(original.failure.code,'OUTCOME_UNKNOWN');
+  assert.equal(calls,1);assert.equal([...f.context().state.items.values()].filter(q=>q.role==='reviewer').length,0);
+  assert.equal(noMutation(f,original).schema,'review-queue-no-mutation/v1');
+  createLineService(options).pass();createLineService(options).pass();createLineService(options).pass();
+  const after=JSON.parse(fs.readFileSync(file)).actions[key];assert.equal(calls,2);
+  assert.deepEqual(after.history,[original]);assert.equal(after.queue_recovery.original_sha256,hash(JSON.stringify(original)));
+  assert.equal(after.queue_recovery.receipt_sha256,hash(JSON.stringify(original.receipt)));
+  assert.equal(after.queue_recovery.reference_resolution_seqs.length,1);
+  const reviews=[...f.context().state.items.values()].filter(q=>q.role==='reviewer');
+  assert.equal(reviews.length,next==='queued'?1:0);assert.equal(after.state,next==='queued'?'complete':'held');
+  if(next==='queued')assert.equal(validateQueuedReview({...f.context(),item:reviews[0]}).head,f.head);
+  assert.equal(fs.readFileSync(path.join(f.directory,'passes.jsonl'),'utf8').split('\n').filter(s=>s&&JSON.parse(s).action==='review-queue-no-mutation').length,1);
+});
+
+test('queue absence and a resolved reference cannot authorize refused, ambiguous or already consumed receipts',t=>{
+  const f=fixture(t),original=failedQueue(f);assert.equal(noMutation(f,original),null,'no disposition');
+  resolveReviewReference(f.args());assert.ok(noMutation(f,original));
+  const variants=[
+    e=>e.state='started',e=>e.owner='other',e=>e.subject='other',e=>e.review_operation='native-review',
+    e=>e.review_target.head=f.base,e=>e.failure.kind='fence',e=>e.result={},e=>e.history=[original],
+    e=>e.history={},e=>e.native_launch_attempted=true,e=>e.worker={agent:'reviewer'},e=>e.recorded_review_status={},
+    e=>e.queue_recovery={},e=>delete e.finished_at,e=>e.finished_at='2026-10-29T00:00:00Z',
+    e=>e.receipt.status=1,e=>e.receipt.signal='SIGTERM',e=>e.receipt.stdout='possible review',
+    e=>e.receipt.error='EACCES',e=>e.receipt.signal_sent=true,e=>delete e.receipt.signal_sent,
+    e=>e.receipt.stderr+='record: native input refused\n',e=>e.receipt.stderr=e.receipt.stderr.replace(f.identity,'/foreign/.git'),
+    e=>e.receipt.stderr=e.receipt.stderr.replace('record changed repeatedly while preparing a consistent read; no mutation attempted','invalid queue identity or contents'),
+    e=>e.error='native input refused',
+  ];
+  for(const mutate of variants){const entry=structuredClone(original);mutate(entry);assert.equal(noMutation(f,entry),null,mutate.toString());}
+  for(const event of [
+    {type:'review.verdict',run:'R-1',head:f.head},
+    {type:'review.recovery-intent',item:'ENG-1',target:{head:f.head}},
+    {type:'change.reviewed',item:'ENG-1',head:f.head},
+  ]){const c=f.context();c.events=[...c.events,{...event,seq:c.events.at(-1).seq+1}];assert.equal(noMutation(f,original,c),null);}
+  const queued=f.queue();assert.equal(noMutation(f,original),null,'even an unstarted existing review stays retained');
+  f.add([{type:'run.started',id:'R-2',item:queued.review_item,workspace:f.repo,meta:{}}]);assert.equal(noMutation(f,original),null);
+});
+
+test('Brain retained outcome:review failures remain held; absence is not a pre-append receipt',t=>{
+  const f=fixture(t);resolveReviewReference(f.args());
+  const cases=JSON.parse(fs.readFileSync(new URL('./fixtures/review-queue-outcomes.json',import.meta.url))).cases;
+  assert.equal(cases.length,6);
+  for(const saved of cases){
+    const entry={...failedQueue(f),error:saved.error,receipt:saved.receipt,failure:saved.failure};
+    assert.equal(noMutation(f,entry),null,saved.source_key);
+  }
+});
+
+for(const obstacle of ['STOP','competing-attempt','changed-archive','started-continuation'])test(`pre-append continuation retains ${obstacle} without a replacement`,t=>{
+  const f=fixture(t);resolveReviewReference(f.args());let calls=0;
+  const options={repo:f.repo,org:f.org,to:'fixture-supervisor',env:f.serviceEnv,command:(_exe,args)=>{
+    if(args[1]!=='queue-review')return{status:0,stdout:'{"created":[]}',stderr:''};
+    calls++;return contentionReceipt(f);
+  }};
+  createLineService(options).pass();const file=path.join(f.directory,'effects.json'),key=`review:ENG-1:${f.head}`,before=JSON.parse(fs.readFileSync(file));
+  if(obstacle==='STOP')fs.writeFileSync(path.join(f.directory,'STOP'),'hold');
+  if(obstacle==='competing-attempt'){
+    fs.mkdirSync(path.join(f.org,'settle'));fs.writeFileSync(path.join(f.org,'settle/R-1.json'),JSON.stringify({kind:'settle',run:'R-1',head:f.head,native_launch_attempted:true}));
+  }
+  if(obstacle==='changed-archive'){
+    const e=f.context().events.find(e=>e.type==='review.reference-resolved');fs.chmodSync(e.archive.file,0o600);fs.appendFileSync(e.archive.file,' ');
+  }
+  if(obstacle==='started-continuation'){
+    const e=before.actions[key];before.actions[key]={...e,state:'started',history:[e],queue_recovery:noMutation(f,e)};fs.writeFileSync(file,JSON.stringify(before));
+  }
+  createLineService(options).pass();createLineService(options).pass();
+  assert.equal(calls,1);assert.deepEqual(JSON.parse(fs.readFileSync(file)).actions[key],before.actions[key]);
 });
 
 for(const disposition of ['mapped-review','superseded'])test(`${disposition} binds the exact existing record review and never creates a replacement`,t=>{

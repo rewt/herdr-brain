@@ -4,13 +4,67 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { affectedTests, boundAffectedTests, DEFAULT_BUDGET_MS, DEFAULT_MAX_FILES } from '../../test/helpers/affected-tests.mjs';
+import { affectedTests, affectedTestPlan, boundAffectedTests, DEFAULT_BUDGET_MS, DEFAULT_MAX_FILES } from '../../test/helpers/affected-tests.mjs';
 import { releasePhases } from '../../test/helpers/release-suites.mjs';
 import { affectedOnlyCommand, plannedCommand, promotionTestPlan } from '../test-plan.mjs';
 const root = fs.realpathSync(new URL('../../', import.meta.url));
 // The planner reads git ls-files of the product tree; a release build's git-archive snapshot has none.
 const gitTree = spawnSync('git', ['-C', root, 'rev-parse', '--is-inside-work-tree'], { encoding: 'utf8' }).stdout.trim() === 'true';
 const SNAPSHOT = 'no Git work tree (release snapshot)';
+test('reduced planning selects unchanged historical promotion consumers from the complete inventory', t => {
+  if (!gitTree) return t.skip(SNAPSHOT);
+  const plan = promotionTestPlan({ cwd: root, planner: 'test/helpers/affected-tests.mjs',
+    changed: ['lib/state.mjs'], baseCommand: 'node test/helpers/affected-tests.mjs --promotion' });
+  assert.ok(plan.files.includes('test/flow.test.mjs'), 'historical promotion file must run in an affected-only plan');
+  assert.ok(plan.graph.inventory.includes('test/flow.test.mjs'));
+  assert.ok(plan.graph.inventory.includes('test-slot/test/test-slot.test.mjs'));
+  assert.equal(plan.graph.test_files, plan.graph.inventory.length);
+  assert.deepEqual(plan.deferred, [], 'reduced affected union has advisory limits');
+  const reason = plan.graph.consumers.find(row => row.input === 'lib/state.mjs' && row.file === 'test/flow.test.mjs');
+  assert.ok(reason?.via.includes('lib/state.mjs'));
+  assert.ok(plan.selected.find(row => row.file === 'test/flow.test.mjs').consumers.length);
+});
+
+test('opaque inputs stay unresolved until a known consumer declares its runtime inputs', t => {
+  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'affected-opaque-'));
+  t.after(() => fs.rmSync(scratch, { recursive: true, force: true }));
+  const sources = {
+    'input.json': '{}', 'unrelated.mjs': '',
+    'opaque.test.mjs': 'await import(process.env.RUNTIME_MODULE);',
+    'unrelated.test.mjs': "import './unrelated.mjs';",
+  };
+  for (const [file, text] of Object.entries(sources)) fs.writeFileSync(path.join(scratch, file), text);
+  const options = { root: scratch, files: Object.keys(sources), changed: ['input.json'] };
+  const opaque = affectedTestPlan(options);
+  assert.deepEqual(opaque.candidates, []);
+  assert.ok(opaque.unknown.some(reason => reason === 'unmapped-input: input.json'));
+  assert.ok(opaque.unknown.some(reason => reason.startsWith('opaque-inputs: opaque.test.mjs')));
+  const recovered = affectedTestPlan({ ...options, consumers: { 'opaque.test.mjs': ['input.json'] } });
+  assert.deepEqual(recovered.candidates, ['opaque.test.mjs']);
+  assert.deepEqual(recovered.unknown, []);
+  assert.deepEqual(recovered.consumers, [{ input: 'input.json', file: 'opaque.test.mjs',
+    via: ['input.json', 'opaque.test.mjs'], reason: 'explicit-consumer' }]);
+  const bounded = boundAffectedTests({ candidates: recovered.candidates, changed: options.changed,
+    consumers: recovered.consumers, budgetMs: 1 });
+  assert.deepEqual(bounded.files, []);
+  assert.equal(bounded.deferred[0].consumers[0].reason, 'explicit-consumer');
+  assert.equal(bounded.deferred[0].destination, 'release-candidate');
+  assert.throws(() => affectedTestPlan({ ...options, consumers: { 'absent.test.mjs': ['input.json'] } }), /invalid explicit consumer/);
+});
+
+test('a changed helper selects its transitive consumer while unrelated tests remain out', t => {
+  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'affected-helper-'));
+  t.after(() => fs.rmSync(scratch, { recursive: true, force: true }));
+  const sources = { 'leaf.mjs': '', 'helper.mjs': "export * from './leaf.mjs';",
+    'consumer.test.mjs': "import './helper.mjs';", 'unrelated.test.mjs': '' };
+  for (const [file, text] of Object.entries(sources)) fs.writeFileSync(path.join(scratch, file), text);
+  const plan = affectedTestPlan({ root: scratch, files: Object.keys(sources), changed: ['leaf.mjs'] });
+  assert.deepEqual(plan.candidates, ['consumer.test.mjs']);
+  assert.deepEqual(plan.unknown, []);
+  assert.deepEqual(plan.consumers[0].via, ['leaf.mjs', 'helper.mjs', 'consumer.test.mjs']);
+  assert.equal(plan.consumers[0].reason, 'transitive-reference');
+});
+
 test('the three-argument planner output keeps the field set accepted by the main validator', t => {
   if (!gitTree) return t.skip(SNAPSHOT);
   const result = spawnSync(process.execPath, ['test/helpers/affected-tests.mjs', '--plan',
@@ -20,7 +74,7 @@ test('the three-argument planner output keeps the field set accepted by the main
   assert.deepEqual(Object.keys(JSON.parse(result.stdout)).sort(), ['covered', 'files', 'graph']);
 });
 
-test('one-hop selection includes changed tests and direct literals without following re-exports or cycles', t => {
+test('transitive selection includes re-exports, literal dynamic imports, deletions and cycles', t => {
   const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'affected-tests-'));
   t.after(() => fs.rmSync(scratch, { recursive: true, force: true }));
   const sources = {
@@ -34,25 +88,25 @@ test('one-hop selection includes changed tests and direct literals without follo
   };
   for (const [file, text] of Object.entries(sources)) fs.writeFileSync(path.join(scratch, file), text);
   const files = Object.keys(sources), tests = files.filter(f => f.endsWith('.test.mjs'));
-  assert.deepEqual(affectedTests({ root: scratch, files, tests, changed: ['module.mjs', 'changed.test.mjs'] }), ['changed.test.mjs', 'direct.test.mjs', 'launch.test.mjs']);
+  assert.deepEqual(affectedTests({ root: scratch, files, tests, changed: ['module.mjs', 'changed.test.mjs'] }), ['changed.test.mjs', 'direct.test.mjs', 'indirect.test.mjs', 'launch.test.mjs']);
   assert.deepEqual(affectedTests({ root: scratch, files, tests, changed: ['deleted.mjs'] }), ['deleted.test.mjs']);
   assert.throws(() => affectedTests({ root: scratch, files: Array(10001).fill('module.mjs'), tests, changed: [] }), /10000/);
   assert.ok(releasePhases(tests).every(([, rows]) => rows.length <= 4));
 });
-test('a core-module change selects bounded one-hop extras and defers the expensive lane file', t => {
+test('a core-module change selects bounded transitive extras and defers the expensive lane file', t => {
   if (!gitTree) return t.skip(SNAPSHOT);
   const plan = promotionTestPlan({ cwd: root, planner: 'test/helpers/affected-tests.mjs', changed: ['lanes/lane.mjs', 'dispatch/dispatch.mjs'], baseCommand: 'npm run test:promotion' });
   assert.ok(!plan.files.includes('lanes/test/lane.test.mjs'));
-  assert.ok(plan.deferred.some(row => row.file === 'lanes/test/lane.test.mjs' && row.reason === 'time-budget'));
+  assert.ok(plan.deferred.some(row => row.file === 'lanes/test/lane.test.mjs' && ['time-budget', 'file-cap'].includes(row.reason)));
   assert.ok(plan.files.length <= DEFAULT_MAX_FILES);
   assert.ok(plan.budget.estimated_ms <= DEFAULT_BUDGET_MS);
-  assert.equal(plan.graph.hops, 1);
+  assert.equal(plan.graph.hops, 'transitive');
   for (const file of ['dispatch/test/dispatch-admission.test.mjs', 'dispatch/test/dispatch-options.test.mjs',
     'dispatch/test/dispatch-recovery.test.mjs', 'dispatch/test/dispatch-session.test.mjs']) {
     assert.ok(plan.files.includes(file) || plan.covered.includes(file));
   }
   assert.ok(!plan.covered.includes('settle/test/validation-tiers.test.mjs'));
-  assert.ok(plan.files.includes('settle/test/validation-tiers.test.mjs'));
+  assert.ok([...plan.selected, ...plan.deferred].some(row => row.file === 'settle/test/validation-tiers.test.mjs'));
   assert.ok(plan.covered.includes('promote/test/train.test.mjs'));
   const overridden = promotionTestPlan({ cwd: root, planner: 'test/helpers/affected-tests.mjs', changed: ['promote/test/train.test.mjs'], baseCommand: 'true' });
   assert.ok(overridden.files.includes('promote/test/train.test.mjs'));

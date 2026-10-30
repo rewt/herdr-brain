@@ -2,7 +2,8 @@
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { isMain } from '../../lib/cli-help.mjs';
-import { affectedTests, boundAffectedTests } from './affected-tests.mjs';
+import { affectedTestPlan, boundAffectedTests } from './affected-tests.mjs';
+import { trackedTestInventory } from './test-inventory.mjs';
 import { main as runSelected, releasePhases } from './release-suites.mjs';
 
 function git(cwd, args) {
@@ -20,19 +21,18 @@ export function combinedPlan({ cwd = process.cwd(), base, extra = [], ...budget 
   assertSource(root, head);
   if (git(root, ['rev-parse', '--verify', `${base}^{commit}`]) !== base) throw Error('base is not the named commit');
   if (git(root, ['merge-base', base, head]) !== base) throw Error('combined-check base must be an ancestor of HEAD; combine or rebase the sources first');
-  const files = git(root, ['ls-files', '-z']).split('\0').filter(Boolean);
-  const tests = files.filter(file => file.endsWith('.test.mjs'));
+  const { files, tests } = trackedTestInventory(root);
   if (extra.some(file => !/^[\w./-]+\.test\.mjs$/.test(file) || file.split('/').includes('..') || path.isAbsolute(file) || !tests.includes(file))) {
     throw Error('--extra requires a tracked test file in the candidate');
   }
   // Disable rename detection to retain both old and new paths for consumers.
   const changed = git(root, ['diff', '--no-renames', '--name-only', '-z', base, head, '--']).split('\0').filter(Boolean);
-  const candidates = affectedTests({ root, changed, files, tests });
-  const selection = boundAffectedTests({ ...budget, candidates, changed, required: extra });
+  const analysis = affectedTestPlan({ root, changed, files, tests });
+  const selection = boundAffectedTests({ ...budget, candidates: analysis.candidates, consumers: analysis.consumers, changed, required: extra });
   assertSource(root, head);
   return { base, head, tree: git(root, ['rev-parse', 'HEAD^{tree}']), changed, ...selection,
     groups: selection.files.length ? releasePhases(selection.files) : [],
-    graph: { hops: 1, max_suite_files: 4 }, root };
+    graph: analysis.graph, unknown: analysis.unknown, root };
 }
 export function main(argv = process.argv.slice(2), {
   cwd = process.cwd(), output = text => console.log(text),
@@ -58,7 +58,7 @@ export function main(argv = process.argv.slice(2), {
   try { status = execute(plan.files); }
   finally { assertSource(plan.root, plan.head); }
   output(JSON.stringify({ base: plan.base, head: plan.head, tree: plan.tree, exit_code: status,
-    selected: plan.files, deferred: plan.deferred, coverage: 'focused; unselected tests unrun' }));
+    selected: plan.files, deferred: plan.deferred, unknown: plan.unknown, coverage: 'focused; unselected tests unrun' }));
   return status;
 }
 if (isMain(import.meta.url)) process.exitCode = main();

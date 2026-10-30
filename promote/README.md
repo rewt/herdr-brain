@@ -573,20 +573,62 @@ changed paths, required files, selected files, deferred files and reasons, cover
 command, budget and graph bounds even for a red gate. Deferred extras do not block
 promotion; the complete offline suites still run once per release candidate.
 
-This repository's `test/helpers/affected-tests.mjs` considers changed existing
-`.test.mjs` files outside whole-file promotion coverage and release files with a
-direct reference to a changed module (one hop). It recognizes static imports,
-re-exports, literal dynamic imports, `new URL` references and literal launched-script
-paths, including conservative basename matches for joined paths. It does not
-follow references through intermediate helpers or modules. Computed runtime
-references need a literal path/import to enter this static selection.
+Both `test/helpers/affected-tests.mjs` and `test/helpers/combined-checks.mjs`
+use `trackedTestInventory` from `test/helpers/test-inventory.mjs`: every tracked
+`.test.mjs` in the candidate, including unchanged historical promotion files,
+slot tests and new module directories. Tier membership never restricts affected
+candidates. An actual whole-file promotion command still subtracts its declared
+whole-file coverage; the reduced affected-only command subtracts nothing.
+
+The shared `affectedTestPlan` follows static consumer edges transitively through
+helpers, re-exports and cycles. It recognizes relative imports/require, literal
+dynamic imports, `new URL`, fixture data paths and launched-script literals,
+including conservative script-basename matches for joined paths. Changed paths
+include both old and new names. `graph.inventory` records the complete live test
+inventory; `graph.consumers` records each changed input/test pair with a witness
+`via` path and `changed-test`, `direct-reference`, `transitive-reference` or
+`explicit-consumer` reason. Selected and deferred rows retain those witnesses.
+These are known dependencies, not evidence of executed coverage.
+
+Computed runtime inputs can be declared in the candidate's tracked
+`test/helpers/test-consumers.json`:
+
+```json
+{
+  "schema": "test-consumers/v1",
+  "consumers": {
+    "path/to/consumer.test.mjs": ["fixtures/input.json", "old/deleted-module.mjs"]
+  }
+}
+```
+
+Consumers may also be helper modules; their edges propagate to tests. Paths are
+safe project-relative names, and consumers must exist in the tracked candidate.
+Old/deleted inputs remain valid. A declaration asserts that consumer's runtime
+inputs explicitly, and discharges its opaque-input warning. It does not attest
+test execution or completeness of arbitrary runtime behavior. Adding a manifest
+also affects its declared consumers. The checked-in empty manifest grants no
+blanket coverage assertion.
+
+Detailed plans expose `unknown` strings for changed inputs with no known test
+consumer and for undeclared opaque import/require/URL/file-read/directory-read
+sites with test consumers. Opaque sites cannot be assigned to a particular edit
+statically, so those warnings remain visible even if other static tests were
+selected; warnings do not select unrelated suites. The scan is conservative,
+not a JavaScript interpreter: aliases, generated paths and arbitrary runtime
+behavior need explicit declarations. The legacy three-argument planner retains
+its accepted top-level fields; detailed consumers use the fourth required-files
+argument (including `[]`) to receive `unknown`, as the promotion adapter does.
+No planner turns inventory counts, estimates, declarations or unresolved inputs
+into executed coverage. Release coverage consumers must retain the inventory,
+known consumers, unresolved warnings and deferred scope separately.
 
 Optional extras default to a **300,000 ms estimated budget and ten-file cap**.
 `MONITOR_PROMOTION_EXTRA_BUDGET_MS` and `MONITOR_PROMOTION_EXTRA_MAX_FILES` accept
 positive integers to override those limits. Bound required evidence always runs,
 even beyond either limit, and consumes the allowance before optional extras.
 Whole-file promotion coverage needs no extra run. Remaining candidates prefer
-changed tests, then cheaper direct references, with path order breaking ties.
+changed tests, then cheaper affected consumers, with path order breaking ties.
 Files that do not fit are recorded as `time-budget` or `file-cap` deferrals to the
 release candidate. Required exceptions carry `bound-required` and
 `budget.required_over_budget` in the receipt.
@@ -602,7 +644,9 @@ for even one. Unmeasured files use a conservative 60,000 ms estimate; every plan
 row identifies measured or fallback cost and retains the measurement timestamp
 when available. Update the tracked inventory from
 whole-file measurements collected during release preparation, without running
-extra suites in a lane. The estimates bound selection rather than impose a new
+extra suites in a lane. The estimates bound optional additive/combined selection; reduced affected-only
+selection retains the complete affected union even beyond those advisory limits.
+They never count deferred or unresolved scope as covered and impose no new
 execution timeout: machine load and changed test behavior can exceed them.
 
 The source scan is bounded to 10,000 paths and 32 MiB; execution uses the release

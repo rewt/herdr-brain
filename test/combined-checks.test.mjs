@@ -6,6 +6,9 @@ import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { combinedPlan, main } from './helpers/combined-checks.mjs';
+import { promotionTestPlan } from '../promote/test-plan.mjs';
+
+const plannerRoot = fileURLToPath(new URL('../', import.meta.url));
 
 function fixture(t) {
   const cwd = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'combined-checks-'));
@@ -13,7 +16,7 @@ function fixture(t) {
   const git = (...args) => execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
   git('init', '-q', '-b', 'main');
   git('config', 'user.name', 'Fixture'); git('config', 'user.email', 'fixture@localhost');
-  const write = (file, text = '') => fs.writeFileSync(path.join(cwd, file), text);
+  const write = (file, text = '') => { fs.mkdirSync(path.dirname(path.join(cwd, file)), { recursive: true }); fs.writeFileSync(path.join(cwd, file), text); };
   const commit = () => { git('add', '--all'); git('commit', '-qm', 'fixture change'); return git('rev-parse', 'HEAD'); };
   write('writer.mjs'); write('reader.mjs'); write('unrelated.mjs');
   write('writer.test.mjs', "import './writer.mjs';");
@@ -41,6 +44,53 @@ test('deletions retain old-path consumers and renamed-path consumers', t => {
   const plan = combinedPlan(f);
   assert.deepEqual(plan.changed, ['replacement.mjs', 'writer.mjs']);
   assert.deepEqual(plan.files, ['contract.test.mjs', 'writer.test.mjs']);
+});
+test('both planners retain transitive old and new consumers in the complete live inventory', t => {
+  const f = fixture(t);
+  f.write('bridge.mjs', "export * from './writer.mjs';");
+  f.write('test/flow.test.mjs', "import '../bridge.mjs';");
+  f.write('test-slot/test/slot.test.mjs', "import '../../bridge.mjs';");
+  f.write('new.test.mjs', "import './replacement.mjs';");
+  const base = f.commit();
+  f.git('mv', 'writer.mjs', 'replacement.mjs'); f.commit();
+  const plan = combinedPlan({ ...f, base });
+  assert.deepEqual(plan.files, ['contract.test.mjs', 'new.test.mjs', 'test-slot/test/slot.test.mjs', 'test/flow.test.mjs', 'writer.test.mjs']);
+  assert.equal(plan.graph.hops, 'transitive');
+  assert.ok(!plan.files.includes('unrelated.test.mjs'));
+  assert.equal(plan.graph.consumers.find(row => row.file === 'test/flow.test.mjs').reason, 'transitive-reference');
+  const reduced = promotionTestPlan({ cwd: f.cwd, plannerRoot, planner: 'test/helpers/affected-tests.mjs',
+    changed: plan.changed, baseCommand: 'node test/helpers/affected-tests.mjs --promotion' });
+  assert.deepEqual(reduced.files, plan.files);
+  assert.deepEqual(reduced.graph, plan.graph);
+  assert.deepEqual(reduced.unknown, plan.unknown);
+  assert.deepEqual(reduced.deferred, []);
+  assert.ok(plan.groups.every(([, rows]) => rows.length <= 4));
+});
+test('both planners expose opaque coverage and recover an explicit data consumer without running unrelated tests', t => {
+  const f = fixture(t);
+  f.write('data.json', '{}');
+  f.write('dynamic.test.mjs', 'await import(process.env.TEST_INPUT);');
+  const base = f.commit();
+  f.write('data.json', '{"shape":2}'); f.commit();
+  const unresolved = combinedPlan({ ...f, base });
+  assert.deepEqual(unresolved.files, []);
+  assert.ok(unresolved.unknown.some(row => row.startsWith('opaque-inputs: dynamic.test.mjs')));
+  assert.ok(unresolved.unknown.includes('unmapped-input: data.json'));
+  f.write('test/helpers/test-consumers.json', JSON.stringify({ schema: 'test-consumers/v1',
+    consumers: { 'dynamic.test.mjs': ['data.json'] } }));
+  f.commit();
+  const plan = combinedPlan({ ...f, base });
+  assert.deepEqual(plan.files, ['dynamic.test.mjs']);
+  assert.deepEqual(plan.unknown, []);
+  assert.ok(plan.selected[0].consumers.every(row => row.reason === 'explicit-consumer'));
+  const reduced = promotionTestPlan({ cwd: f.cwd, plannerRoot, planner: 'test/helpers/affected-tests.mjs',
+    changed: plan.changed, baseCommand: 'node test/helpers/affected-tests.mjs --promotion' });
+  assert.deepEqual(reduced.files, plan.files);
+  assert.deepEqual(reduced.unknown, []);
+  const extra = combinedPlan({ ...f, base, extra: ['unrelated.test.mjs'], budgetMs: 1, maxFiles: 1 });
+  assert.deepEqual(extra.files, ['unrelated.test.mjs']);
+  assert.deepEqual(extra.deferred.map(row => row.file), ['dynamic.test.mjs']);
+  assert.deepEqual(extra.unknown, [], 'a budget deferral is distinct from an unresolved dependency');
 });
 test('bounded deferrals remain explicit and extra contract checks override budgets once', t => {
   const f = fixture(t);

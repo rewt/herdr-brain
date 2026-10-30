@@ -5,8 +5,17 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { tierFiles } from './helpers/tier.mjs';
 import { releasePhases } from './helpers/release-suites.mjs';
+import { testInventory } from './helpers/test-inventory.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
+test('focused inventory includes historical promotion, release, slot and new module tests independently of tiers', () => {
+  const files = ['test/flow.test.mjs', 'promote/test/affected-tests.test.mjs',
+    'test-slot/test/slot.test.mjs', 'new-module/nested/consumer.test.mjs', 'test/helpers/fixture.mjs'];
+  assert.deepEqual(testInventory([...files, files[0]]), files.slice(0, -1).sort());
+  assert.ok(tierFiles('promotion', root).includes('test/flow.test.mjs'));
+  assert.throws(() => testInventory(['../outside.test.mjs']), /safe relative paths/);
+});
+
 test('tier selection covers every current test once in promotion or release and excludes support modules', () => {
   const directories = ['test', 'brain/test', 'watch/test', 'dispatch/test', 'housekeeping/test', 'discovery/test', 'promote/test', 'verify/test', 'settle/test', 'supervisor/test', 'lanes/test', 'acceptance/test'];
   const expected = directories.flatMap(dir => fs.readdirSync(path.join(root, dir)).filter(file => file.endsWith('.test.mjs')).map(file => `${dir}/${file}`));

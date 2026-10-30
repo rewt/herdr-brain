@@ -5,6 +5,7 @@ import { renderBrief } from '../lib/render.mjs';
 import { briefContext, contextDecision } from '../lib/brief-context.mjs';
 import { createWorkerBrief } from '../lib/worker-brief.mjs';
 import { DEFAULT_CONFIG } from '../lib/store.mjs';
+import { normalizeReport } from '../lib/report.mjs';
 
 // Planted cold-start case based on ENG-935/R-1257's actual intent/method tension:
 // exclusive-writer reuse is the intended policy; existing dispatch still allocates
@@ -21,7 +22,7 @@ function example({ title = 'Improve dispatch/dispatch.mjs using ENG-935', noise 
     { type: 'item.acceptance-amended', id: 'ENG-1', accept: ['Keep the held allocation unchanged.'], why: 'Respect the active proof' },
     { type: 'item.added', id: 'HUM-1', kind: 'question', parent: 'ENG-1', title: 'May the reserved effect proceed?', meta: { operator_reserved: true } },
     { type: 'run.started', id: 'R-1', item: 'ENG-1', report_path: '/record/report.md' },
-    { type: 'report.ingested', run: 'R-1', report: { outcome: 'blocked', summary: 'Held pending authority', blockers: ['Proof hold'], learnings: [], artifacts: [], decisions: [], questions: [{ id: 'HUM-1', question: 'May the reserved effect proceed?' }] } },
+    { type: 'report.ingested', run: 'R-1', report: normalizeReport({ outcome: 'blocked', summary: 'Held pending authority', blockers: ['Proof hold'], learnings: [], artifacts: [], decisions: [], questions: [{ id: 'HUM-1', question: 'May the reserved effect proceed?' }] }).report },
     { type: 'run.started', id: 'R-2', item: 'ENG-1', report_path: '/record/report.md' },
     { type: 'lesson.proposed', id: 'L-1', text: 'Old claim: bypass the lane to save folders', scope: 'project', paths: ['unmentioned'], modules: [], evidence: [{ kind: 'item', id: 'ENG-935' }] },
     { type: 'lesson.activated', id: 'L-1' },
@@ -93,4 +94,19 @@ test('decision provenance follows the latest recorded source; challenges never b
   assert.doesNotMatch(f.render(), /unconfirmed suspicion/);
   sibling.notes.push({ decision: true, text: 'Newer correction', seq: 101, by: 'correction-owner' });
   assert.equal(contextDecision(f.s, sibling).text, 'Newer correction');
+});
+
+test('normalized report decisions and questions use the same extra fields as actual report ingestion', () => {
+  const f = example(), sibling = f.s.items.get('ENG-935');
+  const { report, errors } = normalizeReport({ run: 'R-20', outcome: 'done', summary: 'Guarded reuse policy', decisions: [{ text: 'Reuse only where native guards support it', category: 'design', why: 'Keep ownership' }] });
+  assert.deepEqual(errors, []);
+  assert.equal(report.decisions, undefined);
+  f.s.runs.set('R-20', { id: 'R-20', item: sibling.id, report: { ...report, seq: 100 } });
+  sibling.runs.push('R-20');
+  const decision = contextDecision(f.s, sibling);
+  assert.equal(decision.text, 'Reuse only where native guards support it');
+  assert.equal(decision.source, 'R-20');
+  assert.equal(decision.by, 'not retained in report fold; inspect source event');
+  assert.match(f.render(), /Decision excerpt: Reuse only where native guards support it/);
+  assert.match(f.render(), /Prior question obligations[\s\S]*record show HUM-1/);
 });

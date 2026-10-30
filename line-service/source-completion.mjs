@@ -1,6 +1,9 @@
 // Logical completion is independent of allocation disposal. Reads here grant
 // no native effect; the conditional record close still owns final admission.
 import fs from 'node:fs';
+import {policyLocation} from '../lib/config-home.mjs';
+import {readPolicyFile,validatePromote} from '../lib/config-policy.mjs';
+import {enqueueSupervisor,inboxPath,readInbox} from '../supervisor/prompt-supervisor.mjs';
 import {deliveredSourceProof} from '../lib/source-provenance.mjs';
 
 export function sourceCompletionProof({project,run,org=run.meta?.dispatch_record,events,state,git,identify}) {
@@ -37,4 +40,17 @@ export function preEffectSourceHold(entry){
   return entry?.state==='held'&&!entry.receipt&&!entry.result&&!entry.history?.length&&
     (!entry.failure||entry.failure.kind==='unknown')&&
     /^T2 source completion needs supervisor judgment: (?:source\/canonical worktree is not clean|reported source [a-f0-9]{40,64} is not integrated at [a-f0-9]{40,64})$/.test(entry.error??'');
+}
+
+// Enqueue an actual repository mismatch once through the existing role inbox.
+// The inbox owner owns quiet/native delivery; this producer never inputs/replays.
+export function queueSourceException({repo,org,run,proof,env=process.env,git,enqueue=enqueueSupervisor}) {
+  if(proof?.status!=='external')return null;
+  const id=`${run.id}:exception:source-repository:${run.report.sha256}`,file=inboxPath({org,cwd:repo}),prior=readInbox(file).find(e=>e.id===id);
+  if(prior)return{id,inbox:file,state:prior.state,retained:true};
+  const selected=policyLocation(repo,'promote',env,{canonical:repo});
+  const policy=selected.home?readPolicyFile(selected.file,'promote'):validatePromote(JSON.parse(git(repo,['show','HEAD:.promote.json'])));
+  if(!policy.to)return{id,state:'pending',reason:'recorded project supervisor binding is missing'};
+  const message=`[worker-exception] run=${run.id} item=${run.item} claimed delivery repository differs from immutable dispatch repository; evidence=${org}/runs/${run.id}/report.md; held-action=covered source completion; next-owner=${run.id}; source evidence retained in line-service.source-completion-held`;
+  return{...enqueue(policy.to,message,{id,org,cwd:repo,projectSupervisor:true,waitSeconds:0,lockOptions:{recover:false}}),state:'queued',delivered:false};
 }

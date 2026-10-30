@@ -4,21 +4,24 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {execFileSync} from 'node:child_process';
+import {fixtureFleet} from './helpers/offline-herdr.mjs';
 import {gitProject} from '../lib/project.mjs';
 import {fold} from '../lib/state.mjs';
 import {initOrg,transact,loadEvents} from '../lib/store.mjs';
 import {dispatchSourceBinding,deliveredSourceProof} from '../lib/source-provenance.mjs';
-import {sourceCompletionProof} from '../line-service/source-completion.mjs';
+import {sourceCompletionProof,queueSourceException} from '../line-service/source-completion.mjs';
 import {recordOwnLanding} from '../lib/landing-receipt.mjs';
 import {ownWorktreeGuard} from '../promote/own-worktree.mjs';
 import {canonicalReviewIndex,reviewHealth,discoverChanges} from '../line-service/phase1.mjs';
+import {queueReviewMutation} from '../line-service/review-queue.mjs';
+import {preserveReportContext} from '../lib/report-closeout.mjs';
 import {createHash} from 'node:crypto';
 
 const git=(cwd,args)=>execFileSync('git',['-C',cwd,...args],{encoding:'utf8',stdio:['ignore','pipe','pipe']}).trim();
 function fixture(t){
   const scratch=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'source-provenance-'))),repo=path.join(scratch,'repo'),workspace=path.join(scratch,'lane'),clone=path.join(scratch,'clone');
-  t.after(()=>fs.rmSync(scratch,{recursive:true,force:true}));fs.mkdirSync(repo);git(repo,['init','-qb','main']);git(repo,['config','user.name','Fixture']);git(repo,['config','user.email','fixture@example.invalid']);
-  fs.writeFileSync(path.join(repo,'.git/info/exclude'),'.org/\n.lane/\n');fs.writeFileSync(path.join(repo,'seed'),'base');git(repo,['add','.']);git(repo,['commit','-qm','Base']);
+  t.after(()=>fs.rmSync(scratch,{recursive:true,force:true}));fixtureFleet(t,scratch);fs.mkdirSync(repo);fs.writeFileSync(path.join(repo,'.identity-root'),'fixture');git(repo,['init','-qb','main']);git(repo,['config','user.name','Fixture']);git(repo,['config','user.email','fixture@example.invalid']);
+  fs.writeFileSync(path.join(repo,'.promote.json'),JSON.stringify({to:'fixture-supervisor'}));fs.writeFileSync(path.join(repo,'.git/info/exclude'),'.org/\n.lane/\n');fs.writeFileSync(path.join(repo,'seed'),'base');git(repo,['add','.']);git(repo,['commit','-qm','Base']);
   const project=gitProject(repo),org=path.join(repo,'.org');initOrg(org);const base=git(repo,['rev-parse','HEAD']);git(repo,['worktree','add','-qb','lane/source',workspace]);
   fs.writeFileSync(path.join(workspace,'source'),'delivered');git(workspace,['add','.']);git(workspace,['commit','-qm','Delivered']);const head=git(workspace,['rev-parse','HEAD']);
   git(repo,['clone','-q',workspace,clone]);
@@ -50,6 +53,10 @@ test('source provenance compares equal hashes in distinct clones and the unchang
   const found=discoverChanges(c);assert.equal(found.changes.length,1);assert.equal(found.changes[0].target.source_provenance.status,'unknown');
   const health=reviewHealth({...c,index:canonicalReviewIndex(c)});assert.equal(health.guarded_commits,0);assert.equal(health.uncovered_source.length,1);
   assert.equal(c.events.some(e=>e.type==='change.landed'),false,'review observation does not manufacture a guarded landing');
+  const planned=queueReviewMutation({...c,runId:'R-1',head:f.head,base:f.base,deferCommit:true});
+  assert.equal(planned.add.some(e=>e.type==='change.landed'),false,'queue handoff does not manufacture a landing either');
+  const archive=preserveReportContext({run:'R-1',org:f.org,project:f.repo,common:f.project.identity,cwd:f.workspace,head:f.head,branch:'refs/heads/lane/source',source:{type:'report.ingested'}},c.events);
+  const saved=JSON.parse(fs.readFileSync(archive.packet));assert.equal(saved.source_provenance.status,'unknown');assert.equal(saved.author.artifacts[0],f.artifacts[0]);
 });
 
 test('guarded source provenance survives a real same-common-directory worktree and removed allocation with exact ranges',t=>{
@@ -86,4 +93,22 @@ test('self landing binds immutable dispatch repository before its effect and kee
 test('planning reports require no synthetic source delivery',t=>{
   const f=fixture(t);git(f.workspace,['reset','--hard',f.base]);const c=f.context();c.run.report={artifacts:[]};
   const proof=sourceCompletionProof(c);assert.equal(proof.source_provenance.status,'none');assert.equal(c.events.some(e=>e.type==='change.landed'),false);
+});
+
+test('source provenance retains unavailable foreign claims and legacy receipts without inventing historical coverage',t=>{
+  const f=fixture(t);f.ingest();let c=f.context();
+  const report=c.events.find(e=>e.type==='report.ingested');report.report.artifacts=[`source: ${'a'.repeat(40)}; base: ${'b'.repeat(40)}; repository: ${f.clone}`];
+  c.state=fold(c.events);c.run=c.state.runs.get('R-1');
+  const found=discoverChanges(c);assert.equal(found.changes.length,0);assert.equal(found.holds[0].source_provenance.status,'external');assert.equal(found.holds[0].source_provenance.next_owner,'R-1');
+  const unknown=deliveredSourceProof({...c,artifacts:[`source: ${f.head}; base: ${f.base}; repository: ${path.join(f.scratch,'missing')}`]});assert.equal(unknown.status,'unknown');
+  c.run.report={artifacts:[]};c.events.push({type:'change.landed',run:'R-1',item:'ENG-1',head:f.head,base:f.base,project:f.project.identity,landed_at:'2026-10-29T00:00:00Z'});
+  assert.equal(deliveredSourceProof(c).status,'unknown','an untyped historical receipt cannot become a new guarded fact');
+});
+
+test('source provenance queues one mismatch at its recorded project supervisor without native replay',t=>{
+  const f=fixture(t);f.ingest();const c=f.context(),proof=deliveredSourceProof({...c,artifacts:[`${f.artifacts[0]}; repository: ${f.clone}`]});
+  const args={repo:f.repo,org:f.org,run:c.run,proof,git},first=queueSourceException(args),second=queueSourceException(args);
+  assert.equal(first.state,'queued');assert.equal(first.delivered,false);assert.equal(second.id,first.id);assert.equal(second.retained,true);
+  const rows=fs.readFileSync(first.inbox,'utf8').trim().split('\n').map(JSON.parse);assert.equal(rows.filter(e=>e.type==='notice').length,1);
+  assert.equal(rows[0].to,'fixture-supervisor');assert.equal(rows[0].recipient_role,'project-supervisor');
 });

@@ -34,7 +34,7 @@ import {serviceSource,acceptedRuntime} from './runtime.mjs';
 import {installedContext} from './cutoff.mjs';
 import { discoverChanges,dispatchInput,phase0Boundary,morningDigest,recordReviewResults,reviewCompletionPlan,recordReviewCompletion,ensureReviewBoundary,canonicalReviewIndex,observeReviewHealth } from './phase1.mjs';
 import {preflightContinuation,initialCapacityRefusal,initialBriefRefusal,initialSourceRootRefusal} from '../dispatch/preflight.mjs';
-import {sourceCompletionProof,preEffectSourceHold} from './source-completion.mjs';
+import {sourceCompletionProof,preEffectSourceHold,queueSourceException} from './source-completion.mjs';
 import {createWorkerBrief,projectExceptionAddress} from '../lib/worker-brief.mjs';
 import {observeReviewProgress,recoverServiceReview} from './review-recovery.mjs';
 import {haltObservation,completeHaltPass} from './halt-repair.mjs';
@@ -420,7 +420,15 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
           const present=Boolean(fs.lstatSync(run.workspace,{throwIfNoEntry:false}));
           const bound=guardRun(run.id,{workspace:present});
           let proof;
-          try{proof=proofFor(bound);}catch(error){receipt('line-service.source-completion-held',{reason:error.message,...(error.source_provenance?{source_provenance:error.source_provenance}:{}),command_started:false});continue;}
+          try{proof=proofFor(bound);}catch(error){
+            receipt('line-service.source-completion-held',{reason:error.message,...(error.source_provenance?{source_provenance:error.source_provenance}:{}),command_started:false});
+            if(error.source_provenance?.status==='external'){
+              try{const exception=queueSourceException({repo,org,run:bound.run,proof:error.source_provenance,env:childEnv,git:sourceGit});
+                receipt('line-service.source-exception',{exception,command_started:false});}
+              catch(failure){note(`source-exception:${run.id}`,failure.message,{item:item.id,run:run.id});}
+            }
+            continue;
+          }
           const legacy=preEffectSourceHold(prior);
           const landed=bound.events.findLast(e=>e.type==='change.landed'&&e.project===project.identity&&e.run===run.id&&e.item===item.id&&e.landed_at&&e.producer?.ownership_generation===run.owner_generation);
           if(prior?.state==='held'&&!legacy&&(!landed||prior.source_producer_seq===landed.seq)){

@@ -135,10 +135,9 @@ export function queueReviewMutation({ state, events, org, repo, runId, head, bas
   const id = nextItemId(state, { kind: 'work', role: 'reviewer' });
   // The source reference is metadata, not a blocking review-child edge: source
   // completion/build admission must not wait for this post-code review.
-  const landing=target.source_provenance?.status!=='covered'||events.some(e=>e.type==='change.landed'&&e.item===item.id&&e.head===target.head)?[]:[{
-    type:'change.landed',item:item.id,run:run.id,head:target.head,base:target.base,project:identity,landed_at:null,observed_at:new Date().toISOString(),evidence:target.evidence,time_qualification:'Canonical containment observed; exact historical landing time UNKNOWN.'
-  }];
-  return { ...(deferCommit ? { commit: validate => { verifyProducer(); validate(); publishLandedReviewEvidence(target); } } : {}), add: [...landing,{ type: 'item.added', id, kind: 'work', role: 'reviewer', capability: 'review', parent: item.parent, priority: item.priority,
+  // Canonical containment is review evidence; only the post-FF producer writes
+  // change.landed. Unknown/external reports never synthesize that fact.
+  return { ...(deferCommit ? { commit: validate => { verifyProducer(); validate(); publishLandedReviewEvidence(target); } } : {}), add: [{ type: 'item.added', id, kind: 'work', role: 'reviewer', capability: 'review', parent: item.parent, priority: item.priority,
     title: `Review ${item.title}`, budget: {}, accept: ['Independent immutable diff/evidence review; zero suites and no edits. Record PASS or FAIL verdict. Major findings become linked engineer follow-up proposals, never an automatic second review. '+uncertainOutcomeDoctrine],
     meta: { review_key: key,review_group_key:group, review_source_item: item.id, review_source_run: run.id, review_target: target, review_round_cap: 1, review_other_family: needsOtherFamily(item), review_cutover:bound.cutoff,...(bound.authorization?{review_recovery_id:bound.authorization.id}:{}) } }],
     result: { result: 'review_queued', review_item: id, source_item: item.id, head: target.head, existing: false } };

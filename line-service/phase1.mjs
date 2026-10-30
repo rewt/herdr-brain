@@ -208,7 +208,15 @@ export function discoverChanges({events,state,repo,org,identity,boundary,readGit
     const group=producerGroupKey(item.id,run.id,run.report?.sha256),backfills=[...authorized.values()].filter(e=>e.run===run.id&&e.item===item.id),tokens=claimedCommitTokens(run.report?.artifacts??[]),nativeQueues=queues.filter(q=>!archived.has(q.id)&&sameProducerQueue(q,item.id,run.id)&&q.meta.review_target?.evidence_kind==='native-landings/v1');
     // Settled history remains two batched Git index reads, no per-report disk
     // or native inventory. An immutable report's intermediate heads are one group.
-    if(!(landed.get(run.id)??[]).length&&!backfills.length&&!tokens.some(token=>index.heads.some(head=>head.startsWith(token))))continue;
+    if(!(landed.get(run.id)??[]).length&&!backfills.length&&!tokens.some(token=>index.heads.some(head=>head.startsWith(token)))){
+      // New external/unobservable deliveries still have an owning record even
+      // when none of their hashes occur in this repository's canonical graph.
+      if(tokens.length&&run.report?.seq>boundary.seq){
+        const provenance=deliveredSourceProof({project:{identity,canonical:repo},org,run,events,state,git});
+        if(['external','unknown'].includes(provenance.status))holds.push({item:item.id,run:run.id,reason:`${provenance.status} delivered source is retained outside canonical review coverage`,source_provenance:provenance});
+      }
+      continue;
+    }
     try {
         const nativeEvidence=!roleIs(item,'ENG')||!run.report||nativeQueues.length>0||backfills.some(e=>e.target.evidence_kind==='native-landings/v1'),reportFile=run.report&&path.resolve(org,run.report.file??'');
         if(!nativeEvidence&&(!reportFile.startsWith(path.resolve(org)+path.sep)||hash(fs.readFileSync(reportFile))!==run.report.sha256))throw Error('immutable producer report bytes changed/missing');

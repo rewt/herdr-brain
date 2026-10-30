@@ -1165,6 +1165,19 @@ native drains receive the remaining deadline. Least-recently-selected targets
 run first, including after a crash. A kept target yields to independent peers.
 Original UNKNOWN/refused commands remain governed by their original record facts.
 
+An ingested report's original watcher can remain alive while its final notice
+waits for supervisor input. That transport wait does not retain the finished
+worker allocation once its claim-bound watch receipt names the original final
+ID in the ordinary inbox and that inbox records acknowledged transport ownership
+for the same project, record and run. The source-bound closer omits only that
+synthetic watcher reference. It leaves the watcher, inbox bytes, recipient and
+delivery attempt untouched. Worker/pane continuation recipients, uncertain or
+refused input, unknown watcher liveness and missing/redirected handoff evidence
+keep the reference. Real process cwd references, native callback occupants,
+unsaved changes, source/claim checks and all other retirement guards still apply.
+Review and correction obligations stay in the record after allocation release;
+the closer never waits for a review verdict to close the author session.
+
 The exact historical pre-journal release-source override refusal can be admitted
 once when an accepted release no longer supplies that override. The original
 terminal receipt survives, and `line-service.dispatch-readmitted` binds the new

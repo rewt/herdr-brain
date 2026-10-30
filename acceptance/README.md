@@ -117,8 +117,13 @@ judgment, live adoption or final-release readiness. Failed scratch is retained.
 
 The current case also migrates through the existing stopped-service path, then
 advances to a second immutable fixture root while the first producer and watcher
-are live. It moves project main, dispatches a successor-root child, and rolls
-back before either report is published. Every captured dispatch file must keep
+are live. It moves project main and lets the successor line start its next
+child: native landing evidence has already queued the producer's one original
+review, so that review is the successor-root child, started before the producer
+report. The case rolls back before either report is published; the restored
+line then ingests both and must not queue a second review. The scratch pin and
+main commits queue canonical reviews too, so later stages observe the line's own
+selection rather than a fixture-chosen order. Every captured dispatch file must keep
 its exact digest, both watchers retain their captured roots, and the original
 installation/plist bytes are restored. Both roots contain the same committed
 payload: this tests root selection and lifecycle mechanics; the historical

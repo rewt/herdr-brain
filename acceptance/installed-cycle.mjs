@@ -157,19 +157,26 @@ fs.appendFileSync(path.join(repo,'seed.txt'),'Main moved while the installed con
 git(['add','seed.txt']);git(['commit','-qm','Move scratch development main']);
 assert.notEqual(git(['rev-parse','HEAD']),advance);
 record(['amend-accept',item,'--accept','Current acceptance survives both installed roots','--why','Scratch newer record event']);
-const forwardItem=record(['add','Complete a successor-root scratch action','--role','engineer']).match(/ENG-\d+/)[0];
+// Native landing evidence has already queued the producer's one original
+// review. The successor's next start is that review: it is the successor-root
+// child, started before the producer report. The scratch pin and main commits
+// also queue canonical reviews; the fixture takes whatever the line selects.
+const dispatchedBefore=new Set(journals().map(job=>job.file));
 service(1).pass();
-const forwardJob=journals().find(job=>job.item===forwardItem);
-assert.ok(forwardJob,audit());assert.equal(forwardJob.stage,'complete');assert.equal(forwardJob.release.root,config.successor);
+const started=journals().filter(job=>!dispatchedBefore.has(job.file));
+assert.equal(started.length,1,audit());
+const forwardJob=started[0],review=state().items.get(forwardJob.item);
+assert.equal(review.meta.review_source_run,producer.run,JSON.stringify(review.meta));
+assert.equal(forwardJob.stage,'complete');assert.equal(forwardJob.release.root,config.successor);
 const jobsForward=captured();
 for(const [name,digest] of Object.entries(jobsBefore))assert.equal(jobsForward[name],digest);
 assert.equal(ownerAlive(producer.watcher),true);
 const selected=checked(process.execPath,[path.join(config.successor,'herdr/releases.mjs'),'exec',home,'bin/org.mjs','show',item,'--json']);
 assert.deepEqual(JSON.parse(selected).accept,['Current acceptance survives both installed roots']);
-assert.ok(audit().split('\n').filter(Boolean).map(JSON.parse).some(event=>event.action==='pass-start'&&event.source===config.successor&&event.source_head===commit));
+assert.ok(audit().split('\n').filter(Boolean).map(JSON.parse).some(event=>event.action==='pass-start'&&path.resolve(event.source)===config.successor&&event.source_head===commit));
 assert.ok(fs.readFileSync(path.join(evidence,'executables.jsonl'),'utf8').split('\n').filter(Boolean).map(JSON.parse)
   .some(entry=>entry.entry===path.join(config.successor,'bin/org.mjs')&&entry.node===process.execPath));
-stage('forward-and-main-movement',{forwardPlan,forwardReceipt,main:git(['rev-parse','HEAD']),jobs:jobsForward,watcher:producer.watcher,newChild:forwardJob,
+stage('forward-and-main-movement',{forwardPlan,forwardReceipt,main:git(['rev-parse','HEAD']),jobs:jobsForward,watcher:producer.watcher,newChild:forwardJob,producerFolderPresent:fs.existsSync(lane),
   installation:JSON.parse(fs.readFileSync(path.join(directory,'installation.json')))});
 nextControls(['stop','--repo',repo,'--org',org],controlOptions);
 checked(process.execPath,[path.join(config.successor,'herdr/releases.mjs'),'pin',home,repo,'scenario']);
@@ -184,42 +191,39 @@ controls(['restart','--repo',repo,'--org',org],controlOptions);
 assert.deepEqual(captured(),jobsForward);assert.equal(ownerAlive(producer.watcher),true);assert.equal(ownerAlive(forwardJob.watcher),true);
 assert.equal(producer.release.root,bundle);
 stage('rollback-with-captured-work',{rollbackPlan,rollbackReceipt,jobs:captured(),watcherAlive:true,originalInstallationRestored:true,originalPlistRestored:true});
-report(forwardJob,[]);
-await until(()=>loadRecord(org).events.some(event=>event.type==='report.available'&&event.run===forwardJob.run),'successor worker availability');
+// Both captured children finish under the restored previous root: the producer
+// first, then its successor-root review. Ingestion must not queue a second review.
 report(producer, [`source: ${head}; base: ${base}`]);
 // Real watcher publishes availability; the finite line ingests and retires.
 await until(() => state().runs.get(producer.run).report || loadRecord(org).events.some(e => e.type === 'report.available' && e.run === producer.run), 'producer availability');
 service(0).pass();
 await until(() => !fs.existsSync(lane), 'producer folder removal');
-await until(() => !fs.existsSync(forwardJob.worker.cwd), 'successor folder removal after rollback');
 stage('producer-cleanup', { folderRemoved: !fs.existsSync(lane), ingested: Boolean(state().runs.get(producer.run).report),
   native: JSON.parse(fs.readFileSync(path.join(root, 'native.json'))) });
-// Start the one record-queued review only after its producer folder is gone.
-service(1).pass();
 const reviews = [...state().items.values()].filter(i => i.meta.review_source_run === producer.run);
-assert.equal(reviews.length, 1);
-const review = reviews[0], target = review.meta.review_target;
+assert.equal(reviews.length, 1); assert.equal(reviews[0].id, review.id);
+const target = review.meta.review_target;
 assert.equal(target.head, head); assert.equal(target.base, base); assert.equal(review.meta.review_round_cap, 1);
-const reviewer = journals().find(j => j.item === review.id);
-assert.ok(reviewer, audit()); assert.equal(reviewer.stage, 'complete', JSON.stringify(reviewer));
-assert.equal(review.runs.length, 1);
+assert.equal(state().items.get(review.id).runs.length, 1);
 assert.match(git(['show', `${head}:answer.txt`]), /Installed consumer change/);
-assert.equal(fs.existsSync(lane), false);
-stage('original-review', { item: review.id, run: reviewer.run, head, base, target, producerFolderAbsent: true });
-report(reviewer, [], 'verdict: PASS\n');
-await until(() => state().runs.get(reviewer.run).report || loadRecord(org).events.some(e => e.type === 'report.available' && e.run === reviewer.run), 'review availability');
+stage('original-review', { item: review.id, run: forwardJob.run, root: forwardJob.release.root, head, base, target });
+report(forwardJob, [], 'verdict: PASS\n');
+await until(() => state().runs.get(forwardJob.run).report || loadRecord(org).events.some(e => e.type === 'report.available' && e.run === forwardJob.run), 'review availability');
 service(0).pass();
-await until(() => !fs.existsSync(reviewer.worker.cwd), 'review folder removal');
+await until(() => !fs.existsSync(forwardJob.worker.cwd), 'review folder removal after rollback');
 assert.equal(state().items.get(review.id).closed.as, 'done');
 assert.equal(loadRecord(org).events.filter(e => e.type === 'change.reviewed').length, 1);
 assert.equal(state().items.get(item).closed.as, 'done');
 stage('review-cleanup', { folderRemoved: true, verdicts: 1, sourceClosed: true, reviewClosed: true });
 // The next action really reaches scripted input and loses its reply. Observe
 // another pass without replacing its request, attempting input again or clearing it.
-const uncertain = record(['add', 'Retain an uncertain scratch action', '--role', 'engineer']).match(/ENG-\d+/)[0];
+// Queued canonical reviews may precede the added item; observe the line's own selection.
+record(['add', 'Retain an uncertain scratch action', '--role', 'engineer']);
 fs.writeFileSync(path.join(root, 'lose-prompt-reply'), 'lose the original reply');
+const beforeUncertain = new Set(journals().map(j => j.file));
 service(1).pass();
-const unknown = journals().find(j => j.item === uncertain); assert.ok(unknown, audit());
+const fresh = journals().filter(j => !beforeUncertain.has(j.file)); assert.equal(fresh.length, 1, audit());
+const unknown = fresh[0], uncertain = unknown.item;
 const bytes = fs.readFileSync(unknown.file), calls = fs.readFileSync(path.join(root, 'native-calls.jsonl'), 'utf8');
 service(1).pass();
 assert.deepEqual(fs.readFileSync(unknown.file), bytes);
@@ -229,7 +233,7 @@ assert.equal(prompts(calls).length, 1);
 assert.equal(prompts(fs.readFileSync(path.join(root, 'native-calls.jsonl'), 'utf8')).length, 1);
 assert.ok(fs.existsSync(unknown.worker.cwd));
 stage('uncertain-retained', { item: uncertain, run: unknown.run, journal: unknown.file, stage: unknown.stage, attempts: 1, prompts: 1, folderKept: true, error: unknown.error });
-write('outcome.json', { ready: false, scriptedMechanics: true, dispatch: 2, reports: 3, originalReviews: 1, verdicts: 1,
+write('outcome.json', { ready: false, scriptedMechanics: true, dispatch: 3, reports: 2, originalReviews: 1, verdicts: 1,
   producerFoldersRemoved: 1, reviewFoldersRemoved: 1, uncertainAttemptsRetained: 1, base, head, roots: config });
 
 // The uncertain request stays untouched; terminate only its receipt-owned test

@@ -40,6 +40,8 @@ test('only the original claimed final transport handoff releases its synthetic w
     ['foreign project',p=>{p.common+='/other';}],['foreign record',p=>{p.run.meta.dispatch_record+='/other';}],
     ['changed generation',(_p,r)=>{r.ownership.generation++;}],['changed owner',(_p,r)=>{r.ownership.owner.controller='foreign';}],
     ['other watcher intent',(_p,r)=>{r.intent='process-end';}],['no final ID',(_p,r)=>{r.deliveries=[];}],
+    ['malformed deliveries string',(_p,r)=>{r.deliveries='watch:R-1:final';}],
+    ['malformed deliveries entry',(_p,r)=>{r.deliveries.push({id:'other'});}],
     ['other inbox',(_p,r)=>{r.inbox+='.other';}],['no original notice',(_p,_r,n)=>{n.id='other';}],
     ['foreign correlation',(_p,_r,n)=>{n.correlation.run='R-2';}],['foreign inbox project',(_p,_r,n)=>{n.project.identity+='/other';}],
     ['worker continuation',(_p,_r,n)=>{n.to='worker';}],['pane continuation',(_p,_r,n)=>{n.to='w:p';}],

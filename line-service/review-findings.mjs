@@ -5,6 +5,7 @@ import { createHash } from 'node:crypto';
 import { nextItemId } from '../lib/state.mjs';
 import { roleIs } from '../lib/roles.mjs';
 import { capturedReviewCommits } from './review-group.mjs';
+import { intentFirstCreation } from '../lib/dispatch-template.mjs';
 
 const text = value => String(value ?? '').replace(/\s+/g, ' ').trim();
 const digest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
@@ -132,11 +133,11 @@ export function reviewCorrectionEvents({ state, events, run, review, report, fin
           `Selection required before editing: reproduce this exact Major trigger and assert its corrected behavior: ${row.text}`]));
       if (!historical) {
         taken.add(id);
-        add.push({ type: 'item.added', id, kind: 'work', role: proposal?.role ?? 'engineer',
+        add.push(intentFirstCreation({ type: 'item.added', id, kind: 'work', role: proposal?.role ?? 'engineer',
           capability: proposal?.capability ?? null,
           title: proposal?.title ?? `${severity === 'major' ? 'Fix' : 'Follow up'} ${source} at ${target.head.slice(0, 10)}: ${selected[0].text.slice(0, 120)}`,
           parent: review.id, from_run: run.id, accept: proposal?.accept ?? selected.map(row => row.text),
-          why: proposal?.why ?? selected.map(row => row.text).join('\n'), meta: { ...proposal?.extra, ...meta, queue_selected:true } });
+          why: proposal?.why ?? selected.map(row => row.text).join('\n'), meta: { ...proposal?.extra, ...meta, queue_selected:true } }));
       } else if (!historical.meta.review_fix_of) {
         add.push({ type: 'item.updated', id, fields: { meta } });
       }

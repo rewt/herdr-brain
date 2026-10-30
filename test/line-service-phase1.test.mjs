@@ -98,7 +98,7 @@ function admissionService(f,extra={}){
 const admissionPolicy=(f,policy)=>setConfig('review_admission',JSON.stringify({enabled:true,producer_groups:[],canonical_commits:[],hold_ordinary:true,...policy}),{cwd:f.cwd,env:f.env,who:'review admission fixture'});
 function admissionQueue(f){
   const cwd=process.cwd(),env={...installedService(f),ORG_ACTOR:'line-service'};process.chdir(f.cwd);
-  try{const mutation=queueReviewMutation({...f.context(),runId:'R-1',head:f.heads[1],base:f.base,env});f.add(mutation.add);return mutation;}
+  try{const mutation=queueReviewMutation({...f.context(),runId:'R-1',head:f.heads[1],base:f.base,env});for(const e of mutation.add.filter(e=>e.type==='item.added'))assert.match(e.accept[0],/^Why:[\s\S]*How we will know it works:/);f.add(mutation.add);return mutation;}
   finally{process.chdir(cwd);}
 }
 
@@ -588,6 +588,7 @@ test('canonical unattributed queue assigns current real reviewer responsibility 
     const result=queueReviewMutation({...c,runId:selector,env});f.add(result.add);const next=f.context(),q=next.state.items.get(result.result.review_item),target=q.meta.review_target;
     assert.deepEqual(validateQueuedReview({...next,item:q}),target);assert.equal(q.meta.review_source_item,q.id);assert.equal(q.meta.review_source_run,null);assert.equal(q.meta.review_round_cap,1);assert.equal(result.add.some(e=>e.type==='change.landed'||e.type==='run.started'),false);
     assert.deepEqual(target.landed_evidence.historical_producer,{item:null,run:null,owner:null,attribution:'missing'});assert.deepEqual(capturedReviewCommits(target),[f.heads[0]]);assert.equal(target.base,f.base);assert.equal(target.head,f.heads[0]);assert.equal(hash(fs.readFileSync(target.evidence)),target.reportHash);
+    assert.match(q.accept[0],/^Why:[\s\S]*Baseline: Captured source/);
     const index=canonicalReviewIndex(next);assert.equal(index.entries.find(e=>e.head===target.head).run,null);assert.equal(index.entries.find(e=>e.head===target.head).item,null);assert.equal(reviewHealth({...next,index}).queued_commits,1);assert.equal(queueReviewMutation({...next,runId:selector,env}).add.length,0);
     assert.equal(discoverChanges({...next,pendingOnly:true}).unattributed.length,1);assert.deepEqual(next.events.slice(0,original.length),original);
     f.add([{type:'run.started',id:'R-50',item:q.id,workspace:f.cwd}]);const started=f.context(),report={outcome:'done',extra:{verdict:'FAIL'},proposals:[]},events=reviewResultEvents({...started,run:started.state.runs.get('R-50'),report,sha256:'d'.repeat(64),body:'- [Major] source-1:1 - Fix this landed change.'});f.add(events);

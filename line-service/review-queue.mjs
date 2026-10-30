@@ -21,6 +21,7 @@ import {additionalTarget,canonicalSelector,reviewCutoff,validateAdditionalTarget
 import {canonicalReviewIndex} from './phase1.mjs';
 import {installedContext} from './cutoff.mjs';
 import {uncertainOutcomeDoctrine} from '../lib/uncertain-outcome.mjs';
+import { intentFirstCreation } from '../lib/dispatch-template.mjs';
 
 const root = fs.realpathSync(fileURLToPath(new URL('../', import.meta.url)));
 const files = ['line-service/review-reference-proof.mjs','line-service/review-unstarted.mjs','line-service/review-queue.mjs', 'line-service/review-findings.mjs', 'line-service/review-targets.mjs','line-service/review.mjs','line-service/review-observation.mjs','line-service/review-group.mjs','line-service/review-recovery.mjs','line-service/review-resolutions.mjs', 'line-service/phase1.mjs', 'line-service/cutoff.mjs','settle/review-range.mjs', 'bin/org.mjs', 'dispatch/dispatch.mjs','dispatch/launch-guard.mjs','lib/item-launch-hold.mjs','lib/worker-brief.mjs','dispatch/preflight.mjs','dispatch/foreground-command.mjs','dispatch/outcome.mjs','dispatch/completion.mjs','lib/uncertain-outcome.mjs','dispatch/not-started.mjs','dispatch/request-lock.mjs', 'dispatch/session-cap.mjs', 'dispatch/unlanded-cap.mjs','lanes/lane.mjs'];
@@ -137,9 +138,9 @@ export function queueReviewMutation({ state, events, org, repo, runId, head, bas
   // completion/build admission must not wait for this post-code review.
   // Canonical containment is review evidence; only the post-FF producer writes
   // change.landed. Unknown/external reports never synthesize that fact.
-  return { ...(deferCommit ? { commit: validate => { verifyProducer(); validate(); publishLandedReviewEvidence(target); } } : {}), add: [{ type: 'item.added', id, kind: 'work', role: 'reviewer', capability: 'review', parent: item.parent, priority: item.priority,
+  return { ...(deferCommit ? { commit: validate => { verifyProducer(); validate(); publishLandedReviewEvidence(target); } } : {}), add: [intentFirstCreation({ type: 'item.added', id, kind: 'work', role: 'reviewer', capability: 'review', parent: item.parent, priority: item.priority,
     title: `Review ${item.title}`, budget: {}, accept: ['Independent immutable diff/evidence review; zero suites and no edits. Record PASS or FAIL verdict. Major findings become linked engineer follow-up proposals, never an automatic second review. '+uncertainOutcomeDoctrine],
-    meta: { review_key: key,review_group_key:group, review_source_item: item.id, review_source_run: run.id, review_target: target, review_round_cap: 1, review_other_family: needsOtherFamily(item), review_cutover:bound.cutoff,...(bound.authorization?{review_recovery_id:bound.authorization.id}:{}) } }],
+    meta: { review_key: key,review_group_key:group, review_source_item: item.id, review_source_run: run.id, review_target: target, review_round_cap: 1, review_other_family: needsOtherFamily(item), review_cutover:bound.cutoff,...(bound.authorization?{review_recovery_id:bound.authorization.id}:{}) } })],
     result: { result: 'review_queued', review_item: id, source_item: item.id, head: target.head, existing: false } };
 }
 
@@ -161,9 +162,9 @@ function queueCanonicalReview({state,events,org,repo,identity,selector,head,base
   const prior=canonicalAttempt({selector,target,state,events,org,repo,identity,ignoreService:{file:journalFor(org,identity),key:`review:${selector}`,target,operation:'record-queue'}});if(prior)throw Error(`canonical review already retained: ${prior}`);
   if (!deferCommit) publishLandedReviewEvidence(target);
   const id=nextItemId(state,{kind:'work',role:'reviewer'});
-  return{...(deferCommit ? { commit: validate => { openBoundary(org,repo,identity); installedContext(repo,org); validate(); publishLandedReviewEvidence(target); } } : {}),add:[{type:'item.added',id,kind:'work',role:'reviewer',capability:'review',title:`Review unattributed canonical change ${target.head.slice(0,12)}`,budget:{},
+  return{...(deferCommit ? { commit: validate => { openBoundary(org,repo,identity); installedContext(repo,org); validate(); publishLandedReviewEvidence(target); } } : {}),add:[intentFirstCreation({type:'item.added',id,kind:'work',role:'reviewer',capability:'review',title:`Review unattributed canonical change ${target.head.slice(0,12)}`,budget:{},
     accept:['Review this exact canonical diff/evidence with zero suites. Historical producer attribution remains UNKNOWN. Record PASS or FAIL; Major findings require a linked correction before release. '+uncertainOutcomeDoctrine],
-    meta:{review_key:`${id}:${target.head}`,review_group_key:target.source_group.key,review_source_selector:selector,review_source_item:id,review_source_run:null,review_target:target,review_round_cap:1,review_cutover:reviewCutoff(found.index.boundary)}}],
+    meta:{review_key:`${id}:${target.head}`,review_group_key:target.source_group.key,review_source_selector:selector,review_source_item:id,review_source_run:null,review_target:target,review_round_cap:1,review_cutover:reviewCutoff(found.index.boundary)}})],
     result:{result:'review_queued',review_item:id,source_item:id,head:target.head,existing:false}};
 }
 function validateCanonicalReview({item,state,events,org,repo,allowRun,allowJournal,journals}){

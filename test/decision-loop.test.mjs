@@ -38,6 +38,7 @@ function fixture(){
 
 test('one immutable decision per actual intent uses normal role routing and preserves ambiguous starts',()=>{
   const f=fixture(),r=f.request(),id=f.queue();assert.equal(id,'DEC-1');
+  assert.match(f.state().items.get(id).accept[0], /^Why:[\s\S]*How we will know it works:/);
   assert.equal(f.request().key,r.key,'the decision blocker does not change its own intent');
   assert.equal(decisionCandidates({state:f.state(),events:f.events,identity:'/git',org:'/record'}).length,0);
   const retained=decisionQueueMutation({state:f.state(),events:f.events,request:r,config});assert.equal(retained.add.length,0);
@@ -78,6 +79,7 @@ test('reserved outcomes and extra commands are rejected while actual operator qu
   const a=f.answer('ask_operator',{category:'publish',question:'Publish this release?',recommend:'no'}),id=f.queue();f.judge(id,a);
   f.apply(id,a).add.forEach(f.add);
   const question=[...f.state().items.values()].find(i=>i.role==='human');
+  assert.match(question.accept[0], /Question: Publish this release\?/);
   assert.equal(question.meta.operator_reserved,true);assert.equal(question.meta.answer,undefined);assert.equal(question.meta.decider,'brain-chat');
   assert.equal(dispatchInput({events:f.events,state:f.state(),item:f.state().items.get('ENG-1')}),null);
 });

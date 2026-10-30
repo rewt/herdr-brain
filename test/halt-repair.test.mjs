@@ -45,6 +45,7 @@ test('zero-ready passes never file a repair and completed idle passes deduplicat
     assert.equal(pass('three').item,third.item,'a repeated completed pass is a readback, not a second count');
     assert.equal(pass('four').item,third.item);assert.equal([...f.read().state.items.values()].filter(i=>i.meta.halt_repair).length,1);
     const acceptance=f.read().state.items.get(third.item).accept.join('\n');
+    assert.match(acceptance,/^Why:[\s\S]*How we will know it works:/);
     assert.match(acceptance,/Preserve item\/ancestor\/reserved holds, ownership, STOP\/HOLD and resource guards/);
     assert.match(acceptance,/close its session and remove its worktree folder in the same step/);
     assert.match(acceptance,/delete its branch only if it is already on main/);

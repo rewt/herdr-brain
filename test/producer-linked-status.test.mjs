@@ -110,7 +110,7 @@ test('producer linked missing-producer decision deduplicates through normal owne
   transact(org,()=>({add:[{type:'item.added',id:'ENG-1',role:'engineer',title:'Original subject'}]}));
   const env={...f.env};delete env.HERDR_ENV;delete env.HERDR_PANE_ID;
   const release=noticeLock(path.join(directory,'pass.lock')),check={key:'original',subject:{item:'ENG-1',head:'captured'},defect:'Runtime completion transport absent'};
-  try{const a=queueOutcomeDecision({repo,org,env,check});assert.deepEqual(queueOutcomeDecision({repo,org,env,check}),a);const state=fold(loadEvents(org).events);assert.equal(state.items.get(a.item).role,'decision');assert.equal(state.links.length,0);assert.ok(state.items.get(a.item).accept[0].includes(uncertainOutcomeDoctrine));}finally{release();}
+  try{const a=queueOutcomeDecision({repo,org,env,check});assert.deepEqual(queueOutcomeDecision({repo,org,env,check}),a);const state=fold(loadEvents(org).events);assert.equal(state.items.get(a.item).role,'decision');assert.equal(state.links.length,0);assert.match(state.items.get(a.item).accept[0],/^Why:[\s\S]*How we will know it works:/);assert.ok(state.items.get(a.item).accept[0].includes(uncertainOutcomeDoctrine));}finally{release();}
 });
 
 test('producer linked completed pass health remains diagnostic with no bulk record telemetry',t=>{

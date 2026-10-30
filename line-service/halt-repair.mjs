@@ -8,6 +8,7 @@ import {createHash} from 'node:crypto';
 import {transact} from '../lib/store.mjs';
 import {ancestors,itemStatus,nextItemId} from '../lib/state.mjs';
 import {roleIs} from '../lib/roles.mjs';
+import {intentFirstCreation} from '../lib/dispatch-template.mjs';
 import {protectRecordMutation} from '../lib/record-guard.mjs';
 import {serviceRecordBinding,canonicalFailure} from './record-inbox.mjs';
 import {queuePolicy,queueClass,queueSelected} from './priority-order.mjs';
@@ -71,12 +72,12 @@ export function completeHaltPass({repo,org,env,pass,previous,observation,route,a
     if(idle&&count>=after&&!existing){
       item=nextItemId(state,{kind:'work',role:'engineer'});
       const evidence=`Completed pass ${pass}; ${audit}; ${effects}; ready items ${observation.ready.join(', ')}. Original effects and uncertain requests remain authoritative.`;
-      add.push({type:'item.added',id:item,kind:'work',role:'engineer',priority:2600,
+      add.push(intentFirstCreation({type:'item.added',id:item,kind:'work',role:'engineer',priority:2600,
         title:'Diagnose and repair stalled engineering admission',
         accept:['Diagnose this exact engineering-idle episode and fix its concrete admission cause through normal native dispatch. Preserve item/ancestor/reserved holds, ownership, STOP/HOLD and resource guards. '+uncertainOutcomeDoctrine],
         meta:{halt_repair:1,halt_episode:episode,route,purpose:'Restore productive engineering admission for the recorded idle episode.',
           scope:`One bounded diagnosis/fix of episode ${episode}. ${evidence} Do not create recursive halt repairs or take reserved actions. File unrelated work separately.`,
-          evidence,halt_evidence:{audit,effects,pass,signature:observation.signature},halt_pass:pass,halt_threshold:after}});
+          evidence,halt_evidence:{audit,effects,pass,signature:observation.signature},halt_pass:pass,halt_threshold:after}}));
     }
     progress.item=item??null;
     const mutation={add,result:{progress,episode,count,item:item??null,existing:Boolean(existing),dispatch:Boolean(item)&&!['done','dropped'].includes(itemStatus(state,item))}};

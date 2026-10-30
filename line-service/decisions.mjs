@@ -7,6 +7,7 @@ import {fileURLToPath} from 'node:url';
 import {transact,loadRecord} from '../lib/store.mjs';
 import {nextItemId,ancestors,itemStatus,releases,isDeclined} from '../lib/state.mjs';
 import {roleIs} from '../lib/roles.mjs';
+import {intentFirstCreation} from '../lib/dispatch-template.mjs';
 import {readReport} from '../lib/report.mjs';
 import {readOwnedRun,requireController,assertOwner,ownerBinding} from '../lib/run-owner-guard.mjs';
 import {effectiveWorkerIdentity} from '../lib/worker-identity.mjs';
@@ -77,8 +78,8 @@ export function decisionQueueMutation({state,events,request,config,archive}) {
   const previous=events.filter(e=>e.type==='decision.applied'&&e.premise===request.premise&&e.restart_required);
   if(previous.length>=2)throw Error('same-premise answers exhausted; park subject for a new contract');
   const id=nextItemId(state,{kind:'work',role:'decision'}),route=decisionRoute(config,previous.length?{failedFamily:previous.at(-1).family??'codex'}:{});
-  return {add:[{type:'item.added',id,kind:'work',role:'decision',parent:request.subject,title:`Decide blocked work: ${state.items.get(request.subject).title}`,priority:state.items.get(request.subject).priority,
-    accept:['Return one typed decision report on the immutable request. Zero suites, source edits, lifecycle or outward actions.'],meta:{decision_request:request,decision_archive:archive,route,queue_selected:true}},
+  return {add:[intentFirstCreation({type:'item.added',id,kind:'work',role:'decision',parent:request.subject,title:`Decide blocked work: ${state.items.get(request.subject).title}`,priority:state.items.get(request.subject).priority,
+    accept:['Return one typed decision report on the immutable request. Zero suites, source edits, lifecycle or outward actions.'],meta:{decision_request:request,decision_archive:archive,route,queue_selected:true}}),
     {type:'link.added',blocker:id,blocked:request.subject}],result:{item:id,key:request.key}};
 }
 export function decisionBrief(item) {
@@ -131,7 +132,7 @@ export function decisionApplyMutation({state,events,item,answer,archive,activati
   }
   if(answer.action==='ask_operator'){
     const id=nextItemId(state,{kind:'work',role:'human'});
-    add.push({type:'item.added',id,kind:'work',role:'human',title:answer.question,parent:subject.id,meta:{operator_reserved:true,category:answer.category,decider:'brain-chat',recommend:answer.recommend,decision_key:r.key}},
+    add.push(intentFirstCreation({type:'item.added',id,kind:'work',role:'human',title:answer.question,why:answer.reason,parent:subject.id,meta:{operator_reserved:true,category:answer.category,decider:'brain-chat',recommend:answer.recommend,decision_key:r.key}}),
       {type:'note.added',id,text:answer.reason,kind:'why'},{type:'link.added',blocker:id,blocked:subject.id});
   }
   add.push({type:'note.added',id:subject.id,text:answer.reason,decision:true,kind:'delegated-answer'},

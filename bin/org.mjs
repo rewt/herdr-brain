@@ -24,6 +24,7 @@ import { isReservedItem, proposalIntakeEvents, proposalSelection } from '../lib/
 import { completionSession } from '../lib/completion-session.mjs';
 import { approvalPolicy, CATEGORY_CHECKLIST, categoryFlag, categoryFlagText, reportCategoryFlags } from '../lib/discernment.mjs';
 import { sanitizeTerminal } from '../lib/sanitize.mjs';
+import { DISPATCH_TEMPLATE, intentFirstCreation } from '../lib/dispatch-template.mjs';
 import { renderToday, todayJson } from '../lib/today.mjs';
 import { loadDiscoveredRoutes, readRoutesSnapshot, resolveRoute } from '../lanes/routes.mjs';
 import { completeBatchCommand } from '../lib/completion.mjs';
@@ -54,7 +55,9 @@ Work
   record messages digest [--limit 5 --after SEQ --json]  pull a short operator digest
   record messages push --id ID            resume an existing reserved ask through Brain Chat
   record add <title> [--goal] [--role R] [--capability C] [--parent ID]
-          [--blocked-by ID]... [--accept TEXT]... [--priority N] [--budget key=N]...
+          [--blocked-by ID]... [--accept TEXT]... | [--file PROMPT] [--why TEXT]
+          [--priority N] [--budget key=N]...
+  record template                       editable intent-first dispatch prompt
   record queue-review R-n|canonical:SHA [--head SHA --base SHA]  idempotent landed-source review item
   record proposals file R-n --index N     reuse an immutable report proposal
   record proposals metrics               daily filing and ever-run cohorts (UTC)
@@ -360,12 +363,24 @@ function add(argv) {
     parent: { type: 'string' },
     'blocked-by': { type: 'string', multiple: true },
     accept: { type: 'string', multiple: true },
+    file: { type: 'string' },
+    why: { type: 'string' },
     priority: { type: 'string' },
     budget: { type: 'string', multiple: true },
     meta: { type: 'string', multiple: true },
   }, { min: 1, usage: 'record add <title> [options]' });
   const title = positionals.join(' ').trim();
   if (!title) throw new UserError('a title is required');
+  if (values.file && values.accept) throw new UserError('choose --file or --accept, not both');
+  let accept = values.accept ?? [];
+  if (values.file) {
+    try {
+      if (!fs.statSync(values.file).isFile()) throw Error('not a regular file');
+      const body = fs.readFileSync(values.file, 'utf8');
+      if (!body.trim()) throw Error('empty prompt');
+      accept = [body];
+    } catch (error) { throw new UserError(`cannot read prompt ${values.file}: ${error.message}`); }
+  }
   const budget = parsePairs(values.budget, '--budget');
   for (const [key, value] of Object.entries(budget)) checkBudget(key, value);
   const priority = values.priority == null ? null : Number(values.priority);
@@ -376,16 +391,16 @@ function add(argv) {
     const blockers = [...new Set(values['blocked-by'] ?? [])];
     blockers.forEach((b) => requireItem(s, b));
     const id = nextItemId(s, { kind, role: values.role });
-    const events = [{
+    const events = [intentFirstCreation({
       type: 'item.added', id, kind, title,
       role: values.role?.toLowerCase() ?? null,
       capability: values.capability ?? null,
       parent: values.parent ?? null,
       priority,
-      accept: values.accept ?? [],
+      accept, why: values.why ?? null,
       budget,
       meta: parsePairs(values.meta, '--meta'),
-    }];
+    })];
     for (const blocker of blockers) events.push({ type: 'link.added', blocker, blocked: id });
     return { add: events, result: id };
   });
@@ -546,8 +561,8 @@ function ask(argv) {
     const id = nextItemId(s, { kind: 'work', role: 'human' });
     const meta = { category: values.category, recommend, memo, on_yes: text(values['on-yes']), on_no: text(values['on-no']) };
     const events = [
-      { type: 'item.added', id, kind: 'work', title, role: 'human', capability: null, parent: values.parent, priority, accept: [], budget: {},
-        meta: Object.fromEntries(Object.entries(meta).filter(([, v]) => v != null)) },
+      intentFirstCreation({ type: 'item.added', id, kind: 'work', title, why, role: 'human', capability: null, parent: values.parent, priority, accept: [], budget: {},
+        meta: Object.fromEntries(Object.entries(meta).filter(([, v]) => v != null)) }),
       { type: 'note.added', id, text: why, decision: false, kind: 'why' },
     ];
     for (const blocked of blocks) {
@@ -1124,6 +1139,7 @@ function log(argv) {
 const lazy = (file, name) => async (argv) => (await import(file))[name](argv);
 
 const COMMANDS = {
+  template: argv => { args(argv, {}, { max: 0, usage: 'record template' }); out(DISPATCH_TEMPLATE); return 0; },
   lookup: argv => import('../lib/lookup.mjs').then(module => module.lookupCommand(argv, { out })),
   messages: async argv => (await import('../messages/record-command.mjs')).messagesCommand(argv, { openOrg, mutate, out }),
   lesson, lessons,

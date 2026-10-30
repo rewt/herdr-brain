@@ -46,7 +46,8 @@ test('finding intake: one formal proposal covers Major and Minor findings withou
   assert.equal(new Set(bindings(add).map(event => event.correction_item)).size, 1);
   assert.equal(add[0].findings.length, 2);
   assert.equal(items(add)[0].meta.review_round_cap, 1);
-  assert.deepEqual(items(add)[0].accept, ['Fix both defects']);
+  assert.match(items(add)[0].accept[0], /^Why:/);
+  assert.ok(items(add)[0].accept[0].endsWith('\nFix both defects'));
   assert.deepEqual(data, before, 'immutable parsed proposals are retained');
   assert.deepEqual(intake(stamped([...events, ...add]), data), []);
 });

@@ -180,9 +180,12 @@ test('ordinary admission rereads policy and selection after capacity without sta
 });
 
 test('ordinary admission idle repair audits adopted policy before its record transaction and keeps the source revision',async t=>{
-  const f=fixture(t,{reported:false});await f.adopt();
-  f.add([{type:'item.closed',id:'ENG-1',as:'done'},
-    {type:'item.added',id:'ENG-10',role:'engineer',title:'Selected stalled work',meta:{queue_selected:true}}]);
+  // Adopt before introducing work; the source-review fixture intentionally has
+  // an open development writer, which correctly cannot adopt a release home.
+  const base=configFixture(t,{custom:true});await base.adopt();
+  const org=base.env.ORG_DIR,identity=gitProject(base.cwd).identity,directory=serviceDirectory(org,identity);
+  const f={...base,org,identity,directory,context:()=>{const events=loadEvents(org).events;return{events,state:fold(events),org};}};
+  transact(org,()=>({add:[{type:'item.added',id:'ENG-10',role:'engineer',title:'Selected stalled work',meta:{queue_selected:true}}]}));
   ordinaryPolicy(f,{});const env=installedService(f),selected=readProjectPolicy(f.cwd,'lane',f.env);
   const config=structuredClone(selected.config);config.ordinary_admission.items=['ENG-10'];
   fs.writeFileSync(selected.file,JSON.stringify(config)+'\n');

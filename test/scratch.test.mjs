@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { waitForChange, waitForFile } from './helpers/file-wait.mjs';
 import { recoverScratch } from './helpers/scratch.mjs';
 import { spawnChild, waitForExit } from './helpers/child.mjs';
 
@@ -50,7 +51,7 @@ test('scratch recovery retains foreign paths, reused PIDs, live groups and unava
 for (const mode of ['success', 'assertion', 'killed-worker', 'lost-reply']) {
   test(`runner reclaims registered scratch and retains TAP after ${mode}`, async t => {
     const root = fixture(t), file = path.join(root, 'victim.test.mjs'), published = path.join(root, 'ready.json');
-    const preload = path.join(root, 'drop-reply.mjs');
+    const preload = path.join(root, 'drop-reply.mjs'), retained = path.join(root, 'retained');
     fs.writeFileSync(preload, `if(process.argv.includes('--worker')){const send=process.send.bind(process);process.send=(message,...args)=>message.fileTapComplete?true:send(message,...args);}`);
     fs.writeFileSync(file, `import test from ${JSON.stringify(local('./helpers/bounded-test.mjs'))};
 import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import assert from 'node:assert/strict';
@@ -60,7 +61,7 @@ const scratch=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'owned-victim
 fs.writeFileSync(path.join(scratch,'payload'),'owned');
 fs.writeFileSync(${JSON.stringify(published)},JSON.stringify({scratch,history:process.env.MONITOR_GATE_HISTORY_ROOT}));
 console.error('retained victim evidence');
-${mode === 'assertion' ? "assert.fail('intentional witness failure');" : mode === 'killed-worker' ? "await waitForFile(process.env.MONITOR_TEST_FILE_SIGNAL_RECEIPT.replace('.signal.json','.stderr'),text=>text.includes('retained victim evidence'),{signal:t.signal});process.kill(Number(process.env.HERDR_TEST_SUITE_PID),'SIGKILL');Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0);" : ''}
+${mode === 'assertion' ? "assert.fail('intentional witness failure');" : mode === 'killed-worker' ? "await waitForFile("+JSON.stringify(retained)+",text=>text==='retained',{signal:t.signal});process.kill(Number(process.env.HERDR_TEST_SUITE_PID),'SIGKILL');Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0);" : ''}
 });`);
     // A new coordinator owns this journal; the enclosing test keeps its own
     // registry. Drop only the final file IPC reply, never its disk receipt.
@@ -68,6 +69,18 @@ ${mode === 'assertion' ? "assert.fail('intentional witness failure');" : mode ==
     fs.writeFileSync(wrapper, `delete process.env.HERDR_TEST_SCRATCH_JOURNAL;process.argv=[process.execPath,${JSON.stringify(local('./helpers/run.mjs'))},${JSON.stringify(file)}];await import(${JSON.stringify(local('./helpers/run.mjs'))});`);
     const child = spawnChild(t, process.execPath, [wrapper], { env: { ...process.env,
       ...(mode === 'lost-reply' ? { NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --import=${preload}` } : {}) } });
+    if (mode === 'killed-worker') {
+      let diagnostics = '';
+      child.stderr.on('data', bytes => { diagnostics += bytes; });
+      const reference = await waitForChange([published], () => {
+        try { JSON.parse(fs.readFileSync(published, 'utf8')); }
+        catch (error) { if (error.code === 'ENOENT' || error instanceof SyntaxError) return false; throw error; }
+        const marker = diagnostics.match(/FILE_TAP: (.+)/);
+        return marker && JSON.parse(marker[1]);
+      });
+      await waitForFile(reference.stderr_artifact, text => text.includes('retained victim evidence'));
+      fs.writeFileSync(retained, 'retained');
+    }
     const result = await waitForExit(child);
     assert.equal(result.code, ['assertion', 'killed-worker'].includes(mode) ? 1 : 0, result.stdout + result.stderr);
     const ready = JSON.parse(fs.readFileSync(published, 'utf8'));

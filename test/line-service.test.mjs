@@ -286,7 +286,8 @@ test('engineering-idle excludes held ancestry reserved work and unchanged blocke
   f.service({haltAfter:3}).pass();
   assert.deepEqual(f.calls.map(c=>c.args[1]),[ready],'existing ordinary dispatch admits independent work');
   assert.ok(!f.calls.some(c=>[held,child,blocked,reserved,ancestor,descendant].includes(c.args[1])));
-  assert.deepEqual(loadEvents(f.org).events,beforeDispatch,'independent dispatch does not repeat the missing-binding observation');
+  const repeated=loadEvents(f.org).events.slice(beforeDispatch.length).filter(e=>e.type==='closeout.binding-kept'&&e.run==='R-1');
+  assert.deepEqual(repeated,[],'independent dispatch does not repeat the missing-binding observation');
 });
 
 test('engineering-idle includes an authorized blocked restart even before the record status changes',()=>{

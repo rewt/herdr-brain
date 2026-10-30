@@ -127,14 +127,26 @@ export async function pushReserved(envelope, binding, state, { enqueue, resume, 
 }
 
 export function operatorDigest(events, org, { limit = 5, after } = {}) {
+  return operatorDigestFrom(recordMessages(events), org, { limit, after, state: fold(events), entries: readInbox(inboxPath({ org })) });
+}
+
+// Also accepts a captured event stream. Retain only the selected envelopes;
+// callers supply the question state and delivery observation at their cutoff.
+export function operatorDigestFrom(messages, org, { limit = 5, after, state, entries = null } = {}) {
   if (!Number.isInteger(limit) || limit < 1 || limit > 20 || after !== undefined && (!Number.isSafeInteger(after) || after < 0)) fail('digest needs limit 1..20 and nonnegative record sequence');
-  const entries = readInbox(inboxPath({ org })), all = recordMessages(events), state = fold(events);
-  const eligible = after === undefined ? all : all.filter(e => e.seq > after);
-  const selected = after === undefined ? eligible.slice(-limit) : eligible.slice(0, limit);
-  return { total: all.length, remaining: eligible.length - selected.length, next: selected.at(-1)?.seq ?? after ?? null,
+  const selected = []; let total = 0, eligible = 0;
+  for (const event of messages) {
+    total++;
+    if (after !== undefined && event.seq <= after) continue;
+    eligible++;
+    if (after !== undefined && selected.length === limit) continue;
+    selected.push(event);
+    if (selected.length > limit) selected.shift();
+  }
+  return { total, remaining: eligible - selected.length, next: selected.at(-1)?.seq ?? after ?? null,
     messages: selected.map(({ seq, envelope: e }) => ({ seq, id: e.eventId, kind: e.payload.kind, summary: e.payload.summary,
       operator_text: operatorWording(e, { decisionNeeded: pendingReservedQuestions(e, state, org).length > 0 }),
       correlation: e.correlationId ?? null, reply_to: e.payload.reply_to, refs: e.payload.refs,
-      push: ['question', 'request'].includes(e.payload.kind) ? entries.find(entry => e.payload.refs.some(ref =>
+      push: ['question', 'request'].includes(e.payload.kind) ? entries === null ? 'unknown' : entries.find(entry => e.payload.refs.some(ref =>
         ref.orgRef === org && ref.item && entry.id === pushId(org, ref.item)))?.state ?? 'record-only' : 'record-only' })) };
 }

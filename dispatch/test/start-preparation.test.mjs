@@ -11,6 +11,9 @@ const saved = f => JSON.parse(fs.readFileSync(f.jobs()[0]));
 
 test('closeout publication moves outside start locks and its failure retains pending preparation', t => {
   const f = fixture(t), hook = path.join(f.root, 'publication.mjs');
+  // Publication independently discovers this project's owning record; ORG_DIR
+  // alone must not authorize a foreign queue. Bind only this scratch project.
+  fs.symlinkSync(f.org, path.join(f.repo, '.org'));
   const common = f.git(['rev-parse', '--path-format=absolute', '--git-common-dir']);
   fs.mkdirSync(path.join(common, 'closeout/entries'), { recursive: true });
   const receipt = path.join(f.root, 'publication.json');
@@ -99,7 +102,7 @@ if(process.argv[1]===${JSON.stringify(RECORD)}&&process.argv[2]==='start'){
 test('an installed consumer with BCH-sized retained history binds on its first dispatch', async t => {
   const project = configFixture(t);
   await project.adopt();
-  const f = fixture(t, { project });
+  const f = fixture(t, { project, lateSession: 'delayed' });
   const benchmark = f.rec(['add', 'Start timing control', '--role', 'engineer']).match(/ENG-\d+/)[0];
   // Representative closed run/note history, not just a large inert JSON field.
   // No live allocations, native bindings or copied consumer data are invented.

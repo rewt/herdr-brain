@@ -31,7 +31,12 @@ test('obligation projection consumes the recorded installed original review afte
     assert.ok(row); assert.equal(row.queues.length, 1); assert.equal(row.outcome.result.review_item, review.item);
     assert.equal(row.queues[0].target.head, review.head); assert.equal(row.queues[0].target.base, review.base);
     assert.equal(obligationPending(row), false); assert.equal(row.landings.length, 1);
-    assert.equal(row.landings[0].binding.attempt, producer.attempt);
+    const originalLanding = facts.find(e => e.type === 'change.landed' && e.run === producer.run);
+    // The installed predecessor predates the typed dispatch-source field. Keep
+    // its real null/legacy binding and native producer, never enrich history.
+    assert.deepEqual(row.landings[0].binding, originalLanding.source ?? null);
+    assert.deepEqual(row.landings[0].producer, originalLanding.producer);
+    assert.equal(row.landings[0].source.seq, originalLanding.seq);
     const request = reader.state.obligations.get(obligationId('dispatch-outcome', unknown.run, job.token, unknown.journal));
     assert.ok(request); assert.equal(request.attempt, job.token); assert.equal(request.journal, unknown.journal);
     assert.equal(request.outcome.result.exit_code, 1); assert.equal(request.outcome.result.failure.code, job.failure.code);

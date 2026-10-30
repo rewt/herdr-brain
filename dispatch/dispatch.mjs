@@ -293,7 +293,7 @@ function originalUnclaimedStart(saved, run) {
 }
 function retryCommand(error) {
   // Terminal refusals retain their evidence without actionable retry advice.
-  if (error && (['RUN_OWNED_ELSEWHERE','DISPATCH_OUTCOME_UNKNOWN'].includes(error.code) ||
+  if (error && (['RUN_OWNED_ELSEWHERE','DISPATCH_OUTCOME_UNKNOWN','DISPATCH_LANE_OCCUPIED'].includes(error.code) ||
       /^(?:RUN_OWNED_ELSEWHERE:|original dispatch was terminally abandoned;|run is already abandoned or reported;|resume launch\/delivery outcome must be retained;)/.test(error.message))) return undefined;
   return [process.execPath, local('./dispatch.mjs'), '--repo', job.repo, '--org', job.org,
     '--retry', job.run ?? journal].map(quote).join(' ');
@@ -653,6 +653,9 @@ async function main() {
     // Reuse shares this admission too. Never hold the project lock over memory
     // waits; session launch takes the same lock again for its independent cap.
     releaseAdmission = acquireSessionCapLock(common, { check: checkStop });
+    // Two dispatchers can pass early admission together. Re-read ownership
+    // after taking the shared start lock, before either can append a new run.
+    checkStop();
     job.unlandedCap = unlandedAdmission(job);
     if (job.unblocks) {
       record(['block', job.unblocks, '--by', job.item]);
@@ -894,11 +897,17 @@ catch (error) {
       journal: [process.execPath, local('./dispatch.mjs'), '--repo', job.repo, '--org', job.org, '--status', journal].map(quote).join(' '),
       record: `ORG_DIR=${quote(job.org)} ${[...recordCLI, 'show', job.run ?? job.item, '--json'].map(quote).join(' ')}`,
       org: job.org,
+      ...(job.stage === 'starting' && job.native_launch_attempted === false ? { start_recovery: {
+        condition: 'The original command has exited, and readback confirms exactly one current matching committed start with no native launch. A run can be recorded open without a pane.',
+        action: 'Resume only this original journal to claim that recorded run and launch its worker; do not issue a new dispatch. Missing or ambiguous starts require project supervisor inspection.',
+        command: [process.execPath, local('./dispatch.mjs'), '--repo', job.repo, '--org', job.org, '--retry', journal].map(quote).join(' '),
+      } } : {}),
     } : undefined;
     if (job && journal && ownsLock) {
       job.error = error.message;
       job.failure={...outcomeFailure(error),kind:['DISPATCH_SESSION_CAP','DISPATCH_REVIEW_CAP','DISPATCH_DECISION_CAP'].includes(error.code)?'capacity':outcomeFailure(error).kind,stage:job.stage,observed_at:new Date().toISOString(),native_launch_attempted:job.native_launch_attempted??null,...(error.sessions?{capacity:error.sessions}:{}),...(error.launch_input?{launch_input:error.launch_input}:{})};
       if (readback) Object.assign(job.failure, { code: 'DISPATCH_OUTCOME_UNKNOWN', kind: 'unknown', receipt, readback });
+      if (error.occupied) job.failure.occupied = error.occupied;
       if(job.detached&&!job.native_launch_attempted&&!job.worker&&!['starting','launching','prompting'].includes(job.stage))job.detached_refused=true;
       save();
       if (job.run) try { note(`incomplete at ${job.stage}: ${error.message}${retry ? `; retry with ${retry}` : ''}`); } catch {}
@@ -906,7 +915,11 @@ catch (error) {
     process.stderr.write(`dispatch: ${error.message}${journal ? `\nrequest: ${journal}` : ''}${retry ? `\nretry: ${retry}` : ''}\n`);
     if (readback) {
       process.stdout.write(`${JSON.stringify({ result: 'unknown', code: error.code, reason: error.message,
-        run: job.run, item: job.item, stage: job.stage, journal, receipt, readback })}\n`);
+        run: job.run, item: job.item, stage: job.stage, native_launch_attempted: job.native_launch_attempted ?? null, journal, receipt, readback })}\n`);
+      process.exitCode = 1;
+    } else if (error.code === 'DISPATCH_LANE_OCCUPIED') {
+      process.stdout.write(`${JSON.stringify({ result: 'blocked', code: error.code, reason: error.message,
+        item: job.item, lane: job.lane, journal, occupied: error.occupied })}\n`);
       process.exitCode = 1;
     } else if (error.code === 'DISPATCH_STOPPED') {
       process.stdout.write(`${JSON.stringify({ result: 'stopped', run: job.run, item: job.item, lane: job.lane,

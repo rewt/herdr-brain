@@ -65,6 +65,12 @@ function assertUnknown(f, result, stage, committed) {
   assert.match(receipt.readback.journal, /--status/); assert.match(receipt.readback.record, /show/);
   assert.ok(receipt.readback.record.includes(`ORG_DIR='${f.org}'`));
   assert.equal(receipt.readback.org, f.org);
+  assert.equal(receipt.native_launch_attempted, stage === 'launching');
+  if (stage === 'starting') {
+    assert.match(receipt.readback.start_recovery.condition, /exactly one current matching committed start with no native launch/);
+    assert.match(receipt.readback.start_recovery.action, /Resume only this original journal/);
+    assert.ok(receipt.readback.start_recovery.command.endsWith(`--retry' '${journal}'`));
+  } else assert.equal(receipt.readback.start_recovery, undefined);
   assert.match(receipt.readback.hint, /never redispatch, replay or replace/);
   assert.equal(saved.failure.kind, 'unknown'); assert.equal(saved.failure.code, receipt.code);
   assert.deepEqual(saved.failure.receipt, receipt.receipt);
@@ -132,4 +138,20 @@ test('a definite record refusal stays failed with no committed start or native e
   assert.match(receipt.retry, /--retry/); assert.equal(saved.startRefused, true);
   assert.equal(events(f).filter(e => e.type === 'run.started').length, 0);
   assert.equal(f.calls().filter(c => c.type === 'lane' && c.a[0] === 'dispatch').length, 0);
+});
+
+for (const stage of ['starting', 'launching']) test(`a second same-item lane dispatch surfaces the original open ${stage} run without superseding it`, t => {
+  const { f, start } = interruptedCommand(t, stage === 'starting' ? 'signal' : 'uncapped');
+  f.fail('dispatch'); const first = start(); assert.equal(first.status, 1, first.stderr);
+  const original = f.jobs()[0], bytes = fs.readFileSync(original), saved = JSON.parse(bytes);
+  assert.equal(saved.stage, stage); assert.equal(f.show(f.item).runs.length, 1);
+  const second = f.start(), blocked = JSON.parse(second.stdout);
+  assert.equal(second.status, 1, second.stderr + second.stdout);
+  assert.equal(blocked.result, 'blocked'); assert.equal(blocked.code, 'DISPATCH_LANE_OCCUPIED');
+  assert.equal(blocked.occupied.run, 'R-1'); assert.equal(blocked.occupied.journal, original);
+  assert.equal(Object.hasOwn(blocked, 'retry'), false);
+  assert.deepEqual(fs.readFileSync(original), bytes);
+  assert.deepEqual(f.show(f.item).runs, ['R-1']);
+  assert.equal(f.calls().filter(c => c.type === 'lane' && c.a[0] === 'dispatch').length, stage === 'launching' ? 1 : 0);
+  assert.equal(promptCalls(f).length, 0);
 });

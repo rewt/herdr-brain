@@ -13,6 +13,7 @@ import {itemLaunchHold} from '../lib/item-launch-hold.mjs';
 import {correctionSource} from '../lib/report-closeout.mjs';
 import {effectiveWorkerIdentity} from '../lib/worker-identity.mjs';
 import {resumeSource} from './resume-source.mjs';
+import {matchesDispatchStart} from './unlanded-cap.mjs';
 
 export const launchDigest = bytes => createHash('sha256').update(bytes).digest('hex');
 const changed = (reason, input) => {
@@ -39,6 +40,17 @@ export function checkDispatchEligibility(job, journal, {boundary='launch'}={}) {
     refuse('original stopped allocation has entered final disposition; retain its original request');
   const item=state.items.get(job.item),hold=itemLaunchHold(state,job.item,events);
   if(hold)refuse(hold.reason,hold.subject);
+  // An open recorded start owns this item/lane even without a native pane.
+  // Use immutable start attribution, not mutable worker/display metadata. The
+  // exact original journal may recover its own start under the existing guards.
+  const occupied=events.find(e=>e.type==='run.started'&&e.item===job.item&&e.id!==job.run&&
+    e.meta?.dispatch_project===job.common&&e.meta?.lane===job.lane&&
+    !matchesDispatchStart(e,{...job,journal})&&
+    state.runs.has(e.id)&&!state.runs.get(e.id).report&&!state.runs.get(e.id).abandoned);
+  if(occupied)throw Object.assign(Error(`item/lane already has open run ${occupied.id}; inspect its original journal; do not dispatch another writer`),{
+    code:'DISPATCH_LANE_OCCUPIED',failure:{code:'DISPATCH_LANE_OCCUPIED',kind:'fence'},
+    occupied:{run:occupied.id,journal:occupied.meta.dispatch_journal??null,workspace:occupied.workspace},
+  });
   if(job.resumeSession && [...state.runs.values()].some(r=>r.id!==job.run&&!r.report&&!r.abandoned&&
     effectiveWorkerIdentity(r,state).agent_session_id===job.resumeSession))
     refuse('an active run owns the requested native conversation');

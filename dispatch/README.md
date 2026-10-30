@@ -572,6 +572,21 @@ There is no retry hint: inspect that original request and record before any
 continuation; never redispatch or replace it. A definite pre-spawn or record
 refusal remains a failure. Read-only session observations retain their bounds.
 
+For an interrupted `starting` request with `native_launch_attempted: false`, the
+readback includes `start_recovery`: an open recorded run may have no pane yet.
+After the original command has exited and readback confirms exactly one current
+matching committed start with no native launch, its conditional command resumes
+only that journal to claim the existing run and launch its worker. Missing or
+ambiguous starts require project supervisor inspection. The normal original-run,
+claim, source, native, CAS and STOP/HOLD checks still apply to continuation.
+
+A second dispatch into the same item's lane returns `result: "blocked"` with
+`code: "DISPATCH_LANE_OCCUPIED"` and the owning `occupied` run/journal/workspace.
+An open run holds that allocation even if it has no pane. This is rechecked under
+the shared start lock; it neither supersedes that run nor launches another writer.
+The exact original journal can still recover its own start. A reported or
+abandoned run no longer holds this same-item guard.
+
 Some failures cannot be safely retried by guessing:
 
 - A lost `record start` result leaves `starting`. Retry reconciles the item's

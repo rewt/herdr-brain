@@ -1178,6 +1178,16 @@ unsaved changes, source/claim checks and all other retirement guards still apply
 Review and correction obligations stay in the record after allocation release;
 the closer never waits for a review verdict to close the author session.
 
+Report handback uses this existing finite turn and source-bound closer for every
+consumer project. Supervisors do not substitute hand-closed panes or direct Git
+worktree/branch removal when the closer is held. Those actions cannot produce its
+preservation and effect receipts. A historical hand removal remains explicitly
+classified as manual assistance, with the cleanup actor's evidence and missing
+proof retained for the original guarded owner. Successful `git worktree remove`
+without `--force`, a successful branch `-d`, or current main ancestry do not
+retroactively establish supported closeout or a clean line-release witness.
+They never authorize replay, replacement or clearance of the original obligation.
+
 The exact historical pre-journal release-source override refusal can be admitted
 once when an accepted release no longer supplies that override. The original
 terminal receipt survives, and `line-service.dispatch-readmitted` binds the new

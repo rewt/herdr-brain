@@ -39,7 +39,19 @@ do not grant authority or replace the guarded project tools.
 
 - Hand immutable landed base/head and evidence through the report to the existing
   record queue-review path. ONE async post-code diff/evidence review, cap1,
-  about30-minute planning target, zero reviewer suites. When a worker report is in, close its session and remove its worktree folder in the same step; delete its branch only if it is already on main, otherwise keep the branch so a fix can continue from it, and keep the folder only if it has unsaved changes. Reviews and fixes start fresh from the record and may resume a saved session by its ID; nothing stays open waiting. No pre-code or serial concurrence stages. One
+  about30-minute planning target, zero reviewer suites. When a worker report is in,
+  the owning line's existing finite report/closeout turn releases its session and
+  clean worktree in the same step through the source-bound guarded closer, which
+  records preservation and native/Git effect receipts. This is the handback path
+  for every consumer project; do not hand-close panes or hand-remove worktrees or
+  branches to satisfy this rule. The closer deletes a branch only if it is already
+  on main, otherwise keeps it so a fix can continue, and keeps a folder with unsaved
+  changes. A held or failed closeout remains with its original binding and owner;
+  route the exception rather than bypassing it. Historical hand removals are
+  recorded as such, never counted as clean line-release witnesses or retrofitted
+  with successful closeout receipts. See the [finite closeout contract](line-service/README.md#finite-report-and-closeout-turns).
+  Reviews and fixes start fresh from the record and may resume a saved session by
+  its ID; nothing stays open waiting. No pre-code or serial concurrence stages. One
   formal correction; later findings fix forward. Majors require specific correction
   checks before release.
 - Verify each routine fact once and name verifier/evidence in the normal report.

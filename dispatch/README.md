@@ -21,6 +21,14 @@ Route values come from `lanes/routes.mjs`, never copied by the caller. Dispatch
 freezes that request's route configuration for both `record start --route` and
 `lane dispatch --route`; retries keep it even if project config changes. Lifecycle
 configuration retains its original sources and path resolution.
+The bundled record CLI uses `start --defer-preparation`: its reply follows the
+committed start, before closeout publication or brief rendering. Dispatch saves
+and claims that run, releases start admission, then calls
+`brief R-n --prepare-start` to publish the original closeout facts and materialize
+the complete brief and report directory before native launch. Preparation failure
+retains the same run and journal; continuation never repeats a committed start.
+An explicit `--org-cli` keeps the custom CLI's synchronous start contract, and
+older saved journals keep their original preparation behavior.
 The frozen snapshot contains routing fields only, including with an explicit
 `LANE_CONFIG`. Record briefs resolve archive directories from the run's workspace
 through the canonical project's configuration layers unless `LANE_CONFIG` is set.

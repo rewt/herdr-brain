@@ -680,10 +680,14 @@ async function main() {
       job.unlandedCap = unlandedAdmission(job, { requireLink: true });
     }
     delete job.startRefused;
+    // Custom record CLIs retain their synchronous contract. Save this choice
+    // before invoking the writer so recovery uses the original protocol.
+    if (!opt['org-cli']) job.startPreparation = { status: 'pending' };
     job.stage = 'starting'; save();
     let output;
     try { output = record(['start', job.item, '--route', job.route, '--route-config', job.routeConfig,
       '--workspace', job.workspace, '--meta', `lane=${job.lane}`, '--meta', `dispatch_journal=${journal}`,
+      ...(job.startPreparation ? ['--defer-preparation'] : []),
       '--meta', `dispatch_attempt=${job.token}`, '--meta', `dispatch_project=${job.common}`, '--meta', `dispatch_record=${job.org}`,
       '--meta', `dispatch_unlanded_admitted=${job.unlandedCap.admission.admitted}`,
       ...(job.workerBrief ? ['--meta', `worker_brief=${JSON.stringify(job.workerBrief)}`] : []),
@@ -753,9 +757,12 @@ async function main() {
   dispatchWaits = run.meta?.dispatch_waits;
   admissionWaits = run.meta?.dispatch_admission_waits;
   syncTiming();
-  // start may have committed the run before failing to materialize its brief.
-  // The existing record command recreates a missing brief from durable context.
-  if (!fs.existsSync(run.brief_path)) record(['brief', job.run]);
+  // The start/retirement admission locks have been released. Preparation has
+  // its own saved status and may resume on this run without replaying start.
+  if (job.startPreparation?.status === 'pending') {
+    record(['brief', job.run, '--prepare-start']);
+    job.startPreparation.status = 'complete'; save();
+  } else if (!fs.existsSync(run.brief_path)) record(['brief', job.run]);
   if (job.workerBrief && job.native_launch_attempted === false && !job.worker) {
     const original = fs.readFileSync(run.brief_path, 'utf8');
     const compatible = compatibleLineBrief({ job, run, brief: original });

@@ -157,7 +157,8 @@ test('a nonzero record start after committed brief failure is unknown and its ex
 test('a nonzero record start after report directory failure is unknown without a record refusal prefix', t => {
   const f = fixture(t), parent = path.join(f.root, 'report-parent');
   fs.writeFileSync(parent, 'not a directory');
-  const { receipt } = assertUnknown(f, f.start(['--report', path.join(parent, 'report.md')]), 'starting', true);
+  // An explicitly supplied legacy record CLI still prepares inside start.
+  const { receipt } = assertUnknown(f, f.start(['--org-cli', RECORD, '--report', path.join(parent, 'report.md')]), 'starting', true);
   assert.equal(receipt.receipt.status, 1); assert.equal(receipt.receipt.signal, null);
   assert.equal(receipt.receipt.stdout, ''); assert.match(receipt.receipt.stderr, /EEXIST|ENOTDIR/);
 });

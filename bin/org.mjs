@@ -106,7 +106,8 @@ Runs and reports
   record handoffs template | check --file PATH [--json]
                                           standard headings; missing sections are advisory
   record start <ID> [--route R [--route-config FILE] | --harness H --model M --effort E] [--workspace DIR]
-          [--report PATH] [--escalation] [--meta key=value]... [--if-current-run R-n]
+          [--report PATH] [--escalation] [--meta key=value]... [--if-current-run R-n] [--defer-preparation]
+  record brief R-n [--prepare-start]      materialize deferred start work without starting again
   record claim R-n --controller NAME [--legacy] [--release-root DIR]
     [--transfer-from NAME --expected-owner JSON --expected-generation N --why TEXT]
     [--admit-worker | --adopt-brain-receipt FILE]
@@ -206,7 +207,7 @@ function briefArchive(workspace) {
 }
 
 let warnedUnattributed = false;
-function mutate(ctx, fn, authority) {
+function mutate(ctx, fn, authority, { deferCloseout = false } = {}) {
   const who = writer();
   if (who.unattributed && !warnedUnattributed) {
     warnedUnattributed = true;
@@ -231,9 +232,9 @@ function mutate(ctx, fn, authority) {
     replaySafe,
   });
   if (res.repaired) err('record: repaired an incomplete last event left by an interrupted write\n');
-  try { publishCloseoutEvents({ org: ctx.dir, added: res.added }); }
+  try { if (!deferCloseout) publishCloseoutEvents({ org: ctx.dir, added: res.added }); }
   catch (e) { err(`record: closeout deferred: ${e.message}; source retained; recover with supervisor/closeout.mjs event --seq N\n`); }
-  if (res.added.some(e => ['report.ingested', 'item.closed', 'item.reopened', 'question.answered', 'link.removed', 'run.abandoned', 'promotion.reconciled'].includes(e.type) || (e.type === 'note.added' && e.decision))) {
+  if (!deferCloseout && res.added.some(e => ['report.ingested', 'item.closed', 'item.reopened', 'question.answered', 'link.removed', 'run.abandoned', 'promotion.reconciled'].includes(e.type) || (e.type === 'note.added' && e.decision))) {
     try { requestRetirement({ org: ctx.dir, eventSeq: res.added.at(-1).seq, source: `record ${process.argv[2]}` }); }
     catch (e) { err(`record: retirement request deferred: ${e.message}\n`); }
   }
@@ -775,6 +776,7 @@ function start(argv) {
     report: { type: 'string' },
     escalation: { type: 'boolean' },
     'if-current-run': { type: 'string' },
+    'defer-preparation': { type: 'boolean' },
     meta: { type: 'string', multiple: true },
   }, { min: 1, max: 1, usage: 'record start <ID> [--route R [--route-config FILE] | --harness H --model M --effort E] [options]' });
   const id = positionals[0];
@@ -800,9 +802,10 @@ function start(argv) {
   for (const key of ['harness', 'model', 'effort']) if (values[key]) meta[key] = values[key];
   if (values.escalation) meta.escalation = true;
   const workspace = path.resolve(values.workspace ?? process.cwd());
-  const archive = briefArchive(workspace);
+  const deferred = values['defer-preparation'] === true;
+  const archive = deferred ? null : briefArchive(workspace);
   const ctx = openOrg();
-  const { result } = mutate(ctx, (s) => {
+  const { result, added } = mutate(ctx, (s) => {
     const item = requireItem(s, id);
     if (item.meta.operator_reserved && writer().actor !== 'human') throw new UserError('release questions are reserved for the operator');
     if (proposalSelection(item) && proposalSelection(item) !== 'selected') throw new UserError('select the proposal separately with meta.queue_selected=true before starting work');
@@ -823,9 +826,18 @@ function start(argv) {
       workspace,
       report_path: path.resolve(values.report ?? path.join(runDir, 'report.md')),
       brief_path: path.join(runDir, 'brief.md'),
+      ...(deferred ? { preparation_deferred: true } : {}),
     });
     return { add: events, result: { runId, reopened: Boolean(item.closed), parallel: openRuns(s, id).map((r) => r.id) } };
-  });
+  }, undefined, { deferCloseout: deferred });
+
+  // The committed source is the recovery anchor. No publication, record reload,
+  // archive discovery or filesystem preparation belongs to this start reply.
+  if (deferred) {
+    const run = added.find(e => e.type === 'run.started');
+    safeOut(`${run.id} started on ${id}\n  preparation deferred; run record brief ${run.id} --prepare-start\n`);
+    return 0;
+  }
 
   const after = openOrg();
   const run = after.state.runs.get(result.runId);
@@ -1065,10 +1077,22 @@ function abandon(argv) {
 }
 
 function brief(argv) {
-  const { positionals } = args(argv, {}, { min: 1, max: 1, usage: 'record brief <R-n>' });
+  const { positionals, values } = args(argv, { 'prepare-start': { type: 'boolean' } },
+    { min: 1, max: 1, usage: 'record brief <R-n> [--prepare-start]' });
   const ctx = openOrg();
   const run = ctx.state.runs.get(positionals[0]);
   if (!run) throw new UserError(`unknown run ${positionals[0]}`);
+  if (values['prepare-start']) {
+    const source = ctx.events.find(e => e.type === 'run.started' && e.id === run.id);
+    if (!source?.preparation_deferred) throw new UserError(`${run.id} has no deferred start preparation`);
+    // Include an atomic reopen, if present. Replay only publication of these
+    // original facts, never the start mutation or its authority checks.
+    const reopen = ctx.events.find(e => e.seq === source.seq - 1 && e.type === 'item.reopened' &&
+      e.id === run.item && e.note === `reopened by starting ${run.id}`);
+    publishCloseoutEvents({ org: ctx.dir, added: [...(reopen ? [reopen] : []), source] });
+    if (reopen) requestRetirement({ org: ctx.dir, eventSeq: source.seq, source: 'record start' });
+    fs.mkdirSync(path.dirname(run.report_path), { recursive: true });
+  }
   if (!fs.existsSync(run.brief_path)) writeFileAtomic(run.brief_path, renderBrief(ctx.state, run.id,
     { ...view(ctx), ...briefArchive(run.workspace) }));
   out(fs.readFileSync(run.brief_path, 'utf8'));

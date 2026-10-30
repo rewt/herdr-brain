@@ -4,8 +4,9 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 
 const root = fs.realpathSync(process.env.INSTALLED_CYCLE_ROOT);
-const file = path.join(root, 'native.json'), args = process.argv.slice(2), [group, verb, target] = args;
+const file = path.join(root, 'native.json'), args = process.argv.slice(2), [group, verb, positional] = args;
 const state = JSON.parse(fs.readFileSync(file)), option = key => args[args.indexOf(key) + 1];
+const target = positional === '--pane' ? option('--pane') : positional;
 const inside = value => typeof value === 'string' && value.startsWith(root + path.sep) &&
   fs.realpathSync(value).startsWith(root + path.sep);
 const all = Object.values(state.workspaces);

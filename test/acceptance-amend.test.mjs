@@ -125,6 +125,33 @@ test('invalid or reserved acceptance amendments append nothing', t => {
   }
 });
 
+test('every reserved item form refuses both amendment inputs without changing record bytes', t => {
+  const f = fixture(t), original = 'Keep the reserved acceptance';
+  const forms = [
+    ['--meta', 'operator_reserved=true'],
+    ['--meta', 'reserved=true'],
+    ['--role', 'human'],
+    ['--role', 'HUMAN'],
+    ...['security', 'funds-and-chain', 'publish', 'delete-data', 'licensing', 'priorities']
+      .map(category => ['--meta', `category=${category}`]),
+  ];
+  const ids = forms.map((form, index) => f.ok(['add', `Reserved form ${index}`, '--accept', original, ...form]).trim());
+  const file = path.join(f.root, 'replacement.md');
+  fs.writeFileSync(file, 'Replacement acceptance\n');
+  const log = path.join(f.dir, 'events.jsonl'), before = fs.readFileSync(log);
+  for (const id of ids) {
+    for (const input of [['--accept', 'Replacement acceptance'], ['--file', file]]) {
+      const result = f.org(['amend-accept', id, ...input, '--why', 'Attempt reserved rewrite']);
+      assert.equal(result.code, 1, result.out + result.err);
+      assert.match(result.err, /operator-reserved acceptance cannot be amended/);
+      assert.deepEqual(fs.readFileSync(log), before, `${id}: refusal appends nothing`);
+    }
+    const item = f.json(['show', id, '--json']);
+    assert.deepEqual(item.accept, [original]);
+    assert.equal(item.accept_history, undefined);
+  }
+});
+
 test('acceptance writer inherits the existing promotion member guard', t => {
   const f = fixture(t);
   const git = args => {

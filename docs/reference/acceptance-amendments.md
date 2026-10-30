@@ -18,7 +18,9 @@ writer attribution, append-only transaction, promotion write guard and source
 binding as `note` and `set`. Unlike a note or metadata change, it changes the
 acceptance agents receive. Unlike `set`, it emits a dedicated
 `item.acceptance-amended` event, with the replacement list and reason. It creates
-no approval or dispatch stage. Operator-reserved items cannot be amended.
+no approval or dispatch stage. Reserved items cannot be amended: this includes
+`meta.operator_reserved`, `meta.reserved`, human roles and reserved categories,
+using the same predicate as proposal intake.
 
 The replacement supersedes the entire previous acceptance list, irrespective
 of author. Original operator words and every later revision remain fully visible

@@ -20,7 +20,7 @@ import { requestRetirement } from '../lib/retire-trigger.mjs';
 import { bindCloseoutSources, publishCloseoutEvents } from '../lib/closeout.mjs';
 import { lessonProposal, lessonsJson } from '../lib/lessons.mjs';
 import { readReport } from '../lib/report.mjs';
-import { proposalIntakeEvents, proposalSelection } from '../lib/proposal-intake.mjs';
+import { isReservedItem, proposalIntakeEvents, proposalSelection } from '../lib/proposal-intake.mjs';
 import { completionSession } from '../lib/completion-session.mjs';
 import { approvalPolicy, CATEGORY_CHECKLIST, categoryFlag, categoryFlagText, reportCategoryFlags } from '../lib/discernment.mjs';
 import { sanitizeTerminal } from '../lib/sanitize.mjs';
@@ -463,7 +463,7 @@ function amendAccept(argv) {
   const id = positionals[0];
   const { added } = mutate(openOrg(), s => {
     const item = requireItem(s, id);
-    if (item.meta.operator_reserved) throw new UserError('operator-reserved acceptance cannot be amended');
+    if (isReservedItem(item)) throw new UserError('operator-reserved acceptance cannot be amended');
     return { add: [{ type: 'item.acceptance-amended', id, accept, why: values.why }] };
   });
   safeOut(describeEvent(added[0]) + '\n');

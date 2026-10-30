@@ -21,6 +21,10 @@ function fixture(t, { waived = false, recordedWorkspace } = {}) {
   commitFile(workspace, 'owned.txt', 'owned\n', 'Owned candidate');
   initOrg(org);
   const identity = fs.realpathSync(path.join(f.repo, '.git'));
+  const dispatch = path.join(org, 'dispatch', 'owned-source.json');
+  fs.mkdirSync(path.dirname(dispatch), {recursive:true});
+  fs.writeFileSync(dispatch, JSON.stringify({token:'owned-source', run:'R-1', item:'ENG-1',
+    common:identity, org, workspace, base:git(f.repo, ['rev-parse', 'HEAD'])}));
   const native = { name: 'own-worker', pane_id: 'own-pane', workspace_id: 'own-workspace',
     terminal_id: 'own-terminal', cwd: workspace, agent_session: { value: 'own-session' } };
   const owner = { controller: 'brain', legacy: false,
@@ -30,6 +34,8 @@ function fixture(t, { waived = false, recordedWorkspace } = {}) {
     { type: 'run.started', id: 'R-1', item: 'ENG-1',
       workspace: recordedWorkspace === 'other' ? f.repo
         : recordedWorkspace === 'missing' ? path.join(f.root, 'missing-own-workspace') : workspace, meta: { lane: topic,
+      dispatch_project: identity, dispatch_record: org, dispatch_attempt: 'owned-source',
+      dispatch_journal: dispatch,
       agent: native.name, pane: native.pane_id, worker_workspace: native.workspace_id,
       terminal_id: native.terminal_id, agent_session_id: native.agent_session.value } },
     { type: 'run.claimed', run: 'R-1', project: identity, record: org, owner }]);

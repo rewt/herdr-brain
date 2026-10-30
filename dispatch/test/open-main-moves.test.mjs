@@ -22,7 +22,7 @@ function scenario(t,phase,{correction=false,author=false}={}) {
   // stay offline, using the existing dispatch fixture's identity contract.
   const fake=path.join(f.root,'bin','lane');
   let source=fs.readFileSync(fake,'utf8');
-  const open="if(a[0]==='open') git(['worktree','add','-b','lane/'+a[1],path.join(root,'lane'),a.slice(2).find(x=>!x.startsWith('--'))??'HEAD']);";
+  const open="if(a[0]==='open') git(['worktree','add','-b','lane/'+a[1],path.join(root,fs.existsSync(path.join(root,'lane'))?'lane-'+a[1]:'lane'),a.slice(2).find(x=>!x.startsWith('--'))??'HEAD']);";
   assert.ok(source.includes(open));
   source=source.replace(open,`if(['open','prepare'].includes(a[0])) {
     ${phase==='prepare'?`if(a[0]==='prepare'){${pause}}`:''}

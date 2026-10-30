@@ -6,6 +6,7 @@ import { spawnSync } from 'node:child_process';
 import { setupOrg } from './helpers.mjs';
 import { fixtureFleet } from './helpers/offline-herdr.mjs';
 import { fold, itemStatus } from '../lib/state.mjs';
+import { transact } from '../lib/store.mjs';
 import { fold as olderFold } from './fixtures/state-v0.mjs';
 import { queueFor, enqueue } from '../promote/promote.mjs';
 
@@ -28,7 +29,8 @@ test('acceptance amendments append attributed revisions, preserving operator wor
   f.ok(['set', id, 'meta.hold=true', 'meta.accept=metadata is not acceptance']);
   f.ok(['note', id, 'A note also does not replace acceptance']);
   const beforeEvents = f.events(), before = fold(beforeEvents), beforeItem = structuredClone(before.items.get(id));
-  assert.deepEqual(beforeItem.accept, original);
+  assert.equal(beforeItem.accept.length, 1);
+  assert.ok(beforeItem.accept[0].endsWith(original.join('\n')), 'creation preserves the operator words verbatim inside the dispatch prompt');
   const log = path.join(f.dir, 'events.jsonl'), oldBytes = fs.readFileSync(log);
   const intermediate = ['Interim acceptance with  two spaces', 'Keep the full middle revision '.repeat(30)];
   f.ok(['amend-accept', id, '--accept', intermediate[0], '--accept', intermediate[1], '--why', 'Apply the first rewrite'],
@@ -41,7 +43,7 @@ test('acceptance amendments append attributed revisions, preserving operator wor
   assert.deepEqual(events.slice(beforeEvents.length).map(e => e.type), ['item.acceptance-amended', 'item.acceptance-amended']);
   assert.deepEqual(item.accept, latest);
   assert.deepEqual(item.accept_history.map(r => [r.accept, r.by, r.at, r.why]), [
-    [original, 'human', '2026-09-15T09:00:00.000Z', null],
+    [beforeItem.accept, 'human', '2026-09-15T09:00:00.000Z', null],
     [intermediate, 'first-amender', '2026-09-15T10:00:00.000Z', 'Apply the first rewrite'],
     [latest, 'second-amender', '2026-09-15T11:00:00.000Z', 'Apply the final rewrite'],
   ]);
@@ -97,7 +99,8 @@ test('closed done items accept amendments while retaining closure and original a
   assert.deepEqual(events.slice(0, beforeEvents.length), beforeEvents);
   assert.deepEqual(events.slice(beforeEvents.length).map(e => e.type), ['item.acceptance-amended']);
   assert.deepEqual(item.accept, ['Current acceptance for later consumers']);
-  assert.deepEqual(item.accept_history.map(r => r.accept), [[original], item.accept]);
+  assert.ok(beforeItem.accept[0].endsWith(original));
+  assert.deepEqual(item.accept_history.map(r => r.accept), [beforeItem.accept, item.accept]);
   const { accept, accept_history, ...otherFacts } = item;
   const { accept: ignored, ...oldFacts } = beforeItem;
   assert.deepEqual(otherFacts, oldFacts, 'closure and all other item facts remain intact');
@@ -108,7 +111,9 @@ test('closed done items accept amendments while retaining closure and original a
 });
 
 test('amending an item without initial acceptance retains an empty original revision', t => {
-  const f = fixture(t), id = f.ok(['add', 'Previously unspecified']).trim();
+  const f = fixture(t), id = 'ENG-1';
+  // Existing records can predate intent-first creation, which now supplies a prompt.
+  transact(f.dir, () => ({ add: [{type:'item.added', id, kind:'work', role:'engineer', title:'Previously unspecified', accept:[]}] }));
   f.ok(['amend-accept', id, '--accept', 'Now specified', '--why', 'Define the result']);
   const item = f.json(['show', id, '--json']);
   assert.deepEqual(item.accept, ['Now specified']);
@@ -157,6 +162,7 @@ test('every reserved item form refuses both amendment inputs without changing re
       .map(category => ['--meta', `category=${category}`]),
   ];
   const ids = forms.map((form, index) => f.ok(['add', `Reserved form ${index}`, '--accept', original, ...form]).trim());
+  const created = new Map(ids.map(id => [id, f.json(['show', id, '--json']).accept]));
   const file = path.join(f.root, 'replacement.md');
   fs.writeFileSync(file, 'Replacement acceptance\n');
   const log = path.join(f.dir, 'events.jsonl'), before = fs.readFileSync(log);
@@ -168,7 +174,8 @@ test('every reserved item form refuses both amendment inputs without changing re
       assert.deepEqual(fs.readFileSync(log), before, `${id}: refusal appends nothing`);
     }
     const item = f.json(['show', id, '--json']);
-    assert.deepEqual(item.accept, [original]);
+    assert.deepEqual(item.accept, created.get(id));
+    assert.ok(item.accept.join('\n').endsWith(original), 'reserved creation retains the original words');
     assert.equal(item.accept_history, undefined);
   }
 });

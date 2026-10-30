@@ -11,6 +11,7 @@ import {waitForFile} from './file-wait.mjs';
 import {loadEvents, transact} from '../../lib/store.mjs';
 import {fold} from '../../lib/state.mjs';
 import {gitProject} from '../../lib/project.mjs';
+import {dispatchLaneName} from '../../lib/lane-name.mjs';
 import {createLineService, serviceDirectory} from '../../line-service/line-service.mjs';
 import {runCloseoutTurn} from '../../line-service/closeout-turn.mjs';
 import {developmentRoot} from '../../line-service/cutoff.mjs';
@@ -21,9 +22,10 @@ const source=fs.realpathSync(fileURLToPath(new URL('../../',import.meta.url)));
 // Compose existing native and dispatch fixtures. Only Herdr and the launch-time
 // watcher are fake: lane open/dispatch, Git, record, foreground watcher and line
 // consumers execute product code. No service installation or live socket exists.
-export function notificationFixture(t, {startFail=false,topic='topic'}={}) {
+export function notificationFixture(t, {startFail=false,topic='topic',item='ENG-1'}={}) {
   const f=dispatchFixture(t,{beforeRemove:()=>stopOwnedInbox(path.join(f.org,'supervisor/inbox.log'),{
-    script:path.join(source,'supervisor/prompt-supervisor.mjs')})}),bin=path.join(f.root,'bin'),lane=path.join(f.root,`lane-${topic}`);
+    script:path.join(source,'supervisor/prompt-supervisor.mjs')})}),bin=path.join(f.root,'bin');
+  const laneTopic=dispatchLaneName(topic,item),lane=path.join(f.root,`lane-${laneTopic}`);
   setSessionEnvironment(t,{HERDR_MONITOR_FLEET:f.env.HERDR_MONITOR_FLEET});
   Object.assign(f.env,{HERDR_BRAIN_ROOT:source,LANE_WORKTREE_ROOT:f.root,
     MONITOR_SUPERVISOR_AGENT:'supervisor-test',HERDR_TEST_SCRATCH_ROOTS:'[]'});
@@ -34,7 +36,7 @@ export function notificationFixture(t, {startFail=false,topic='topic'}={}) {
     // The test explicitly invokes each finite turn. A report-available wake
     // must not start a second turn against that same scratch checkpoint.
     dispatch:{max_sessions:4,max_unlanded:8},retirement:{closeout_queue:false,line_service_cleanup:false}}));
-  const native=writeFakeHerdr({...f,bin},{lanePath:lane,branch:`lane/${topic}`,startFail});
+  const native=writeFakeHerdr({...f,bin},{lanePath:lane,branch:`lane/${laneTopic}`,startFail});
   // Preserve the dispatch fixture's owned watcher PID receipts and teardown.
   fs.writeFileSync(path.join(bin,'lane'),`#!${process.execPath}\nimport {spawnSync} from 'node:child_process';\nconst r=spawnSync(process.execPath,[${JSON.stringify(path.join(source,'lanes/lane.mjs'))},...process.argv.slice(2)],{stdio:'inherit'});process.exit(r.status??1);\n`,{mode:0o755});
   const events=()=>loadEvents(f.org).events,state=()=>fold(events()),project=gitProject(f.repo);
@@ -102,7 +104,7 @@ export function notificationFixture(t, {startFail=false,topic='topic'}={}) {
     assert.equal(gitProject(lane).identity,project.identity);
     assert.equal(native.state().opened,true);
     assert.ok(native.calls().some(a=>a[0]==='worktree'&&a[1]==='open'));
-    assert.equal(f.git(['rev-parse','--abbrev-ref','HEAD'],lane),`lane/${topic}`);
+    assert.equal(f.git(['rev-parse','--abbrev-ref','HEAD'],lane),`lane/${laneTopic}`);
   };
   return{...f,lane,native,events,state,project,directory,add,execute,queueCanonicalReview,turn,pass,commands,job,
     patchNative,writeReport,watch,watchUntil,assertOpened};

@@ -98,8 +98,11 @@ test('producer old reported source skips cheaply while an unresolved manual revi
   for(const resource of ['session','folder','branch'])assert.equal(kept.resources[resource].status,'kept');
   f.service().pass();assert.deepEqual(f.events(),after,'unchanged cleanup binding and review holds append no repeat events');
   assert.equal(f.refreshes.length,2,'cleanup refresh is independent of historical source and retained review');
-  assert.equal(f.calls.length,0);assert.equal(f.messages().length,0);assert.match(f.diagnostics().find(r=>r.notice_record).reason,/legacy\/manual.*UNKNOWN/);
-  assert.ok(f.diagnostics().filter(e=>e.action==='review-health').every(e=>e.health.owed===0));assert.equal(morningDigest({events:f.events(),diagnostics:f.diagnostics()}).review_errors.occurrences,2);
+  const diagnostics=f.diagnostics(),notices=diagnostics.filter(r=>r.notice_record);
+  assert.equal(f.calls.length,0);assert.equal(f.messages().length,0);
+  assert.equal(notices.filter(r=>/legacy\/manual.*UNKNOWN/.test(r.reason)).length,2,'the original manual-review hold survives both passes');
+  assert.equal(notices.filter(r=>/unknown delivered source/.test(r.reason)).length,2,'the unproven historical claim remains diagnostic too');
+  assert.ok(diagnostics.filter(e=>e.action==='review-health').every(e=>e.health.owed===0));assert.equal(morningDigest({events:f.events(),diagnostics}).review_errors.occurrences,4);
   assert.equal(fs.existsSync(inboxPath({org:f.org})),false);
 });
 

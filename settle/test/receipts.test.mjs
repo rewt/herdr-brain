@@ -16,7 +16,8 @@ import fs from 'node:fs'; import { spawnSync } from 'node:child_process';
 const cli = ${JSON.stringify(path.join(f.source, 'bin/org.mjs'))}, args = process.argv.slice(2);
 const record = (argv) => spawnSync(process.execPath, [cli, ...argv], { env: process.env, encoding: 'utf8' });
 const checked = (argv) => { const r = record(argv); if (r.status !== 0) throw new Error(r.stderr); return r.stdout; };
-const forward = (r) => { process.stdout.write(r.stdout ?? ''); process.stderr.write(r.stderr ?? ''); process.exit(r.status ?? 1); };
+// Drain the whole captured reply before exit, including JSON larger than a pipe buffer.
+const forward = (r) => { fs.writeFileSync(1, r.stdout ?? ''); fs.writeFileSync(2, r.stderr ?? ''); process.exit(r.status ?? 1); };
 ${body}
 forward(record(args));
 `, { mode: 0o755 });

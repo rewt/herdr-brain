@@ -10,6 +10,7 @@ import { configFixture } from './helpers/config-home-fixture.mjs';
 import { transact, loadEvents } from '../lib/store.mjs';
 import { fold } from '../lib/state.mjs';
 import { gitProject } from '../lib/project.mjs';
+import { recordOwnLanding } from '../lib/landing-receipt.mjs';
 import { createLineService, sourceRoot } from '../line-service/line-service.mjs';
 import { reviewAttempt, readServiceJournal } from '../line-service/review.mjs';
 import { validateQueuedReview, reviewQueueBrief, reviewQueueRoute } from '../line-service/review-queue.mjs';
@@ -18,7 +19,7 @@ import { checkSessionCap } from '../dispatch/session-cap.mjs';
 import { fixture as dispatchFixture, promptCalls } from '../dispatch/test/dispatch-fixture.mjs';
 
 const root = fs.realpathSync(sourceRoot), entry = path.join(root, 'bin/org.mjs');
-function fixture(t, { outcome = 'blocked', beforeReport = () => [], producerHarness = 'claude', sourceMeta = {} } = {}) {
+function fixture(t, { outcome = 'blocked', beforeReport = () => [], producerHarness = 'claude', sourceMeta = {}, guarded = false } = {}) {
   const f = configFixture(t, { custom: true }), org = f.env.ORG_DIR, identity = gitProject(f.cwd).identity;
   const git = (args, cwd = f.cwd) => { const r = spawnSync('git', ['-C', cwd, ...args], { env: f.env, encoding: 'utf8' }); assert.equal(r.status, 0, r.stderr); return r.stdout.trim(); };
   fs.writeFileSync(path.join(f.cwd, 'code.mjs'), 'export const value=0;\n'); git(['add', 'code.mjs']); git(['commit', '-qm', 'Base']);
@@ -29,15 +30,25 @@ function fixture(t, { outcome = 'blocked', beforeReport = () => [], producerHarn
   fs.writeFileSync(dispatch, JSON.stringify({ token: 'fixture', stage: 'complete', run: 'R-1', item: 'ENG-1', org, common: identity, workspace, base }));
   const report = `---\nrun: R-1\noutcome: ${outcome}\nsummary: Landed code with red producer evidence.\nartifacts:\n  - "Commit: ${head}"\n  - code.mjs\n---\n`, reportHash = createHash('sha256').update(report).digest('hex');
   fs.mkdirSync(path.join(org, 'reports'), { recursive: true }); fs.writeFileSync(path.join(org, 'reports', 'R-1.md'), report);
+  const native = {...f.observation.agents[0], cwd: workspace};
+  const reportEvent = { type: 'report.ingested', run: 'R-1', item: 'ENG-1', file: 'reports/R-1.md', sha256: reportHash, report: { outcome, summary: 'Committed red code', artifacts: [`Commit: ${head}`, 'code.mjs'], blockers: [], extra: {} } };
   transact(org, () => ({ add: [
     {type:'line-service.cutover',id:'fixture-cutover',project:identity,repo:f.cwd,org,source:root,main:'main',canonical_head:base},
     {type:'line-service.phase0',id:'fixture-phase0',project:identity,repo:f.cwd,org,source:root,main:'main',canonical_head:base},
     { type: 'item.added', id: 'ENG-1', title: 'Build', role: 'engineer', meta: sourceMeta },
-    { type: 'run.started', id: 'R-1', item: 'ENG-1', workspace, meta: { lane: 'implementation', dispatch_journal: dispatch, dispatch_attempt: 'fixture', ...(producerHarness ? { harness: producerHarness } : {}) } },
+    { type: 'run.started', id: 'R-1', item: 'ENG-1', workspace, meta: { lane: 'implementation', dispatch_journal: dispatch, dispatch_attempt: 'fixture', ...(producerHarness ? { harness: producerHarness } : {}),
+      ...(guarded ? {dispatch_project:identity, dispatch_record:org, agent:native.name, pane:native.pane_id, worker_workspace:native.workspace_id, terminal_id:native.terminal_id, agent_session_id:native.agent_session.value} : {}) } },
     { type: 'run.claimed', run: 'R-1', record: org, project: identity, owner: { controller: 'brain', legacy: false, release: { id: 'source', commit: null, root, identity: gitProject(root).identity } } },
     ...beforeReport({head,base}),
-    { type: 'report.ingested', run: 'R-1', item: 'ENG-1', file: 'reports/R-1.md', sha256: reportHash, report: { outcome, summary: 'Committed red code', artifacts: [`Commit: ${head}`, 'code.mjs'], blockers: [], extra: {} } },
+    ...(!guarded ? [reportEvent] : []),
   ] }));
+  if (guarded) {
+    // Completion requires the original native delivery receipt, beyond Git containment.
+    const receipt = recordOwnLanding({canonical:f.cwd, workspace, base, head, landedAt:new Date().toISOString(),
+      env:{...f.env, HERDR_ENV:'1', CODEX_THREAD_ID:native.agent_session.value}, call:()=>JSON.stringify({result:{agent:native}})});
+    assert.equal(receipt.changes.length,1);
+    transact(org,()=>({add:[reportEvent]}));
+  }
   const env = { ...f.env, ORG_ACTOR: 'line-service', HERDR_BRAIN_ROOT: root };
   for (const key of ['HERDR_ENV', 'HERDR_PANE_ID', 'HERDR_WORKSPACE_ID', 'CODEX_THREAD_ID']) delete env[key];
   const run = (args, extra = {}, file = entry) => spawnSync(process.execPath, [file, ...args], { cwd: f.cwd, env: { ...env, ...extra }, encoding: 'utf8' });
@@ -351,7 +362,7 @@ test('review admission is separate from eight build slots while native total cap
 });
 
 test('line service creates a record review item then normal review-lane dispatch exactly once without a settle driver', t => {
-  const f=fixture(t,{outcome:'done'}), calls=[], notices=[];
+  const f=fixture(t,{outcome:'done',guarded:true}), calls=[], notices=[];
   const command=(exe,args,options)=>{
     calls.push(args);
     if(args[0]===entry) return spawnSync(exe,args,{...options,env:f.env});

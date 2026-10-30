@@ -65,7 +65,7 @@ test('operational opened worker with an undelivered prompt retains its failure a
 });
 
 for(const priorHistory of [false,true])test('operational review launch with no agent preserves the ending status and the one-review cap after abandonment'+(priorHistory?' with existing dispatch history':''),t=>{
-  const f=notificationFixture(t,{startFail:true,topic:'review-notification'});
+  const f=notificationFixture(t,{startFail:true,topic:'review-notification',item:'REV-1'});
   const {review,launch}=queueReview(f,{priorHistory}),r=launch();
   assert.equal(r.status,1,r.stderr+r.stdout);f.assertOpened();const job=f.job(),bytes=fs.readFileSync(job.journal);
   assert.equal(f.native.state().agent,undefined);assert.ok(!job.worker);
@@ -80,7 +80,7 @@ for(const priorHistory of [false,true])test('operational review launch with no a
 });
 
 for(const priorHistory of [false,true])test('operational written review report crosses watcher and intake with its original Minor findings linked once'+(priorHistory?' with existing dispatch history':''),t=>{
-  const f=notificationFixture(t,{topic:'review-notification'}),{launch}=queueReview(f,{priorHistory}),launched=launch();
+  const f=notificationFixture(t,{topic:'review-notification',item:'REV-1'}),{launch}=queueReview(f,{priorHistory}),launched=launch();
   assert.equal(launched.status,0,launched.stderr+launched.stdout);f.assertOpened();const job=f.job();
   const report=f.writeReport(job.run),historical=fs.readFileSync(new URL('./fixtures/review-findings/R-1307.md',import.meta.url),'utf8');
   fs.writeFileSync(report,historical.replace(/^run: R-1307$/m,`run: ${job.run}`));const bytes=fs.readFileSync(report);

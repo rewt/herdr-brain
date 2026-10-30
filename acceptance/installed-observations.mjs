@@ -4,8 +4,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import childProcess from 'node:child_process';
 import { syncBuiltinESMExports } from 'node:module';
+import { fileURLToPath } from 'node:url';
 
 const root = fs.realpathSync(process.env.INSTALLED_CYCLE_ROOT);
+// sandbox-exec drops the host preload. Propagate this local native fixture
+// explicitly to every installed product child after the boundary is entered.
+const preload = `--import=${fileURLToPath(import.meta.url)}`;
+if (!process.env.NODE_OPTIONS?.includes(preload)) process.env.NODE_OPTIONS = `${process.env.NODE_OPTIONS ?? ''} ${preload}`.trim();
 const original = childProcess.spawnSync;
 childProcess.spawnSync = function (file, args = [], options = {}) {
   if (file === '/usr/sbin/lsof') {

@@ -19,6 +19,11 @@ for (const file of forbidden) {
   const child = spawnSync(process.execPath, ['-e', 'require("fs").readFileSync(process.argv[1])', file], { encoding: 'utf8' });
   assert.notEqual(child.status, 0); assert.match(child.stderr, /EPERM|EACCES/);
 }
+const childEnvironment = spawnSync(process.execPath, ['-e', 'console.log(JSON.stringify({fleet:process.env.HERDR_MONITOR_FLEET,preload:process.env.NODE_OPTIONS}))'], { encoding: 'utf8' });
+assert.equal(childEnvironment.status, 0, childEnvironment.stderr);
+const childHomes = JSON.parse(childEnvironment.stdout);
+assert.equal(childHomes.fleet, process.env.HERDR_MONITOR_FLEET);
+assert.match(childHomes.preload, /installed-observations\.mjs/);
 assert.equal(fs.existsSync(config.development), false);
 const { fleetPath } = await module('lib/fleet.mjs');
 assert.ok(fleetPath().startsWith(root + path.sep));
@@ -43,7 +48,7 @@ const base = git(['rev-parse', 'HEAD']);
 const directory = serviceDirectory(org, project.identity);
 fs.mkdirSync(directory, { recursive: true });
 // An offline service binding, not a launchd installation or release attestation.
-fs.writeFileSync(path.join(directory, 'installation.json'), JSON.stringify({ repo, org, source: bundle, node: process.execPath,
+fs.writeFileSync(path.join(directory, 'installation.json'), JSON.stringify({ at: '2026-10-30T00:00:00Z', repo, org, source: bundle, node: process.execPath,
   file: path.join(directory, 'service.plist'), target: `gui/${process.getuid()}/dev.herdr.line.${path.basename(directory)}` }));
 const boundary = { id: 'installed-scenario', project: project.identity, repo, org, source: bundle, main: 'main', canonical_head: base };
 transact(org, () => ({ add: ['line-service.cutover', 'line-service.phase0'].map(type => ({ type, ...boundary })) }));

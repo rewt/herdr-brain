@@ -1179,7 +1179,10 @@ test('useful admission proceeds after unrelated productive cleanup exceeds its w
     }});
     const result=service.pass();if(stopped)assert.match(result.held,/STOP/);assert.ok(calls.some(a=>a[0].endsWith('supervisor/closeout.mjs')));assert.equal(calls.filter(a=>a[0].endsWith('dispatch.mjs')).length,stopped?0:1);
     assert.equal(clock,1000,'the independent closeout allowance was spent');
-    if(!stopped){const rows=diagnostics(f);assert.equal(rows.find(r=>r.action==='admission-stage').preceding_budget_exhausted,false,'the general pass starts with its own allowance');assert.equal(rows.find(r=>r.action==='pass-complete').starts,1);}
+    const rows=diagnostics(f),timing=rows.find(r=>r.action==='closeout-timing');
+    assert.equal(timing.duration_ms,1000);assert.equal(timing.budget_ms,720000);
+    if(!stopped){assert.equal(rows.find(r=>r.action==='admission-stage').preceding_budget_exhausted,false,'the general pass starts with its own allowance');assert.equal(rows.find(r=>r.action==='pass-complete').starts,1);
+      assert.equal(rows.find(r=>r.action==='pass-complete').timing.closeout_ms,1000);}
   }
 });
 

@@ -59,6 +59,73 @@ test('BCH vacancy leaves a main-ancestor branch intact and records its exact hea
   assert.equal(f.git(['rev-parse','lane/topic']),f.head);assert.deepEqual(effects(f),[]);
 });
 
+function duringVacancyObservation(f,append){
+  const command=f.options.command;let observed=false;
+  f.options.command=(exe,args,options)=>{
+    if(!observed&&exe===f.job.herdr&&args[0]==='workspace'){
+      observed=true;append();
+    }
+    return command(exe,args,options);
+  };
+  return()=>assert.equal(observed,true,'change must occur during the vacancy observation');
+}
+
+test('BCH vacancy survives an unrelated concurrent append',t=>{
+  const f=partial(t,{absent:true}),before=events(f);
+  const observed=duringVacancyObservation(f,()=>f.append([{type:'note',id:'ENG-2',text:'unrelated concurrent writer'}]));
+  assert.deepEqual(f.refresh().settled,['R-1']);observed();
+  const after=events(f);
+  assert.ok(after.some(e=>e.type==='closeout.vacancy-settled'&&e.run==='R-1'));
+  assert.ok(after.some(e=>e.type==='note'&&e.id==='ENG-2'&&e.text==='unrelated concurrent writer'));
+  assert.deepEqual(after.slice(0,before.length),before);assert.deepEqual(effects(f),[]);assert.deepEqual(f.read().actions,[]);
+});
+
+test('BCH vacancy retains a concurrent change to its own run',t=>{
+  const f=partial(t,{absent:true});
+  const observed=duringVacancyObservation(f,()=>f.append([{type:'run.claimed',run:'R-1',project:f.common,record:f.org,
+    owner:{controller:'foreign',legacy:true}}]));
+  assert.deepEqual(f.refresh().settled,[]);observed();
+  assert.equal(events(f).some(e=>e.type==='closeout.vacancy-settled'&&e.run==='R-1'),false);
+  assert.deepEqual(effects(f),[]);assert.deepEqual(f.read().actions,[]);
+});
+
+test('BCH vacancy survives a settlement failure and still binds another finished run',t=>{
+  const f=partial(t,{absent:true}),second=path.join(f.scratch,'second');
+  f.git(['worktree','add','-b','lane/second',second]);
+  f.append([{type:'item.added',id:'ENG-2',role:'engineer'},
+    {type:'run.started',id:'R-2',item:'ENG-2',workspace:second,
+      meta:{lane:'second',agent_session_id:'second-session',dispatch_project:f.common}}]);
+  f.append([{type:'report.ingested',run:'R-2',sha256:'second',report:{outcome:'done'}}]);
+  const observed=duringVacancyObservation(f,()=>{throw Error('injected vacancy observation failure');});
+  const result=f.refresh();observed();
+  const bound=currentCloseoutEntries(f.common,f.org,events(f)).find(e=>e.run==='R-2'&&e.source.type==='cleanup.bound');
+  assert.ok(bound,JSON.stringify(result));assert.ok(result.created.includes(bound.key));
+  assert.ok(result.errors.some(e=>e.stage==='vacancy'&&/injected vacancy observation failure/.test(e.reason)),JSON.stringify(result));
+  assert.deepEqual(result.settled,[]);assert.deepEqual(effects(f),[]);assert.deepEqual(f.read().actions,[]);
+});
+
+test('BCH vacancy retains a concurrently reused allocation',t=>{
+  const f=partial(t,{absent:true});
+  const observed=duringVacancyObservation(f,()=>f.append([{type:'item.added',id:'ENG-2',role:'engineer'},
+    {type:'run.started',id:'R-2',item:'ENG-2',workspace:f.lane,meta:{dispatch_project:f.common}}]));
+  assert.deepEqual(f.refresh().settled,[]);observed();
+  assert.equal(events(f).some(e=>e.type==='closeout.vacancy-settled'),false);assert.deepEqual(effects(f),[]);
+});
+
+test('BCH vacancy skips foreign and unbound finished runs without vacancy rows or native work',t=>{
+  const f=partial(t,{absent:true}),rows=events(f);
+  // Keep both an explicitly foreign allocation and a legacy unbound allocation.
+  rows.find(e=>e.type==='run.started').meta.dispatch_project='/foreign/git';
+  fs.writeFileSync(f.eventFile,rows.map(e=>JSON.stringify(e)+'\n').join(''));
+  f.append([{type:'item.added',id:'ENG-2',role:'engineer'},
+    {type:'run.started',id:'R-2',item:'ENG-2',workspace:path.join(f.scratch,'legacy'),meta:{lane:'legacy'}},
+    {type:'report.ingested',run:'R-2',report:{outcome:'done'}}]);
+  const calls=f.herdrCalls();
+  assert.deepEqual(f.refresh().settled,[]);
+  assert.equal(events(f).some(e=>e.type.startsWith('closeout.vacancy-')),false);
+  assert.deepEqual(f.herdrCalls(),calls);assert.deepEqual(effects(f),[]);
+});
+
 for(const merged of [true,false])test(`BCH partial original SID permits vacant clean folder disposal with ${merged?'landed':'unlanded'} branch protection`,t=>{
   const f=partial(t,{merged}),before=fs.readFileSync(f.eventFile),result=f.refresh();
   assert.equal(result.created.length,1,JSON.stringify(result));

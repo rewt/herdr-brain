@@ -175,7 +175,13 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
     log({action:'general-pass-lock-recovery',schema:'line-pass-lock-recovery/v1',project:project.identity,org,...recovery});
   }});
   function pass() {
+    const closeoutStarted=workClock();
+    let closeout_ms;
     try { closeout(); } catch(error) { log({action:'closeout-held',reason:error.message}); }
+    finally {
+      closeout_ms=Math.max(0,workClock()-closeoutStarted);
+      log({action:'closeout-timing',duration_ms:closeout_ms,budget_ms:CLOSEOUT_TURN_BUDGET_MS});
+    }
     const release = acquirePass();
     let effects,checkpointNotices;
     const passAt=now(),heartbeat=phase=>writeFileAtomic(path.join(directory,'heartbeat.json'),JSON.stringify({at:now(),started_at:passAt,project:project.identity,source:sourceRoot,phase,pid:process.pid})+'\n',0o600);
@@ -183,7 +189,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
     try {
       const passStarted = performance.now();
       let workStarted=workClock();const maintenanceStarted=workStarted,expired=()=>workClock()-workStarted>=passBudgetMs;
-      timings = { snapshots: 0, record_snapshot_ms: 0, effect_command_ms: 0, historical_intake_skipped: 0, historical_review_skipped: 0, closeout_retained: 0,outcome_decisions_deferred:0,effects_journal_writes:0,notice_record_attempts:0 };
+      timings = { closeout_ms,snapshots: 0, record_snapshot_ms: 0, effect_command_ms: 0, historical_intake_skipped: 0, historical_review_skipped: 0, closeout_retained: 0,outcome_decisions_deferred:0,effects_journal_writes:0,notice_record_attempts:0 };
       effects = readServiceJournal(journal) ?? { identity: project.identity, org, actions: {}, notices: {} };
       if (effects.identity !== project.identity || effects.org !== org) throw Error('effect journal project binding changed');
       const audit=path.join(directory,'passes.jsonl'),restored=replayNoticeAudit(audit,effects);let noticesDirty=false;

@@ -102,6 +102,7 @@ for (const [mode, revision] of [...historical, ['current', 'HEAD']]) {
     env.NODE_OPTIONS = `--import=${path.join(root, 'harness/fixture-policy.mjs')} --import=${path.join(root, 'harness/installed-observations.mjs')}`;
     fs.writeFileSync(path.join(root, 'bin/herdr'), `#!/bin/sh\nexec ${quote(process.execPath)} ${quote(path.join(root, 'harness/installed-native.mjs'))} "$@"\n`, { mode: 0o755 });
     fs.writeFileSync(path.join(root, 'bin/watch'), `#!/bin/sh\nexec ${quote(process.execPath)} ${quote(path.join(bundle, 'watch/watch.mjs'))} "$@" --record-only --retry-after 0.02 --start-grace 0\n`, { mode: 0o755 });
+    if(successor)fs.writeFileSync(path.join(root,'bin/watch-successor'),`#!/bin/sh\nexec ${quote(process.execPath)} ${quote(path.join(successor,'watch/watch.mjs'))} "$@" --record-only --retry-after 0.02 --start-grace 0\n`,{mode:0o755});
     for (const name of ['codex', 'claude']) fs.writeFileSync(path.join(root, 'bin', name), '#!/bin/sh\nexit 97\n', { mode: 0o755 });
     const repo = path.join(root, 'project'), org = path.join(repo, '.org');
     run('git', ['init', '-qb', 'main', repo]);

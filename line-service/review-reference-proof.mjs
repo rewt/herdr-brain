@@ -19,6 +19,20 @@ export const producerReportHandoff=value=>Boolean(value&&typeof value==='object'
   producerSchemas.includes(value.schema)||
   ['schema','type','kind','role'].every(k=>value[k]==null)&&typeof value.run==='string'&&typeof value.worker==='string'&&value.producerEvidence!=null&&(value.head!=null||value.source!=null||value.ownedScope?.head!=null)));
 
+// The enclosing typed handoff binds this focused-test receipt to its actual
+// producer. It retains a failed qualification, not a review-launch outcome or
+// absence proof. Unknown fields and review-related control/refusal text stay held.
+function producerQualification(value,{state,item}){
+  const keys=['exitCode','tests','pass','fail','node','refusal','affectedControl','provingExecuted'];
+  return Boolean(value&&typeof value==='object'&&!Array.isArray(value)&&
+    !roleIs(state.items.get(item),'REV')&&
+    Object.keys(value).length===keys.length&&keys.every(k=>Object.hasOwn(value,k))&&
+    value.exitCode===1&&['tests','pass','fail'].every(k=>Number.isSafeInteger(value[k])&&value[k]>=0)&&
+    value.fail>0&&value.tests===value.pass+value.fail&&
+    typeof value.node==='string'&&/^v\d+\.\d+\.\d+$/.test(value.node)&&value.provingExecuted===false&&
+    ['refusal','affectedControl'].every(k=>typeof value[k]==='string'&&value[k].trim()&&!/review|rev-|queue|pane|session/i.test(value[k])));
+}
+
 // Dispatch's top-level watcher waits for the producer report. Its process is
 // not a reviewer. Unknown shapes and any binding to another run stay held;
 // even a recognized watcher still needs the full historical record/STOP proof.
@@ -105,7 +119,8 @@ export function referenceProof({events,state,repo,org,item,run,target,input,obse
         ['type','kind','role'].some(k=>value[k]!=null)||queueFlags.some(v=>v!==false)||
         Object.hasOwn(value,'stage')||
         Object.hasOwn(value,'native_launch_attempted')&&value.native_launch_attempted!==false||
-        ['reviewer','launchProcess','sessionBinding','verdict','qualification','native_qualification','review_item','review_run','agent','pane','terminal','session','pid','reviewer_session','reviewer_pane'].some(k=>value[k]!=null||review&&typeof review==='object'&&review[k]!=null)||
+        value.qualification!=null&&!producerQualification(value.qualification,{state,item})||review?.qualification!=null||
+        ['reviewer','launchProcess','sessionBinding','verdict','native_qualification','review_item','review_run','agent','pane','terminal','session','pid','reviewer_session','reviewer_pane'].some(k=>value[k]!=null||review&&typeof review==='object'&&review[k]!=null)||
         review!=null&&typeof review!=='string'&&(typeof review!=='object'||Array.isArray(review))||
         review?.worker!=null||review?.watcher!=null||review?.item!=null||review?.run!=null||review?.native_launch_attempted!=null||
         review?.cap!=null&&review.cap!==1||review?.reviewerSuites!=null&&review.reviewerSuites!==0||

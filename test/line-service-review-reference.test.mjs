@@ -213,6 +213,73 @@ test('producer handoff metadata cannot hide explicit review links or top-level q
   }
 });
 
+const ownQualification=()=>({exitCode:1,tests:3,pass:2,fail:1,node:'v22.22.3',refusal:'PermissionError: synthetic operation not permitted',affectedControl:'harmless timing-exit',provingExecuted:false});
+for(const watcher of [false,true])test(`typed producer qualification refusal preserves original evidence${watcher?' and watcher':''} and admits one record review`,t=>{
+  const f=fixture(t),value={...producerHandoff(f,'ownedScope.head'),qualification:ownQualification(),
+    review:{queueAttempted:false,parallelReviewStarted:false,reviewerSuites:0,existingOrUnknownAttempt:'not replaced',cap:1,
+      completionDelivery:'existing prompt',formalFixRounds:1,owner:'fixture-producer',status:'deferred'}};
+  if(watcher)value.watcher={pid:123,identity:'original-watcher-birth',recipient:'fixture-supervisor',retained:true,liveness:'unprobed'};
+  f.prepare(value);const before=f.captured(),bytes=fs.readFileSync(f.reference);
+  assert.match(reviewAttempt(f.context().item,f.context()),/typed review reference UNKNOWN/,'still fenced before exact supervisor disposition');
+  resolveReviewReference(f.args());const c=f.context(),event=c.events.find(e=>e.type==='review.reference-resolved');
+  assert.equal(event.proof.kind,'producer-record-no-attempt');
+  assert.deepEqual(f.captured().subarray(0,before.length),before);assert.deepEqual(fs.readFileSync(f.reference),bytes);
+  assert.deepEqual(Buffer.from(JSON.parse(fs.readFileSync(event.archive.file)).original,'base64'),bytes);
+  assert.equal(resolvedReference({...c,item:'ENG-1',run:'R-1',file:f.reference}),true);
+  assert.equal(resolveReviewReference(f.args()).existing,true);
+  const q=f.queue();assert.equal(q.existing,false);assert.equal(f.queue().review_item,q.review_item);
+  const next=f.context();assert.equal(validateQueuedReview({...next,item:next.state.items.get(q.review_item)}).head,f.head);
+  assert.equal([...next.state.items.values()].filter(q=>q.meta.review_source_run==='R-1').length,1);
+  assert.ok(f.calls.every(a=>a[0]==='agent'&&a[1]==='get'),'read-only native binding observations');
+});
+
+test('typed producer qualification refuses malformed test results, review launch bindings and unknown content',t=>{
+  const f=fixture(t),mutations=[
+    ...Object.keys(ownQualification()).map(k=>q=>delete q[k]),
+    q=>q.exitCode=0,q=>q.exitCode='1',q=>q.tests++,q=>q.tests='3',q=>q.pass=-1,q=>q.fail=0,q=>q.fail=0.5,
+    q=>q.node=22,q=>q.node='UNKNOWN',q=>q.provingExecuted=true,q=>q.provingExecuted='false',
+    q=>q.refusal='',q=>q.refusal={error:'PermissionError'},q=>q.affectedControl='',q=>q.affectedControl=[],
+    ...['review qualification','review-launch','fixture-reviewer','REV-1','queue','pane','session'].flatMap(text=>[
+      q=>q.affectedControl=text,q=>q.refusal=`PermissionError: ${text}`,
+    ]),
+    ...['subject','actor','run','item','reviewer','review_item','review_run','queue','queueAttempted','native_launch_attempted','launchProcess','sessionBinding','nested'].map(k=>q=>q[k]={run:'R-review',agent:'fixture-reviewer'}),
+  ];
+  for(const mutate of mutations){
+    const qualification=ownQualification();mutate(qualification);f.prepare({...producerHandoff(f),qualification});
+    const c=f.context(),before=f.captured(),bytes=fs.readFileSync(f.reference);
+    assert.throws(()=>referenceProof({...c,item:'ENG-1',run:'R-1',input:f.input()}),/UNKNOWN\/started\/refused/);
+    assert.throws(()=>resolveReviewReference(f.args()),/UNKNOWN\/started\/refused/);
+    assert.deepEqual(f.captured(),before);assert.deepEqual(fs.readFileSync(f.reference),bytes);
+  }
+});
+
+test('producer qualification does not relax the other top-level or review attempt fields',t=>{
+  const f=fixture(t),keys=['reviewer','launchProcess','sessionBinding','verdict','native_qualification','review_item','review_run','agent','pane','terminal','session','pid','reviewer_session','reviewer_pane'];
+  for(const nested of [false,true])for(const key of [...keys,...(nested?['qualification']:[])]){
+    const value={...producerHandoff(f),qualification:ownQualification()},attempt=key.endsWith('qualification')?ownQualification():key==='pid'?123:'existing';
+    if(nested)value.review={[key]:attempt};else value[key]=attempt;
+    f.prepare(value);const c=f.context();
+    assert.throws(()=>referenceProof({...c,item:'ENG-1',run:'R-1',input:f.input()}),/UNKNOWN\/started\/refused/);
+  }
+});
+
+test('producer qualification refusals do not excuse another retained native attempt or missing STOP evidence',t=>{
+  // Even positively attributed producer metadata still requires the existing
+  // historical no-review proof; refusal text alone never grants queue admission.
+  for(const kind of ['missing-stop','competing-attempt','competing-queue']){
+    const f=fixture(t),value=producerHandoff(f,'ownedScope.head');
+    value.qualification=ownQualification();
+    if(kind==='missing-stop')fs.unlinkSync(path.join(f.directory,'controls.jsonl'));
+    if(kind==='competing-attempt'){
+      fs.mkdirSync(path.join(f.org,'settle'));fs.writeFileSync(path.join(f.org,'settle/R-1.json'),JSON.stringify({kind:'settle',run:'R-1',head:f.head,native_launch_attempted:true}));
+    }
+    if(kind==='competing-queue'){fs.unlinkSync(f.reference);f.queue();}
+    f.prepare(value);const before=f.captured(),bytes=fs.readFileSync(f.reference);
+    assert.throws(()=>resolveReviewReference(f.args()),/ENOENT|STOP|attempt|replacement|retained/);
+    assert.deepEqual(f.captured(),before);assert.deepEqual(fs.readFileSync(f.reference),bytes);
+  }
+});
+
 const handoffRefusals={
   'queue proof':[
     v=>v.queueAttempted=true,v=>v.queueMutation=true,v=>v.queueAttempted='false',
@@ -226,8 +293,15 @@ const handoffRefusals={
     v=>v.source_run='R-other',v=>v.source_item='ENG-other',
   ],
   'native evidence':[
-    ...['reviewer','launchProcess','sessionBinding','watcher','verdict','review_item','review_run','agent','pane','terminal','session','pid','reviewer_session','reviewer_pane'].map(k=>v=>v[k]=k==='pid'?123:'existing'),
+    ...['reviewer','launchProcess','sessionBinding','watcher','verdict','native_qualification','review_item','review_run','agent','pane','terminal','session','pid','reviewer_session','reviewer_pane'].map(k=>v=>v[k]=k==='pid'?123:'existing'),
     v=>v.error='EPERM native refusal',v=>v.review={worker:'fixture-reviewer'},v=>v.stage='launched',
+  ],
+  qualification:[
+    ...['UNKNOWN',false,[],{}, {refusal:'PermissionError: synthetic sandbox refusal'},
+      {subject:'review',actor:'fixture-reviewer',refusal:'PermissionError: synthetic sandbox refusal'},
+      {subject:'review-launch',actor:'fixture-producer',refusal:'PermissionError: synthetic sandbox refusal'},
+    ].map(qualification=>v=>v.qualification=qualification),
+    v=>v.review={qualification:{subject:'producer',actor:'fixture-producer',refusal:'PermissionError: synthetic sandbox refusal'}},
   ],
   scope:[
     v=>v.ownedScope={head:'0'.repeat(40)},v=>v.source='0'.repeat(40),v=>v.head=v.head.slice(0,12),

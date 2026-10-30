@@ -92,6 +92,20 @@ corroboration for the record-backed proof. Any populated queue/parallel-start or
 waited-for-verdict flag must be false. Review strings and cap/suite/deferred
 metadata describe the intended handoff, not a review identity or verdict.
 
+A top-level `qualification` may retain the producing worker's own failed focused
+test run. The recognized object has exactly eight fields: `exitCode` is 1;
+`tests`, `pass`, and `fail` are non-negative safe integers, with positive `fail`
+and `tests = pass + fail`; `node` is a version string such as `v22.22.3`;
+`refusal` and `affectedControl` are non-empty strings; and `provingExecuted` is
+false. The enclosing producer handoff supplies the verified producing worker and
+source binding. Review-related text (`review`, `rev-`, `queue`, `pane`, or
+`session`, case-insensitive) in either descriptive field, missing/extra fields,
+malformed counts, and other qualification shapes remain UNKNOWN. In particular,
+`review.qualification` and `native_qualification` retain their existing refusal.
+The original failed test result stays unchanged; recognizing its producer scope
+does not make it PASS or prove that no review was attempted. The existing queue
+or historical record/STOP proof and competing-attempt guards still apply.
+
 A top-level producer handoff `watcher` can be the dispatch-time process waiting
 for that producer's own report, rather than a review attempt. Supported watcher
 objects contain a positive integer `pid` and only the optional dispatch fields

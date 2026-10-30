@@ -81,8 +81,8 @@ reserved decisions, STOP/HOLD, pools, native identity and original-attempt guard
 still apply. Selection does not serialize a wave: the existing detached starts
 fill the build pool using item-named lanes and normal report/cleanup paths.
 
-To let BCH start only its explicitly flagged wave while retaining its review
-freeze allowlists, its owner would set:
+After adopting a compatible accepted release, BCH's owner would set the following
+to start only its explicitly flagged wave while retaining its review allowlists:
 
 ```sh
 record config set ordinary_admission '{"selected_only":true}' --who-asked 'owning recorded selected-wave admission'

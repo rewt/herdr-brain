@@ -33,6 +33,8 @@ import {fold as historicalFold} from './fixtures/state-pre-session-bind.mjs';
 import {canonical} from '../messages/schema.mjs';
 import {nativeCloseoutWait,closeoutWaitState} from '../lib/closeout-status.mjs';
 import {setConfig} from '../lib/config-command.mjs';
+import {readProjectPolicy} from '../lib/config-policy.mjs';
+import {haltObservation,completeHaltPass} from '../line-service/halt-repair.mjs';
 import {inspectReviewAdmission} from '../line-service/review-admission.mjs';
 
 const hash=b=>createHash('sha256').update(b).digest('hex');
@@ -163,8 +165,9 @@ test('ordinary admission rereads policy and selection after capacity without sta
     const f=fixture(t,{reported:false});f.add([{type:'item.closed',id:'ENG-1',as:'done'},
       {type:'item.added',id:'G-9',kind:'goal',title:'Wave'},
       {type:'item.added',id:'ENG-10',role:'engineer',title:'Selected',parent:'G-9'}]);
-    ordinaryPolicy(f,{items:['G-9']});let changed=false;
-    const s=admissionService(f,{capacity:()=>{
+    ordinaryPolicy(f,{items:['G-9']});admissionPolicy(f,{hold_ordinary:false});let changed=false;
+    const s=admissionService(f,{capacity:kind=>{
+      assert.equal(kind,'build','this fixture isolates ordinary launches from independent review admission');
       if(!changed){changed=true;if(change==='policy')ordinaryPolicy(f,{items:[]});
         else f.add([{type:'item.updated',id:'ENG-10',fields:change==='flag'?{meta:{queue_selected:false}}:{parent:null}}]);}
       return{count:0,cap:4};
@@ -174,6 +177,24 @@ test('ordinary admission rereads policy and selection after capacity without sta
     assert.equal(Object.keys(effects.actions).some(k=>k.startsWith('dispatch:')),false,change);
     assert.ok(effects.ordinary_admission.held.some(h=>h.stage==='launch-mutation'),change);
   }
+});
+
+test('ordinary admission idle repair audits adopted policy before its record transaction and keeps the source revision',async t=>{
+  const f=fixture(t,{reported:false});await f.adopt();
+  f.add([{type:'item.closed',id:'ENG-1',as:'done'},
+    {type:'item.added',id:'ENG-10',role:'engineer',title:'Selected stalled work',meta:{queue_selected:true}}]);
+  ordinaryPolicy(f,{});const env=installedService(f),selected=readProjectPolicy(f.cwd,'lane',f.env);
+  const config=structuredClone(selected.config);config.ordinary_admission.items=['ENG-10'];
+  fs.writeFileSync(selected.file,JSON.stringify(config)+'\n');
+  const observation=haltObservation({...f.context(),identity:f.identity,config});
+  const release=noticeLock(path.join(f.directory,'pass.lock'));
+  try{
+    const result=completeHaltPass({repo:f.cwd,org:f.org,env,pass:'ordinary-adopted-policy',observation,route:'engineer',after:1,audit:path.join(f.directory,'passes.jsonl'),effects:path.join(f.directory,'effects.json')});
+    assert.ok(result.item);
+    const events=f.context().events,audit=events.findLast(e=>e.type==='config.changed'&&e.file===selected.file),repair=events.find(e=>e.type==='item.added'&&e.id===result.item);
+    assert.equal(audit.origin,'hand-edit');assert.ok(audit.seq<repair.seq,'policy audit completes before the repair transaction');
+    assert.deepEqual(audit.new_value.ordinary_admission,{selected_only:true,items:['ENG-10']});
+  }finally{release();}
 });
 
 test('ordinary admission selection preserves review holds original UNKNOWN attempts and normal cleanup',t=>{

@@ -17,6 +17,8 @@ import {itemLaunchHold} from '../lib/item-launch-hold.mjs';
 import {judgmentDispatchAllowed} from './decision-policy.mjs';
 import {observeOutcomeDecisions} from './outcome-decision.mjs';
 import {readProjectPolicy} from '../lib/config-policy.mjs';
+import {contentDigest} from '../lib/config-home.mjs';
+import {readPlainFile} from '../lib/files.mjs';
 
 const hash=value=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const repair=item=>item?.meta?.halt_repair===1;
@@ -59,12 +61,15 @@ export function completeHaltPass({repo,org,env,pass,previous,observation,route,a
   const episode=hash([binding.identity,org,observation.signature]);
   const progress={project:binding.identity,org,pass,signature:observation.signature,episode,count,item:null};
   if(!idle||count<after)return {progress,episode,count,item:null,dispatch:false};
+  // Audited policy reads may append a recovered/hand-edited config revision.
+  // Finish that outside the record transaction; fence its bytes at the intent.
+  const admission=readProjectPolicy(repo,'lane',env),ordinaryAdmission=admission.config.ordinary_admission;
   return transact(org,(events,state)=>{
     serviceRecordBinding({repo,org,env});
     for(const file of [path.join(binding.directory,'STOP'),path.join(repo,'.lane/supervisor/STOP'),path.join(repo,'.lane/supervisor/HOLD')])
       if(fs.existsSync(file))throw Error('STOP/HOLD prevents halt repair intent');
     // Input changed after the completed scan: let the next real pass observe it.
-    const ordinaryAdmission=readProjectPolicy(repo,'lane',env).config.ordinary_admission;
+    if((fs.existsSync(admission.file)?contentDigest(readPlainFile(admission.file,null)):undefined)!==admission.source_digest)throw Error('halt admission policy changed before record intent');
     if(JSON.stringify(readyItems({state,events,org,identity:binding.identity,actions,ordinaryAdmission}).map(i=>i.id).sort())!==JSON.stringify([...observation.ready].sort()))throw Error('halt ready inputs changed before record intent');
     const previous=[...state.items.values()].filter(repair);
     // Pending, working, held and ambiguous owners are exclusive even if the

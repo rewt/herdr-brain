@@ -277,6 +277,37 @@ test('producer record proof retains a competing queue, native UNKNOWN or verdict
   }
 });
 
+for(const kind of ['later-review-base','unrelated-mention'])test(`producer record proof ignores ${kind} in another review and preserves its history`,t=>{
+  const f=fixture(t);fs.writeFileSync(path.join(f.repo,'later-change'),'another producer');f.git('add','later-change');f.git('commit','-qm','Later producer');
+  const target={base:kind==='later-review-base'?f.head:f.base,head:f.git('rev-parse','HEAD')};
+  f.add([
+    {type:'item.added',id:'REV-99',role:'reviewer',title:'Another producer review',meta:{review_source_item:'ENG-99',review_source_run:'R-99',review_target:target,review_round_cap:1}},
+    {type:'change.reviewed',item:'ENG-99',head:target.head,base:target.base,review_item:'REV-99',review_run:'R-100',verdict:'PASS'},
+    {type:'review.finding-linked',item:'ENG-100',source_item:'ENG-99',head:target.head,base:target.base,review_item:'REV-99',review_run:'R-100',
+      ...(kind==='unrelated-mention'?{finding:{text:`Related context: ${JSON.stringify('ENG-1')} ${JSON.stringify('R-1')}`},evidence:{item:'ENG-1',run:'R-1',head:f.head}}:{})},
+    {type:'review.recovery-intent',item:'ENG-99',run:'R-99',target},
+  ]);
+  f.prepare(producerHandoff(f,'ownedScope.head'));const before=f.captured(),bytes=fs.readFileSync(f.reference);
+  resolveReviewReference(f.args());const c=f.context();
+  assert.equal(resolvedReference({...c,item:'ENG-1',run:'R-1',file:f.reference}),true);
+  assert.deepEqual(f.captured().subarray(0,before.length),before);assert.deepEqual(fs.readFileSync(f.reference),bytes);
+  assert.equal(f.queue().existing,false);assert.equal(f.queue().existing,true);
+  assert.equal([...f.context().state.items.values()].filter(q=>q.meta.review_source_run==='R-1').length,1);
+});
+
+for(const kind of ['source-run','source-item-head','source-item-target','finding-source','verdict','legacy-verdict'])test(`producer record proof retains a typed ${kind} without replacing it`,t=>{
+  const f=fixture(t);
+  const event=kind==='source-run'?{type:'review.original-continuation',item:'ENG-99',run:'R-1',target:{head:f.base}}:
+    kind==='source-item-head'?{type:'review.finding-linked',item:'ENG-1',head:f.head}:
+    kind==='source-item-target'?{type:'review.recovery-intent',item:'ENG-1',target:{head:f.head,base:f.base}}:
+    kind==='finding-source'?{type:'review.finding-linked',item:'ENG-100',source_item:'ENG-1',head:f.head,base:f.base}:
+    {type:kind==='verdict'?'change.reviewed':'review.verdict',item:'ENG-1',head:f.head,verdict:'PASS'};
+  f.add([event]);f.prepare(producerHandoff(f,'ownedScope.head'));const before=f.captured(),bytes=fs.readFileSync(f.reference);
+  const c=f.context();assert.throws(()=>referenceProof({...c,item:'ENG-1',run:'R-1',input:f.input()}),/retains a review attempt\/verdict; no replacement/);
+  assert.throws(()=>resolveReviewReference(f.args()),/retains a review attempt\/verdict; no replacement/);
+  assert.deepEqual(f.captured(),before);assert.deepEqual(fs.readFileSync(f.reference),bytes);
+});
+
 test('historical producer proof survives a later restart while its original audit prefix stays bound',t=>{
   const f=fixture(t),controls=path.join(f.directory,'controls.jsonl');f.prepare(producerHandoff(f,'source'));resolveReviewReference(f.args());
   fs.appendFileSync(controls,JSON.stringify(f.control('restart','restarted',new Date(Date.parse(f.reportAt)+1000).toISOString()))+'\n');

@@ -58,8 +58,11 @@ function producerRecordProof({events,repo,org,item,run,target,input,observation}
     !(report.report?.artifacts??[]).some(a=>typeof a==='string'&&a.split(/[ #]/)[0]===input.reference)||
     target.source_group?.report_sha256&&target.source_group.report_sha256!==report.sha256)throw Error('producer ingested report bytes/reference binding changed');
   if([...state.items.values()].some(q=>roleIs(q,'REV')&&(sameProducerQueue(q,item,run)||q.meta.review_source_item===item&&q.meta.review_target?.head===target.head))||
-    prefix.some(e=>(e.type==='change.reviewed'||e.type.startsWith('review.')&&e.type!=='review.reference-resolved')&&
-      [run,item,target.head].some(v=>JSON.stringify(e).includes(JSON.stringify(v)))))throw Error('producer record retains a review attempt/verdict; no replacement');
+    // Only the event's own source/target binds an attempt. A later review's
+    // base (or a mention in its evidence) is not a review of this producer.
+    prefix.some(e=>e.type==='change.reviewed'?e.item===item&&e.head===target.head:
+      e.type.startsWith('review.')&&e.type!=='review.reference-resolved'&&
+      (e.run===run||(e.item===item||e.source_item===item)&&(e.head===target.head||e.target?.head===target.head))))throw Error('producer record retains a review attempt/verdict; no replacement');
   const directory=lineDirectory(org,gitProject(repo).identity),controls=path.join(directory,'controls.jsonl'),all=reviewPlain(controls);
   const length=observation?.stop?.length??all.length;
   if(!Number.isSafeInteger(length)||length<1||length>all.length)throw Error('producer STOP audit prefix changed');

@@ -11,6 +11,10 @@ the project. Linked worktrees share canonical policy and its original path bases
 Legacy fields `entry`, `chat`, `always_args`, `host_suites` and `tier_suites`
 retain their documented no-effect treatment.
 
+For an operating revision on the same release, see the
+[offline config/brief control and owner runbook](project-operations.md). Its
+native live acceptance remains pending actual owner evidence.
+
 `record config set dispatch.max_sessions 8 --who-asked R-123` changes a project
 override. `validation.fast`, `promote.max_batch`, `housekeeping.enabled` and
 `pin.release` select their separate files; lane keys retain their existing names.

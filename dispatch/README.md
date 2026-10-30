@@ -582,6 +582,13 @@ There is no retry hint: inspect that original request and record before any
 continuation; never redispatch or replace it. A definite pre-spawn or record
 refusal remains a failure. Read-only session observations retain their bounds.
 
+A nonzero record start exit is read back before it is classified as a refusal:
+brief rendering and report-directory creation happen after `run.started` commits.
+A matching committed start, or an unavailable readback, returns the same typed
+unknown with its original child receipt and no unconditional retry hint. Only
+a successful readback with no matching start can establish a definite record
+refusal. This does not claim or launch the recorded run automatically.
+
 For an interrupted `starting` request with `native_launch_attempted: false`, the
 readback includes `start_recovery`: an open recorded run may have no pane yet.
 After the original command has exited and readback confirms exactly one current
@@ -589,6 +596,12 @@ matching committed start with no native launch, its conditional command resumes
 only that journal to claim the existing run and launch its worker. Missing or
 ambiguous starts require project supervisor inspection. The normal original-run,
 claim, source, native, CAS and STOP/HOLD checks still apply to continuation.
+New journals retain their original controller and custom record/lane/watcher CLI
+paths. Recovery and retry commands include that selection; journal continuation
+also inherits it and refuses conflicting overrides before changing the request.
+Older journals retain their existing explicit-flag/default behavior. If brief
+generation failed after append, `record brief R-n` can regenerate the missing
+brief after the underlying failure is resolved, before continuing the journal.
 
 A second dispatch into the same item's lane returns `result: "blocked"` with
 `code: "DISPATCH_LANE_OCCUPIED"` and the owning `occupied` run/journal/workspace.

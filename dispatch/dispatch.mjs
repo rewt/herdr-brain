@@ -42,7 +42,7 @@ import { dispatchLaneName } from '../lib/lane-name.mjs';
 
 const local = (file) => fileURLToPath(new URL(file, import.meta.url));
 const { values: opt, positionals } = parseArgs({ usage: "Usage: node dispatch/dispatch.mjs ITEM --lane TOPIC --route ROUTE --brief FILE [OPTIONS] | --retry R-n|JOURNAL | --status R-n|JOURNAL\nAdmission counts running native workers/reviewers and durable uncertain starts under dispatch.max_sessions. Unlanded lifecycle history is diagnostic only. --from-run retains same-item/current-run guards; --unblocks records a genuine landing dependency and never bypasses native capacity.", allowPositionals: true, options: {
-  controller: { type: 'string', default: BRAIN_CONTROLLER },
+  controller: { type: 'string' },
   repo: { type: 'string', default: process.cwd() }, org: { type: 'string', default: process.env.ORG_DIR },
   lane: { type: 'string' }, route: { type: 'string' }, brief: { type: 'string' }, report: { type: 'string' },
   awaited: { type: 'boolean' }, 'awaited-step': { type: 'string' },
@@ -59,9 +59,12 @@ const { values: opt, positionals } = parseArgs({ usage: "Usage: node dispatch/di
   'org-cli': { type: 'string' }, 'lane-cli': { type: 'string' }, 'watch-cli': { type: 'string' },
 }});
 const cli = (name, fallback) => opt[`${name}-cli`] ? [opt[`${name}-cli`]] : [process.execPath, local(fallback)];
-const recordCLI = cli('org', '../bin/org.mjs');
-const laneCLI = cli('lane', '../lanes/lane.mjs');
-const watchCLI = cli('watch', '../watch/watch.mjs');
+let recordCLI = cli('org', '../bin/org.mjs');
+let laneCLI = cli('lane', '../lanes/lane.mjs');
+let watchCLI = cli('watch', '../watch/watch.mjs');
+const invocationKeys = ['controller', 'org-cli', 'lane-cli', 'watch-cli'];
+const invocation = () => Object.fromEntries(invocationKeys.filter(key => opt[key] !== undefined).map(key => [key, opt[key]]));
+const invocationFlags = () => Object.entries(invocation()).flatMap(([key, value]) => [`--${key}`, value]);
 let job, journal, lock, contender, ownsLock = false, observationDeadline;
 let releaseAdmission;
 let controllerDeadline=Infinity;
@@ -297,7 +300,7 @@ function retryCommand(error) {
   if (error && (['RUN_OWNED_ELSEWHERE','DISPATCH_OUTCOME_UNKNOWN','DISPATCH_LANE_OCCUPIED'].includes(error.code) ||
       /^(?:RUN_OWNED_ELSEWHERE:|original dispatch was terminally abandoned;|run is already abandoned or reported;|resume launch\/delivery outcome must be retained;)/.test(error.message))) return undefined;
   return [process.execPath, local('./dispatch.mjs'), '--repo', job.repo, '--org', job.org,
-    '--retry', job.run ?? journal].map(quote).join(' ');
+    ...invocationFlags(), '--retry', job.run ?? journal].map(quote).join(' ');
 }
 function prepareSessionBinding(run) {
   const binding = job.sessionBinding;
@@ -412,6 +415,17 @@ async function main() {
     lockJob();
     const saved = JSON.parse(fs.readFileSync(journal, 'utf8'));
     if (saved.org !== fs.realpathSync(opt.org)) throw new Error('retry belongs to a different record');
+    // New journals retain their original command selection. Older requests keep
+    // their existing explicit-flag/default behavior; never backfill their bytes.
+    for (const key of invocationKeys) {
+      if (saved.invocation && opt[key] !== undefined && opt[key] !== saved.invocation[key])
+        throw new Error(`--retry cannot replace saved --${key}`);
+      opt[key] ??= saved.invocation?.[key];
+    }
+    opt.controller ??= BRAIN_CONTROLLER;
+    recordCLI = cli('org', '../bin/org.mjs');
+    laneCLI = cli('lane', '../lanes/lane.mjs');
+    watchCLI = cli('watch', '../watch/watch.mjs');
     // Refuse before admission, recovery or stage effects. Assigning job would
     // also let the failure handler mutate this retained request and completion.
     if (opt.abandon && ['open', 'start', 'starting'].includes(saved.stage))
@@ -459,6 +473,7 @@ async function main() {
       job.predecessor ??= { run: job.fromRun, binding: requireController(readOwnedRun(job.org, job.fromRun), opt.controller) };
     }
   } else {
+    opt.controller ??= BRAIN_CONTROLLER;
     if(opt['continue-review'])throw Error('--continue-review requires the original --retry journal');
     if(opt['continue-preflight'])throw Error('--continue-preflight requires the original --retry journal');
     let predecessor;
@@ -529,6 +544,7 @@ async function main() {
     fs.mkdirSync(directory, { recursive: true });
     journal = path.join(directory, `${token}.json`);
     job = { token, repo, org, common, predecessor, release: bundleRelease(), sourceSelection: sourceSelection ?? null,
+      invocation: invocation(),
       operatorRecordCommand: [process.execPath, local('../bin/org.mjs')],
       operatorRecordRoot: bundleRelease().root,
       operatorPlainText: true,
@@ -603,8 +619,7 @@ async function main() {
     try{
       if(!ownsLock||fs.readFileSync(lock,'utf8')!==String(process.pid))throw Error('detached request ownership changed before handoff');
       fs.unlinkSync(lock);ownsLock=false;if(contender){fs.unlinkSync(contender);contender=null;}
-      const args=[local('../dispatch/dispatch.mjs'),'--retry',journal,'--repo',job.repo,'--org',job.org,'--controller',opt.controller,
-        ...(opt['org-cli']?['--org-cli',opt['org-cli']]:[]),...(opt['lane-cli']?['--lane-cli',opt['lane-cli']]:[]),...(opt['watch-cli']?['--watch-cli',opt['watch-cli']]:[])];
+      const args=[local('../dispatch/dispatch.mjs'),'--retry',journal,'--repo',job.repo,'--org',job.org,...invocationFlags()];
       const child=spawn(process.execPath,args,{cwd:job.repo,env:process.env,detached:true,stdio:['ignore',output,output]});child.on('error',e=>fs.appendFileSync(`${journal}.driver.log`,`${e.message}\n`));child.unref();
       fs.mkdirSync(`${journal}.driver`,{recursive:true});
       const launch={pid:child.pid??null,at:new Date().toISOString(),journal,command_limit_ms:null,controller_budget_ms:null,stop_policy:'measured no-output AND confirmed no-activity; unknown retained',...(preflight?{continuation:preflight.capability}:{})};
@@ -680,6 +695,16 @@ async function main() {
       ...(job.reuse ? ['--meta', `continuation_of=${job.reuse}`, '--meta', 'same_session=true'] : []),
       ...(job.report ? ['--report', path.resolve(job.workspace, job.report)] : [])]); }
     catch (error) {
+      // A nonzero exit can follow run.started (brief/report preparation happens
+      // after append). Only a successful readback with no match can establish
+      // that a record refusal did not commit this request's start.
+      let starts;
+      try { starts = requestStarts(); }
+      catch (readbackError) { error.message += `; start readback unavailable: ${readbackError.message}`; }
+      if (!starts || starts.length) {
+        error.code = 'DISPATCH_OUTCOME_UNKNOWN';
+        error.recordRefusal = false;
+      }
       if (error.recordRefusal && /R-\d+ is superseded by R-\d+/.test(error.message)) error.code = 'FROM_RUN_SUPERSEDED';
       job.startRefused = error.recordRefusal === true; save(); throw error;
     }
@@ -903,7 +928,7 @@ catch (error) {
       ...(job.stage === 'starting' && job.native_launch_attempted === false ? { start_recovery: {
         condition: 'The original command has exited, and readback confirms exactly one current matching committed start with no native launch. A run can be recorded open without a pane.',
         action: 'Resume only this original journal to claim that recorded run and launch its worker; do not issue a new dispatch. Missing or ambiguous starts require project supervisor inspection.',
-        command: [process.execPath, local('./dispatch.mjs'), '--repo', job.repo, '--org', job.org, '--retry', journal].map(quote).join(' '),
+        command: [process.execPath, local('./dispatch.mjs'), '--repo', job.repo, '--org', job.org, ...invocationFlags(), '--retry', journal].map(quote).join(' '),
       } } : {}),
     } : undefined;
     if (job && journal && ownsLock) {

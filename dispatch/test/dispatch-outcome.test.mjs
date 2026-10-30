@@ -2,6 +2,7 @@ import test from '../../test/helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { fixture, DISPATCH, RECORD, promptCalls } from './dispatch-fixture.mjs';
 
 const events = f => fs.readFileSync(path.join(f.org, 'events.jsonl'), 'utf8').trim().split('\n').map(JSON.parse);
@@ -14,6 +15,10 @@ import fs from 'node:fs';
 import {spawnSync} from 'node:child_process';
 const args=process.argv.slice(2),selected=args[0]===${JSON.stringify(action)},mode=${JSON.stringify(mode)};
 if(selected&&mode==='refused'){console.error('record: injected definite refusal');process.exit(1);}
+if(selected&&mode==='readback-unavailable'){
+  fs.writeFileSync(${JSON.stringify(path.join(f.root, 'readback-unavailable'))},'failed');
+  console.error('record: injected definite refusal');process.exit(1);
+}
 if(selected&&mode==='uncommitted-signal')process.kill(process.pid,'SIGTERM');
 const r=spawnSync(process.execPath,[${JSON.stringify(original)},...args],{stdio:'inherit'});
 if(r.status!==0)process.exit(r.status??1);
@@ -29,7 +34,22 @@ if(selected){
   fs.writeFileSync(preload, `import cp from 'node:child_process';
 import fs from 'node:fs';
 import {syncBuiltinESMExports} from 'node:module';
+if(process.argv[1]===${JSON.stringify(RECORD)}&&process.argv[2]==='start'&&${JSON.stringify(mode)}==='brief-error'){
+  const {UserError}=await import(${JSON.stringify(new URL('../../lib/store.mjs', import.meta.url).href)});
+  const rename=fs.renameSync;
+  fs.renameSync=function(from,to,...args){
+    if(String(to).endsWith('/runs/R-1/brief.md'))throw new UserError('injected brief failure after committed start');
+    return rename.call(this,from,to,...args);
+  };
+}
 if(process.argv[1]===${JSON.stringify(DISPATCH)}){
+  const read=fs.readFileSync;
+  fs.readFileSync=function(file,...args){
+    if(${JSON.stringify(mode)}==='readback-unavailable'&&String(file)===${JSON.stringify(path.join(f.org, 'events.jsonl'))}&&
+       fs.existsSync(${JSON.stringify(path.join(f.root, 'readback-unavailable'))})&&new Error().stack.includes('at requestStarts '))
+      throw Error('injected unavailable start readback');
+    return read.call(this,file,...args);
+  };
   const original=cp.spawnSync;
   cp.spawnSync=function(exe,args,options){
     const owned=args.includes('--owned-command');
@@ -52,7 +72,7 @@ if(process.argv[1]===${JSON.stringify(DISPATCH)}){
 }
 `);
   const env = { ...f.env, NODE_OPTIONS: `${f.env.NODE_OPTIONS ?? ''} --import=${preload}` };
-  const start = () => f.start([action === 'dispatch' ? '--lane-cli' : '--org-cli', wrapper], { env });
+  const start = (extra = []) => f.start([action === 'dispatch' ? '--lane-cli' : '--org-cli', wrapper, ...extra], { env });
   return { f, start };
 }
 
@@ -90,6 +110,104 @@ function assertUnknown(f, result, stage, committed) {
   return { receipt, saved };
 }
 
+function recoverOriginal(f, receipt, controller = 'brain') {
+  // Execute exactly the quoted command offered to the caller, without the
+  // fixture's common CLI flags masking omissions in that command.
+  const recovered = spawnSync('/bin/sh', ['-c', receipt.readback.start_recovery.command], {
+    cwd: f.repo, env: f.env, encoding: 'utf8',
+  });
+  assert.equal(recovered.status, 0, recovered.stderr + recovered.stdout);
+  assert.equal(JSON.parse(recovered.stdout).run, 'R-1');
+  assert.deepEqual(f.show(f.item).runs, ['R-1']);
+  assert.equal(f.show('R-1').owner.controller, controller);
+  assert.equal(events(f).filter(e => e.type === 'run.started').length, 1);
+  assert.equal(events(f).filter(e => e.type === 'run.claimed').length, 1);
+  assert.equal(f.calls().filter(c => c.type === 'lane' && c.a[0] === 'dispatch').length, 1);
+  assert.equal(f.calls().filter(c => c.type === 'watch').length, 1);
+  assert.equal(promptCalls(f).length, 1);
+  const completions = events(f).filter(e => e.type === 'dispatch.completed');
+  assert.equal(completions.length, 2);
+  assert.equal(completions[0].failure.code, 'DISPATCH_OUTCOME_UNKNOWN');
+  assert.deepEqual(completions[0].failure.receipt, receipt.receipt);
+  assert.equal(completions[1].stage, 'complete');
+  assert.equal(completions[1].exit_code, 0);
+  assert.equal(completions[1].failure, null);
+  assert.equal(completions[1].journal, completions[0].journal);
+  assert.equal(completions[1].attempt, completions[0].attempt);
+  assert.equal(completions[1].run, 'R-1');
+}
+
+test('a nonzero record start after committed brief failure is unknown and its exact command recovers the original run', t => {
+  const { f, start } = interruptedCommand(t, 'brief-error');
+  const { receipt } = assertUnknown(f, start(['--controller', 'custom-controller']), 'starting', true);
+  assert.equal(receipt.receipt.status, 1); assert.equal(receipt.receipt.signal, null);
+  assert.equal(receipt.receipt.stdout, '');
+  assert.match(receipt.receipt.stderr, /^record: injected brief failure after committed start/m);
+  const saved = JSON.parse(fs.readFileSync(receipt.journal));
+  assert.equal(saved.invocation.controller, 'custom-controller');
+  for (const key of ['controller', 'org-cli', 'lane-cli', 'watch-cli']) {
+    assert.ok(receipt.readback.start_recovery.command.includes(`'--${key}' '${saved.invocation[key]}'`));
+  }
+  // The injected render failure happened before a brief existed; restore that
+  // read-only artifact through its real supported command before continuation.
+  f.rec(['brief', 'R-1']);
+  recoverOriginal(f, receipt, 'custom-controller');
+});
+
+test('a nonzero record start after report directory failure is unknown without a record refusal prefix', t => {
+  const f = fixture(t), parent = path.join(f.root, 'report-parent');
+  fs.writeFileSync(parent, 'not a directory');
+  const { receipt } = assertUnknown(f, f.start(['--report', path.join(parent, 'report.md')]), 'starting', true);
+  assert.equal(receipt.receipt.status, 1); assert.equal(receipt.receipt.signal, null);
+  assert.equal(receipt.receipt.stdout, ''); assert.match(receipt.receipt.stderr, /EEXIST|ENOTDIR/);
+});
+
+test('saved command selection resumes a typed unknown by journal without repeated CLI flags', t => {
+  const { f, start } = interruptedCommand(t, 'signal');
+  const { receipt } = assertUnknown(f, start(['--controller', 'custom-controller']), 'starting', true);
+  const command = [process.execPath, DISPATCH, '--repo', f.repo, '--org', f.org, '--retry', receipt.journal];
+  const recovered = spawnSync(command[0], command.slice(1), { cwd: f.repo, env: f.env, encoding: 'utf8' });
+  assert.equal(recovered.status, 0, recovered.stderr + recovered.stdout);
+  assert.equal(f.show('R-1').owner.controller, 'custom-controller');
+  assert.equal(promptCalls(f).length, 1);
+  assert.equal(f.calls().filter(c => c.type === 'watch').length, 1);
+  assert.deepEqual(f.show(f.item).runs, ['R-1']);
+});
+
+test('an older journal without saved command selection retains explicit flag recovery', t => {
+  const { f, start } = interruptedCommand(t, 'signal');
+  const { receipt, saved } = assertUnknown(f, start(), 'starting', true);
+  delete saved.invocation;
+  fs.writeFileSync(receipt.journal, JSON.stringify(saved));
+  const recovered = f.dispatch(['--retry', receipt.journal]);
+  assert.equal(recovered.status, 0, recovered.stderr + recovered.stdout);
+  assert.equal(promptCalls(f).length, 1);
+  assert.deepEqual(f.show(f.item).runs, ['R-1']);
+  assert.equal(JSON.parse(fs.readFileSync(receipt.journal)).invocation, undefined);
+});
+
+test('a failed start readback cannot turn a nonzero record exit into a definite refusal', t => {
+  const { f, start } = interruptedCommand(t, 'readback-unavailable');
+  const { receipt } = assertUnknown(f, start(), 'starting', false);
+  assert.match(receipt.reason, /start readback unavailable: injected unavailable start readback/);
+  assert.equal(receipt.receipt.status, 1);
+  assert.match(receipt.receipt.stderr, /record: injected definite refusal/);
+});
+
+test('retry cannot replace saved command selection or mutate the retained unknown attempt', t => {
+  const { f, start } = interruptedCommand(t, 'signal');
+  const { receipt } = assertUnknown(f, start(), 'starting', true);
+  const before = fs.readFileSync(receipt.journal);
+  for (const key of ['controller', 'org-cli', 'lane-cli', 'watch-cli']) {
+    const refused = f.dispatch(['--retry', receipt.journal, `--${key}`, 'replacement']);
+    assert.equal(refused.status, 1, refused.stderr + refused.stdout);
+    assert.match(refused.stderr, new RegExp(`cannot replace saved --${key}`));
+    assert.deepEqual(fs.readFileSync(receipt.journal), before);
+  }
+  assert.equal(events(f).filter(e => e.type === 'dispatch.completed').length, 1);
+  assert.equal(promptCalls(f).length, 0);
+});
+
 test('a slow real record start commits before spawnSync ETIMEDOUT and returns typed unknown without replay', t => {
   const { f, start } = interruptedCommand(t, 'timeout');
   const { receipt, saved } = assertUnknown(f, start(), 'starting', true);
@@ -99,7 +217,8 @@ test('a slow real record start commits before spawnSync ETIMEDOUT and returns ty
   assert.deepEqual(receipt.receipt, { ...native, error: native.error.code });
   assert.equal(saved.run, null); assert.equal(saved.native_launch_attempted, false);
   assert.equal(f.calls().filter(c => c.type === 'lane' && c.a[0] === 'dispatch').length, 0);
-  t.diagnostic('One committed run, original ETIMEDOUT/SIGTERM receipt, one retained unknown completion, zero launches or retry hints.');
+  recoverOriginal(f, receipt);
+  t.diagnostic('Initial unknown retains ETIMEDOUT/SIGTERM with zero launches; exact recovery claims the same run, launches once and adds one successful completion.');
 });
 
 for (const mode of ['signal', 'uncommitted-signal']) test(`${mode} record start is unknown whether or not it committed`, t => {

@@ -301,7 +301,11 @@ function prepareSessionBinding(run) {
 }
 async function bindSession() {
   const binding = job.sessionBinding;
-  if (!binding || binding.status === 'bound' || binding.status === 'unbound' && !binding.proposed) return;
+  if (!binding || binding.record_refusal || binding.status === 'bound' ||
+      binding.status === 'unbound' && (!opt.retry || !binding.proposed)) return;
+  // Only explicit retry reopens an unbound saved proposal. Automatic replay
+  // still selects observing proposals, and a recorded refusal stays final.
+  if (binding.status === 'unbound') { binding.status = 'observing'; save(); }
   // An exact saved proposal may be retried after the deadline. Observation may not.
   observationDeadline = binding.proposed ? undefined : Date.parse(binding.deadline);
   try {

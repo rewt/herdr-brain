@@ -23,7 +23,9 @@ function onlyCompletion(f, before, journal) {
   const added = after.subarray(before.length).toString().trim().split('\n').filter(Boolean).map(JSON.parse);
   assert.deepEqual(added.map(e => [e.type, e.journal, e.stage, e.run, e.exit_code]), [['dispatch.completed', journal, 'open', null, 1]]);
 }
-test('timely saved unbound proposal retries through dispatch without a new native observation or prompt', t => {
+for (const refused of [false, true]) test(refused
+  ? 'explicit dispatch retry keeps a saved proposal record refusal final without native observation or prompt'
+  : 'timely saved unbound proposal retries through dispatch without a new native observation or prompt', t => {
   const f = fixture(t, { lateSession: 'delayed' }), first = f.start(); assert.equal(first.status, 0, first.stderr);
   const file = f.jobs()[0], job = JSON.parse(fs.readFileSync(file)), b = job.sessionBinding;
   const eventFile = path.join(f.org, 'events.jsonl');
@@ -33,13 +35,27 @@ test('timely saved unbound proposal retries through dispatch without a new nativ
   b.prompted_at = b.proposed.prompted_at = new Date(at).toISOString();
   b.deadline = b.proposed.deadline = new Date(at + 60000).toISOString();
   b.proposed.observed_at = new Date(at + 30000).toISOString();
+  if (refused) { b.record_refusal = true; b.reason = 'original record refusal'; }
   fs.writeFileSync(file, JSON.stringify(job));
   const reads = () => fs.readFileSync(path.join(f.root, 'calls'), 'utf8').trim().split('\n').map(JSON.parse)
     .filter(c => c.a[0] === 'pane' && c.a[1] === 'process-info').length;
   const before = reads(), retry = f.dispatch(['--retry', job.run]); assert.equal(retry.status, 0, retry.stderr);
   const after = JSON.parse(fs.readFileSync(file));
-  assert.equal(after.sessionBinding.status, 'bound'); assert.equal(reads(), before); assert.equal(promptCalls(f).length, 1);
+  assert.equal(after.sessionBinding.status, refused ? 'unbound' : 'bound');
+  assert.equal(reads(), before); assert.equal(promptCalls(f).length, 1);
   assert.deepEqual(after.sessionBinding.proposed, b.proposed); assert.equal(after.sessionBinding.deadline, b.deadline);
+  assert.deepEqual(after.watcher, job.watcher);
+  if (refused) {
+    assert.deepEqual(after.sessionBinding, b);
+    assert.equal(f.state().sessionBindings.get(job.run), undefined);
+  } else {
+    assert.deepEqual(after.sessionBinding.commit_attempts.slice(0, -1), b.commit_attempts);
+    assert.equal(after.sessionBinding.commit_attempts.length, b.commit_attempts.length + 1);
+    const binds = f.state().sessionBindings.get(job.run);
+    assert.equal(binds.length, 1);
+    assert.equal(after.sessionBinding.commit_receipt.event_seq, binds[0].seq);
+    assert.equal(after.sessionBinding.commit_receipt.recorded, true);
+  }
   assert.equal(effectiveWorkerIdentity(f.state().runs.get(job.run), f.state()).identity_conflict, false);
 });
 test('fake Herdr readers see complete worker state while a concurrent writer is paused mid-write', async t => {

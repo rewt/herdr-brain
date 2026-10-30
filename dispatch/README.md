@@ -418,6 +418,10 @@ recovery, discovers a session, sends input, or changes the saved release. The
 record writer rechecks the claim inside its transaction. Legacy/unclaimed or
 foreign operations remain held; `unbound` proposals and recorded refusals are
 final for automatic replay.
+An explicit `dispatch --retry` may reopen an `unbound` saved proposal without a
+recorded refusal. It commits only that original timely observation, even after
+expiry, without observing again or renewing the deadline. Recorded refusals
+remain final for explicit retry too.
 `sessionBinding.commit_attempts` preserves the original attempt and any error
 code, exit status, signal and CLI output available to dispatch. Unknown record
 outcomes may retry the same fact; a refusal stops. Successful commits save a

@@ -1,6 +1,6 @@
 # Routine runtime updates and stable adoption
 
-The 30 October 2026 operator direction on ENG-1126 adopts the BCH model recorded
+The 30 October 2026 operator direction on ENG-1126 adopts the release model first proven on BCH and recorded
 in `.org/evidence/STABLE-RELEASE-20261027/adopt-bch-release-model.md`: nothing
 gates main, producers run only new or affected checks once, one asynchronous
 capped review follows, and findings fix forward. Full final coverage belongs to
@@ -15,7 +15,7 @@ It does not execute or certify landing checks again. The producer's report and
 existing validation receipts remain the evidence of their actual selected scope.
 
 Live acceptance follows the same rule: it is UNRUN for each routine internal
-update, required for the exact stable candidate that BCH adopts. Repeating it on
+update, required for the exact stable candidate that a consumer project adopts. Repeating it on
 each internal update would retain a per-candidate gate after the offline gate
 was removed. The routine safety net is affected landing tests, fix forward,
 immutable bundles and rollback. Stable adoption retains one full coverage

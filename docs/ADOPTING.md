@@ -15,7 +15,7 @@ Releases live under
 `~/.local/share/herdr-monitor/releases`; `current` selects the installed product.
 Activation manages three launchers: `org`, its `record` alias, and `lane`.
 See [machine releases](../herdr/README.md) for overrides, status and rollback.
-For a stable release that BCH adopts, `build TAG --live` retains the full path:
+For a stable release that a consumer project (such as BCH) adopts, `build TAG --live` retains the full path:
 one full final offline coverage obligation, actual live acceptance of that exact
 candidate and corrected Majors before stable adoption. Valid completed evidence
 is reused; only failed, affected or unrun controls are rerun. Existing

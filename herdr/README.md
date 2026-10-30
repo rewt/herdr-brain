@@ -81,7 +81,7 @@ Keep their actual scope and failures in the owning record. A missing check stays
 unproven and does not become a new activation readiness gate.
 
 Per-candidate live acceptance follows the same rule as offline coverage: UNRUN for
-routine updates, required for the stable candidate that BCH adopts. Repeating the
+routine updates, required for the stable candidate that a consumer project adopts. Repeating the
 native harness for several internal updates each day would recreate the removed
 gate. Landing checks, fix forward, immutable bundles, rollback and separation from
 pinned consumers are the routine safety net. Full final coverage runs once before

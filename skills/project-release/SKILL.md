@@ -27,7 +27,7 @@ adoption; do not add a full-suite or native acceptance gate to each internal upd
 Repeated per-candidate live runs would recreate the removed routine gate.
 This Brain choice does not change BCH's own release procedure or authority.
 
-Before a stable release that BCH adopts, resolve all Major correction obligations
+Before a stable release that a consumer project adopts, resolve all Major correction obligations
 with their specific checks. One full offline coverage obligation, actual live
 acceptance of the exact stable candidate, package sealing and installed-consumer
 readback must support the stable activation/adoption decision. Brain's

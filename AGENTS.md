@@ -95,7 +95,7 @@ Do not restart services/watchers or edit saved runtimes/pins. Only the canonical
 supervisor starts housekeeping or releases. Routine runtime updates use landing
 checks, with full coverage and per-candidate live acceptance explicitly UNRUN;
 they may activate with the existing rollback and pin separation. Full coverage
-runs once before a stable release that BCH adopts, reusing valid evidence and
+runs once before a stable release that a consumer project adopts, reusing valid evidence and
 rerunning only failed, affected or unrun controls. Actual live acceptance of that
 stable candidate and corrected Majors precede stable adoption. Publishing, secrets,
 funds and adoption retain their actual outward/native checks.

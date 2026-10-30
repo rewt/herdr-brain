@@ -87,7 +87,7 @@ const journals = () => fs.readdirSync(path.join(org, 'dispatch')).filter(n => n.
 // Join dispatch in the original call so each stage is observed before moving
 // on. All other product commands execute unchanged; native/model IO is scripted.
 const command = (exe, args, options) => run(exe, args[0]?.endsWith('/dispatch/dispatch.mjs')
-  ? [...args.filter(a => a !== '--detach'), '--watch-cli', path.join(root, 'bin/watch')] : args, options);
+  ? [...args.filter(a => a !== '--detach'), '--watch-cli', path.join(root, args[0].startsWith(config.successor??'\0')?'bin/watch-successor':'bin/watch')] : args, options);
 const service = maxStarts => createLineService({ repo, org, to: 'scratch-supervisor', runtimeHome: home,
   env: { ...env, HERDR_BRAIN_ROOT: config.development }, maxStarts, haltAfter: 100, command });
 service(1).pass();
@@ -135,7 +135,7 @@ assert.equal(git(['rev-parse', 'main']), head);
 stage('land', { base, head });
 // The producer is still working and its watcher/callback is live. Exercise the
 // existing maintenance path before publishing that producer's report.
-const captured=()=>Object.fromEntries(fs.readdirSync(path.join(org,'dispatch')).sort().map(name=>{
+const captured=()=>Object.fromEntries(fs.readdirSync(path.join(org,'dispatch')).filter(name=>name.endsWith('.json')).sort().map(name=>{
   const bytes=fs.readFileSync(path.join(org,'dispatch',name));
   return [name,createHash('sha256').update(bytes).digest('hex')];
 }));

@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {configFixture} from './helpers/config-home-fixture.mjs';
-import {requireRecordCompatibility} from '../lib/record-compatibility.mjs';
+import {requireRecordCompatibility,requireRecordFileCompatibility} from '../lib/record-compatibility.mjs';
 import {runRelease} from '../lib/releases.mjs';
 import {transact} from '../lib/store.mjs';
 
@@ -44,4 +44,17 @@ test('session hook selects installed resolvers ahead of a development canary',t=
   assert.equal(hook.status,0,hook.stderr);
   const result=spawnSync('/bin/sh',['-c','. "$1"; record','session',file],{env:{...f.env,PATH:canary+':/usr/bin:/bin'},encoding:'utf8'});
   assert.equal(result.status,0,result.stderr);assert.equal(result.stdout.trim(),'installed');
+});
+
+test('streaming admission preserves decision-reader receipts and refuses a torn or incompatible tail',t=>{
+  const f=configFixture(t,{custom:true}),file=path.join(f.scratch,'record.jsonl');
+  const events=[{type:'decision.restart',seq:1},{type:'decision.consequence',seq:2},
+    {type:'item.added',id:'ENG-1',title:'Unicode '+ 'é'.repeat(40000),seq:3},
+    {type:'item.acceptance-amended',id:'ENG-1',accept:['Current'],seq:4}];
+  fs.writeFileSync(file,events.map(JSON.stringify).join('\n')+'\n');
+  assert.deepEqual(requireRecordFileCompatibility(f.bundle,file),requireRecordCompatibility(f.bundle,events));
+  fs.appendFileSync(file,'{"type":');
+  assert.throws(()=>requireRecordFileCompatibility(f.bundle,file),/incomplete record/);
+  fs.writeFileSync(file,JSON.stringify({type:'item.future',seq:5})+'\n');
+  assert.throws(()=>requireRecordFileCompatibility(f.bundle,file),/record-incompatible:.*item.future/);
 });

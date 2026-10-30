@@ -189,7 +189,7 @@ with empty stdout, no signal/error, and the exact promotion-guard diagnostic
 `record changed repeatedly while preparing a consistent read; no mutation attempted`.
 That error comes from pure plan preparation before the record commit/append;
 it is not a native refusal or an unreadable queue authorization. The exact
-project queue path and whole diagnostic must match the saved receipt. No review
+project queue path (when resolved) and whole diagnostic must match the saved receipt. No review
 item, run or verdict may exist for that source, and normal review inventory,
 landed target, claim, admission, STOP/HOLD and record CAS checks still apply.
 

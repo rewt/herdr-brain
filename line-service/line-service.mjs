@@ -229,6 +229,11 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         log({action:'hold',...row,boundary,reason,canonical_key:key,scope,...(alert?{inspection_due:true}:{}),notice_record:{key,entry}});
       };
       const effect = (key, run, binding, operation, safe=false, outcomeReadback=false, before) => {
+        const retain=prior=>{
+          log({ action: 'effect-retained', key, state: prior.state });
+          if (prior.state !== 'complete') note(key, prior.error ?? 'prior failed/uncertain effect retained; inspect its existing receipt, do not replay');
+          return prior;
+        };
         const pendingHandoff = result => key.startsWith('closeout:') && Array.isArray(result?.evaluated) && result.evaluated.length===0 &&
           Array.isArray(result.restart?.keys) && result.restart.keys.length>0 && result.successor?.pending===true &&
           result.successor.reason==='fresh drain required' && JSON.stringify(result.successor.keys)===JSON.stringify(result.restart.keys);
@@ -236,9 +241,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
           const prior = effects.actions[key];
           const failure=prior.failure??outcomeFailure(prior);
           if(!safe||prior.state==='complete'&&!pendingHandoff(prior.result)||failure.kind==='fence'||prior.state!=='complete'&&!outcomeReadback){
-            log({ action: 'effect-retained', key, state: prior.state });
-            if (prior.state !== 'complete') note(key, prior.error ?? 'prior failed/uncertain effect retained; inspect its existing receipt, do not replay');
-            return prior;
+            return retain(prior);
           }
         }
         if(expired())return;
@@ -250,7 +253,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         if(before&&!before(fresh))return;
         const prior=effects.actions[key],history=prior?[...(prior.history??[]),Object.fromEntries(Object.entries(prior).filter(([k])=>k!=='history'))]:[];
         const continuation=prior&&typeof outcomeReadback==='function'?outcomeReadback(fresh):null;
-        if(prior&&typeof outcomeReadback==='function'&&!continuation)return prior;
+        if(prior&&typeof outcomeReadback==='function'&&!continuation)return retain(prior);
         const entry = effects.actions[key] = { state: 'started',owner:'line-service',subject:key, at: now(),...(history.length?{history}:{}),...(continuation?{queue_recovery:continuation}:{}), ...(binding ? { review_target: binding, review_operation: operation } : {}) }; save();
         if(continuation)log({action:'review-queue-no-mutation',key,proof:continuation});
         try {

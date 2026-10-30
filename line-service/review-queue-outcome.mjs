@@ -23,8 +23,9 @@ export function reviewQueueNoMutation({entry,key,events,state,repo,org,identity,
   // deriving a pure queue-review plan, before plannedAppend's commit/append.
   // Genuine queue/STOP/native refusals and arbitrary status-3 errors stay held.
   const queue=path.join(identity,'promote/queue.json');
-  const diagnostic=`record: promotion write guard REFUSED (fail-closed): cannot read the project's promotion queue ${queue}: record changed repeatedly while preparing a consistent read; no mutation attempted. Stale entries never expire; repair/inspect the queue before writing. Write the information on an unguarded parent or in the supervisor digest meanwhile, and copy it to the member after landing and reconciliation.\n`;
-  if(r.stderr!==diagnostic||entry.error!==diagnostic.trim())return null;
+  // recordProject can exhaust its snapshot before the queue path is resolved.
+  const diagnostics=['',` ${queue}`].map(location=>`record: promotion write guard REFUSED (fail-closed): cannot read the project's promotion queue${location}: record changed repeatedly while preparing a consistent read; no mutation attempted. Stale entries never expire; repair/inspect the queue before writing. Write the information on an unguarded parent or in the supervisor digest meanwhile, and copy it to the member after landing and reconciliation.\n`);
+  if(!diagnostics.includes(r.stderr)||entry.error!==r.stderr.trim())return null;
   if([...state.items.values()].some(q=>roleIs(q,'REV')&&(q.parent===item.id||
     sameProducerQueue(q,item.id,run.id)||q.meta.review_source_item===item.id&&q.meta.review_target?.head===target.head)))return null;
   if([...state.runs.values()].some(r=>r.meta?.reviewQueue&&(r.meta.reviewQueue.head===target.head||r.meta.review_source_run===run.id)))return null;

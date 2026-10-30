@@ -403,19 +403,19 @@ for(const producer of [false,true])test(`line reconsiders its remembered ${produ
   const after=JSON.parse(fs.readFileSync(file));assert.deepEqual(after.review_reference_observed[key],before.review_reference_observed[key]);assert.equal(commands.length,1);assert.equal(commands[0][1],'queue-review');
 });
 
-const contentionReceipt=f=>({status:3,signal:null,stdout:'',signal_sent:false,
-  stderr:`record: promotion write guard REFUSED (fail-closed): cannot read the project's promotion queue ${path.join(f.identity,'promote/queue.json')}: record changed repeatedly while preparing a consistent read; no mutation attempted. Stale entries never expire; repair/inspect the queue before writing. Write the information on an unguarded parent or in the supervisor digest meanwhile, and copy it to the member after landing and reconciliation.\n`});
+const contentionReceipt=(f,pathless=false)=>({status:3,signal:null,stdout:'',signal_sent:false,activity:{duration_s:1,longest_silence_s:1,observations:[]},
+  stderr:`record: promotion write guard REFUSED (fail-closed): cannot read the project's promotion queue${pathless?'':` ${path.join(f.identity,'promote/queue.json')}`}: record changed repeatedly while preparing a consistent read; no mutation attempted. Stale entries never expire; repair/inspect the queue before writing. Write the information on an unguarded parent or in the supervisor digest meanwhile, and copy it to the member after landing and reconciliation.\n`});
 const failedQueue=(f,receipt=contentionReceipt(f))=>({state:'held',owner:'line-service',subject:`review:ENG-1:${f.head}`,
   at:'2026-10-30T01:00:00Z',finished_at:'2026-10-30T01:01:00Z',review_target:f.context().target,review_operation:'record-queue',
   error:receipt.stderr.trim(),receipt,failure:{kind:'unknown',code:'OUTCOME_UNKNOWN'}});
 const noMutation=(f,entry,context=f.context())=>reviewQueueNoMutation({...context,entry,key:`review:ENG-1:${f.head}`});
 
-for(const next of ['queued','unknown','contention'])test(`resolved reference settles only proven pre-append contention once; continuation ${next}`,t=>{
+for(const next of ['queued','unknown','contention','pathless'])test(`resolved reference settles only proven pre-append contention once; continuation ${next}`,t=>{
   const f=fixture(t);resolveReviewReference(f.args());let calls=0;
   const options={repo:f.repo,org:f.org,to:'fixture-supervisor',env:f.serviceEnv,command:(_exe,args)=>{
     if(args[1]!=='queue-review')return{status:0,stdout:'{"created":[]}',stderr:''};
     calls++;
-    if(calls===1||next==='contention')return contentionReceipt(f);
+    if(calls===1||next==='contention')return contentionReceipt(f,next==='pathless');
     if(next==='unknown')return{status:1,signal:null,stdout:'',stderr:'reply lost after possible mutation',signal_sent:false};
     return{status:0,stdout:JSON.stringify(f.queue()),stderr:''};
   }};
@@ -429,8 +429,9 @@ for(const next of ['queued','unknown','contention'])test(`resolved reference set
   assert.equal(after.queue_recovery.receipt_sha256,hash(JSON.stringify(original.receipt)));
   assert.equal(after.queue_recovery.reference_resolution_seqs.length,1);
   const reviews=[...f.context().state.items.values()].filter(q=>q.role==='reviewer');
-  assert.equal(reviews.length,next==='queued'?1:0);assert.equal(after.state,next==='queued'?'complete':'held');
-  if(next==='queued')assert.equal(validateQueuedReview({...f.context(),item:reviews[0]}).head,f.head);
+  const queued=['queued','pathless'].includes(next);
+  assert.equal(reviews.length,queued?1:0);assert.equal(after.state,queued?'complete':'held');
+  if(queued)assert.equal(validateQueuedReview({...f.context(),item:reviews[0]}).head,f.head);
   assert.equal(fs.readFileSync(path.join(f.directory,'passes.jsonl'),'utf8').split('\n').filter(s=>s&&JSON.parse(s).action==='review-queue-no-mutation').length,1);
 });
 

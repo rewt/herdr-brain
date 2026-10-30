@@ -108,7 +108,7 @@ Each case has private Git objects, org, HOME/XDG/config/release homes, in-proces
 and child fleet, a nonexistent development source and a refusal-only socket.
 `sandbox-exec` denies network and the real account home except the pinned Node
 directory, with both in-process and child denial probes before product calls.
-Native UI/model responses, scratch process/file observations and the fixture
+Native UI/model responses, scratch OS account/process/file observations and the fixture
 acceptance input are scripted;
 real installed record, lane, dispatcher, watcher and finite line code run. The
 fixture binding creates no launchd job, and its synthetic READY input certifies

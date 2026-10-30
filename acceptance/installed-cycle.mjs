@@ -19,10 +19,11 @@ for (const file of forbidden) {
   const child = spawnSync(process.execPath, ['-e', 'require("fs").readFileSync(process.argv[1])', file], { encoding: 'utf8' });
   assert.notEqual(child.status, 0); assert.match(child.stderr, /EPERM|EACCES/);
 }
-const childEnvironment = spawnSync(process.execPath, ['-e', 'console.log(JSON.stringify({fleet:process.env.HERDR_MONITOR_FLEET,preload:process.env.NODE_OPTIONS}))'], { encoding: 'utf8' });
+const childEnvironment = spawnSync(process.execPath, ['-e', 'console.log(JSON.stringify({fleet:process.env.HERDR_MONITOR_FLEET,preload:process.env.NODE_OPTIONS,userHome:require("os").userInfo().homedir}))'], { encoding: 'utf8' });
 assert.equal(childEnvironment.status, 0, childEnvironment.stderr);
 const childHomes = JSON.parse(childEnvironment.stdout);
 assert.equal(childHomes.fleet, process.env.HERDR_MONITOR_FLEET);
+assert.equal(childHomes.userHome, process.env.HOME);
 assert.match(childHomes.preload, /installed-observations\.mjs/);
 assert.equal(fs.existsSync(config.development), false);
 const { fleetPath } = await module('lib/fleet.mjs');
@@ -157,3 +158,5 @@ await until(() => !unknown.watcher || !ownerAlive(unknown.watcher), 'uncertain w
 await until(() => !fs.existsSync(path.join(directory, 'closeout-turn.lock')), 'finite closeout shutdown');
 assert.deepEqual(fs.readFileSync(unknown.file), bytes);
 stage('fixture-teardown', { uncertainJournalUnchanged: true, watcherStopped: true });
+const wakeLog = path.join(directory, 'closeout.log');
+if (fs.existsSync(wakeLog)) assert.doesNotMatch(fs.readFileSync(wakeLog, 'utf8'), /^line-closeout:/m, 'installed background wakes must also stay in scratch and succeed');

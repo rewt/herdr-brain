@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { fork, execFileSync } from 'node:child_process';
+import { fork } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { fold } from '../lib/state.mjs';
 
@@ -15,26 +15,20 @@ async function measure(mode, dir, ids, { group = true, verify = false } = {}) {
   return new Promise((resolve, reject) => {
     const child = fork(new URL('./helpers/record-reader-worker.mjs', import.meta.url), [mode, dir, JSON.stringify(ids), group ? 'parent' : 'leaf', String(verify)],
       { execArgv: ['--expose-gc'], stdio: ['ignore', 'ignore', 'pipe', 'ipc'], env: { ...process.env, HERDR_MONITOR_FLEET: path.join(dir, 'no-fleet.json') } });
-    let stderr = '', pids = [child.pid], peak = 0, samples = 0, result;
+    let stderr = '', result;
     child.stderr.on('data', bytes => { stderr += bytes; });
-    const timer = setInterval(() => {
-      try {
-        const rows = execFileSync('/bin/ps', ['-o', 'rss=', '-p', pids.join(',')], { encoding: 'utf8' }).trim().split(/\s+/).map(Number);
-        const rss = rows.reduce((a, b) => a + b, 0) * 1024;
-        if (Number.isFinite(rss)) { peak = Math.max(peak, rss); samples++; }
-      } catch { /* Process startup/exit races do not imply a zero sample. */ }
-    }, 20);
-    child.on('error', error => { clearInterval(timer); reject(error); });
+    child.on('error', reject);
     child.on('message', message => {
-      if (message.kind === 'pids') { pids = message.pids; return; }
+      if (message.kind === 'pids') return;
       const readers = message.readers ?? [message];
-      result = { readers, reader_count: readers.length, sampled_peak_rss_bytes: peak, rss_samples: samples,
+      result = { readers, reader_count: readers.length, sampled_peak_rss_bytes: null, rss_samples: 0,
+        sampling: 'unrun: native process observation excluded from worker sandbox; per-process counters provide conservative bounds',
         aggregate_idle_rss_bytes: readers.reduce((sum, r) => sum + r.idle_rss_bytes, 0),
         sum_process_high_water_rss_bytes: readers.reduce((sum, r) => sum + r.high_water_rss_bytes, 0),
         median_read_ms: median(readers.flatMap(r => r.read_ms)) };
-      clearInterval(timer); child.disconnect();
+      child.disconnect();
     });
-    child.on('exit', code => { clearInterval(timer); if (code || !result) reject(Error(`measurement failed: ${code}: ${stderr}`)); else resolve(result); });
+    child.on('exit', code => { if (code || !result) reject(Error(`measurement failed: ${code}: ${stderr}`)); else resolve(result); });
   });
 }
 
@@ -60,7 +54,7 @@ test('aggregate compact readers on real history and an equivalent-facts larger h
   const report = { schema: 'record-reader-measure/v1', node: process.version, source, source_sha256: createHash('sha256').update(fs.readFileSync(source)).digest('hex'),
     active_subjects: ids, target: { aggregate_idle_ratio: 0.60, aggregate_peak_ratio: 0.60, median_latency_ratio: 1.25 },
     topology: 'one parent reader plus two simultaneous transient command readers; no watchers or finished sessions; test coordinator/runner excluded',
-    method: 'three opens per warm reader, retained exact selected facts; forced GC between opens; 20ms external aggregate RSS samples plus sum of individual process high-water marks (conservative, not simultaneous). Cold single reader rebuild/fact-and-history verification measured separately. Expanded corpus replays real historical payloads then original log; not a live production census.', cases: [] };
+    method: 'three opens per warm reader, retained exact selected facts; forced GC between opens; sum of individual process high-water marks is a conservative aggregate bound, not a simultaneous sample. Native process observation is excluded in the worker sandbox; sampled peak is null/unrun. Cold single reader rebuild/fact-and-history verification measured separately. Expanded corpus replays real historical payloads then original log; not a live production census.', cases: [] };
   fs.mkdirSync(path.dirname(evidence), { recursive: true });
   try {
     let expectedFacts;
@@ -79,7 +73,7 @@ test('aggregate compact readers on real history and an equivalent-facts larger h
       assert.ok([...legacy.readers, ...compact.readers].every(r => r.facts === a.facts));
       const ratios = { idle: compact.aggregate_idle_rss_bytes / legacy.aggregate_idle_rss_bytes,
         peak: compact.sum_process_high_water_rss_bytes / legacy.sum_process_high_water_rss_bytes,
-        sampled_peak: compact.sampled_peak_rss_bytes / legacy.sampled_peak_rss_bytes,
+        sampled_peak: null,
         latency: compact.median_read_ms / legacy.median_read_ms };
       report.cases.push({ name: c.name, bytes: Buffer.byteLength(text), events: c.rows.length, current_facts_sha256: b.all_facts,
         cold_legacy: coldLegacy, cold_compact: coldCompact, legacy, compact, ratios });

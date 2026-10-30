@@ -72,9 +72,11 @@ and two concurrent transient children at two history sizes with identical
 folded facts and active subjects. The larger input replays resettable real
 historical payloads before the original log. Both sizes verify all folded facts
 and all events against the legacy reader. It records warm aggregate idle RSS,
-sampled aggregate peak, conservative summed process high-water marks, read
+conservative summed process high-water marks, read
 latency, reader counts and separate cold rebuild costs. This replay is not a live
-service census or evidence of reduced installed-service memory. Consumers and
+service census or evidence of reduced installed-service memory. Native process
+observation is excluded from sandboxed worker checks: simultaneous sampled peak
+is explicitly null/unrun, not zero. Consumers and
 ENG-1038 can use its costs; adoption belongs to their separately selected work.
 
 ## Existing full-history reader

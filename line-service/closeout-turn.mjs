@@ -25,6 +25,14 @@ export const closeoutServiceDirectory=(org,common)=>path.join(org,'line-service'
 // finite role has its own allowance, independent of a general review pass.
 export const CLOSEOUT_TURN_BUDGET_MS=720000;
 export const CLOSEOUT_MIN_STEP_BUDGET_MS=120000;
+function ingestEligible(run,state,identity,events) {
+  const item=state.items.get(run?.item);
+  if(!item||item.closed||run.report||run.abandoned||!run.report_path||
+      !run.owner||run.owner.legacy||run.owner.controller!=='brain')return false;
+  if(run.meta?.dispatch_project!==identity&&!events.some(e=>e.type==='run.started'&&e.id===run.id&&e.meta?.dispatch_project===identity))return false;
+  // An earlier report is still useful while the current successor is unreported.
+  return item.runs.at(-1)===run.id||!state.runs.get(item.runs.at(-1))?.report;
+}
 export function runCloseoutTurn(options) {
   const clock=options.clock??(()=>performance.now()),now=options.now??(()=>Date.now()),started=clock();
   let successor=false,contended=false;
@@ -69,20 +77,20 @@ function closeoutTurn({project,org,cli,guard,env=process.env,maxSteps=8,budgetMs
     let observed=read(),ingested=0,steps=0;const errors=[];
     // The file is only a validation candidate. Reconcile all committed run
     // sources, so losing an availability hint or dying before ingest is safe.
-    const pending=[...observed.state.runs.values()].filter(r=>!r.report&&!r.abandoned&&r.report_path&&fs.existsSync(r.report_path))
+    const pending=[...observed.state.runs.values()].filter(r=>ingestEligible(r,observed.state,project.identity,observed.events)&&fs.existsSync(r.report_path))
       .sort((a,b)=>(state.ingest[a.id]??0)-(state.ingest[b.id]??0)||a.started.seq-b.started.seq);
     for(const run of pending){
       if(expired()||clock()-started>=Math.min(15000,budgetMs/3)||ingested>=maxSteps)break;
       state.ingest[run.id]=++state.attempt;state.pending={stage:'ingest',run:run.id};save();fault('before-ingest');
       try{
         const current=read(),r=current.state.runs.get(run.id),item=current.state.items.get(r?.item);
-        if(!r||r.report||r.abandoned||item?.runs.at(-1)!==r.id)throw Error('current run changed before bounded ingest');
+        if(!r||!ingestEligible(r,current.state,project.identity,current.events))throw Error('run eligibility changed before bounded ingest');
         if(r.workspace&&fs.existsSync(r.workspace)&&gitProject(r.workspace).identity!==project.identity)throw Error('ingest allocation project identity changed');
         requireController(readOwnedRun(org,r.id,current.events),'brain');
         const start=current.events.find(e=>e.type==='run.started'&&e.id===r.id);
         if(r.owner?.legacy||r.meta.dispatch_project!==project.identity&&start?.meta?.dispatch_project!==project.identity)
           throw Error('original ingest project/claim is missing or foreign');
-        cli('bin/org.mjs',['ingest',r.report_path,'--run',r.id,'--if-current-run',r.id]);
+        cli('bin/org.mjs',['ingest',r.report_path,'--run',r.id,...(item.runs.at(-1)===r.id?['--if-current-run',r.id]:[])]);
         fault('after-ingest');
       }catch(error){errors.push({run:run.id,stage:'ingest',reason:error.message});}
       ingested++;delete state.pending;save();

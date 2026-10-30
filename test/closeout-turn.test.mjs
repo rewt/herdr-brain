@@ -151,6 +151,72 @@ test('crash before ingest and a dropped availability wake reconcile the original
   assert.equal(runCloseoutTurn(args).ingested,0);
 });
 
+function reportCandidate(f,id,{owner={controller:'brain',legacy:false,release:{id:'source',root:process.cwd(),commit:null,identity:gitProject(process.cwd()).identity}},project=f.common}={}){
+  const item=`ENG-${id.slice(2)}`,report=path.join(f.org,'runs',id,'report.md');
+  fs.mkdirSync(path.dirname(report),{recursive:true});
+  fs.writeFileSync(report,`---\nrun: ${id}\noutcome: blocked\nsummary: Preserved report\nheadline: Source needs follow-up\nblockers: [Remaining work]\n---\n`);
+  f.append([{type:'item.added',id:item,role:'engineer',title:'Report candidate'},
+    {type:'run.started',id,item,report_path:report,meta:{dispatch_project:project}},
+    ...(owner?[{type:'run.claimed',run:id,record:f.org,project:f.common,owner}]:[])]);
+  return{item,report};
+}
+function ingestReports(f,calls){
+  return(file,args)=>{
+    if(args[0]!=='ingest')return '{}';
+    calls.push(args);
+    const result=spawnSync(process.execPath,[path.resolve(file),...args],{cwd:f.repo,env:{...f.env,ORG_ACTOR:'line-service'},encoding:'utf8'});
+    assert.equal(result.status,0,result.stderr+result.stdout);return result.stdout;
+  };
+}
+
+test('historical and foreign report files spend no finite ingest slots across repeated turns',t=>{
+  const f=fixture(t),calls=[];
+  reportCandidate(f,'R-2');f.append([{type:'item.closed',id:'ENG-2',as:'done'}]);
+  reportCandidate(f,'R-3',{owner:null});
+  reportCandidate(f,'R-4',{owner:{controller:'brain',legacy:true,release:null}});
+  reportCandidate(f,'R-5',{owner:{controller:'foreign',legacy:false,release:{id:'source',root:process.cwd(),commit:null,identity:gitProject(process.cwd()).identity}}});
+  reportCandidate(f,'R-6',{project:'/foreign/project/.git'});
+  reportCandidate(f,'R-7',{project:null});
+  reportCandidate(f,'R-8');f.append([{type:'run.started',id:'R-18',item:'ENG-8'},
+    {type:'report.ingested',run:'R-18',sha256:'successor',report:{outcome:'blocked'}}]);
+  reportCandidate(f,'R-9');f.append([{type:'run.abandoned',id:'R-9'}]);
+  reportCandidate(f,'R-10');f.append([{type:'report.ingested',run:'R-10',sha256:'reported',report:{outcome:'blocked'}}]);
+  reportCandidate(f,'R-20');reportCandidate(f,'R-21');
+  const args={...f.args,cli:ingestReports(f,calls)};
+  for(const id of ['R-20','R-21']){
+    const result=runCloseoutTurn(args);assert.deepEqual(result.errors,[]);assert.equal(result.ingested,1);
+    assert.deepEqual(calls.at(-1).slice(-2),['--if-current-run',id]);
+  }
+  const final=runCloseoutTurn(args);assert.deepEqual(final.errors,[]);assert.equal(final.ingested,0);assert.equal(final.continuation.ingest,0);
+  assert.deepEqual(calls.map(args=>args[args.indexOf('--run')+1]),['R-20','R-21']);
+  const checkpoint=JSON.parse(fs.readFileSync(path.join(f.directory,'closeout-turn.json')));
+  assert.deepEqual(Object.keys(checkpoint.ingest),['R-20','R-21'],'skips never receive an attempt checkpoint');
+  assert.deepEqual(f.read().actions,[]);
+});
+
+test('an earlier report ingests while its current successor is unreported',t=>{
+  const f=fixture(t),calls=[];reportCandidate(f,'R-2');
+  f.append([{type:'run.started',id:'R-3',item:'ENG-2'}]);
+  const args={...f.args,cli:ingestReports(f,calls)},result=runCloseoutTurn(args);
+  assert.deepEqual(result.errors,[]);assert.equal(result.ingested,1);assert.equal(calls.length,1);
+  assert.deepEqual(calls[0].slice(-2),['--run','R-2']);
+  const report=events(f).find(e=>e.type==='report.ingested'&&e.run==='R-2');assert.ok(report);assert.equal(report.late,false);
+  assert.equal(runCloseoutTurn(args).ingested,0);assert.deepEqual(f.read().actions,[]);
+});
+
+for(const change of ['closed','claim','successor-report'])test(`bounded ingest rechecks a ${change} change after selection`,t=>{
+  const f=fixture(t),calls=[];reportCandidate(f,'R-2');
+  const result=runCloseoutTurn({...f.args,cli:ingestReports(f,calls),fault:stage=>{
+    if(stage!=='before-ingest')return;
+    if(change==='closed')f.append([{type:'item.closed',id:'ENG-2',as:'done'}]);
+    if(change==='claim')f.append([{type:'run.claimed',run:'R-2',record:f.org,project:f.common,owner:{controller:'foreign',legacy:true,release:null}}]);
+    if(change==='successor-report')f.append([{type:'run.started',id:'R-3',item:'ENG-2'},
+      {type:'report.ingested',run:'R-3',sha256:'successor',report:{outcome:'blocked'}}]);
+  }});
+  assert.equal(result.errors.length,1);assert.match(result.errors[0].reason,/eligibility changed/);
+  assert.deepEqual(calls,[]);assert.deepEqual(f.read().actions,[]);
+});
+
 for(const change of ['STOP','HOLD','claim','current','head','session','start','dispatch','report'])test(`finite turn retains a ${change} boundary change without a native effect`,t=>{
   const f=fixture(t);f.report();
   if(change==='STOP')fs.writeFileSync(path.join(f.directory,'STOP'),'stop');

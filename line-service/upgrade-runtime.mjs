@@ -14,6 +14,7 @@ import {readPlainFile,plainDirectory,writeFileAtomic} from '../lib/files.mjs';
 import {withRuntimeLocks} from './runtime-locks.mjs';
 import {loadDiscoveredRoutes} from '../lanes/routes.mjs';
 import {installationPhaseProof,settledInstallation} from './runtime-phase.mjs';
+import {requireRecordCompatibility} from '../lib/record-compatibility.mjs';
 
 const git=(repo,args)=>execFileSync('git',['--no-optional-locks','-C',repo,...args],{encoding:'utf8',stdio:['ignore','pipe','pipe'],timeout:10000}).trim();
 const same=(a,b)=>canonical(a)===canonical(b);
@@ -55,6 +56,7 @@ export function upgradeRuntime({repo,org,id,fromRoot,targetRoot,rollback=false,d
     return {head:git(c.repo,['rev-parse','HEAD']),previous,runtime,stop_sha256:digest(stopBytes),service};
   };
   const snapshot=initial(),loaded=loadEvents(c.org);if(loaded.tornTail)throw Error('incomplete record prevents service upgrade');
+  requireRecordCompatibility(targetRoot,loaded.events);
   const savedBytes=readPlainFile(installationFile),saved=JSON.parse(savedBytes),plistBytes=readPlainFile(file);
   if(saved.repo!==c.repo||saved.org!==c.org||saved.file!==file||saved.target!==target||saved.node!==process.execPath||!['installed','uncertain-or-refused'].includes(saved.phase)||!(saved.migration||saved.fresh_install))throw Error('saved migrated/fresh installation binding differs; retain it');
   const history=events=>{
@@ -95,6 +97,7 @@ export function upgradeRuntime({repo,org,id,fromRoot,targetRoot,rollback=false,d
         changes:['installation.source','installation.runtime','installation.upgrade','service.ProgramArguments[1]'],preserved:['migration archive/event','cutover','phase0','STOP','node','transport','saved jobs/watchers','claims','queue attempts']};
     }
     const result=transact(c.org,events=>{
+      requireRecordCompatibility(targetRoot,events);
       if(!same(initial(),snapshot)||readPlainFile(installationFile)!==savedBytes||readPlainFile(file)!==plistBytes||fs.existsSync(archiveFile)||
           history(events).last.seq!==state.last.seq)throw Error('service upgrade source/record/native CAS changed');
       plainDirectory(path.dirname(archiveFile));

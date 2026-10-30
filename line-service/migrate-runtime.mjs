@@ -14,6 +14,7 @@ import {withRuntimeLocks} from './runtime-locks.mjs';
 import {loadDiscoveredRoutes} from '../lanes/routes.mjs';
 import {recipientChanges,legacyRecipientHistory} from './recipient-history.mjs';
 import {installationPhaseProof,settledInstallation} from './runtime-phase.mjs';
+import {requireRecordCompatibility} from '../lib/record-compatibility.mjs';
 
 const git=(repo,args)=>execFileSync('git',['--no-optional-locks','-C',repo,...args],{encoding:'utf8',stdio:['ignore','pipe','pipe'],timeout:10000}).trim();
 const tuple=b=>({project:b.project,native:{name:b.native.name,pane:b.native.pane_id,workspace:b.native.workspace_id,terminal:b.native.terminal_id,session:b.native.agent_session.value}});
@@ -73,6 +74,7 @@ export function migrateRuntime({repo,org,id,dryRun=false,expectedPlan,cwd=proces
     return{head,runtime,stop_sha256:digest(stopBytes),service};
   };
   const snapshot=initial(),loaded=loadEvents(c.org);if(loaded.tornTail)throw Error('incomplete record prevents service migration');
+  requireRecordCompatibility(runtimeRoot,loaded.events);
   const savedBytes=readPlainFile(installationFile),saved=JSON.parse(savedBytes),plistBytes=readPlainFile(file);
   const recipientHistory=recipientChanges(loaded.events,c);
   if(saved.repo!==c.repo||saved.org!==c.org||saved.file!==file||saved.target!==target||saved.node!==process.execPath||!['installed','uncertain-or-refused'].includes(saved.phase)||!path.isAbsolute(saved.source??''))throw Error('saved installation binding differs; retain it');
@@ -120,6 +122,7 @@ export function migrateRuntime({repo,org,id,dryRun=false,expectedPlan,cwd=proces
         preserved:['node','transport','recipient','interval','logs','STOP','cutover','phase0','saved jobs/watchers','claims','queue attempts'],stopped:true,runtime_started:false};
     }
     const result=transact(c.org,events=>{
+      requireRecordCompatibility(runtimeRoot,events);
       if(!same(initial(),snapshot)||readPlainFile(installationFile)!==savedBytes||readPlainFile(file)!==plistBytes||fs.existsSync(archiveFile)||
           events.some(e=>e.type==='line-service.runtime-migrated'&&e.project===c.identity&&e.org===c.org)||
           !same(events.find(e=>e.seq===cutover.seq),cutover))throw Error('service migration source/record/native CAS changed');

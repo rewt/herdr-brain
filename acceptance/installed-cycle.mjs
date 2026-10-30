@@ -4,6 +4,7 @@ import path from 'node:path';
 import assert from 'node:assert/strict';
 import { pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 
 const config = JSON.parse(fs.readFileSync(process.argv[2]));
 const { root, bundle, repo, org, home, commit, mode, forbidden } = config;
@@ -40,7 +41,7 @@ const checked = (exe, args, options) => { const r = run(exe, args, options); ass
 const git = (args, cwd = repo) => checked('git', ['-C', cwd, ...args]);
 const record = args => checked(process.execPath, [path.join(bundle, 'bin/org.mjs'), ...args]);
 const { initOrg, loadRecord, transact } = await module('lib/store.mjs');
-const { createLineService, serviceDirectory } = await module('line-service/line-service.mjs');
+let { createLineService, serviceDirectory } = await module('line-service/line-service.mjs');
 const { gitProject } = await module('lib/project.mjs');
 const { ownerAlive } = await module('lib/process-owner.mjs');
 const project = gitProject(repo);
@@ -49,10 +50,36 @@ const base = git(['rev-parse', 'HEAD']);
 const directory = serviceDirectory(org, project.identity);
 fs.mkdirSync(directory, { recursive: true });
 // An offline service binding, not a launchd installation or release attestation.
-fs.writeFileSync(path.join(directory, 'installation.json'), JSON.stringify({ at: '2026-10-30T00:00:00Z', repo, org, source: bundle, node: process.execPath,
-  file: path.join(directory, 'service.plist'), target: `gui/${process.getuid()}/dev.herdr.line.${path.basename(directory)}` }));
-const boundary = { id: 'installed-scenario', project: project.identity, repo, org, source: bundle, main: 'main', canonical_head: base };
+const initialSource=mode==='current'?config.development:bundle;
+fs.writeFileSync(path.join(directory, 'installation.json'), JSON.stringify({ at: '2026-10-30T00:00:00Z', repo, org, source: initialSource, node: process.execPath,
+  phase:'installed',file: path.join(directory, 'service.plist'), target: `gui/${process.getuid()}/dev.herdr.line.${path.basename(directory)}` })+'\n');
+const boundary = { id: 'installed-scenario', project: project.identity, repo, org, source: initialSource, main: 'main', canonical_head: base };
 transact(org, () => ({ add: ['line-service.cutover', 'line-service.phase0'].map(type => ({ type, ...boundary })) }));
+let controls,controlOptions,loaded=false;
+if(mode==='current') {
+  const agent={name:'scratch-supervisor',cwd:repo,pane_id:'control-pane',workspace_id:'control-workspace',terminal_id:'control-terminal',agent_session:{value:'control-session'}};
+  const command=(exe,args,options)=>{
+    if(exe==='/usr/bin/plutil')return run(exe,args,options);
+    assert.equal(exe,'/bin/launchctl');
+    let result;
+    if(args[0]==='print')result=loaded?{status:0,stdout:'scripted loaded job'}:{status:113,stderr:'Could not find service in domain'};
+    else if(args[0]==='bootstrap'){loaded=true;result={status:0,stdout:''};}
+    else if(args[0]==='bootout'){loaded=false;result={status:0,stdout:''};}
+    else throw Error('unexpected launchctl effect');
+    fs.appendFileSync(path.join(evidence,'scripted-controls.jsonl'),JSON.stringify({args,result})+'\n');return result;
+  };
+  controlOptions={cwd:repo,home,env:{...env,HERDR_ENV:'1',HERDR_PANE_ID:agent.pane_id,HERDR_WORKSPACE_ID:agent.workspace_id,CODEX_THREAD_ID:agent.agent_session.value},
+    call:()=>JSON.stringify({result:{agent}}),command};
+  const {main,launchPlist}=await module('line-service/launchd.mjs');controls=main;
+  fs.writeFileSync(path.join(directory,'service.plist'),launchPlist({label:`dev.herdr.line.${path.basename(directory)}`,repo,org,to:agent.name,
+    herdr:path.join(root,'bin/herdr'),socket:path.join(root,'absent.sock'),directory,node:process.execPath,source:initialSource,searchPath:env.PATH}));
+  fs.writeFileSync(path.join(directory,'STOP'),'Scratch maintenance\n');
+  const args=['migrate','--repo',repo,'--org',org,'--id','scratch-migration'];
+  const plan=controls([...args,'--dry-run'],controlOptions);
+  controls([...args,'--expected-plan',plan.archive.sha256],controlOptions);
+  controls(['restart','--repo',repo,'--org',org],controlOptions);
+  stage('initial-migration',{plan,installation:JSON.parse(fs.readFileSync(path.join(directory,'installation.json')))});
+}
 const state = () => loadRecord(org).state;
 const item = record(['add', 'Complete the installed scratch cycle', '--role', 'engineer']).match(/ENG-\d+/)[0];
 const journals = () => fs.readdirSync(path.join(org, 'dispatch')).filter(n => n.endsWith('.json') && !n.endsWith('.routes.json'))
@@ -106,11 +133,65 @@ const workerEnv = { ...env, HERDR_ENV: '1', HERDR_PANE_ID: producer.worker.pane,
 checked(process.execPath, [path.join(bundle, 'lanes/lane.mjs'), 'promote', producer.lane, '--expected-head-from-worktree'], { cwd: lane, env: workerEnv });
 assert.equal(git(['rev-parse', 'main']), head);
 stage('land', { base, head });
+// The producer is still working and its watcher/callback is live. Exercise the
+// existing maintenance path before publishing that producer's report.
+const captured=()=>Object.fromEntries(fs.readdirSync(path.join(org,'dispatch')).sort().map(name=>{
+  const bytes=fs.readFileSync(path.join(org,'dispatch',name));
+  return [name,createHash('sha256').update(bytes).digest('hex')];
+}));
+const jobsBefore=captured();
+assert.equal(ownerAlive(producer.watcher),true);
+const originalInstallation=fs.readFileSync(path.join(directory,'installation.json'),'utf8');
+const originalPlist=fs.readFileSync(path.join(directory,'service.plist'),'utf8');
+const {main:nextControls}=await import(pathToFileURL(path.join(config.successor,'line-service/launchd.mjs')).href);
+controls(['stop','--repo',repo,'--org',org],controlOptions);
+checked(process.execPath,[path.join(bundle,'herdr/releases.mjs'),'pin',home,repo,'successor']);
+git(['add','.herdr-release.json']);git(['commit','-qm','Select scratch successor']);
+const forward=['upgrade','--repo',repo,'--org',org,'--id','scratch-forward','--from-root',bundle,'--target-root',config.successor];
+const forwardPlan=nextControls([...forward,'--dry-run'],controlOptions);
+const forwardReceipt=nextControls([...forward,'--expected-plan',forwardPlan.archive.sha256],controlOptions);
+nextControls(['restart','--repo',repo,'--org',org],controlOptions);
+({createLineService}=await import(pathToFileURL(path.join(config.successor,'line-service/line-service.mjs')).href));
+const advance=git(['rev-parse','HEAD']);
+fs.appendFileSync(path.join(repo,'seed.txt'),'Main moved while the installed controller stayed pinned\n');
+git(['add','seed.txt']);git(['commit','-qm','Move scratch development main']);
+assert.notEqual(git(['rev-parse','HEAD']),advance);
+record(['amend-accept',item,'--accept','Current acceptance survives both installed roots','--why','Scratch newer record event']);
+const forwardItem=record(['add','Complete a successor-root scratch action','--role','engineer']).match(/ENG-\d+/)[0];
+service(1).pass();
+const forwardJob=journals().find(job=>job.item===forwardItem);
+assert.ok(forwardJob,audit());assert.equal(forwardJob.stage,'complete');assert.equal(forwardJob.release.root,config.successor);
+const jobsForward=captured();
+for(const [name,digest] of Object.entries(jobsBefore))assert.equal(jobsForward[name],digest);
+assert.equal(ownerAlive(producer.watcher),true);
+const selected=checked(process.execPath,[path.join(config.successor,'herdr/releases.mjs'),'exec',home,'bin/org.mjs','show',item,'--json']);
+assert.deepEqual(JSON.parse(selected).accept,['Current acceptance survives both installed roots']);
+assert.ok(audit().split('\n').filter(Boolean).map(JSON.parse).some(event=>event.action==='pass-start'&&event.source===config.successor&&event.source_head===commit));
+assert.ok(fs.readFileSync(path.join(evidence,'executables.jsonl'),'utf8').split('\n').filter(Boolean).map(JSON.parse)
+  .some(entry=>entry.entry===path.join(config.successor,'bin/org.mjs')&&entry.node===process.execPath));
+stage('forward-and-main-movement',{forwardPlan,forwardReceipt,main:git(['rev-parse','HEAD']),jobs:jobsForward,watcher:producer.watcher,newChild:forwardJob,
+  installation:JSON.parse(fs.readFileSync(path.join(directory,'installation.json')))});
+nextControls(['stop','--repo',repo,'--org',org],controlOptions);
+checked(process.execPath,[path.join(config.successor,'herdr/releases.mjs'),'pin',home,repo,'scenario']);
+git(['add','.herdr-release.json']);git(['commit','-qm','Select previous scratch root']);
+const rollback=['upgrade','--repo',repo,'--org',org,'--id','scratch-rollback','--from-root',config.successor,'--target-root',bundle,'--rollback'];
+const rollbackPlan=nextControls([...rollback,'--dry-run'],controlOptions);
+const rollbackReceipt=nextControls([...rollback,'--expected-plan',rollbackPlan.archive.sha256],controlOptions);
+assert.equal(fs.readFileSync(path.join(directory,'installation.json'),'utf8'),originalInstallation);
+assert.equal(fs.readFileSync(path.join(directory,'service.plist'),'utf8'),originalPlist);
+controls(['restart','--repo',repo,'--org',org],controlOptions);
+({createLineService}=await module('line-service/line-service.mjs'));
+assert.deepEqual(captured(),jobsForward);assert.equal(ownerAlive(producer.watcher),true);assert.equal(ownerAlive(forwardJob.watcher),true);
+assert.equal(producer.release.root,bundle);
+stage('rollback-with-captured-work',{rollbackPlan,rollbackReceipt,jobs:captured(),watcherAlive:true,originalInstallationRestored:true,originalPlistRestored:true});
+report(forwardJob,[]);
+await until(()=>loadRecord(org).events.some(event=>event.type==='report.available'&&event.run===forwardJob.run),'successor worker availability');
 report(producer, [`source: ${head}; base: ${base}`]);
 // Real watcher publishes availability; the finite line ingests and retires.
 await until(() => state().runs.get(producer.run).report || loadRecord(org).events.some(e => e.type === 'report.available' && e.run === producer.run), 'producer availability');
 service(0).pass();
 await until(() => !fs.existsSync(lane), 'producer folder removal');
+await until(() => !fs.existsSync(forwardJob.worker.cwd), 'successor folder removal after rollback');
 stage('producer-cleanup', { folderRemoved: !fs.existsSync(lane), ingested: Boolean(state().runs.get(producer.run).report),
   native: JSON.parse(fs.readFileSync(path.join(root, 'native.json'))) });
 // Start the one record-queued review only after its producer folder is gone.
@@ -148,7 +229,7 @@ assert.equal(prompts(calls).length, 1);
 assert.equal(prompts(fs.readFileSync(path.join(root, 'native-calls.jsonl'), 'utf8')).length, 1);
 assert.ok(fs.existsSync(unknown.worker.cwd));
 stage('uncertain-retained', { item: uncertain, run: unknown.run, journal: unknown.file, stage: unknown.stage, attempts: 1, prompts: 1, folderKept: true, error: unknown.error });
-write('outcome.json', { ready: false, scriptedMechanics: true, dispatch: 1, reports: 2, originalReviews: 1, verdicts: 1,
+write('outcome.json', { ready: false, scriptedMechanics: true, dispatch: 2, reports: 3, originalReviews: 1, verdicts: 1,
   producerFoldersRemoved: 1, reviewFoldersRemoved: 1, uncertainAttemptsRetained: 1, base, head, roots: config });
 
 // The uncertain request stays untouched; terminate only its receipt-owned test

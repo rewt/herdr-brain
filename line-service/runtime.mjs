@@ -10,6 +10,8 @@ import {readPlainFile,plainDirectory} from '../lib/files.mjs';
 import {recipientChanges,applyRecipientChange,legacyRecipientHistory} from './recipient-history.mjs';
 import {installationPhaseProof,settledInstallation} from './runtime-phase.mjs';
 import {freshInstallation} from './install-history.mjs';
+import {findOrgDir,loadEvents} from '../lib/store.mjs';
+import {requireRecordCompatibility} from '../lib/record-compatibility.mjs';
 
 export const runtimeRoot=fs.realpathSync(fileURLToPath(new URL('../',import.meta.url)));
 export const digest=bytes=>createHash('sha256').update(bytes).digest('hex');
@@ -22,6 +24,8 @@ export function acceptedRuntime(repo,{root=runtimeRoot,home=releaseHome(),verify
   if(selected.root!==root)throw Error('executing line runtime differs from the accepted project pin');
   const release=checkRelease(home,pin.release,{verifyFiles});
   requireReadyAcceptance(release,home);
+  const org=findOrgDir({cwd:repo,env:{...process.env,ORG_DIR:''}});
+  if(org){const loaded=loadEvents(org);if(loaded.tornTail)throw Error('incomplete record prevents runtime admission');requireRecordCompatibility(root,loaded.events);}
   return release;
 }
 

@@ -88,6 +88,14 @@ for (const [mode, revision] of [...historical, ['current', 'HEAD']]) {
     fs.rmSync(development, { recursive: true });
     const freeze = file => { const s = fs.lstatSync(file); if (s.isDirectory()) for (const name of fs.readdirSync(file)) freeze(path.join(file, name)); fs.chmodSync(file, s.mode & ~0o222); };
     freeze(bundle);
+    let successor;
+    if(mode==='current') {
+      successor=path.join(home,'releases/successor');
+      copyProduct(bundle,successor);
+      fs.writeFileSync(path.join(successor,'.release-commit'),commit+'\n');
+      run(process.execPath,[path.join(successor,'herdr/releases.mjs'),'manifest',successor,summary]);
+      freeze(successor);
+    }
     fs.symlinkSync(bundle, path.join(home, 'current'));
     for (const name of ['installed-cycle.mjs', 'installed-native.mjs', 'installed-observations.mjs']) fs.copyFileSync(path.join(source, 'acceptance', name), path.join(root, 'harness', name));
     for (const name of ['fixture-policy.mjs', 'memory-fixture.mjs']) fs.copyFileSync(path.join(source, 'test/helpers', name), path.join(root, 'harness', name));
@@ -108,7 +116,7 @@ for (const [mode, revision] of [...historical, ['current', 'HEAD']]) {
     run('git', ['-C', repo, 'add', '.']); run('git', ['-C', repo, 'commit', '-qm', 'Independent scratch project']);
     fs.writeFileSync(path.join(root, 'native.json'), JSON.stringify({ repo, workspaces: {}, next: 0 }));
     const forbidden = [path.join(source, 'package.json'), path.join(savedHome, 'development/rewt/.org/config.json')];
-    const config = { root, repo, org, home, bundle, commit, mode, development, forbidden };
+    const config = { root, repo, org, home, bundle, successor, commit, mode, development, forbidden };
     fs.writeFileSync(path.join(root, 'config.json'), JSON.stringify(config, null, 2));
     // Deny the entire real home except the pinned interpreter. Descendants
     // inherit the boundary; no host test preload or live socket is accessible.

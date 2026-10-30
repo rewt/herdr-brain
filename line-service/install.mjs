@@ -16,6 +16,7 @@ import {plainDirectory,readPlainFile,writeFileAtomic} from '../lib/files.mjs';
 import {noticeLock} from '../supervisor/notice-lock.mjs';
 import {acquireLock} from '../lanes/promotion-lock.mjs';
 import {loadDiscoveredRoutes} from '../lanes/routes.mjs';
+import {requireRecordCompatibility} from '../lib/record-compatibility.mjs';
 
 const git=(repo,args)=>execFileSync('git',['--no-optional-locks','-C',repo,...args],{encoding:'utf8',stdio:['ignore','pipe','pipe'],timeout:10000}).trim();
 const same=(a,b)=>canonical(a)===canonical(b);
@@ -36,6 +37,7 @@ export function installRelease({repo,org,id,to,herdr,socket,interval=30,dryRun=f
   };
   let locked=false;
   const snapshot=events=>{
+    requireRecordCompatibility(runtimeRoot,events);
     const owner=bind();
     for(const name of ['STOP','HOLD'])if(fs.existsSync(path.join(c.repo,'.lane/supervisor',name)))throw Error('project STOP/HOLD prevents install');
     // Validate even absent paths through their nearest existing ancestor.

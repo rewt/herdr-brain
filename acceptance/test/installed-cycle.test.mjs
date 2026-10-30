@@ -8,6 +8,7 @@ import { copyProduct } from '../../lib/product-files.mjs';
 import { harnessEnvironment } from '../run.mjs';
 import { enterScratchHomes } from '../environment.mjs';
 import { makeSnapshotWritable } from '../snapshot.mjs';
+import { createReceiptTracker } from '../../test/helpers/receipts.mjs';
 
 const source = path.resolve(import.meta.dirname, '../..');
 const historical = [
@@ -33,7 +34,19 @@ for (const [mode, revision] of [...historical, ['current', 'HEAD']]) {
     for (const name of ['bin', 'project', 'evidence', 'harness', 'home']) fs.mkdirSync(path.join(root, name));
     fs.writeFileSync(path.join(root, '.identity-root'), 'installed-scratch\n');
     let success = false;
-    t.after(() => {
+    const receipts = createReceiptTracker();
+    t.after(async () => {
+      const jobs = path.join(root, 'project/.org/dispatch');
+      for (const name of fs.existsSync(jobs) ? fs.readdirSync(jobs) : []) {
+        if (!name.endsWith('.json') || name.endsWith('.routes.json')) continue;
+        const job = JSON.parse(fs.readFileSync(path.join(jobs, name)));
+        if (job.watcher?.pid) receipts.remember(job.watcher.pid, [process.execPath, job.release.root + '/watch/watch.mjs', job.run,
+          '--controller', job.ownership.owner.controller, '--org', job.org, '--to', job.to, '--cwd', job.repo, '--log', job.watcher.log,
+          '--record-only', '--retry-after', '0.02', '--start-grace', '0'].join(' '));
+      }
+      receipts.cleanup();
+      // A watcher can have one short synchronous native lookup in flight.
+      await new Promise(resolve => setTimeout(resolve, 100));
       // Preserve failed scratch and its original requests. Successful cases
       // retain evidence before their disposable payloads are removed.
       if (process.env.INSTALLED_CYCLE_EVIDENCE) {
@@ -88,7 +101,7 @@ for (const [mode, revision] of [...historical, ['current', 'HEAD']]) {
     run('git', ['-C', repo, 'config', 'user.email', 'installed@example.invalid']);
     fs.writeFileSync(path.join(repo, '.git/info/exclude'), '.org/\n.lane/\n');
     fs.writeFileSync(path.join(repo, '.herdr-release.json'), '{"release":"scenario"}\n');
-    fs.writeFileSync(path.join(repo, '.lane.json'), JSON.stringify({ main: 'main', worktree_root: path.join(root, 'worktrees'),
+    fs.writeFileSync(path.join(repo, '.lane.json'), JSON.stringify({ main: 'main', validate: 'true', worktree_root: path.join(root, 'worktrees'),
       routes: { engineer: { kind: 'codex' }, reviewer: { kind: 'codex' } },
       dispatch: { max_sessions: 4, max_unlanded: 8 }, retirement: { closeout_queue: false, line_service_cleanup: mode === 'current' } }));
     fs.writeFileSync(path.join(repo, 'seed.txt'), 'Independent installed consumer\n');

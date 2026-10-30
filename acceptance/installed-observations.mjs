@@ -8,6 +8,8 @@ import { syncBuiltinESMExports } from 'node:module';
 import { fileURLToPath } from 'node:url';
 
 const root = fs.realpathSync(process.env.INSTALLED_CYCLE_ROOT);
+fs.appendFileSync(path.join(root,'evidence/executables.jsonl'),JSON.stringify({pid:process.pid,node:process.execPath,
+  entry:process.argv[1],cwd:process.cwd()})+'\n');
 // sandbox-exec drops the host preload. Propagate this local native fixture
 // explicitly to every installed product child after the boundary is entered.
 const preload = `--import=${fileURLToPath(import.meta.url)}`;

@@ -413,6 +413,35 @@ No full/default suite or reviewer suite is selected here.
 
 ### Upgrade an already migrated service, or roll back
 
+Brain operations use these same installed-release and project-pin paths. The
+retained `herdr/canary-env.sh` SessionStart entry now puts installed launchers
+(`~/.local/bin`) first; explicit development source commands remain available
+for engineering. Updating source does not change an existing session PATH or
+authorize activation. A canonical release/adoption owner must install/accept
+the chosen release, set Brain's existing project pin, migrate its controller,
+and observe the next real dispatch. Until that happens, live separation is
+pending. Do not edit saved controller/worker/watch paths to simulate adoption.
+
+New command selection, installed controller admission and stopped handoffs
+check the actual target fold against present core record event types. A target
+without `item.acceptance-amended`, for example, refuses with
+`record-incompatible` before creating a transition intent. The same check runs
+inside the transition's record transaction so events arriving after preview
+cannot silently become stale facts. Unknown core types and unrecognized fold
+layouts refuse. Legacy protocol-1 folds use their literal event switch; no
+second pin/version registry is introduced. This is a recognition check, not
+proof of all event semantics. Other subsystems' opaque receipts keep their
+existing readers and guards. Explicit captured continuations keep their
+original root and callback; they are never reselected by this admission check.
+
+Maintenance currently holds **control, then pass, then promotion**, with record
+CAS inside those locks. ENG-1034 must retain the stopped handoff's exclusion and
+final record compatibility check when replacing `pass.lock`. ENG-1038 should
+observe the authorized owner's first real dispatch: installed controller
+`ProgramArguments[1]`, project pin/accepted root, child `release.root/commit`,
+watcher executable and original callback, plus the changed-main observation.
+Scratch READY fixture input and a saved pin alone do not supply that receipt.
+
 `upgrade` hands the controller between two explicit immutable release roots.
 Both roots must be fully sealed and READY in the same installation home, and
 the project's supported pin must already select the target. The command must

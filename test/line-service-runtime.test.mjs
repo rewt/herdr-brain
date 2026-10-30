@@ -346,6 +346,22 @@ test('release upgrade retains original migration and cutoff, restarts the succes
   assert.deepEqual(JSON.parse(fs.readFileSync(path.join(f.directory,'effects.json'))).actions['review:original'],JSON.parse(f.original.effects).actions['review:original']);
 });
 
+test('rollback rejects a historical fold that would silently discard current acceptance',async t=>{
+  const f=await successor(t);f.upgrade();
+  transact(f.org,()=>({add:[{type:'item.added',id:'ENG-1',title:'Current contract',accept:['Original']},
+    {type:'item.acceptance-amended',id:'ENG-1',accept:['Current'],why:'Scratch compatibility control'}]}));
+  const old=spawnSync('git',['show','a96eaa9c47:lib/state.mjs'],{encoding:'utf8'});assert.equal(old.status,0,old.stderr);
+  fs.writeFileSync(path.join(f.bundle,'lib/state.mjs'),old.stdout);
+  const manifest=spawnSync(process.execPath,[path.resolve('herdr/releases.mjs'),'manifest',f.bundle,path.join(f.bundle,'.release-acceptance.json')],{env:f.env,encoding:'utf8'});
+  assert.equal(manifest.status,0,manifest.stderr);f.pin('compatible');
+  const before=retained(f),jobs=fs.readFileSync(path.join(f.org,'dispatch/retained.json'));
+  const args=['upgrade','--repo',f.cwd,'--org',f.org,'--id','incompatible-rollback','--from-root',f.next,'--target-root',f.bundle,'--rollback','--dry-run'];
+  assert.throws(()=>f.main(args,f.args),/record-incompatible:.*item.acceptance-amended/);
+  assert.deepEqual(retained(f),before);assert.deepEqual(fs.readFileSync(path.join(f.org,'dispatch/retained.json')),jobs);
+  assert.equal(fs.existsSync(path.join(f.directory,'upgrades/incompatible-rollback.json')),false);
+  assert.equal(f.calls.some(c=>['bootstrap','bootout'].includes(c.args[0])),false);
+});
+
 test('upgrade refuses foreign owners, mismatched roots and records, STOP/HOLD, live locks, loaded service and changed native CAS',async t=>{
   const f=await successor(t),before=retained(f),plan=f.plan();
   const apply=extra=>f.main([...f.argv,'--expected-plan',plan.archive.sha256],{...f.args,...extra});

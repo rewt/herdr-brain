@@ -76,7 +76,7 @@ function producerRecordProof({events,repo,org,item,run,target,input,observation}
     // base (or a mention in its evidence) is not a review of this producer.
     prefix.some(e=>e.type==='change.reviewed'?e.item===item&&e.head===target.head:
       e.type.startsWith('review.')&&e.type!=='review.reference-resolved'&&
-      (e.run===run||(e.item===item||e.source_item===item)&&(e.head===target.head||e.target?.head===target.head))))throw Error('producer record retains a review attempt/verdict; no replacement');
+      (e.run===run||(e.item===item||e.source_item===item)&&(e.head===target.head||e.target?.head===target.head||e.reviewed_head===target.head))))throw Error('producer record retains a review attempt/verdict; no replacement');
   const directory=lineDirectory(org,gitProject(repo).identity),controls=path.join(directory,'controls.jsonl'),all=reviewPlain(controls);
   const length=observation?.stop?.length??all.length;
   if(!Number.isSafeInteger(length)||length<1||length>all.length)throw Error('producer STOP audit prefix changed');

@@ -370,12 +370,13 @@ for(const kind of ['later-review-base','unrelated-mention'])test(`producer recor
   assert.equal([...f.context().state.items.values()].filter(q=>q.meta.review_source_run==='R-1').length,1);
 });
 
-for(const kind of ['source-run','source-item-head','source-item-target','finding-source','verdict','legacy-verdict'])test(`producer record proof retains a typed ${kind} without replacing it`,t=>{
+for(const kind of ['source-run','source-item-head','source-item-target','finding-source','verdict','legacy-verdict','reviewed-head'])test(`producer record proof retains a typed ${kind} without replacing it`,t=>{
   const f=fixture(t);
   const event=kind==='source-run'?{type:'review.original-continuation',item:'ENG-99',run:'R-1',target:{head:f.base}}:
     kind==='source-item-head'?{type:'review.finding-linked',item:'ENG-1',head:f.head}:
     kind==='source-item-target'?{type:'review.recovery-intent',item:'ENG-1',target:{head:f.head,base:f.base}}:
     kind==='finding-source'?{type:'review.finding-linked',item:'ENG-100',source_item:'ENG-1',head:f.head,base:f.base}:
+    kind==='reviewed-head'?{type:'review.verdict',item:'ENG-1',run:'R-99',reviewed_head:f.head,verdict:'PASS'}:
     {type:kind==='verdict'?'change.reviewed':'review.verdict',item:'ENG-1',head:f.head,verdict:'PASS'};
   f.add([event]);f.prepare(producerHandoff(f,'ownedScope.head'));const before=f.captured(),bytes=fs.readFileSync(f.reference);
   const c=f.context();assert.throws(()=>referenceProof({...c,item:'ENG-1',run:'R-1',input:f.input()}),/retains a review attempt\/verdict; no replacement/);

@@ -124,6 +124,8 @@ test('closer lock contention discards preparation; only a named safe turn retrie
   retryCloseout({ cwd: f.repo, org: f.org, topic: 'topic', why: 'lifecycle-lock-released', start: false });
   assert.deepEqual(f.drain().evaluated, []);
   assert.equal(fs.existsSync(f.lane), true); assert.equal(f.herdrCalls().length, native);
+  assert.deepEqual(f.drain({ keys: [blocked.key] }).evaluated, []);
+  assert.equal(fs.existsSync(f.lane), true);
   const before = events(f), next = f.drain({ keys: [blocked.key], retrySafe: true });
   assert.equal(next.evaluated.length, 1);
   assert.equal(next.evaluated[0].completed, true, JSON.stringify(next));

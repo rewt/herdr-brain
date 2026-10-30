@@ -7,9 +7,8 @@ lessons do not add work items, change their status, inherit budgets or start run
 Allocation avoids collisions with existing items using the custom `L` role prefix.
 
 The dependency-free core validates references and selects lessons without a model,
-a harness check or a filesystem search. It does not distill report learnings or
-insert lessons into supervisor/chat policy text, briefs or cold starts; those are
-the next consumers of this interface.
+a harness check or a filesystem search. Briefs consume active lessons; report
+learnings and challenges are not automatically promoted to confirmed mistakes.
 
 ## Write
 
@@ -97,6 +96,50 @@ while allowing consumers to select a different bound. No matching lessons yields
 `No matching lessons.` in text and `[]` in JSON.
 
 ## Events and consumer API
+
+### Fresh-owner context
+
+Generated briefs include a compact intent/authority view in `lib/render.mjs`.
+It links the project goal's purpose, the item's original rationale, acceptance
+amendment history and the saved execution contract's external ask. Ask contents
+are not opened or inferred. Current acceptance and the execution contract still
+govern scope; interpreting intent grants no native, reserved or outward authority.
+
+`lib/brief-context.mjs` selects at most four related items from the **same record**:
+exact item/run references in the item's title, rationale, acceptance and notes
+(plus saved purpose/outcome/scope), then siblings sharing literal relative source
+paths or explicitly mentioned active-lesson module names. Ties use numeric IDs.
+Paths do not imply module names. Exact run references resolve to their owning item.
+Unresolved references and omitted match counts are explicit. There is no automatic
+cross-record read, graph traversal, filesystem crawl, transcript or second store.
+
+For each selected item and up to two ancestors, the brief carries a decision
+excerpt with `record show` and source event links. These are the most recent
+decision note or decision-bearing report per item, **not** a finding that the
+decision remains authoritative. Read the linked history for amendments,
+withdrawals or supersession. Notes retain authorship; report folds that lack an
+author say so. Recent status notes cannot displace these ancestor pointers.
+
+Lessons are selected using literal mentions, then evidence tied to the owning
+item, ancestors or these selected related records, then broad applicability.
+Only active lessons appear; superseded and retired claims remain inspectable
+with `record lessons --state all --json`. Five claims are shown, with an omitted
+count and deeper lookup command. Prior report questions without a recorded closed
+question remain explicit obligations; retrieving context does not answer them.
+
+Owners choose deeper reads using exact `record show ID` links and
+`record lessons --path PATH --json` / `--module NAME --json`. When current code
+conflicts with the intended outcome, record the changed premise, source evidence,
+proposed method and any held authority boundary. For example, ENG-935/R-1257's
+exclusive-writer reuse policy does not permit bypassing `dispatch/dispatch.mjs`'s
+current lane allocation or lifting the closeout proof's hold. Shared procedures
+and the ENG-1040 record lookup remain separately owned; this renderer adds no
+workspace allocation or search index.
+
+`test/brief-context.test.mjs` measures UTF-8 brief/context bytes and retrieval
+utility on planted cold starts, including that real policy/method tension. It
+also checks unchanged prompt size with 300 unrelated records. These are example
+measurements, not estimated token savings or proof of whole-organization utility.
 
 The fold in `lib/state.mjs` creates `state.lessons`, a map keyed by lesson ID:
 

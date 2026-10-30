@@ -132,11 +132,13 @@ function historicalTail(t,{kind='eligible'}={}){
   }
   fs.writeFileSync(f.eventFile,raw.map(e=>JSON.stringify(e)+'\n').join(''));
   transact(f.org,()=>({add:[{type:'report.ingested',run:'R-1',report:{outcome:'blocked',summary:'old final allocation'},sha256:'old'}]}));
-  if(kind==='refused'){
+  if(kind==='refused'||kind==='unbound-refused'){
     // Historical refusal is an effect fact; report prose grants no authority.
     const report=events(f).find(e=>e.type==='report.ingested');
-    f.append([{type:'closeout.command-failed',identity:f.common,run:'R-1',key:'original-refused-exit',
-      source:{seq:report.seq,type:report.type},effect:'original-refused-exit',reason:'operation not permitted',
+    if(kind==='refused')f.append([{type:'lane.ready',common:f.common,run:'R-1'}]);
+    const entry=readCloseoutEntries(f.common)[0];
+    f.append([{type:'closeout.command-failed',identity:f.common,run:'R-1',key:entry?.key??'original-refused-exit',
+      source:entry?.source??{seq:report.seq,type:report.type},effect:'original-refused-exit',reason:'operation not permitted',
       failure:{kind:'fence',code:'EPERM'}}]);
   }
   if(kind==='working'){f.state.agents[0].agent_status='working';f.save();}
@@ -174,11 +176,19 @@ test('cleanup tail explicit abandonment permits only a guarded content-released 
 
 test('cleanup tail historical discovery keeps unsafe scopes and binds reported dirty and unlanded allocations',async t=>{
   const {refreshCloseouts}=await import('../lib/closeout-consumer.mjs');
-  for(const kind of ['working','reused','foreign','refused','uncertain']){
+  for(const [kind,reason] of [
+    ['working','working or mismatched cleanup native allocation'],
+    ['reused','open/reused allocation retains cleanup target'],
+    ['foreign','foreign native cleanup workspace identity'],
+    ['refused','original native refusal remains held'],
+    ['unbound-refused','original unbound cleanup attempt remains held; original owner evidence required'],
+    ['uncertain','original uncertain or refused cleanup scope remains held'],
+  ]){
     const f=historicalTail(t,{kind}),bytes=fs.readFileSync(f.eventFile),result=refreshCloseouts({cwd:f.repo,org:f.org,env:f.env,retirementOptions:f.options});
     assert.deepEqual(result.created,[],`${kind}: ${JSON.stringify(result)}`);
     assert.deepEqual(fs.readFileSync(f.eventFile).subarray(0,bytes.length),bytes,'original evidence stays immutable');
     const kept=events(f).filter(e=>e.type==='closeout.kept');assert.equal(kept.length,1,kind);assert.equal(kept[0].run,'R-1');assert.equal(kept[0].cwd,f.lane);
+    assert.equal(kept[0].reason,reason,kind);assert.equal(result.kept[0]?.reason,reason,kind);
     const recorded=fs.readFileSync(f.eventFile);refreshCloseouts({cwd:f.repo,org:f.org,env:f.env,retirementOptions:f.options});
     assert.deepEqual(fs.readFileSync(f.eventFile),recorded,'the kept outcome is deduplicated');assert.deepEqual(f.read().actions,[]);
   }

@@ -4,6 +4,9 @@ Herdr Monitor gives coding agents a durable record and isolated Git lanes. A fre
 session recovers tasks, reports and decisions from the record instead of a long
 chat history.
 
+Use [`record lookup`](docs/LOOKUP.md) to retrieve decisions, confirmed mistakes
+and their original evidence from the owning record, including supersession.
+
 Install a release once and dispatch work into explicit Git lanes.
 
 **Start with [the adoption guide](docs/ADOPTING.md).** It covers installation,

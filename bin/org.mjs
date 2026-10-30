@@ -120,6 +120,8 @@ Runs and reports
   record brief <R-n>                      print the brief a run was given
 
 Views (zero inference)
+  record lookup TEXT [--kind decision|mistake|challenge|lesson|learning|note] [--item ID]
+          [--at SEQ] [--limit 10] [--all-states] [--json]  rebuild per-record source lookup
   record status [--json]                  one-screen overview
   record snapshot                         markdown state for a fresh session of any harness
   record show <ID> [--json] [--compact]   an item or run with its reports and history
@@ -1122,6 +1124,7 @@ function log(argv) {
 const lazy = (file, name) => async (argv) => (await import(file))[name](argv);
 
 const COMMANDS = {
+  lookup: argv => import('../lib/lookup.mjs').then(module => module.lookupCommand(argv, { out })),
   messages: async argv => (await import('../messages/record-command.mjs')).messagesCommand(argv, { openOrg, mutate, out }),
   lesson, lessons,
   'complete-batch': argv => completeBatchCommand(argv, { openOrg, mutate, out }),

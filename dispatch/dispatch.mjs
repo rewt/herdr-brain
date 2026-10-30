@@ -274,15 +274,21 @@ function originalUnclaimedStart(saved, run) {
       saved.sessionBinding || saved.watcher || run.report || run.abandoned ||
       ['agent', 'pane', 'worker_workspace', 'terminal_id', 'agent_session_id'].some(key => run.meta?.[key] != null)) return false;
   const starts = requestStarts(saved), start = starts[0];
-  return starts.length === 1 && start.id === run.id && start.meta.dispatch_record === saved.org &&
+  if (!(starts.length === 1 && start.id === run.id && start.meta.dispatch_record === saved.org &&
     start.meta.lane === saved.lane && start.meta.route === saved.route &&
     (start.meta.dispatch_from_run ?? null) === (saved.fromRun ?? null) &&
     (start.meta.dispatch_unblocks ?? null) === (saved.unblocks ?? null) &&
     Object.entries(saved.declared).every(([key, value]) => (start.meta[key] ?? null) === value) &&
-    fs.realpathSync(start.workspace) === fs.realpathSync(saved.workspace) &&
-    run.item === saved.item && fs.realpathSync(run.workspace) === fs.realpathSync(saved.workspace);
+    run.item === saved.item)) return false;
+  try {
+    return fs.realpathSync(start.workspace) === fs.realpathSync(saved.workspace) &&
+      fs.realpathSync(run.workspace) === fs.realpathSync(saved.workspace);
+  } catch { return false; }
 }
-function retryCommand() {
+function retryCommand(error) {
+  // Terminal refusals retain their evidence without actionable retry advice.
+  if (error && (error.code === 'RUN_OWNED_ELSEWHERE' ||
+      /^(?:RUN_OWNED_ELSEWHERE:|original dispatch was terminally abandoned;|run is already abandoned or reported;|resume launch\/delivery outcome must be retained;)/.test(error.message))) return undefined;
   return [process.execPath, local('./dispatch.mjs'), '--repo', job.repo, '--org', job.org,
     '--retry', job.run ?? journal].map(quote).join(' ');
 }
@@ -871,14 +877,14 @@ catch (error) {
     process.stderr.write(`dispatch: launch delivered; completion pending: ${error.message}\nrequest: ${journal}\n`);
     outputReceipt({ reason: error.message });
   } else {
+    const retry = job && journal && ownsLock ? retryCommand(error) : undefined;
     if (job && journal && ownsLock) {
       job.error = error.message;
       job.failure={...outcomeFailure(error),kind:['DISPATCH_SESSION_CAP','DISPATCH_REVIEW_CAP','DISPATCH_DECISION_CAP'].includes(error.code)?'capacity':outcomeFailure(error).kind,stage:job.stage,observed_at:new Date().toISOString(),native_launch_attempted:job.native_launch_attempted??null,...(error.sessions?{capacity:error.sessions}:{}),...(error.launch_input?{launch_input:error.launch_input}:{})};
       if(job.detached&&!job.native_launch_attempted&&!job.worker&&!['starting','launching','prompting'].includes(job.stage))job.detached_refused=true;
       save();
-      if (job.run) try { note(`incomplete at ${job.stage}: ${error.message}; retry with ${retryCommand()}`); } catch {}
+      if (job.run) try { note(`incomplete at ${job.stage}: ${error.message}${retry ? `; retry with ${retry}` : ''}`); } catch {}
     }
-    const retry = job && journal && ownsLock ? retryCommand() : undefined;
     process.stderr.write(`dispatch: ${error.message}${journal ? `\nrequest: ${journal}` : ''}${retry ? `\nretry: ${retry}` : ''}\n`);
     if (error.code === 'DISPATCH_STOPPED') {
       process.stdout.write(`${JSON.stringify({ result: 'stopped', run: job.run, item: job.item, lane: job.lane,

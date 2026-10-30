@@ -113,12 +113,13 @@ for (const control of ['STOP', 'HOLD']) test(`pre-claim retry retains the ${cont
   assert.deepEqual(f.show(f.item).runs, [saved.run]); assert.equal(launches(f).length, 0); noDelivery(f);
 });
 
-for (const changed of ['request', 'native', 'abandoned', 'owner', 'ambiguous']) test(`pre-claim recovery refuses changed ${changed} evidence without another effect`, t => {
+for (const changed of ['request', 'native', 'abandoned', 'owner', 'ambiguous', 'missing-workspace']) test(`pre-claim recovery refuses changed ${changed} evidence without another effect`, t => {
   const { f, journal, saved } = interrupted(t);
   if (changed === 'request') saved.token = 'foreign-request';
   if (changed === 'native') saved.native_launch_attempted = true;
   if (changed === 'abandoned') f.rec(['abandon', saved.run, '--note', 'fixture abandoned']);
   if (changed === 'owner') f.rec(['claim', saved.run, '--controller', 'foreign-controller', '--legacy']);
+  if (changed === 'missing-workspace') fs.rmSync(saved.workspace, { recursive: true });
   if (changed === 'ambiguous') {
     f.rec(['start', f.item, '--route', saved.route, '--route-config', saved.routeConfig, '--workspace', saved.workspace,
       ...Object.entries({ lane: saved.lane, dispatch_journal: journal, dispatch_project: saved.common,
@@ -130,7 +131,40 @@ for (const changed of ['request', 'native', 'abandoned', 'owner', 'ambiguous']) 
   const retry = f.dispatch(['--retry', saved.run]);
   assert.equal(retry.status, 1, retry.stdout + retry.stderr);
   assert.match(retry.stderr, changed === 'owner' ? /RUN_OWNED_ELSEWHERE/ : /RUN_OWNER_UNCLAIMED/);
+  assert.doesNotMatch(retry.stderr, /ENOENT/);
   assert.equal(fs.readFileSync(journal, 'utf8'), before);
   assert.equal(events(f).filter(e => e.type === 'run.claimed').length, claims);
   assert.equal(launches(f).length, 0); noDelivery(f);
+});
+
+for (const kind of ['terminal-abandonment', 'closed-run', 'resume-delivery', 'owner-code', 'owner-message'])
+test(`terminal refusal ${kind} omits retry advice from every failure surface`, t => {
+  const owner = kind.startsWith('owner-');
+  const f = owner ? interrupted(t).f : fixture(t);
+  if (!owner) { f.fail('dispatch'); assert.equal(f.start().status, 1); }
+  const journal = f.jobs()[0], saved = JSON.parse(fs.readFileSync(journal));
+  if (kind === 'terminal-abandonment') saved.terminal_abandonment = { reason: 'fixture terminal' };
+  if (kind === 'closed-run') f.rec(['abandon', saved.run, '--note', 'fixture closed']);
+  if (kind === 'resume-delivery') saved.resumeDeliveryProtocol = 1;
+  fs.writeFileSync(journal, JSON.stringify(saved));
+  // Inject the ownership refusal after job assignment, at initial claim, so
+  // both the typed claim error and the older message-only refusal hit the catch.
+  const env = owner ? hook(f, `if(file===lock&&dispatch&&new Error().stack.includes('at claimRun '))
+    throw Object.assign(Error('RUN_OWNED_ELSEWHERE: fixture competing claim'),
+      ${kind === 'owner-code' ? "{code:'RUN_OWNED_ELSEWHERE'}" : '{}'});
+    return mkdir.call(this,file,...args);`) : f.env;
+  const beforeLaunches = launches(f).length;
+  const claims = events(f).filter(e => e.type === 'run.claimed').length;
+  const retry = f.dispatch(['--retry', saved.run, ...(kind === 'resume-delivery' ? ['--fresh'] : [])], { env });
+  assert.equal(retry.status, 1, retry.stdout + retry.stderr);
+  const reason = owner ? /RUN_OWNED_ELSEWHERE/ : kind === 'terminal-abandonment' ? /original dispatch was terminally abandoned/ :
+    kind === 'closed-run' ? /run is already abandoned or reported/ : /resume launch\/delivery outcome must be retained/;
+  assert.match(retry.stderr, reason);
+  const failure = JSON.parse(retry.stdout);
+  assert.equal(failure.result, 'failed'); assert.equal(Object.hasOwn(failure, 'retry'), false);
+  assert.doesNotMatch(retry.stderr, /^retry:/m);
+  const note = f.show(saved.run).notes.at(-1).text;
+  assert.match(note, reason); assert.doesNotMatch(note, /; retry with /);
+  assert.equal(events(f).filter(e => e.type === 'run.claimed').length, claims);
+  assert.equal(launches(f).length, beforeLaunches); noDelivery(f);
 });

@@ -95,7 +95,10 @@ metadata describe the intended handoff, not a review identity or verdict.
 A top-level producer handoff `watcher` can be the dispatch-time process waiting
 for that producer's own report, rather than a review attempt. Supported watcher
 objects contain a positive integer `pid` and only the optional dispatch fields
-`run`, `item`, `identity`, `log`, `release`, `to`, `target`, and `retained`.
+`run`, `item`, `identity`, `log`, `release`, `to`, `target`, `recipient`, `retained`,
+and `liveness`. The destination fields `to`, `target`, and `recipient` accept
+non-empty strings. Optional `liveness` accepts only descriptive strings; its text
+grants no authority and supplies no process or absence evidence.
 Populated run/item fields must name the producer; a log must be its exact
 `ORG/dispatch/R-SOURCE.watch.log`. Populated identity/log/PID fields must agree
 with any recorded producer watcher binding. A watcher linked to a review run

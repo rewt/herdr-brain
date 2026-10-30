@@ -76,9 +76,12 @@ const producerHandoff=(f,shape='head')=>({
 });
 
 const reportWatcher=f=>({run:'R-1',pid:123,identity:'original-watcher-birth',log:path.join(f.org,'dispatch/R-1.watch.log')});
-for(const shape of ['dispatch','retained','explicit-queue-flags'])test(`producer ${shape} watcher is retained with typed record-backed proof and one ordinary queue`,t=>{
-  const f=fixture(t),watcher=shape==='retained'?{pid:123,to:'fixture-supervisor',retained:true}:reportWatcher(f);
-  f.add([{type:'run.updated',id:'R-1',meta:{watcher_pid:watcher.pid,watcher_identity:watcher.identity,watcher_log:watcher.log}}]);
+for(const shape of ['dispatch','retained','explicit-queue-flags','recipient-dispatch-A','recipient-retained-B'])test(`producer ${shape} watcher is retained with typed record-backed proof and one ordinary queue`,t=>{
+  const f=fixture(t);let watcher=reportWatcher(f);
+  if(shape==='retained')watcher={pid:123,to:'fixture-supervisor',retained:true};
+  if(shape==='recipient-dispatch-A')watcher={...watcher,release:{commit:f.head,id:'fixture-release',protocol:1,root},recipient:'fixture-supervisor',retained:true,liveness:'Unprobed; unchanged.'};
+  if(shape==='recipient-retained-B')watcher={pid:123,identity:'original-watcher-birth',recipient:'fixture-supervisor',retained:true,liveness:'unprobed'};
+  f.add([{type:'run.updated',id:'R-1',meta:{watcher_pid:watcher.pid,watcher_identity:watcher.identity,watcher_log:watcher.log??path.join(f.org,'dispatch/R-1.watch.log')}}]);
   f.prepare({...producerHandoff(f),...(shape==='explicit-queue-flags'?{queueAttempted:false,queueMutation:false}:{}),watcher});
   const before=f.captured(),bytes=fs.readFileSync(f.reference);
   const result=resolveReviewReference(f.args());assert.equal(result.existing,false);
@@ -94,17 +97,19 @@ for(const shape of ['dispatch','retained','explicit-queue-flags'])test(`producer
   assert.ok(f.calls.every(a=>a[0]==='agent'&&a[1]==='get'),'no watcher or reviewer native effects');
 });
 
-for(const kind of ['review-run','review-item','review-link','review-log','review-metadata','review-recipient','nested','unknown','recorded-mismatch','missing-stop','competing-attempt','competing-queue'])test(`producer watcher refuses ${kind} without changing original history`,t=>{
+for(const kind of ['review-run','review-item','review-link','review-log','review-metadata','review-to','review-target','review-recipient','nested','unknown','recorded-mismatch','missing-stop','competing-attempt','competing-queue'])test(`producer watcher refuses ${kind} without changing original history`,t=>{
   const f=fixture(t),watcher=reportWatcher(f),value={...producerHandoff(f),queueAttempted:false,queueMutation:false,watcher};
   if(kind==='review-run')watcher.run='R-2';
   if(kind==='review-item')watcher.item='REV-1';
   if(kind==='review-link')watcher.review_run='R-2';
   if(kind==='review-log')watcher.log=path.join(f.org,'dispatch/R-2.watch.log');
-  if(['review-metadata','review-recipient'].includes(kind))f.add([
+  if(['review-metadata','review-to','review-target','review-recipient'].includes(kind))f.add([
     {type:'item.added',id:'REV-1',title:'Existing review',role:'reviewer',meta:{}},
     {type:'run.started',id:'R-2',item:'REV-1',workspace:f.repo,meta:kind==='review-metadata'?{watcher_pid:watcher.pid}:{agent:'fixture-reviewer'}},
   ]);
-  if(kind==='review-recipient')watcher.to='fixture-reviewer';
+  if(kind==='review-to')watcher.to='fixture-reviewer';
+  if(kind==='review-target')watcher.target='fixture-reviewer';
+  if(kind==='review-recipient')watcher.recipient='fixture-reviewer';
   if(kind==='nested'){delete value.watcher;value.review={watcher};}
   if(kind==='unknown')value.watcher='unknown';
   if(kind==='recorded-mismatch')f.add([{type:'run.updated',id:'R-1',meta:{watcher_pid:456}}]);
@@ -116,6 +121,32 @@ for(const kind of ['review-run','review-item','review-link','review-log','review
   f.prepare(value);const before=f.captured(),bytes=fs.readFileSync(f.reference);
   assert.throws(()=>resolveReviewReference(f.args()));
   assert.deepEqual(f.captured(),before);assert.deepEqual(fs.readFileSync(f.reference),bytes);
+});
+
+for(const [key,values] of [['recipient',['',123,{},[]]],['liveness',[null,false,123,{},[]]]])test(`producer watcher refuses malformed ${key} without changing original history`,t=>{
+  const f=fixture(t);
+  for(const value of values){
+    f.prepare({...producerHandoff(f),watcher:{...reportWatcher(f),[key]:value}});
+    const before=f.captured(),bytes=fs.readFileSync(f.reference);
+    assert.throws(()=>resolveReviewReference(f.args()),/producer watcher binding is UNKNOWN/);
+    assert.deepEqual(f.captured(),before);assert.deepEqual(fs.readFileSync(f.reference),bytes);
+  }
+});
+
+test('descriptive watcher liveness neither probes a process nor replaces historical STOP proof',t=>{
+  const f=fixture(t),descriptions=['','unprobed','Unprobed; unchanged.','Process is absent.','Process is alive.'];
+  const prepare=liveness=>f.prepare({...producerHandoff(f),queueAttempted:false,queueMutation:false,watcher:{...reportWatcher(f),recipient:'fixture-supervisor',liveness}});
+  for(const liveness of descriptions){
+    prepare(liveness);const c=f.context();
+    assert.equal(referenceProof({...c,item:'ENG-1',run:'R-1',input:f.input()}).kind,'producer-record-no-attempt');
+  }
+  fs.unlinkSync(path.join(f.directory,'controls.jsonl'));
+  for(const liveness of descriptions){
+    prepare(liveness);const before=f.captured(),bytes=fs.readFileSync(f.reference);
+    assert.throws(()=>resolveReviewReference(f.args()),/STOP|ENOENT/);
+    assert.deepEqual(f.captured(),before);assert.deepEqual(fs.readFileSync(f.reference),bytes);
+  }
+  assert.ok(f.calls.every(a=>a[0]==='agent'&&a[1]==='get'),'no watcher process probe or native effect');
 });
 
 test('multi-megabyte immutable diff keeps its exact hash through watcher disposition and queue admission',t=>{

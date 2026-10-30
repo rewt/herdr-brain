@@ -25,12 +25,14 @@ export const producerReportHandoff=value=>Boolean(value&&typeof value==='object'
 function producerWatcherProof({value,state,org,item,run}){
   const w=value.watcher;if(w==null)return null;
   if(typeof w!=='object'||Array.isArray(w)||!Number.isSafeInteger(w.pid)||w.pid<1||
-    Object.keys(w).some(k=>!['run','item','pid','identity','log','release','to','target','retained'].includes(k))||
+    Object.keys(w).some(k=>!['run','item','pid','identity','log','release','to','target','recipient','retained','liveness'].includes(k))||
     w.run!=null&&w.run!==run||w.item!=null&&w.item!==item||
     w.identity!=null&&(typeof w.identity!=='string'||!w.identity)||
     w.log!=null&&w.log!==path.join(org,'dispatch',`${run}.watch.log`)||
     w.retained!=null&&w.retained!==true||
-    ['to','target'].some(k=>w[k]!=null&&(typeof w[k]!=='string'||!w[k]))||
+    ['to','target','recipient'].some(k=>w[k]!=null&&(typeof w[k]!=='string'||!w[k]))||
+    // Liveness is descriptive metadata only, never a probe or absence proof.
+    Object.hasOwn(w,'liveness')&&typeof w.liveness!=='string'||
     roleIs(state.items.get(item),'REV'))throw Error('producer watcher binding is UNKNOWN or tied to a review run; retain the original reference');
   const source=state.runs.get(run)?.meta??{};
   for(const [key,meta] of [['pid','watcher_pid'],['identity','watcher_identity'],['log','watcher_log']]){
@@ -39,7 +41,7 @@ function producerWatcherProof({value,state,org,item,run}){
   for(const r of state.runs.values())if(roleIs(state.items.get(r.item),'REV')){
     const m=r.meta??{};
     if(String(m.watcher_pid??'')===String(w.pid)||w.identity!=null&&m.watcher_identity===w.identity||w.log!=null&&m.watcher_log===w.log||
-      [w.to,w.target].some(v=>v!=null&&v===effectiveWorkerIdentity(r,state).agent))
+      [w.to,w.target,w.recipient].some(v=>v!=null&&v===effectiveWorkerIdentity(r,state).agent))
       throw Error('producer watcher is tied to a review run; retain the original attempt');
   }
   return{kind:'producer-report-watcher',run,sha256:hash(JSON.stringify(w))};

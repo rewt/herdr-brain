@@ -50,6 +50,7 @@ Setup
   record adopt PROJECT --scope FILE --decision ID:SEQ
 
 Work
+  record obligations [--json] [--project COMMON_DIR]  exact pending facts and consumer outcomes (read-only)
   record messages send --id ID --summary TEXT [--kind KIND --run R-n --item ID --question HUM-n]
   record messages send --file ENVELOPE    store an existing session.message.v1 envelope
   record messages digest [--limit 5 --after SEQ --json]  pull a short operator digest
@@ -1139,6 +1140,7 @@ function log(argv) {
 const lazy = (file, name) => async (argv) => (await import(file))[name](argv);
 
 const COMMANDS = {
+  obligations: lazy('../lib/obligations-command.mjs', 'obligationsCommand'),
   template: argv => { args(argv, {}, { max: 0, usage: 'record template' }); out(DISPATCH_TEMPLATE); return 0; },
   lookup: argv => import('../lib/lookup.mjs').then(module => module.lookupCommand(argv, { out })),
   messages: async argv => (await import('../messages/record-command.mjs')).messagesCommand(argv, { openOrg, mutate, out }),

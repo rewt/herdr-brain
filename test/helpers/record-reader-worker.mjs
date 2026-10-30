@@ -19,7 +19,7 @@ if (role === 'parent') {
 }
 function fingerprint(state) {
   const hash = createHash('sha256');
-  for (const name of ['items', 'runs', 'lessons', 'candidates', 'workerReceipts', 'sessionBindings']) {
+  for (const name of ['items', 'runs', 'lessons', 'candidates', 'workerReceipts', 'sessionBindings', 'obligations']) {
     hash.update(name);
     for (const entry of state[name]) hash.update(JSON.stringify(entry));
   }

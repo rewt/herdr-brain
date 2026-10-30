@@ -30,7 +30,7 @@ function fixture(t, events = [
 }
 function materialize(reader) {
   const state = { ...reader.state };
-  for (const key of ['items', 'runs', 'lessons', 'candidates', 'workerReceipts', 'sessionBindings']) state[key] = new Map(state[key]);
+  for (const key of ['items', 'runs', 'lessons', 'candidates', 'workerReceipts', 'sessionBindings', 'obligations']) state[key] = new Map(state[key]);
   return state;
 }
 function equivalent(f) {

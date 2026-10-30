@@ -150,3 +150,49 @@ test('unknown prompt delivery cannot be relabeled as terminal abandonment',t=>{
   assert.equal(result.status,1);assert.match(result.stderr,/UNKNOWN is retained/);
   assert.equal(f.show(job.run).abandoned,null);assert.equal(promptCalls(f).length,1);
 });
+
+for (const scenario of [
+  { stage: 'open', allocated: false },
+  { stage: 'open', allocated: true },
+  { stage: 'start', allocated: true },
+  { stage: 'starting', allocated: true },
+  { stage: 'starting', allocated: true, started: true },
+]) test(`abandonment refuses saved ${scenario.stage} with ${scenario.started ? 'a committed start' : scenario.allocated ? 'a retained lane' : 'no lane'} before allocation effects`, t => {
+  const f = fixture(t);
+  f.fail('open');
+  const first = f.start(); assert.equal(first.status, 1, first.stderr);
+  const journal = f.jobs()[0], job = JSON.parse(fs.readFileSync(journal));
+  assert.equal(job.stage, 'open'); assert.equal(job.run, null);
+  f.fail('');
+  if (scenario.allocated) {
+    const lane = path.join(f.root, 'lane');
+    f.git(['worktree', 'add', '-b', 'lane/topic', lane, 'HEAD']);
+    job.workspace = fs.realpathSync(lane);
+    if (scenario.stage === 'open') {
+      f.git(['commit', '--allow-empty', '-m', 'requested base advances']);
+      job.base = f.git(['rev-parse', 'HEAD']);
+      assert.notEqual(f.git(['rev-parse', 'HEAD'], lane), job.base);
+    }
+  }
+  job.stage = scenario.stage;
+  if (scenario.stage === 'starting') {
+    job.startRefused = !scenario.started;
+    if (scenario.started) f.rec(['start', f.item, '--route', job.route, '--route-config', job.routeConfig,
+      '--workspace', job.workspace, '--meta', `lane=${job.lane}`, '--meta', `dispatch_journal=${journal}`,
+      '--meta', `dispatch_attempt=${job.token}`, '--meta', `dispatch_project=${job.common}`, '--meta', `dispatch_record=${job.org}`]);
+  }
+  fs.writeFileSync(journal, JSON.stringify(job));
+  const original = fs.readFileSync(journal), eventFile = path.join(f.org, 'events.jsonl'), events = fs.readFileSync(eventFile);
+  const calls = f.calls(), worktrees = f.git(['worktree', 'list', '--porcelain']), main = f.git(['rev-parse', 'main']);
+  const laneHead = job.workspace && f.git(['rev-parse', 'HEAD'], job.workspace);
+  const result = f.dispatch(['--retry', journal, '--abandon', '--abandon-reason', 'End only the original allocation']);
+  assert.equal(result.status, 1, result.stderr + result.stdout);
+  assert.match(result.stderr, new RegExp(`terminal abandonment refuses saved ${scenario.stage} request`));
+  assert.deepEqual(fs.readFileSync(journal), original, 'retain original pending/start proof unchanged');
+  assert.deepEqual(fs.readFileSync(eventFile), events, 'no new run, claim, note, completion or abandonment');
+  assert.deepEqual(f.calls(), calls, 'no admission native queries, lane preparation, worker, watcher or prompt');
+  assert.equal(f.git(['worktree', 'list', '--porcelain']), worktrees, 'no lane allocation');
+  assert.equal(f.git(['rev-parse', 'main']), main);
+  if (job.workspace) assert.equal(f.git(['rev-parse', 'HEAD'], job.workspace), laneHead, 'no base fast-forward');
+  assert.equal(fs.existsSync(journal + '.lock'), false, 'release original request lock');
+});

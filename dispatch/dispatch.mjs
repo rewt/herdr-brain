@@ -405,6 +405,10 @@ async function main() {
     lockJob();
     const saved = JSON.parse(fs.readFileSync(journal, 'utf8'));
     if (saved.org !== fs.realpathSync(opt.org)) throw new Error('retry belongs to a different record');
+    // Refuse before admission, recovery or stage effects. Assigning job would
+    // also let the failure handler mutate this retained request and completion.
+    if (opt.abandon && ['open', 'start', 'starting'].includes(saved.stage))
+      throw Error(`terminal abandonment refuses saved ${saved.stage} request; retain original allocation/start evidence`);
     if(resolvedNotStarted({events:loadEvents(saved.org).events,org:saved.org,common:saved.common,journal}))throw Error('original request archived NOT STARTED; never retry it; only the existing line may use its changed input');
     // A consumed proof still governs delivery after interruption. The saved
     // request and immutable archive, rather than an optional flag, select it.

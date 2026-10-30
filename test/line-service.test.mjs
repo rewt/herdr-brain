@@ -484,7 +484,10 @@ test('wake closeout failure keeps an original native refusal while admitting ind
   fs.writeFileSync(path.join(s.directory,'closeout-turn.json'),'{');
   const wake=wakeLineService({service:s,launch:()=>s.pass()});
   assert.match(wake.closeout.held,/JSON/);assert.equal(wake.general.result,'pass-complete');
-  assert.deepEqual(f.calls.map(call=>call.args[1]),[refused,ready]);assert.deepEqual(actions()[key],original,'original refused effect and receipt stay immutable');
+  assert.deepEqual(f.calls.map(call=>call.args[1]),[refused,ready]);
+  const {original_outcome,...retained}=actions()[key];
+  assert.deepEqual(retained,original,'original refused effect and receipt stay immutable');
+  assert.equal(original_outcome.status,'unknown','the existing readback does not invent a successful outcome');
 });
 test('a real command refusal is recorded once and never re-executed on restart', t => {
   const f = fixture(t); f.add('Ready'); f.setFailure('native permission refused'); const s = f.service(); s.pass(); f.service().pass(); f.service().pass();

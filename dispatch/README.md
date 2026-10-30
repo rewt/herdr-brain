@@ -558,8 +558,19 @@ refuses duplicate watchers, including one whose acknowledgement was lost.
 Record start, worker receipt and claim preparation use the record's bounded
 pre-append conflict retry: an ordinary concurrent append refreshes the record
 and rechecks authority before any effect. No native launch or prompt is replayed.
-Failures print a quoted retry command with the original repository and record;
-before a run exists it selects the saved journal instead of a run ID.
+Retryable failures print a quoted retry command with the original repository and
+record; before a run exists it selects the saved journal instead of a run ID.
+
+Mutation children (including record start/worker, lane allocation, watcher start
+and prompt delivery) have no wall-clock execution cap. They use the owned
+foreground helper's measured inactivity policy. If a mutation is nevertheless
+interrupted by a signal, timeout or lost transport, dispatch returns nonzero with
+`result: "unknown"`, `code: "DISPATCH_OUTCOME_UNKNOWN"`, the original child
+`receipt`, and `readback` commands for the saved journal and owning record. The
+journal and completion event retain this typed unknown, never `DISPATCH_FAILED`.
+There is no retry hint: inspect that original request and record before any
+continuation; never redispatch or replace it. A definite pre-spawn or record
+refusal remains a failure. Read-only session observations retain their bounds.
 
 Some failures cannot be safely retried by guessing:
 

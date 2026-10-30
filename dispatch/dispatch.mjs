@@ -114,20 +114,25 @@ function claimAdmission() {
   job.ownership = { owner: claim.owner, generation: claim.generation };
   save();
 }
-function command(argv, args, cwd = job?.repo ?? path.resolve(opt.repo)) {
+function command(argv, args, cwd = job?.repo ?? path.resolve(opt.repo), mutation = false) {
   const remaining = Math.min(observationDeadline??Infinity,controllerDeadline)-Date.now();
   if (remaining !== undefined && remaining <= 0) throw Error('session observation deadline expired');
-  const phase1=opt.detach||job?.detached,execute=phase1?foregroundCommand:spawnSync;
+  // Mutations use measured inactivity, never a wall-clock kill. A lost reply
+  // cannot establish whether their effect committed, even when stdout is empty.
+  const owned=mutation||opt.detach||job?.detached,execute=owned?foregroundCommand:spawnSync;
   const result = execute(argv[0], [...argv.slice(1), ...args], {
     cwd, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024,
     env: { ...process.env, ORG_DIR: job?.org ?? opt.org },
-    timeout:phase1?0:Math.max(1,Math.min(120000,remaining??120000)),killSignal:'SIGTERM',
+    timeout:owned?0:Math.max(1,Math.min(120000,remaining??120000)),killSignal:'SIGTERM',
   });
-  if (result.error || result.status !== 0) {
+  if (result.error || result.signal || result.status !== 0) {
     const error = new Error(`${argv[0]} ${args[0]}: ${(result.stderr || result.stdout || result.error?.message || `exit ${result.status}`).trim()}`);
     error.code=outcomeFailure({code:result.error?.code,receipt:result}).code;
     error.receipt = { status: result.status, signal: result.signal ?? null, stdout: result.stdout ?? '',
       stderr: result.stderr ?? '', ...(result.error ? { error: result.error.code ?? result.error.message } : {}) };
+    if (mutation && (result.signal || result.error && !['ENOENT','ENOTDIR','EACCES','EPERM'].includes(result.error.code))) {
+      error.code = 'DISPATCH_OUTCOME_UNKNOWN';
+    }
     error.recordRefusal = !result.error && !result.signal && Number.isInteger(result.status) && result.status !== 0 &&
       result.stderr.trim().split('\n').at(-1).startsWith('record: ');
     if(argv===laneCLI&&!result.error&&!result.signal)try{
@@ -144,10 +149,11 @@ const allocationEffect=operation=>{
   const release=claimRetirementOwner(job.common,{waitMs,deadline:controllerDeadline});
   try{return operation();}finally{release();}
 };
-const record = args => ['start','worker'].includes(args[0]) ? allocationEffect(()=>command(recordCLI,args)) : command(recordCLI,args);
+const recordCommand = args => command(recordCLI,args,undefined,args[0] !== 'show');
+const record = args => ['start','worker'].includes(args[0]) ? allocationEffect(()=>recordCommand(args)) : recordCommand(args);
 const identityState = () => fold(loadEvents(job?.org ?? opt.org).events);
-const lane = args => ['open','prepare','dispatch'].includes(args[0]) ? allocationEffect(()=>command(laneCLI,args)) : command(laneCLI,args);
-const git = (args, cwd) => command(['git'], args, cwd);
+const lane = args => ['open','prepare','dispatch'].includes(args[0]) ? allocationEffect(()=>command(laneCLI,args,undefined,true)) : command(laneCLI,args);
+const git = (args, cwd) => command(['git'], args, cwd, args[0] === 'merge');
 const json = (text) => { const value = JSON.parse(text); if (value.error) throw new Error(JSON.stringify(value.error)); return value.result ?? value; };
 const refusal = (code, message) => Object.assign(new Error(message), { code });
 const dispatchCodes = new Set(['REUSE_RUN_OPEN', 'REUSE_MISMATCH', 'REUSE_IDENTITY_UNKNOWN', 'REUSE_WORKER_BUSY',
@@ -175,7 +181,7 @@ function checkReuseOccupant(prior, currentRun) {
     other.started.seq > prior.started.seq && !other.report && !other.abandoned && sharesWorker(prior, other, state));
   if (holders.length) throw refusal('REUSE_WORKER_BUSY', `reuse worker is held by an open run: ${holders.map(run => run.id).join(', ')}`);
 }
-const herdr = (args) => json(command(['herdr'], args));
+const herdr = (args) => json(command(['herdr'], args, undefined, args[0] === 'agent' && args[1] === 'prompt'));
 const note = (text) => record(['note', job.run, `Dispatch: ${text}`]);
 let dispatchWaits, admissionWaits;
 function timingFailure(phase) {
@@ -287,7 +293,7 @@ function originalUnclaimedStart(saved, run) {
 }
 function retryCommand(error) {
   // Terminal refusals retain their evidence without actionable retry advice.
-  if (error && (error.code === 'RUN_OWNED_ELSEWHERE' ||
+  if (error && (['RUN_OWNED_ELSEWHERE','DISPATCH_OUTCOME_UNKNOWN'].includes(error.code) ||
       /^(?:RUN_OWNED_ELSEWHERE:|original dispatch was terminally abandoned;|run is already abandoned or reported;|resume launch\/delivery outcome must be retained;)/.test(error.message))) return undefined;
   return [process.execPath, local('./dispatch.mjs'), '--repo', job.repo, '--org', job.org,
     '--retry', job.run ?? journal].map(quote).join(' ');
@@ -349,7 +355,7 @@ function ensureWatcher() {
     save();
     job.watcher = json(command(watchCLI, [job.run, '--controller', opt.controller, '--org', job.org, '--to', job.to,
       '--cwd', job.repo, ...(job.resumeDeliveryProtocol ? ['--agent', job.resumeDelivery.agentName] : []), '--detach', '--log', path.join(job.org, 'dispatch', `${job.run}.watch.log`),
-      ...(opt['org-cli'] ? ['--org-cli', opt['org-cli']] : []),...(job.recordOnlyNotices?['--record-only']:[])]));
+      ...(opt['org-cli'] ? ['--org-cli', opt['org-cli']] : []),...(job.recordOnlyNotices?['--record-only']:[])], undefined, true));
     save();
   } else {
     if (!ownerAlive(job.watcher)) {
@@ -632,7 +638,7 @@ async function main() {
     } else if (matches.length === 0 && job.startRefused) {
       job.stage = 'start'; save();
     } else {
-      throw new Error('record start outcome is unknown or has multiple matches; inspect record and use --recover-run R-n');
+      throw refusal('DISPATCH_OUTCOME_UNKNOWN', 'record start outcome is unknown or has multiple matches; inspect record and use --recover-run R-n');
     }
   }
   if (job.stage === 'start') {
@@ -882,15 +888,27 @@ catch (error) {
     outputReceipt({ reason: error.message });
   } else {
     const retry = job && journal && ownsLock ? retryCommand(error) : undefined;
+    const receipt = error.receipt ?? job?.failure?.receipt ?? null;
+    const readback = error.code === 'DISPATCH_OUTCOME_UNKNOWN' ? {
+      hint: 'Inspect the original journal and record before any continuation; never redispatch, replay or replace this attempt.',
+      journal: [process.execPath, local('./dispatch.mjs'), '--repo', job.repo, '--org', job.org, '--status', journal].map(quote).join(' '),
+      record: `ORG_DIR=${quote(job.org)} ${[...recordCLI, 'show', job.run ?? job.item, '--json'].map(quote).join(' ')}`,
+      org: job.org,
+    } : undefined;
     if (job && journal && ownsLock) {
       job.error = error.message;
       job.failure={...outcomeFailure(error),kind:['DISPATCH_SESSION_CAP','DISPATCH_REVIEW_CAP','DISPATCH_DECISION_CAP'].includes(error.code)?'capacity':outcomeFailure(error).kind,stage:job.stage,observed_at:new Date().toISOString(),native_launch_attempted:job.native_launch_attempted??null,...(error.sessions?{capacity:error.sessions}:{}),...(error.launch_input?{launch_input:error.launch_input}:{})};
+      if (readback) Object.assign(job.failure, { code: 'DISPATCH_OUTCOME_UNKNOWN', kind: 'unknown', receipt, readback });
       if(job.detached&&!job.native_launch_attempted&&!job.worker&&!['starting','launching','prompting'].includes(job.stage))job.detached_refused=true;
       save();
       if (job.run) try { note(`incomplete at ${job.stage}: ${error.message}${retry ? `; retry with ${retry}` : ''}`); } catch {}
     }
     process.stderr.write(`dispatch: ${error.message}${journal ? `\nrequest: ${journal}` : ''}${retry ? `\nretry: ${retry}` : ''}\n`);
-    if (error.code === 'DISPATCH_STOPPED') {
+    if (readback) {
+      process.stdout.write(`${JSON.stringify({ result: 'unknown', code: error.code, reason: error.message,
+        run: job.run, item: job.item, stage: job.stage, journal, receipt, readback })}\n`);
+      process.exitCode = 1;
+    } else if (error.code === 'DISPATCH_STOPPED') {
       process.stdout.write(`${JSON.stringify({ result: 'stopped', run: job.run, item: job.item, lane: job.lane,
         reason: error.message, stage: job.stage, journal })}\n`);
     } else if (error.code === RESERVATION_WAIT_EXPIRED_CODE) {

@@ -70,7 +70,7 @@ checks inside harness sandboxes.
 
 | Module | Reference |
 | --- | --- |
-| Record | `node bin/org.mjs help` (`org` is the permanent `record` alias); [Lessons](docs/reference/lessons.md) |
+| Record | `node bin/org.mjs help` (`org` is the permanent `record` alias); [Lessons](docs/reference/lessons.md), [Acceptance amendments](docs/reference/acceptance-amendments.md) |
 | Fleet and project chats | [Discovery](discovery/README.md) |
 | Machine installation | [Herdr](herdr/README.md) |
 | Lanes and routes | [Lanes](lanes/README.md) |

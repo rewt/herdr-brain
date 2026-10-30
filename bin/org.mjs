@@ -65,6 +65,8 @@ Work
   record unblock <ID> --by <ID>           remove that blocking link
   record note <ID> <text> [--decision [--summary TEXT]]
                                           attach a note or decision (summary: one plain sentence)
+  record amend-accept <ID> --accept TEXT... --why TEXT
+          | <ID> --file PATH --why TEXT   replace acceptance; retain every revision in show
 
 Questions for the operator
   record ask "<yes/no question>" --parent ID --category C --recommend ANSWER --why TEXT
@@ -197,7 +199,7 @@ function mutate(ctx, fn, authority) {
   }
   // Event derivation and read-only guards precede the append lock. Intake and
   // queue-review defer their immutable/native effects to the final commit hook.
-  const planned = new Set(['add', 'block', 'unblock', 'note', 'ask', 'answer', 'set', 'close', 'reopen', 'start', 'worker', 'abandon', 'lesson', 'ingest', 'sync', 'queue-review', 'messages']);
+  const planned = new Set(['add', 'block', 'unblock', 'note', 'amend-accept', 'ask', 'answer', 'set', 'close', 'reopen', 'start', 'worker', 'abandon', 'lesson', 'ingest', 'sync', 'queue-review', 'messages']);
   // Only event derivation may refresh on a race. Commit hooks never replay;
   // nested configuration audits also revoke replay permission in the store.
   // Message preparation includes its fresh native sender observation. It may
@@ -437,6 +439,34 @@ function note(argv) {
     return { add: [{ type: 'note.added', id, text: words.join(' ').trim(), decision: Boolean(values.decision), ...(summary ? { summary } : {}) }] };
   });
   out(`${values.decision ? 'decision' : 'note'} recorded on ${id}\n`);
+  return 0;
+}
+
+function amendAccept(argv) {
+  const { values, positionals } = args(argv, {
+    accept: { type: 'string', multiple: true }, file: { type: 'string' }, why: { type: 'string' },
+  }, { min: 1, max: 1, usage: 'record amend-accept <ID> (--accept TEXT... | --file PATH) --why TEXT' });
+  if (Boolean(values.accept) === (values.file !== undefined))
+    throw new UserError('supply either repeated --accept TEXT or --file PATH');
+  if (!values.why?.trim()) throw new UserError('--why is required: explain the acceptance replacement');
+  let accept = values.accept;
+  if (values.file !== undefined) {
+    const file = path.resolve(values.file);
+    try {
+      if (!fs.statSync(file).isFile()) throw new UserError(`acceptance file ${file} is not a regular file`);
+      accept = [fs.readFileSync(file, 'utf8')];
+    } catch (error) {
+      throw new UserError(`cannot read acceptance file ${file}: ${error.message}`);
+    }
+  }
+  if (accept.some(text => !text.trim())) throw new UserError('acceptance text cannot be empty');
+  const id = positionals[0];
+  const { added } = mutate(openOrg(), s => {
+    const item = requireItem(s, id);
+    if (item.meta.operator_reserved) throw new UserError('operator-reserved acceptance cannot be amended');
+    return { add: [{ type: 'item.acceptance-amended', id, accept, why: values.why }] };
+  });
+  safeOut(describeEvent(added[0]) + '\n');
   return 0;
 }
 
@@ -1088,7 +1118,7 @@ const COMMANDS = {
   handoffs: argv => handoffsCommand(argv, { openOrg, mutate, out }),
   init, add, 'queue-review': queueReview,
   proposals: async argv => (await import('../lib/proposals-command.mjs')).proposalsCommand(argv, { openOrg, mutate, out }),
-  block, unblock: (argv) => block(argv, true), note, ask, answer, set, close, reopen,
+  block, unblock: (argv) => block(argv, true), note, 'amend-accept': amendAccept, ask, answer, set, close, reopen,
   start, worker, check, ingest, sync, abandon, brief, status, snapshot, show, log, today,
   // Module views load only when used, so a fault in one of them cannot break every record command.
   claim: lazy('../lib/run-owner.mjs', 'claimCommand'),

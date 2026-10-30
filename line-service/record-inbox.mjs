@@ -25,8 +25,10 @@ export function serviceRecordBinding({repo,org,env=process.env,owner='pass'}) {
   // A finite guarded operation can yield the scheduling lock while keeping
   // its actual per-subject owner. Environment metadata alone grants nothing.
   const subject=env.HERDR_LINE_SUBJECT;
-  if(owner==='pass'&&lock?.pid!==process.pid&&typeof subject==='string'&&subject.length&&subject.length<=512)
+  if(owner==='pass'&&lock?.pid!==process.pid&&typeof subject==='string'&&subject.length&&subject.length<=512){
     lock=regularJSON(path.join(c.directory,'subjects',createHash('sha256').update(JSON.stringify(subject)).digest('hex')+'.lock','owner.json'));
+    if(!env.HERDR_LINE_SUBJECT_TOKEN||lock?.token!==env.HERDR_LINE_SUBJECT_TOKEN)lock=null;
+  }
   if(lock?.pid!==process.pid||owner==='closeout-turn'&&(!lock.identity||lock.identity!==ownerIdentity(process.pid)))
     throw Error(`service inbox requires its actual owned ${owner} lock`);
   const root=identityRootAt(c.identity);if(!root)throw Error('service identity root is UNKNOWN');

@@ -5,11 +5,14 @@ import os from 'node:os';
 import path from 'node:path';
 import {spawn,spawnSync} from 'node:child_process';
 import {pathToFileURL} from 'node:url';
+import {createHash} from 'node:crypto';
 import {initOrg,transact} from '../lib/store.mjs';
 import {gitProject} from '../lib/project.mjs';
 import {serviceDirectory,sourceRoot} from '../line-service/line-service.mjs';
-import {commandIntent,finishCommand,assertCommandQuiescence} from '../lib/command-receipt.mjs';
+import {commandIntent,finishCommand,assertCommandQuiescence,readCommandResult} from '../lib/command-receipt.mjs';
 import {withRuntimeLocks} from '../line-service/runtime-locks.mjs';
+import {serviceRecordBinding} from '../line-service/record-inbox.mjs';
+import {noticeLock} from '../supervisor/notice-lock.mjs';
 
 async function until(predicate){
   const end=Date.now()+30000;
@@ -84,8 +87,11 @@ for(const mode of ['available','full','crashed'])test(`scheduling yields slow A 
   const launches=f.launches(),eligible=f.rows().find(r=>r.action==='admission-eligible'&&r.item==='ENG-2');assert.ok(eligible);
   if(mode==='full'){
     assert.equal(launches.some(r=>r.item==='ENG-2'),false);assert.ok(f.rows().some(r=>r.action==='capacity-held'&&r.code==='DISPATCH_SESSION_CAP'));
+    const wait=Object.values(f.journal().capacity_waits).find(w=>w.item==='ENG-2');assert.equal(wait.state,'waiting');assert.equal(wait.consumer,'line-service');
     fs.writeFileSync(path.join(f.root,'release'),'capacity released');assert.equal((await a.done).code,0);
     const next=f.start();assert.equal((await next.done).code,0);assert.equal(f.launches().filter(r=>r.item==='ENG-2').length,1);
+    const released=Object.values(f.journal().capacity_waits).find(w=>w.item==='ENG-2');assert.equal(released.state,'released');assert.ok(released.duration_ms>0);
+    assert.equal(released.first_at,wait.first_at);assert.ok(f.rows().some(r=>r.action==='admission-decision'&&r.item==='ENG-2'&&r.capacity_wait_ms===released.duration_ms));
   }else{
     const launched=launches.find(r=>r.item==='ENG-2');assert.ok(launched);assert.ok(launched.at-Date.parse(eligible.at)<5000,'B starts within five seconds of eligibility observation');
     if(mode==='available'){
@@ -94,12 +100,16 @@ for(const mode of ['available','full','crashed'])test(`scheduling yields slow A 
       assertCommandQuiescence(f.directory);
       const actions=f.journal().actions;assert.equal(actions[original[0]].state,'complete');
       assert.ok(Object.values(actions).filter(e=>e.state==='complete').length>=2,'both completions survive interleaved whole-file saves');
+      for(const action of Object.values(actions))if(action.state==='complete')for(const ref of action.commands??[]){
+        assert.equal(fs.existsSync(ref.file),false);assert.equal(readCommandResult(ref).result.status,0,'terminal receipts remain readable after the active marker is removed');
+      }
       withRuntimeLocks({directory:f.directory,identity:f.project.identity,org:f.org},
         {id:'fixture',operation:'rollback',dryRun:false,owner:{native:{name:'fixture'}},validate:()=>{}},()=>transitions++);assert.equal(transitions,1);
     }else assert.throws(()=>assertCommandQuiescence(f.directory),/active or UNKNOWN/,'parent death cannot authorize maintenance or replay');
   }
   const rows=f.rows();evidence(t,mode,{launches:f.launches(),lock_segments:rows.filter(r=>r.action==='schedule-unlocked'),
-    completions:rows.filter(r=>r.action==='pass-complete'),admission:rows.filter(r=>r.action.startsWith('admission-')||r.action==='capacity-held'),actions:f.journal().actions});
+    completions:rows.filter(r=>r.action==='pass-complete'),admission:rows.filter(r=>r.action.startsWith('admission-')||r.action==='capacity-held'),actions:f.journal().actions,
+    capacity_waits:f.journal().capacity_waits??{},command_results:fs.readdirSync(path.join(f.directory,'command-receipts')).map(name=>JSON.parse(fs.readFileSync(path.join(f.directory,'command-receipts',name))))});
 });
 
 test('STOP appearing during slow A preserves its receipt and prevents B native admission',async t=>{
@@ -123,6 +133,7 @@ const exe=process.execPath,args=[${JSON.stringify(script)}],cwd=${JSON.stringify
   child.kill('SIGKILL');await done;assert.throws(()=>assertCommandQuiescence(f.directory),/active or UNKNOWN/);
   fs.writeFileSync(path.join(f.root,'release'),'original child may finish');await until(()=>{try{return JSON.parse(fs.readFileSync(ref.receipt)).result?.status===0;}catch{return false;}});
   const receipt=JSON.parse(fs.readFileSync(ref.receipt));assert.equal(receipt.result.status,0);assert.equal(receipt.result.stdout,'original result');
+  assert.ok(receipt.execution.pid>0);assert.ok(Date.parse(receipt.execution.started_at)>=Date.parse(receipt.intent.at));
   assertCommandQuiescence(f.directory);assert.ok(fs.existsSync(ref.file),'orphan intent remains available for its owner');
   evidence(t,'orphan-result',receipt);
 });
@@ -140,4 +151,13 @@ test('an UNKNOWN command on a subject fences a changed action key while an indep
     consumer:'line-service',wake_fact:'original terminal receipt',stuck_owner:'supervisor-test'});
   const before=fs.readFileSync(ref.file),pass=f.start();assert.equal((await pass.done).code,0);
   assert.deepEqual(fs.readFileSync(ref.file),before);assert.deepEqual(f.launches().map(row=>row.item),['ENG-2']);
+});
+
+test('direct service operations require the exact subject-lock token as well as the actual owner PID',t=>{
+  const f=fixture(t),subject='ENG-1',lock=path.join(f.directory,'subjects',createHash('sha256').update(JSON.stringify(subject)).digest('hex')+'.lock'),release=noticeLock(lock);
+  try{
+    const owner=JSON.parse(fs.readFileSync(path.join(lock,'owner.json'))),env={...f.env,HERDR_LINE_SUBJECT:subject,HERDR_LINE_SUBJECT_TOKEN:owner.token};
+    assert.equal(serviceRecordBinding({repo:f.repo,org:f.org,env}).identity,f.project.identity);
+    for(const token of [undefined,'older-owner'])assert.throws(()=>serviceRecordBinding({repo:f.repo,org:f.org,env:{...env,HERDR_LINE_SUBJECT_TOKEN:token}}),/actual owned pass lock/);
+  }finally{release();}
 });

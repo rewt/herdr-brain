@@ -10,6 +10,7 @@ import {finishCommand,validateCommandIntent} from '../lib/command-receipt.mjs';
 export function executeForeground({exe,args,cwd,env=process.env,commandReceipt},{launch=spawn,watch=watchRun,readProcess=readOwnerProcess}={}){
   if(commandReceipt)validateCommandIntent(commandReceipt,{exe,args,cwd});
   return new Promise(resolve=>{
+    const startedAt=new Date().toISOString();
     const child=launch(exe,args,{cwd,env,stdio:['ignore','pipe','pipe']});
     let stdout='',stderr='',error,signalSent=false,birth;
     try{const r=readProcess(child.pid);if(r?.ok&&r.value?.pid===child.pid)birth=r.value.identity;}catch{/* Unknown never authorizes a signal. */}
@@ -23,7 +24,7 @@ export function executeForeground({exe,args,cwd,env=process.env,commandReceipt},
     child.once('error',e=>{error={code:e.code??'COMMAND_FAILED',message:e.message};});
     child.once('close',(status,signal)=>{watcher.stop();const result={status,signal,stdout,stderr,...(error?{error}:{}),signal_sent:signalSent,activity:watcher.snapshot()};
       // Persist before replying. Parent death must not discard the real exit.
-      try{if(commandReceipt)finishCommand(commandReceipt,result);resolve(result);}catch(error){resolve({status:null,stdout:'',stderr:error.message,error});}
+      try{if(commandReceipt)finishCommand(commandReceipt,result,{started_at:startedAt,pid:child.pid??null,identity:birth??null});resolve(result);}catch(error){resolve({status:null,stdout:'',stderr:error.message,error});}
     });
   });
 }

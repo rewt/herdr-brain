@@ -128,7 +128,8 @@ timer-based retry, deletion or native substitution. Independent work can proceed
 Commands and their immutable results live in the existing service directory;
 the action points to their receipt, which retains the original intent after the
 active marker is removed. Recovery/decision operations keep their actual subject
-lock while using the existing installed-service, source and record guards.
+lock and exact owner token while using the existing installed-service, source
+and record guards. A saved subject label or reused PID grants no authority.
 
 Maintenance still orders control, pass and promotion locks. While holding the
 pass lock it additionally checks active command intents for matching terminal
@@ -140,7 +141,12 @@ running service or saved pin is changed by source delivery.
 The pass audit reports `schedule-unlocked.duration_ms` per lock segment and total
 `pass_lock_ms`, maximum segment and `suspended_ms` on completion. Admission rows
 separate eligibility observation, decision, capacity observation and original
-dispatch acknowledgement. `event_to_wake_ms` remains null for ENG-1033 to supply;
+dispatch acknowledgement. Rows name their process and subject so overlapping
+passes can be joined. `capacity_waits` retains the interval from first observed
+full capacity to the next observed available capacity, separately from decision
+time. Command receipts carry those admission facts and the foreground helper's
+actual start time; they remain readable after active-marker removal.
+`event_to_wake_ms` remains null for ENG-1033 to supply;
 an acknowledgement is not a claim that the worker has finished native startup.
 
 ## Standing order and explicit selection

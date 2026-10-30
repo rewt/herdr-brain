@@ -1,0 +1,105 @@
+# Completion, acceptance and progress
+
+`record show ID --json` exposes `conditions`; the local project page includes
+those same facts and `phase`. Each condition has True/False/Unknown, a reason,
+observed run/report/claim generation and transition evidence. These are read-only
+projections over the record. They grant no native effect or release authority.
+
+- Completed: the latest run has a done report, independently of review or cleanup.
+- SourceDelivered: a source landing belongs to that run, project and claim.
+- Accepted: code needs its existing async review's exact run/report/head/base/claim
+  judgment and covered commits. An old item/head-only PASS accepts nothing new.
+  Plans use a completed report with no outstanding question, blocker or review.
+  Corrections use the finding discharge below. A missing result is Unknown.
+- Progressing: owned source transitions provide positive record evidence. An
+  explicit available observation interval with no transition is False; missing,
+  foreign or unavailable observations are Unknown. Finished runs are False.
+  There is no inactivity timer, stop, replacement, counter-based acceptance or
+  claim of native liveness. ENG-1033 owns the bound observation/counter feed.
+
+The phase is derived: pending, working, ready-for-review, in-review, needs-work,
+accepted. There is no setter. Existing historical item status is preserved;
+completion, source, native retirement and acceptance remain separate facts.
+
+In that same async review report, a fulfilled result is declared as:
+
+```yaml
+acceptance:
+  fulfilled: true
+  source_run: R-1
+  source_report_sha256: ACTUAL_ORIGINAL_REPORT_SHA256
+  head: FULL_CAPTURED_HEAD
+  claim_generation: 123
+```
+
+The review owns this judgment; the producer cannot self-accept code. Intake
+binds it to the original capture and actual report. This also lets an existing
+native-landings capture retain its source-only evidence while the same reviewer
+names the actual producer result it assessed. Missing report/result means Unknown;
+finish with its missing-proof owner in the report, without waiting or starting
+another review. A bare PASS remains historical review evidence, not acceptance.
+
+## Dependencies and existing consumers
+
+`record block CONSUMER --by PRODUCER` retains existing completion semantics,
+including negative-verdict holds, declined questions and legacy child reviews.
+The async queue's sibling review metadata creates no new completion hold.
+`--requires accepted` opts a new edge into acceptance as an additional requirement.
+Unknown never releases it. Existing edges are not migrated; change a requirement
+only by explicitly removing and recreating its edge. Saved accepted edges name
+consumer, wake facts and stuck owner. The existing record/status reader is the
+consumer; no new evaluator, watcher or background process is installed.
+
+The state dependency resolver, `record show/status --json`, blocker explanations
+and project page share the conditions. Existing conditional close, completion
+reconciliation, promotion, release and physical cleanup keep their native controls;
+this projection does not replace their gates. In particular an original negative
+verdict hold remains until its existing owner disposes of it, even when correction
+evidence establishes accepted outcome. Worker landing and retirement do not wait
+for acceptance. No historical done item is reopened or selected by these views.
+
+## Single correction discharge
+
+The existing report ingestion can emit `correction.discharged` after verifying
+proof for each original `review.finding-linked` key. The immutable report retains
+all declarations, including missing or failed proof. A done correction alone,
+a selected command, assertions, a moving counter or a prose claim does not discharge.
+
+Example report frontmatter extension (replace every example value with actual
+owned findings, run, claim, landed head and existing check receipt; do not rerun a
+check to create another receipt):
+
+```yaml
+correction_discharge:
+  review_key: ENG-1:FULL_ORIGINAL_REVIEW_HEAD
+  run: R-4
+  claim_generation: 123
+  findings:
+    - key: review-finding/v1:ORIGINAL_KEY
+      result: PASS
+      head: FULL_LANDED_CORRECTION_HEAD
+      command: node test/helpers/run.mjs test/affected.test.mjs
+      requirement: Exact original required Major check text
+      evidence: /owning/.org/evidence/correction/gate.json
+      sha256: SHA256_OF_GATE_JSON_BYTES
+```
+
+Intake checks the original correction/finding/run binding, claim and landed head,
+receipt hash, command, executed green result, log hash and actual execution result.
+The receipt must survive lane removal in the owning record's evidence directory;
+its original log and execution sidecar remain retrievable. Majors must name their
+original required-check text. Missing, red, changed and unrun controls produce no
+discharge, without refusing or rewriting the report. Intake uses the same guarded
+record mutation; it does not run checks, retarget findings or start another review.
+A discharge can establish accepted outcome while preserving the original FAIL.
+The release owner still judges whether the specific Major control proves its
+correction and runs final-release/live coverage.
+
+ENG-1037's residual obligation is to witness this exact producer-to-intake-to-release
+handoff with a real assigned correction: inherited finding/check, one captured
+result, discharge and existing negative-hold disposition. It should fix a concrete
+remaining consumer gap if observed, without adding a reviewer or overriding saved
+runtime pins. Old pinned intake without this new fact leaves acceptance Unknown;
+activation/migration remains with its actual owner. ENG-1035's bounded packet
+selects a check but supplies no result; it accepts nothing. Its real independent
+cold-reader observations remain with its single existing queued review.

@@ -13,7 +13,7 @@ import {
 } from '../lib/store.mjs';
 import {
   BUDGET_KEYS, attention, blockedBy, blockersOf, fold, isResolved, itemStatus, laterRuns, nextItemId, nextRunId, openRuns,
-  wouldCycleBlock, wouldCycleParent, releases, nextLessonId, lessonState, wouldCycleLesson,
+  wouldCycleBlock, wouldCycleParent, releases, dependencyReleases, nextLessonId, lessonState, wouldCycleLesson,
 } from '../lib/state.mjs';
 import { roleIs } from '../lib/roles.mjs';
 import { requestRetirement } from '../lib/retire-trigger.mjs';
@@ -65,7 +65,8 @@ Work
   record proposals token ID               current proposal/dependency version
   record proposals lapse ID --cut selection|release --expect TOKEN --why TEXT
   record proposals duplicate ID --into ID --key KEY --expect TOKEN --successor-expect TOKEN --why TEXT
-  record block <ID> --by <ID>             record that --by blocks ID
+  record block <ID> --by <ID> [--requires completed|accepted]
+                                          default completion; acceptance is opt-in
   record unblock <ID> --by <ID>           remove that blocking link
   record note <ID> <text> [--decision [--summary TEXT]]
                                           attach a note or decision (summary: one plain sentence)
@@ -431,20 +432,25 @@ async function queueReview(argv) {
 
 function block(argv, remove = false) {
   const usage = `record ${remove ? 'unblock' : 'block'} <ID> --by <ID>`;
-  const { values, positionals } = args(argv, { by: { type: 'string', multiple: true } }, { min: 1, max: 1, usage });
+  const { values, positionals } = args(argv, { by: { type: 'string', multiple: true }, requires: { type: 'string' } }, { min: 1, max: 1, usage });
   if (!values.by?.length) throw new UserError(`usage: ${usage}`);
+  if (values.requires && (remove || !['completed', 'accepted'].includes(values.requires))) throw new UserError('--requires must be completed or accepted on block');
   const target = positionals[0];
   const { added } = mutate(openOrg(), (s) => {
     requireItem(s, target);
     const events = [];
     for (const by of new Set(values.by)) {
       requireItem(s, by);
-      const exists = s.links.some((l) => l.blocker === by && l.blocked === target);
+      const exists = s.links.find((l) => l.blocker === by && l.blocked === target);
+      if (!remove && exists && values.requires && (exists.requires ?? 'completed') !== values.requires)
+        throw new UserError('existing link requirement differs; explicitly unblock before replacing it');
       if (remove) {
         if (exists) events.push({ type: 'link.removed', blocker: by, blocked: target });
       } else if (!exists) {
         if (wouldCycleBlock(s, by, target)) throw new UserError(`${by} cannot block ${target}: that would create a blocking cycle`);
-        events.push({ type: 'link.added', blocker: by, blocked: target });
+        events.push({ type: 'link.added', blocker: by, blocked: target, ...(values.requires === 'accepted' ? {
+          requires: 'accepted', consumer: target, wake: ['report.ingested', 'change.reviewed', 'correction.discharged'], stuck_owner: target,
+        } : {}) });
       }
     }
     return { add: events };
@@ -719,7 +725,7 @@ function close(argv) {
       const run = s.runs.get(runId);
       if (run.abandoned || run.report?.outcome !== 'done') throw new UserError('conditional close requires a recorded done report');
       if (item.outcome && item.outcome.run !== runId) throw new UserError(`${id} outcome does not belong to ${runId}`);
-      const blocked = blockersOf(s, id).some((b) => !releases(s, b, itemStatus(s, b, new Set(), id)));
+      const blocked = blockersOf(s, id).some((b) => !dependencyReleases(s, b, id, itemStatus(s, b, new Set(), id)));
       if (openRuns(s, id).length || blocked || ['blocked', 'needs_human', 'dropped'].includes(itemStatus(s, id))) throw new UserError('conditional close needs supervisor judgment: work, blockers or outcome changed');
       // A done report may survive explicit reopening. Its ingestion revision
       // binds completion to the first subsequent closure, even for old receipts.
@@ -892,6 +898,7 @@ async function ingestFile(ctx, file, runHint, currentRun) {
   const sha256 = crypto.createHash('sha256').update(text).digest('hex');
   // Load review services before the synchronous record transaction, only for intake.
   const { reviewResultEvents } = await import('../line-service/phase1.mjs');
+  const { correctionDischargeEvents } = await import('../lib/correction-discharge.mjs');
   const { result } = mutate(ctx, (s, committedEvents) => {
     const run = s.runs.get(runId);
     if (!run) throw new UserError(`unknown run ${runId}`);
@@ -933,6 +940,7 @@ async function ingestFile(ctx, file, runHint, currentRun) {
     // The immutable stored bytes/hash retain its original body/frontmatter.
     if(reviewed)report.extra={...report.extra,verdict:reviewed.verdict};
     events.push(...reviewFacts);
+    events.push(...correctionDischargeEvents({ state: s, run, report, sha256, org: ctx.dir }));
     return {
       add: events,
       commit: () => writeFileAtomic(path.join(ctx.dir, stored), text, 0o444),

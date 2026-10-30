@@ -368,7 +368,15 @@ export function reviewResultEvents({state,events,run,report,sha256,body=report.b
   const structuredSeverities=new Set(findings.map(f=>f.severity));
   for(const line of String(body).split('\n')){const m=/^\s*[-*]\s*\[(Major|Minor)\]\s*(.+)$/i.exec(line);if(m&&!structuredSeverities.has(m[1].toLowerCase()))findings.push({severity:m[1].toLowerCase(),text:m[2].trim()});}
   const corrections=reviewCorrectionEvents({state,events,run,review,report,findings,verdict,sha256,usedIds});
+  const acceptance=report.extra?.acceptance,author=state.runs.get(review.acceptance_capture?.source_run);
+  const fulfilled=acceptance?.fulfilled===true&&acceptance.source_run===author?.id&&
+    acceptance.source_report_sha256===author?.report?.sha256&&acceptance.head===target.head&&
+    acceptance.claim_generation===review.acceptance_capture?.target.claim_generation;
   return [{type:'change.reviewed',item:source,head:target.head,base:target.base,review_key:key,review_group_key:queueProducerGroup(review),covered_commits:capturedReviewCommits(target),review_item:review.id,review_run:run.id,verdict,
+    source_run:review.acceptance_capture?.source_run??null,
+    source_report_sha256:state.runs.get(review.acceptance_capture?.source_run)?.report?.sha256??null,
+    source_claim_generation:review.acceptance_capture?.target.claim_generation??null,
+    intent_fulfilled:fulfilled,
     source_provenance:target.source_provenance??{status:'unknown',qualification:'Retained historical review; no guarded-source reattribution.'},
     verdict_evidence:{frontmatter:report.extra?.verdict!==undefined,body_lines:bodyLines},findings:corrections.findings,report_sha256:sha256},...corrections.add];
 }

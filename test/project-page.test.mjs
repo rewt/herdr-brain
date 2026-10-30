@@ -101,7 +101,7 @@ test('local page keeps recorded active/held/unknown work and source/report/revie
     { type: 'item.closed', id: 'REV-1', as: 'done' },
   ]);
   const done = collectProjectPage({ org: accepted, project, now: NOW }).work.find(w => w.id === 'ENG-5');
-  assert.equal(done.completion, 'accepted completion (recorded PASS)');
+  assert.equal(done.completion, 'derived done; acceptance unknown', 'a historical item/head-only PASS cannot establish exact acceptance');
   assert.equal(done.open, false);
 });
 

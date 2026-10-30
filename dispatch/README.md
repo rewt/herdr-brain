@@ -402,7 +402,7 @@ native foreground PID and kernel birth identity before delivery, then observes
 for the remainder of one saved delivery deadline (at most 60 seconds). A verified
 late session becomes a separate `run.session_bound` event through
 `record session-bind --journal FILE`; the launch receipt is never enriched.
-Dispatch alone writes this fact. Retirement, reuse, handoff, pane-release and
+Dispatch proposes this fact; the record writer commits it. Retirement, reuse, handoff, pane-release and
 status derive the same effective identity and reject conflicting evidence.
 Unavailable continuity, replacement or timeout leaves the run unbound. Uncertain
 delivery requires explicit recovery before binding. An authorized `--resend` or
@@ -410,16 +410,27 @@ delivery requires explicit recovery before binding. An authorized `--resend` or
 process and receipt; `prompted_at` records the delivery attempt or confirmation.
 An ordinary retry only gets the saved remainder and never replays a prompt.
 There is no backfill, background binder or ingestion delay. A saved bind proposal
-is never replaced and can recover an exact lost reply even after report ingestion.
-An unknown bind reply prints the exact retry command to stderr and returns
-`binding.status: "unknown"` with that command in the JSON receipt. Record writes
-finish outside the observation timeout and validate the saved observation window
-under the lock.
-The writer judges the proposal's saved `observed_at`, not elapsed CLI or record
-lock time. A timely saved proposal refused by an earlier commit-time check can
-replay on an **open, unreported** run, including a saved `unbound` status; no new
-observation or renewed deadline is allowed. Reported/abandoned runs accept only
-an exact retry of an already recorded bind. They cannot gain a new identity fact.
+is never replaced. The line owns record-only replay on its next pass for a
+completed dispatch with an `observing` proposal, including an unknown reply or a
+crash after proposal publication. It uses the original request lock, project,
+run and exact claim; STOP/HOLD still prevents effects. It never invokes dispatch
+recovery, discovers a session, sends input, or changes the saved release. The
+record writer rechecks the claim inside its transaction. Legacy/unclaimed or
+foreign operations remain held; `unbound` proposals and recorded refusals are
+final for automatic replay.
+`sessionBinding.commit_attempts` preserves the original attempt and any error
+code, exit status, signal and CLI output available to dispatch. Unknown record
+outcomes may retry the same fact; a refusal stops. Successful commits save a
+`dispatch-session-binding/v1` receipt in `commit_receipt`, naming the original
+run/journal/attempt/session and the `run.session_bound` event sequence.
+`recorded: false` identifies exact readback of a lost reply. The pass log records
+the replay result; the journal retains the original proposal and all attempts.
+The dispatch JSON still returns `binding.status: "unknown"` and its existing
+manual retry hint for compatibility. Automatic replay requires no manual retry.
+Record writes finish outside the observation timeout: the writer judges the
+saved `observed_at` against the original window, not elapsed CLI or record-lock
+time. Timely original proposals remain admissible after ingestion or expiry;
+conflicting identities, newer occupants and changed anchors still refuse.
 Folded identity evidence lives in side tables; run objects and historical
 completion fingerprints retain their original shape.
 Correction and completion notices go through watch's

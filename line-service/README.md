@@ -1,5 +1,15 @@
 # Minimal line service
 
+## Saved session bindings
+
+Each pass replays completed dispatches' saved `observing` session proposals
+before review intake, independently of the review cutoff. This is a record-only
+operation under the original request lock and exact Brain claim. It never calls
+dispatch recovery or native input. Unknown record replies keep their evidence
+for another pass; refusals and unbound proposals remain final. The original
+proposal and release stay unchanged. A `dispatch-session-binding/v1` receipt in
+the dispatch journal names the settled event; see [the dispatch contract](../dispatch/README.md).
+
 ## Scoped review admission
 
 `review_admission` is a project lane policy, default off. Set the whole object

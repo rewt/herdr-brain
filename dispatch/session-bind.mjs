@@ -1,6 +1,7 @@
 import { performance } from 'node:perf_hooks';
 import { ownerIdentity } from '../lib/process-owner.mjs';
 import path from 'node:path';
+import { outcomeFailure } from '../lib/uncertain-outcome.mjs';
 
 // Pin the actual native foreground process, not its persistent terminal/shell.
 // An unreadable source or ambiguous foreground is no continuity evidence.
@@ -13,26 +14,47 @@ export function nativeProcess(agent, info, readOwner) {
   return { pid, identity: ownerIdentity(pid, readOwner) };
 }
 
+// Only the saved record fact is replayable. Native delivery is never part of
+// this operation. Keep every attempt, including a lost reply, on its proposal.
+export function commitSessionBinding({ job, save, record, now = Date.now }) {
+  const b = job.sessionBinding;
+  if (b?.status !== 'observing' || !b.proposed || b.record_refusal) return;
+  const attempt = { started_at: new Date(now()).toISOString(), outcome: 'unknown' };
+  (b.commit_attempts ??= []).push(attempt);
+  save();
+  try {
+    const reply = record();
+    attempt.receipt = typeof reply === 'string' ? JSON.parse(reply) : reply;
+    attempt.outcome = 'bound';
+    b.status = 'bound'; delete b.reason;
+    b.commit_receipt = attempt.receipt;
+  } catch (error) {
+    const r = error.receipt;
+    const refused = error.recordRefusal || outcomeFailure(error).kind === 'fence' || r && !r.error && !r.signal && Number.isInteger(r.status) && r.status !== 0 &&
+      (r.stderr ?? '').trim().split('\n').at(-1).startsWith('record: ');
+    attempt.error = { message: error.message, ...(error.code ? { code: error.code } : {}), ...(r ? { receipt: r } : {}) };
+    if (refused) {
+      attempt.outcome = 'refused'; b.status = 'unbound'; b.record_refusal = true; b.reason = error.message;
+    } else {
+      b.reason = 'bind reply unknown; saved proposal awaits line replay';
+      process.stderr.write(`dispatch: ${b.reason}\n`);
+    }
+  }
+  attempt.finished_at = new Date(now()).toISOString();
+  save();
+  return attempt;
+}
+
 // Dispatch saves the deadline before delivery or explicit delivery confirmation.
 // Never initialize it here: observation retries only get the saved remainder.
 export async function observeSessionBinding({ job, save, observe, record, qualify, now = Date.now,
   monotonic = () => performance.now(), pause = ms => new Promise(resolve => setTimeout(resolve, ms)) }) {
   const b = job.sessionBinding;
-  if (!b || b.status === 'bound' || b.status === 'unbound' && !b.proposed) return;
+  if (!b || b.status !== 'observing' || b.record_refusal) return;
   const finish = (status, reason) => { b.status = status; if (reason) b.reason = reason; save(); };
   // Persist a proposal before calling record. A lost response replays exactly
   // that fact, including after ingestion or deadline, without another prompt.
-  const commit = () => {
-    try { record(); finish('bound'); }
-    catch (e) {
-      if (e.recordRefusal) finish('unbound', e.message);
-      else {
-        b.reason = `bind reply unknown; retry the saved proposal with node dispatch/dispatch.mjs --retry ${job.run}`;
-        save();
-        process.stderr.write(`dispatch: ${b.reason}\n`);
-      }
-    }
-  };
+  const commit = () => commitSessionBinding({ job, save, record, now });
   if (b.proposed) { commit(); return; }
   if (!b.process) { finish('unbound', 'native process continuity unavailable at launch'); return; }
   const end = Math.min(60000, Date.parse(b.deadline) - now()), started = monotonic();

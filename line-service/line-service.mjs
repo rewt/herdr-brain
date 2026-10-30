@@ -6,6 +6,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { spawn, spawnSync, execFileSync } from 'node:child_process';
 import {foregroundCommand} from '../dispatch/foreground-command.mjs';
 import {originalDispatchOutcome} from '../dispatch/outcome.mjs';
+import {pendingSessionBinding,replaySessionBinding} from '../dispatch/session-bind-replay.mjs';
 import { fileURLToPath } from 'node:url';
 import { performance } from 'node:perf_hooks';
 import { gitProject } from '../lib/project.mjs';
@@ -273,6 +274,24 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         const row={stage,item:subject.item?.id,run:subject.run?.id,head:subject.target?.head??subject.item?.meta.review_target?.head,...reviewAdmissionSubject(subject),...hold};
         effects.review_admission.held.push(row);noticesDirty=true;log({action:'review-admission-held',...row});return false;
       };
+      snapshot=current();
+      // Saved timely proposals are idempotent record facts, independent of
+      // prompt/review recovery and the phase-zero cutoff. Refusals stay final.
+      const bindings=[];
+      for(const run of snapshot.state.runs.values())try{
+        if(pendingSessionBinding(run,org,project.identity))bindings.push(run);
+      }catch(e){note(`session-binding:${run.id}`,e.message,{item:run.item,run:run.id});}
+      const offset=bindings.length?effects.pass_number%bindings.length:0;
+      for(let n=0;n<Math.min(bindings.length,maxStepsPerStage)&&!expired();n++){
+        const run=bindings[(offset+n)%bindings.length];
+        try{
+          checkpointNotices();
+          const result=replaySessionBinding({journal:run.meta.dispatch_journal,org,project:project.identity,guard:observe,
+            record:journal=>cli('bin/org.mjs',['session-bind','--journal',journal])});
+          stale=true;log({action:'session-binding-replay',run:run.id,result});
+          if(result?.outcome==='refused')note(`session-binding:${run.id}`,result.error.message,{item:run.item,run:run.id});
+        }catch(e){note(`session-binding:${run.id}`,e.message,{item:run.item,run:run.id});}
+      }
       snapshot=current();
       let cutoff;try{cutoff=phase0Boundary(snapshot.events,{repo,org,identity:project.identity});}catch{
         try{checkpointNotices();ensureReviewBoundary({repo,org,env:childEnv});stale=true;snapshot=current();cutoff=phase0Boundary(snapshot.events,{repo,org,identity:project.identity});}catch(e){note('review-cutoff',e.message);}

@@ -126,7 +126,9 @@ function command(argv, args, cwd = job?.repo ?? path.resolve(opt.repo)) {
   if (result.error || result.status !== 0) {
     const error = new Error(`${argv[0]} ${args[0]}: ${(result.stderr || result.stdout || result.error?.message || `exit ${result.status}`).trim()}`);
     error.code=outcomeFailure({code:result.error?.code,receipt:result}).code;
-    error.recordRefusal = !result.error && !result.signal && result.status === 1 &&
+    error.receipt = { status: result.status, signal: result.signal ?? null, stdout: result.stdout ?? '',
+      stderr: result.stderr ?? '', ...(result.error ? { error: result.error.code ?? result.error.message } : {}) };
+    error.recordRefusal = !result.error && !result.signal && Number.isInteger(result.status) && result.status !== 0 &&
       result.stderr.trim().split('\n').at(-1).startsWith('record: ');
     if(argv===laneCLI&&!result.error&&!result.signal)try{
       const receipt=JSON.parse(result.stdout);

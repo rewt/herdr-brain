@@ -226,17 +226,33 @@ test('continuity positive control binds but same PID replacement birth and missi
   assert.throws(() => nativeProcess(agent, info, () => ({ ok: false, error: 'unavailable' })), /unavailable/);
 });
 
-test('timely refused proposals replay without observing, and an elapsed observation error is labelled as expiry', async () => {
+test('unbound proposals stay final, and an elapsed observation error is labelled as expiry', async () => {
   const f = observationFixture(); await observeSessionBinding(f.options);
   f.job.sessionBinding.status = 'unbound'; const reads = f.reads();
   f.options.observe = () => { throw Error('must not observe a saved proposal again'); };
-  await observeSessionBinding(f.options); assert.equal(f.commits(), 2); assert.equal(f.reads(), reads);
+  await observeSessionBinding(f.options); assert.equal(f.commits(), 1); assert.equal(f.reads(), reads);
   const expired = observationFixture();
   expired.options.observe = () => { throw Error('session observation deadline expired'); };
   expired.options.now = (() => { let n = 0; return () => ++n > 2 ? expired.deadline + 1 : 100000; })();
   await observeSessionBinding(expired.options);
   assert.equal(expired.job.sessionBinding.reason, 'native session observation deadline expired');
   assert.equal(expired.commits(), 0);
+});
+
+test('record-only retries preserve failure evidence and proposals, while refusals stay final', async () => {
+  const f = observationFixture();
+  f.options.record = () => { throw Object.assign(Error('writer timed out'), { code: 'ETIMEDOUT',
+    receipt: { status: null, signal: 'SIGTERM', stderr: 'original writer output' } }); };
+  await observeSessionBinding(f.options);
+  const b = f.job.sessionBinding, proposal = structuredClone(b.proposed), reads = f.reads();
+  assert.equal(b.status, 'observing'); assert.equal(b.commit_attempts[0].error.code, 'ETIMEDOUT');
+  assert.equal(b.commit_attempts[0].error.receipt.stderr, 'original writer output');
+  f.options.record = () => { throw Object.assign(Error('newer owner'), { recordRefusal: true }); };
+  await observeSessionBinding(f.options);
+  assert.equal(b.status, 'unbound'); assert.equal(b.record_refusal, true);
+  assert.deepEqual(b.proposed, proposal); assert.equal(f.reads(), reads);
+  f.options.record = () => assert.fail('a refusal must not replay');
+  await observeSessionBinding(f.options); assert.equal(b.commit_attempts.length, 2);
 });
 
 test('resume transaction requires qualified transcript evidence even with an observed native ID', t => {

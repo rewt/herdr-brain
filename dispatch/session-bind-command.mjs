@@ -7,9 +7,10 @@ import { effectiveWorkerIdentity, validSessionBind, sharesWorker, sameReceipt } 
 import { bindCloseoutSources, publishCloseoutEvents } from '../lib/closeout.mjs';
 import { validResumeDelivery } from './resume-delivery.mjs';
 import { protectRecordMutation } from '../lib/record-guard.mjs';
+import { assertOwner, readOwnedRun } from '../lib/run-owner-guard.mjs';
 const fields = ['type', 'run', 'dispatch', 'receipt', 'process', 'prompted_at', 'deadline', 'observed_at', 'session'];
 
-// Dispatch is the sole caller/writer. This command consumes its saved proposal,
+// Dispatch and line replay consume only the original saved proposal. This command
 // never discovers a session or backfills an old run. Saved input and the entire
 // record are fenced before append; replay only rederives this read-only plan.
 export function sessionBindCommand(argv) {
@@ -20,6 +21,8 @@ export function sessionBindCommand(argv) {
   const result = planTransaction(org, (events, state) => {
     const job = JSON.parse(fs.readFileSync(journal, 'utf8')), binding = job.sessionBinding, proposed = binding?.proposed;
     const run = state.runs.get(job.run);
+    if (job.ownership) assertOwner(readOwnedRun(org, job.run, events), job.ownership);
+    if (binding?.record_refusal) throw new UserError('original session bind refusal is final');
     if (!run || job.org !== org || job.common !== gitProject(job.repo).identity ||
         fs.realpathSync(job.repo) !== job.repo || fs.realpathSync(job.workspace) !== run.workspace ||
         path.dirname(journal) !== path.join(org, 'dispatch') || job.stage !== 'complete' ||
@@ -36,7 +39,7 @@ export function sessionBindCommand(argv) {
       if (prior.length !== 1 || effectiveWorkerIdentity(run, state).identity_conflict ||
           Object.keys(proposed).some(k => JSON.stringify(proposed[k]) !== JSON.stringify(prior[0][k])))
         throw new UserError('run already has a different or conflicting session bind');
-      return { add: [] }; // Lost reply remains recoverable after completion/deadline.
+      return { add: [], result: prior[0] }; // Exact lost reply after completion/deadline.
     }
     // validSessionBind checks the saved observation against the original window.
     // Record-lock/CLI latency must not turn a timely observation into a refusal.
@@ -47,6 +50,9 @@ export function sessionBindCommand(argv) {
       protectRecordMutation({ org, events, state, command: 'session-bind', mutation: { add: [proposed] } }) });
   }, { actor: who.actor, unattributed: who.unattributed, replaySafe: true });
   publishCloseoutEvents({ cwd: process.cwd(), org, added: result.added });
-  process.stdout.write(JSON.stringify({ recorded: result.added.length > 0 }) + '\n');
+  const bound = result.added.find(e => e.type === 'run.session_bound') ?? result.result;
+  process.stdout.write(JSON.stringify({ schema: 'dispatch-session-binding/v1', outcome: 'bound',
+    run: bound.run, journal, attempt: bound.dispatch.attempt, session: bound.session,
+    event_seq: bound.seq, recorded: result.added.length > 0 }) + '\n');
   return 0;
 }

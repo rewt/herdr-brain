@@ -184,7 +184,7 @@ for (const fault of ['after-prompt', 'bind-lost-reply']) test(`${fault} recovers
   if (fault === 'bind-lost-reply') {
     assert.ok(before.sessionBinding.proposed);
     assert.deepEqual(JSON.parse(first.stdout).binding, { status: 'unknown', retry: `node dispatch/dispatch.mjs --retry ${before.run}` });
-    assert.match(first.stderr, new RegExp(`bind reply unknown;.*node dispatch/dispatch.mjs --retry ${before.run}`));
+    assert.match(first.stderr, /bind reply unknown; saved proposal awaits line replay/);
     assert.equal(f.show(before.run).notes.some(n => /bind reply unknown/.test(n.text)), false);
     f.rec(['abandon', before.run]); // Exact reply recovery also works after finishing.
   }

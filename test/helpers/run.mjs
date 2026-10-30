@@ -391,7 +391,8 @@ if (worker) {
         }
         try {
           const recovery = recoverScratch(process.env[SCRATCH_JOURNAL], {
-            joined: Boolean(teardown.ok && teardown.signaled && (child.exitCode !== null || child.signalCode !== null)), suite: owner });
+            joined: Boolean(teardown.ok && (teardown.signaled || teardown.reason === 'absent') &&
+              (child.exitCode !== null || child.signalCode !== null)), suite: owner });
           const receipt = `${process.env[SCRATCH_JOURNAL]}.${child.pid}.recovery.json`;
           fs.writeFileSync(receipt, JSON.stringify(recovery) + '\n', { flag: 'wx', mode: 0o600 });
           console.error(`SCRATCH_RECOVERY: ${JSON.stringify({ receipt, created: recovery.created, removed: recovery.removed, absent: recovery.absent, retained: recovery.retained })}`);

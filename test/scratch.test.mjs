@@ -55,7 +55,7 @@ for (const mode of ['success', 'assertion', 'killed-worker', 'lost-reply']) {
     fs.writeFileSync(file, `import test from ${JSON.stringify(local('./helpers/bounded-test.mjs'))};
 import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import assert from 'node:assert/strict';
 test('owned victim',()=>{
-const scratch=fs.mkdtempSync(path.join(os.tmpdir(),'owned-victim-'));
+const scratch=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'owned-victim-')));
 fs.writeFileSync(path.join(scratch,'payload'),'owned');
 fs.writeFileSync(${JSON.stringify(published)},JSON.stringify({scratch,history:process.env.MONITOR_GATE_HISTORY_ROOT}));
 console.error('retained victim evidence');
@@ -86,7 +86,8 @@ ${mode === 'assertion' ? "assert.fail('intentional witness failure');" : mode ==
     const completion = JSON.parse(fs.readFileSync(reference.completion_artifact, 'utf8'));
     if (mode === 'killed-worker') {
       assert.equal(completion.observed_by, 'coordinator');
-      assert.equal(completion.group_teardown_confirmed, true);
+      assert.equal(completion.worker_signal, 'SIGKILL');
+      assert.equal(recovery.joined, true, 'native worker exit and drained pipes permit recovery without a signal to a departed leader');
       assert.equal(completion.tap_complete, false);
     } else assert.ok(completion.native_exit, 'native file exit survives a lost IPC reply');
     console.error(`SCRATCH_WITNESS: ${JSON.stringify({ mode, receipt: summary.receipt, created: recovery.created, removed: recovery.removed, absent: recovery.absent, retained: recovery.retained })}`);

@@ -25,6 +25,18 @@ async function until(predicate, what) {
   assert.fail(`timed out waiting for ${what}`);
 }
 
+// Existence can precede a complete write. Observe the holder contents before
+// using the readiness publication as evidence; notifications/polling only retry.
+function readReady(file) {
+  try {
+    const holder = JSON.parse(fs.readFileSync(file, 'utf8'));
+    return Number.isSafeInteger(holder.pid) && holder.pid > 1 && typeof holder.token === 'string' && holder.token ? holder : null;
+  } catch (error) {
+    if (error.code === 'ENOENT' || error instanceof SyntaxError) return null;
+    throw error;
+  }
+}
+
 function fixture(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'slot-queue-'));
   const children = [];
@@ -98,7 +110,7 @@ function writeTicket(f, { pid = process.pid, arrivedMs = Date.now() - 1000, toke
 
 firing('1: the earlier 2 s waiter takes the slot before a later 100 ms waiter', async t => {
   const f = fixture(t), holder = f.worker('holder', { waitSeconds: 0 });
-  await until(() => fs.existsSync(holder.ready), 'holder');
+  await until(() => Boolean(readReady(holder.ready)), 'holder');
   const removed = f.file('early.removed');
   const early = f.worker('early', { pollMs: 2000, preload: `
     const remove = fs.rmSync;
@@ -119,15 +131,15 @@ firing('1: the earlier 2 s waiter takes the slot before a later 100 ms waiter', 
   const lateTicket = f.queue().find(name => JSON.parse(fs.readFileSync(path.join(`${f.lock}.queue`, name), 'utf8')).pid === late.child.pid);
   assert.ok(lateTicket, 'later waiter has published its ticket');
   await f.stop(holder);
-  await until(() => fs.existsSync(early.ready) || fs.existsSync(late.ready), 'next holder');
-  assert.equal(fs.existsSync(late.ready), false, 'fast polling cannot pass an earlier waiter');
-  assert.equal(fs.existsSync(early.ready), true);
+  await until(() => Boolean(readReady(early.ready)) || Boolean(readReady(late.ready)), 'next holder');
+  assert.equal(Boolean(readReady(late.ready)), false, 'fast polling cannot pass an earlier waiter');
+  assert.equal(Boolean(readReady(early.ready)), true);
   const witness = JSON.parse(fs.readFileSync(removed, 'utf8'));
   assert.equal(witness.holder.token, JSON.parse(fs.readFileSync(early.ready, 'utf8')).token);
   assert.equal(witness.ticket.token, witness.holder.token, 'lock exists before the winner removes its own ticket');
   assert.deepEqual(f.queue(), [lateTicket], 'later waiter keeps its ticket while early holds the lock');
   await f.stop(early);
-  await until(() => fs.existsSync(late.ready), 'later holder');
+  await until(() => Boolean(readReady(late.ready)), 'later holder');
   await f.stop(late);
   assert.equal(fs.readFileSync(f.file('order'), 'utf8'), 'holder\nearly\nlate\n');
   assert.deepEqual(f.queue(), []);
@@ -135,7 +147,7 @@ firing('1: the earlier 2 s waiter takes the slot before a later 100 ms waiter', 
 
 firing('lock publication never exposes incomplete bytes to another queued waiter', async t => {
   const f = fixture(t), holder = f.worker('holder', { waitSeconds: 0 });
-  await until(() => fs.existsSync(holder.ready), 'holder');
+  await until(() => Boolean(readReady(holder.ready)), 'holder');
   const paused = f.file('publication.paused'), resume = f.file('publication.resume'), observed = f.file('late.observed');
   const early = f.worker('early', { pollMs: 50, preload: `
     const write = fs.writeFileSync;
@@ -171,11 +183,11 @@ firing('lock publication never exposes incomplete bytes to another queued waiter
   assert.equal(fs.existsSync(f.lock), false, 'incomplete holder bytes remain private');
   assert.deepEqual(f.queue(), names, 'neither ticket is removed before lock publication');
   fs.writeFileSync(resume, 'resume');
-  await until(() => fs.existsSync(early.ready) || fs.existsSync(late.ready), 'next holder');
-  assert.equal(fs.existsSync(early.ready), true);
-  assert.equal(fs.existsSync(late.ready), false, 'late cannot pass the unpublished head');
+  await until(() => Boolean(readReady(early.ready)) || Boolean(readReady(late.ready)), 'next holder');
+  assert.equal(Boolean(readReady(early.ready)), true);
+  assert.equal(Boolean(readReady(late.ready)), false, 'late cannot pass the unpublished head');
   await f.stop(early);
-  await until(() => fs.existsSync(late.ready), 'later holder');
+  await until(() => Boolean(readReady(late.ready)), 'later holder');
   await f.stop(late);
   assert.equal(fs.readFileSync(f.file('order'), 'utf8'), 'holder\nearly\nlate\n');
   assert.deepEqual(f.queue(), []);
@@ -214,7 +226,7 @@ firing('lock publication preserves a competing creator and cleans scratch on lin
 
 firing('2: SIGKILL leaves a gone head that ESRCH removes even with denied start-time reads', async t => {
   const f = fixture(t), holder = f.worker('holder', { waitSeconds: 0 });
-  await until(() => fs.existsSync(holder.ready), 'holder');
+  await until(() => Boolean(readReady(holder.ready)), 'holder');
   const head = f.worker('killed-head', { pollMs: 2000 });
   await until(() => fs.existsSync(head.waiting), 'head waiting');
   assert.equal(f.queue().length, 1, 'head has a published ticket');
@@ -225,7 +237,7 @@ firing('2: SIGKILL leaves a gone head that ESRCH removes even with denied start-
   assert.equal((await head.done).signal, 'SIGKILL');
   await until(() => !f.queue().includes(headName), 'ESRCH pruning before ticket expiration');
   await f.stop(holder);
-  await until(() => fs.existsSync(next.ready), 'next holder');
+  await until(() => Boolean(readReady(next.ready)), 'next holder');
   await f.stop(next);
   assert.deepEqual(f.queue(), []);
 });
@@ -237,8 +249,8 @@ test('3: an EPERM/unknown head blocks until its own expiresAt', async t => {
   const expires = Date.now() + loadTimeout(1800);
   const head = writeTicket(f, { pid: peer.child.pid, expiresAt: new Date(expires).toISOString() });
   const next = f.worker('next', { preload: denySource(peer.child.pid, { eperm: true }) });
-  await until(() => fs.existsSync(next.waiting) || fs.existsSync(next.ready), 'unknown-head witness');
-  assert.equal(fs.existsSync(next.ready), false, 'unknown head must be honored');
+  await until(() => fs.existsSync(next.waiting) || Boolean(readReady(next.ready)), 'unknown-head witness');
+  assert.equal(Boolean(readReady(next.ready)), false, 'unknown head must be honored');
   const status = await f.start(['--input-type=module', '-e', `import fs from 'node:fs';${denySource(peer.child.pid, { eperm: true })}
     process.argv = [process.execPath, ${JSON.stringify(CLI)}, 'status', '--lock-path', ${JSON.stringify(f.lock)}];await import(${JSON.stringify(MODULE)});`]).done;
   assert.equal(JSON.parse(status.stdout).queue[0].state, 'unknown');
@@ -260,7 +272,7 @@ test('3: an EPERM/unknown head blocks until its own expiresAt', async t => {
 
 firing('4: deleting the queue mid-wait republishes original names and preserves order', async t => {
   const f = fixture(t), holder = f.worker('holder', { waitSeconds: 0 });
-  await until(() => fs.existsSync(holder.ready), 'holder');
+  await until(() => Boolean(readReady(holder.ready)), 'holder');
   const early = f.worker('early', { pollMs: 2000 });
   await until(() => fs.existsSync(early.waiting), 'early waiting');
   const late = f.worker('late');
@@ -273,16 +285,16 @@ firing('4: deleting the queue mid-wait republishes original names and preserves 
   assert.deepEqual(f.queue(), names);
   assert.deepEqual(names.map(name => fs.readFileSync(path.join(`${f.lock}.queue`, name), 'utf8')), bytes);
   await f.stop(holder);
-  await until(() => fs.existsSync(early.ready), 'early holder');
-  assert.equal(fs.existsSync(late.ready), false);
+  await until(() => Boolean(readReady(early.ready)), 'early holder');
+  assert.equal(Boolean(readReady(late.ready)), false);
   await f.stop(early);
-  await until(() => fs.existsSync(late.ready), 'late holder');
+  await until(() => Boolean(readReady(late.ready)), 'late holder');
   await f.stop(late);
 });
 
 firing('5: an old exclusive-create poller and a queuer both eventually run', async t => {
   const f = fixture(t), holder = f.worker('holder', { waitSeconds: 0 });
-  await until(() => fs.existsSync(holder.ready), 'holder');
+  await until(() => Boolean(readReady(holder.ready)), 'holder');
   const queued = f.worker('new');
   await until(() => fs.existsSync(queued.waiting), 'new waiter');
   const oldReady = f.file('old.ready'), oldFinish = f.file('old.finish');
@@ -297,11 +309,11 @@ firing('5: an old exclusive-create poller and a queuer both eventually run', asy
       if(held&&fs.existsSync(${JSON.stringify(oldFinish)})){clearInterval(timer);fs.rmSync(lock);}},20);`]);
   await until(() => fs.existsSync(f.file('old.waiting')), 'old poller');
   await f.stop(holder);
-  await until(() => fs.existsSync(queued.ready) || fs.existsSync(oldReady), 'one competing poller to acquire');
+  await until(() => Boolean(readReady(queued.ready)) || fs.existsSync(oldReady), 'one competing poller to acquire');
   if (fs.existsSync(oldReady)) {
     fs.writeFileSync(oldFinish, 'finish');
     assert.equal((await old.done).code, 0);
-    await until(() => fs.existsSync(queued.ready), 'queuer after old poller');
+    await until(() => Boolean(readReady(queued.ready)), 'queuer after old poller');
     await f.stop(queued);
   } else {
     await f.stop(queued);
@@ -381,7 +393,7 @@ firing('status lists all classifications head-first, and readers prune only elig
 
 firing('two-path acquisition queues on the second path only after taking the first', async t => {
   const f = fixture(t), holder = f.worker('workspace-holder', { waitSeconds: 0 });
-  await until(() => fs.existsSync(holder.ready), 'workspace holder');
+  await until(() => Boolean(readReady(holder.ready)), 'workspace holder');
   const bridge = f.worker('bridge', { compatPath: f.compat });
   await until(() => fs.existsSync(bridge.waiting), 'bridge waiting on workspace');
   assert.equal(JSON.parse(fs.readFileSync(f.compat, 'utf8')).pid, bridge.child.pid);
@@ -392,17 +404,17 @@ firing('two-path acquisition queues on the second path only after taking the fir
   assert.equal(f.queue(f.compat).length, 1);
   assert.equal(f.queue().length, 1, 'next bridge has not queued on workspace yet');
   await f.stop(holder);
-  await until(() => fs.existsSync(bridge.ready), 'bridge acquires both');
+  await until(() => Boolean(readReady(bridge.ready)), 'bridge acquires both');
   assert.equal(JSON.parse(fs.readFileSync(f.compat, 'utf8')).token, JSON.parse(fs.readFileSync(f.lock, 'utf8')).token);
   await f.stop(bridge);
-  await until(() => fs.existsSync(next.ready), 'next bridge acquires both');
+  await until(() => Boolean(readReady(next.ready)), 'next bridge acquires both');
   await f.stop(next);
   assert.deepEqual(f.queue(), []); assert.deepEqual(f.queue(f.compat), []);
 });
 
 for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) firing(`waiting ${signal} removes the ticket and releases an already held compat path`, async t => {
   const f = fixture(t), holder = f.worker('holder', { waitSeconds: 0 });
-  await until(() => fs.existsSync(holder.ready), 'holder');
+  await until(() => Boolean(readReady(holder.ready)), 'holder');
   const waiting = f.start([CLI, 'run', 'waiting', '--wait', String(loadWaitSeconds(12000)), '--poll-ms', '2000', '--', process.execPath, '-e', ''],
     { MONITOR_TEST_SLOT_COMPAT_PATH: f.compat });
   await until(() => f.queue().length === 1, 'CLI ticket on the second path');
@@ -418,7 +430,7 @@ for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) firing(`waiting ${signal} 
 
 firing('wait exhaustion still exits 75 with TEST_SLOT_HELD and removes its ticket', async t => {
   const f = fixture(t), holder = f.worker('holder', { waitSeconds: 0 });
-  await until(() => fs.existsSync(holder.ready), 'holder');
+  await until(() => Boolean(readReady(holder.ready)), 'holder');
   const waiter = f.start([CLI, 'run', 'budget', '--wait', String(loadWaitSeconds(1000)), '--', process.execPath, '-e', '']);
   await until(() => f.queue().length === 1, 'budget ticket');
   const result = await waiter.done;
@@ -437,7 +449,7 @@ firing('a zero-wait taker honors a queued peer without publishing its own ticket
 
 firing('callback failure and an explicit process exit both remove a waiting ticket', async t => {
   const f = fixture(t), holder = f.worker('holder', { waitSeconds: 0 });
-  await until(() => fs.existsSync(holder.ready), 'holder');
+  await until(() => Boolean(readReady(holder.ready)), 'holder');
   for (const exit of [false, true]) {
     const result = await f.start(['--input-type=module', '-e', `import fs from 'node:fs';
       const { acquireTestSlot } = await import(${JSON.stringify(MODULE)});

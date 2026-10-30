@@ -404,7 +404,7 @@ test('blocked fixture',async()=>{
     const child = spawnScenarioChild(t, process.execPath, [local('./helpers/run.mjs'), file]);
     let finished;
     waitForExit(child).then(result => { finished = result; });
-    await until(() => fs.existsSync(receipt) || finished, 'blocked fixture never became ready');
+    await waitForFile(receipt, text => { try { const ready = JSON.parse(text); return [ready.file, ready.leader, ready.owner].every(pid => Number.isSafeInteger(pid) && pid > 1); } catch { return false; } });
     assert.ok(fs.existsSync(receipt), finished?.stdout + finished?.stderr);
     const evidence = JSON.parse(fs.readFileSync(receipt, 'utf8')), rows = snapshot();
     assert.equal(rows.get(evidence.file)?.ppid, evidence.leader);

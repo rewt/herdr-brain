@@ -12,6 +12,8 @@ const inside = value => typeof value === 'string' && value.startsWith(root + pat
 const all = Object.values(state.workspaces);
 const workspace = all.find(w => w.workspace_id === target || w.pane.pane_id === target || w.agent?.name === target);
 const agent = workspace?.agent;
+// Native tab and pane lists honor --workspace; concurrent lanes must not leak.
+const scoped = () => args.includes('--workspace') ? all.filter(w => w.workspace_id === option('--workspace')) : all;
 fs.appendFileSync(path.join(root, 'native-calls.jsonl'), JSON.stringify(args) + '\n');
 let result = {}, changed = false;
 const missing = () => { console.error(JSON.stringify({ error: { code: 'agent_not_found' } })); process.exit(1); };
@@ -28,8 +30,8 @@ else if (group === 'worktree' && verb === 'open') {
     pane: { pane_id: id + ':p1', tab_id: id + ':t1', workspace_id: id, terminal_id: id + '-terminal', foreground_cwd: cwd } };
   state.workspaces[id] = w; changed = true;
   result = { already_open: false, workspace: w, tab: w.tab, root_pane: w.pane };
-} else if (group === 'tab' && verb === 'list') result = { tabs: all.flatMap(w => w.tab ? [w.tab] : []) };
-else if (group === 'pane' && verb === 'list') result = { panes: all.flatMap(w => w.tab ? [w.pane] : []) };
+} else if (group === 'tab' && verb === 'list') result = { tabs: scoped().flatMap(w => w.tab ? [w.tab] : []) };
+else if (group === 'pane' && verb === 'list') result = { panes: scoped().flatMap(w => w.tab ? [w.pane] : []) };
 else if (group === 'pane' && verb === 'get') { if (!workspace) missing(); result = { pane: workspace.pane }; }
 else if (group === 'pane' && verb === 'process-info') {
   if (!workspace) missing();

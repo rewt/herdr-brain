@@ -19,6 +19,7 @@ import { closeoutWaitId, closeoutWaitState, registerCloseoutWait, nativeCloseout
 import { obsoleteOutcomeDecision } from '../line-service/outcome-decision.mjs';
 import { unresolvedCloseoutEffect } from '../lib/closeout.mjs';
 import { events, setup, evaluations, effects, retainNativeOutcome } from './helpers/closeout-fixture.mjs';
+import {sessionBindFact} from './helpers/session-bind.mjs';
 
 // Spend the target's allowance after the ownership locks are held. An already
 // expired allowance is rejected at lock entry, before any target is evaluated.
@@ -291,19 +292,71 @@ test('flood backlog current refusal decisions stay owned while changed or unlink
   assert.equal(obsoleteOutcomeDecision({meta:{uncertain_outcome:{key:'other',check:{key:'dispatch:ENG-9:input'}}}},view()),null,'non-cleanup outcome decisions keep their existing path');
 });
 
-test('session_bound supersession preserves its already-bound predecessor under the current and historical event names',t=>{
+function sharedSuccessor(f,type='run.session_bound'){
+  const meta={lane:'topic',dispatch_attempt:'later',dispatch_journal:path.join(f.org,'dispatch/later.json'),
+    dispatch_project:f.common,dispatch_record:f.org};
+  f.append([{type:'run.started',id:'R-2',item:'ENG-1',workspace:f.lane,meta},
+    {type:'run.updated',id:'R-2',meta:{agent:'successor',pane:'w:q',worker_workspace:'w',terminal_id:'later-terminal',agent_session_id:'later-session'}}]);
+  const state=fold(events(f));
+  const [bound]=f.append([{...sessionBindFact(state.runs.get('R-2'),state,{session:'later-session'}),type}]);
+  f.state.tabs.push({tab_id:'w:u',workspace_id:'w'});
+  f.state.panes.push({pane_id:'w:q',tab_id:'w:u',workspace_id:'w',terminal_id:'later-terminal'});
+  f.state.agents.push({...f.state.agents[0],name:'successor',pane_id:'w:q',tab_id:'w:u',terminal_id:'later-terminal',
+    agent_session:{value:'later-session'},agent_status:'working'});
+  f.state.unregisterOnExit=false;f.save();
+  return bound;
+}
+
+test('session_bound supersession preserves and drains its already-bound predecessor under the current and historical event names',t=>{
+ for(const type of ['run.session_bound','run.session-bound']){
   const f=setup(t,{merged:true});f.report();const key=closeoutKey(fs.realpathSync(f.lane),'R-1','ready');
   const original=readCloseoutEntries(f.common).find(e=>e.key===key),file=path.join(f.common,'closeout/entries',key+'.json'),bytes=fs.readFileSync(file);
   assert.deepEqual(original.panes.map(p=>[p.run,p.session]),[['R-1','session']]);
-  f.append([{type:'run.started',id:'R-2',item:'ENG-1',workspace:f.lane,meta:{lane:'topic'}}]);
-  for(const type of ['run.session_bound','run.session_bound','run.session-bound']){
-    const [bound]=f.append([{type,run:'R-2',session:{agent_session_id:'later'}}]);
+  const bound=sharedSuccessor(f,type);
     assert.deepEqual(bound.closeout_targets,[],`${type}: the original source already owns its target`);
     assert.deepEqual(fs.readFileSync(file),bytes,'no successor identity or new source replaces the original target');
     assert.deepEqual(readCloseoutEntries(f.common).find(e=>e.key===key),original);
     assert.equal(readCloseoutEntries(f.common).filter(e=>e.run==='R-1'&&e.signal==='ready').length,1,type);
-  }
   assert.ok(closeoutRevision(readCloseoutEntries(f.common).find(e=>e.key===key),events(f))>events(f).find(e=>e.type==='report.ingested').seq);
+  const successor=f.read().agents.find(a=>a.name==='successor');
+  // An old unchanged pre-effect keep must become eligible without replacing
+  // its source or inventing a new opportunity for an attempted native effect.
+  f.append([{type:'closeout.evaluated',identity:f.common,key,source:original.source,run:'R-1',item:'ENG-1',
+    revision:original.source.seq,completed:false,reason:'original report allocation/current run/claim changed; keep'}]);
+  const result=f.drain({keys:[key],retrySafe:true,sessionsOnly:true});
+  assert.equal(result.evaluated[0]?.sessions_retired,true,JSON.stringify(result));
+  assert.deepEqual(f.read().actions,[['agent','prompt','worker','/quit'],['tab','close','w:t']]);
+  assert.deepEqual(f.read().agents,[successor]);assert.deepEqual(f.read().panes.map(p=>p.pane_id),['w:q']);
+  assert.ok(fs.existsSync(f.lane));assert.equal(f.git(['rev-parse','refs/heads/lane/topic']),f.head);
+  assert.equal(effects(f).some(e=>['worktree-removed','branch-removed'].includes(e.action)),false);
+ }
+});
+
+test('a deferred report retires only predecessor sessions when its bound successor owns the shared lane',t=>{
+  const f=setup(t,{direct:true,bound:true,merged:true});const [report]=f.report(),entry=report.closeout_targets[0];
+  sharedSuccessor(f);const successor=f.read().agents.find(a=>a.name==='successor');
+  const result=f.drain({keys:[entry.key],retrySafe:true});
+  assert.equal(result.evaluated[0]?.sessions_retired,true,JSON.stringify(result));
+  assert.equal(result.evaluated[0].resources.folder.status,'kept');
+  assert.deepEqual(f.read().agents,[successor]);assert.ok(fs.existsSync(f.lane));
+  assert.equal(f.git(['rev-parse','refs/heads/lane/topic']),f.head);
+  assert.deepEqual(f.read().actions,[['agent','prompt','worker','/quit'],['tab','close','w:t']]);
+});
+
+for(const change of ['start','claim','dispatch','report'])test(`supersession retains a changed predecessor ${change} allocation`,t=>{
+  const f=setup(t,{direct:true,bound:true,merged:true});const [report]=f.report(),entry=report.closeout_targets[0];
+  sharedSuccessor(f);
+  if(change==='claim')f.append([{type:'run.claimed',run:'R-1',record:f.org,project:f.common,owner:{controller:'foreign',legacy:true}}]);
+  else if(change==='dispatch')f.append([{type:'run.updated',id:'R-1',meta:{dispatch_attempt:'replacement'}}]);
+  else{
+    const all=events(f);
+    if(change==='start')all.find(e=>e.type==='run.started'&&e.id==='R-1').seq++;
+    if(change==='report')all.find(e=>e.type==='report.ingested'&&e.run==='R-1').sha256='replacement';
+    fs.writeFileSync(f.eventFile,all.map(e=>JSON.stringify(e)+'\n').join(''));
+  }
+  const result=f.drain({keys:[entry.key],retrySafe:true});
+  assert.equal(result.evaluated[0]?.completed,false,JSON.stringify(result));
+  assert.deepEqual(f.read().actions,[]);assert.ok(fs.existsSync(f.lane));
 });
 
 test('code handoff after a journaled exit intent records zero native start and strands no UNKNOWN intent',t=>{

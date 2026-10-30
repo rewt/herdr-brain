@@ -10,6 +10,12 @@ import {noticeLock} from '../supervisor/notice-lock.mjs';
 import {claimRetirementOwner,currentCloseoutEntries} from '../lib/closeout.mjs';
 import {refreshCloseouts} from '../lib/closeout-consumer.mjs';
 import {wakeLineService} from '../line-service/line-service.mjs';
+import {createLineService,sourceRoot} from '../line-service/line-service.mjs';
+import {fold} from '../lib/state.mjs';
+import {transact} from '../lib/store.mjs';
+import {closeoutRevision} from '../lib/closeout.mjs';
+import {registerCloseoutWait} from '../lib/closeout-status.mjs';
+import {queueOutcomeDecision} from '../line-service/outcome-decision.mjs';
 import {launchPlist} from '../line-service/plist.mjs';
 import {events,setup,selectCurrentCleanup} from './helpers/closeout-fixture.mjs';
 
@@ -145,7 +151,7 @@ test('crash before ingest and a dropped availability wake reconcile the original
   assert.equal(runCloseoutTurn(args).ingested,0);
 });
 
-for(const change of ['STOP','HOLD','claim','current','head','session'])test(`finite turn retains a ${change} boundary change without a native effect`,t=>{
+for(const change of ['STOP','HOLD','claim','current','head','session','start','dispatch','report'])test(`finite turn retains a ${change} boundary change without a native effect`,t=>{
   const f=fixture(t);f.report();
   if(change==='STOP')fs.writeFileSync(path.join(f.directory,'STOP'),'stop');
   if(change==='HOLD')fs.mkdirSync(path.join(f.repo,'.lane/supervisor/HOLD'),{recursive:true});
@@ -153,9 +159,65 @@ for(const change of ['STOP','HOLD','claim','current','head','session'])test(`fin
   if(change==='session'){f.state.agents[0].agent_session.value='foreign';f.save();}
   if(change==='current')f.append([{type:'run.started',id:'R-2',item:'ENG-1',workspace:f.lane}]);
   if(change==='claim')f.append([{type:'run.claimed',run:'R-1',record:f.org,project:f.common,owner:{controller:'foreign',legacy:true,release:null}}]);
+  if(['start','dispatch','report'].includes(change)){
+    const all=events(f);
+    if(change==='start')all.find(e=>e.type==='run.started'&&e.id==='R-1').seq++;
+    if(change==='dispatch')f.append([{type:'run.updated',id:'R-1',meta:{dispatch_attempt:'replacement'}}]);
+    else{
+      if(change==='report')all.find(e=>e.type==='report.ingested'&&e.run==='R-1').sha256='changed';
+      fs.writeFileSync(f.eventFile,all.map(e=>JSON.stringify(e)+'\n').join(''));
+    }
+  }
   if(['STOP','HOLD'].includes(change))assert.throws(()=>runCloseoutTurn(f.args),/STOP\/HOLD/);
   else runCloseoutTurn(f.args);
   assert.deepEqual(f.read().actions,[]);assert.equal(fs.existsSync(f.lane),true);
+});
+
+test('a reaped general-pass owner recovers on wake while live and unidentified owners retain the lock',t=>{
+  const f=fixture(t),lock=path.join(f.directory,'pass.lock');
+  const child=spawnSync(process.execPath,['-e','process.stdout.write(String(process.pid))'],{encoding:'utf8',env:f.env});
+  assert.equal(child.status,0,child.stderr);
+  fs.mkdirSync(lock);fs.writeFileSync(path.join(lock,'owner.json'),JSON.stringify({pid:Number(child.stdout),token:'dead-original'}));
+  let launches=0;
+  const service={directory:f.directory,closeout:()=>({steps:0})},launch=()=>{launches++;return{pid:123};};
+  assert.equal(wakeLineService({service,launch}).general.pid,123);assert.equal(launches,1);
+  const release=noticeLock(lock);
+  try{assert.equal(wakeLineService({service,launch}).general.already_running,true);assert.equal(launches,1);}
+  finally{release();}
+  fs.mkdirSync(lock);fs.writeFileSync(path.join(lock,'owner.json'),'{}');
+  assert.equal(wakeLineService({service,launch}).general.already_running,true);assert.equal(launches,1);
+});
+
+for(const registered of [true,false])test(`finite refusal decision is owned once across turns and general passes (${registered?'registered':'missing'} wait)`,t=>{
+  const f=fixture(t);fs.writeFileSync(path.join(f.scratch,'.identity-root'),'fixture');f.report();
+  const entry=currentCloseoutEntries(f.common,f.org,events(f))[0];
+  const [refusal]=f.append([{type:'closeout.evaluated',identity:f.common,key:entry.key,source:entry.source,
+    run:entry.run,item:entry.item,revision:closeoutRevision(entry,events(f)),completed:false,reason:'EPERM native refusal'}]);
+  if(registered)transact(f.org,current=>({add:registerCloseoutWait(entry,refusal,current,[entry])}),{actor:'fixture'});
+  const original=fs.readFileSync(f.eventFile);
+  for(let turn=0;turn<2;turn++){
+    const result=runCloseoutTurn(f.args);assert.deepEqual(result.errors,[]);assert.equal(result.steps,0);
+  }
+  const commands=[];
+  const service=createLineService({repo:f.repo,org:f.org,to:'brain-chat',env:f.env,maxStarts:0,closeoutMeasure:()=>{},
+    recordNotice:d=>({id:d.id,state:'record-only'}),command:(_exe,args)=>{
+      commands.push(args);return{status:0,stdout:'{}',stderr:''};
+    }});
+  for(let pass=0;pass<2;pass++)service.pass();
+  const decisions=[...fold(events(f)).items.values()].filter(i=>i.role==='decision');
+  assert.equal(decisions.length,1);
+  assert.equal(decisions[0].meta.uncertain_outcome.check.key,`closeout:${entry.key}`);
+  assert.equal(decisions[0].meta.uncertain_outcome.check.status,'defect');
+  assert.deepEqual(decisions[0].meta.uncertain_outcome.check.subject.source,entry.source);
+  assert.deepEqual(f.read().actions,[]);
+  assert.equal(commands.some(args=>args.includes('drain')),false,'a refusal never reaches a native executor');
+  assert.deepEqual(fs.readFileSync(f.eventFile).subarray(0,original.length),original);
+  const check=decisions[0].meta.uncertain_outcome.check,options={repo:f.repo,org:f.org,env:f.env,owner:'closeout-turn',check};
+  assert.throws(()=>queueOutcomeDecision(options),/actual owned closeout-turn lock/);
+  const lock=path.join(f.directory,'closeout-turn.lock');fs.mkdirSync(lock);
+  fs.writeFileSync(path.join(lock,'owner.json'),JSON.stringify({pid:process.pid,identity:'reused process birth'}));
+  assert.throws(()=>queueOutcomeDecision(options),/actual owned closeout-turn lock/);
+  assert.throws(()=>queueOutcomeDecision({...options,check:{...check,key:'dispatch:foreign'}}),/only closeout decisions/);
 });
 
 test('a retirement-owned allocation refuses a new dispatch owner',t=>{

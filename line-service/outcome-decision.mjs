@@ -39,10 +39,11 @@ export function obsoleteOutcomeDecision(item,{events,entries,evaluations}) {
   if(!['defect','failed'].includes(closeoutWaitState(prior&&closeoutWait(entry,prior,events),events)))return 'no current defect or failure for this cleanup request';
   return null;
 }
-export function queueOutcomeDecision({repo,org,env,check}) {
-  const binding=serviceRecordBinding({repo,org,env}),key=createHash('sha256').update(JSON.stringify([binding.identity,org,check.key])).digest('hex');
+export function queueOutcomeDecision({repo,org,env,check,owner='pass'}) {
+  if(owner!=='pass'&&(owner!=='closeout-turn'||!check.key.startsWith('closeout:')))throw Error('finite closeout owner may queue only closeout decisions');
+  const binding=serviceRecordBinding({repo,org,env,owner}),key=createHash('sha256').update(JSON.stringify([binding.identity,org,check.key])).digest('hex');
   return transact(org,(events,state)=>{
-    serviceRecordBinding({repo,org,env});
+    serviceRecordBinding({repo,org,env,owner});
     for(const file of [path.join(binding.directory,'STOP'),path.join(repo,'.lane/supervisor/STOP'),path.join(repo,'.lane/supervisor/HOLD')])if(fs.existsSync(file))throw Error('STOP/HOLD prevents outcome decision');
     const existing=[...state.items.values()].find(i=>i.meta.uncertain_outcome?.key===key);
     if(existing)return {add:[],result:{item:existing.id,key}};

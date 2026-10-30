@@ -12,7 +12,8 @@ import {retirementLock} from '../lib/retire-lock.mjs';
 import {requireController,readOwnedRun} from '../lib/run-owner-guard.mjs';
 import {currentCloseoutEntries,closeoutEvaluations,closeoutEvaluation,closeoutRevision,
   scheduleLineCloseouts,directCloseoutObservation,publishCloseoutEvents,lineServiceOwnsCleanup,unpublishedCloseoutSources,actionableCloseout} from '../lib/closeout.mjs';
-import {closeoutNextStage,closeoutWait,closeoutWaitState,unresolvedGitRemoval} from '../lib/closeout-status.mjs';
+import {closeoutNextStage,closeoutWait,closeoutWaitState,registerCloseoutWait,unresolvedGitRemoval} from '../lib/closeout-status.mjs';
+import {queueOutcomeDecision} from './outcome-decision.mjs';
 import {recordCloseoutTurn} from './closeout-measurement.mjs';
 import {missingCloseoutBinding} from '../lib/closeout-facts.mjs';
 import {reconcileCloseoutBacklog} from '../lib/closeout-backlog.mjs';
@@ -127,19 +128,42 @@ function closeoutTurn({project,org,cli,guard,env=process.env,maxSteps=8,budgetMs
       catch(error){if(error.code==='CLOSEOUT_CODE_CHANGED')throw error;errors.push({stage:'allocations',reason:error.message});}
     }
     if(state.turn%4===0){refresh();observed=read();}
+    // The finite owner also owns missing-producer/refusal visibility. Register
+    // exact waits before selection; an owned next stage remains ordinary progress.
+    planTransaction(org,events=>{
+      guard();code.verify();
+      const owned=currentCloseoutEntries(project.identity,org,events,{onInvalid:()=>{}});
+      return{add:owned.flatMap(entry=>{
+        if(entry.project!==project.canonical||entry.org!==org)return[];
+        const prior=closeoutEvaluation(entry,events);
+        return prior?registerCloseoutWait(entry,prior,events,owned):[];
+      })};
+    },{actor:'line-service',replaySafe:true});
+    observed=read();
     const entries=currentCloseoutEntries(project.identity,org,observed.events,{onInvalid:()=>{}}),
       rows=closeoutEvaluations(project.identity,org,observed.events),evaluations=new Map(rows.map(e=>[e.key,e]));
     for(const entry of entries)if(entry.reportCloseout){const prior=closeoutEvaluation(entry,observed.events);if(prior)evaluations.set(entry.key,prior);else evaluations.delete(entry.key);}
     const eligible=entries.filter(entry=>{
       if(entry.project!==project.canonical||entry.org!==org)return false;
+      const prior=evaluations.get(entry.key);if(prior?.completed)return false;
+      const next=prior&&closeoutNextStage(entry,prior,observed.events,entries);
+      const wait=prior&&closeoutWait(entry,prior,observed.events),status=closeoutWaitState(wait,observed.events);
+      if(prior&&!next&&['defect','failed'].includes(status)){
+        try{
+          guard();code.verify();
+          const key=`closeout:${entry.key}`;
+          queueOutcomeDecision({repo:project.canonical,org,env,owner:'closeout-turn',check:{key,
+            subject:{item:entry.item,run:entry.run,key:entry.key,head:entry.head,source:entry.source},wait,status}});
+        }catch(error){if(error.code==='CLOSEOUT_CODE_CHANGED')throw error;errors.push({key:entry.key,stage:'outcome-decision',reason:error.message});}
+        return false;
+      }
       // Match the executor's admission before spending a finite step. Legacy
       // bindings and interrupted Git commands need their original evidence.
       if(!actionableCloseout(entry,observed.events)||unresolvedGitRemoval(entry,observed.events))return false;
-      const prior=evaluations.get(entry.key);if(prior?.completed)return false;
       if(!prior)return true;
       if(directCloseoutObservation(entry,prior,observed.events))return true;
-      const next=closeoutNextStage(entry,prior,observed.events,entries);if(next)return next.ready;
-      return closeoutWaitState(closeoutWait(entry,prior,observed.events),observed.events)==='complete'&&
+      if(next)return next.ready;
+      return status==='complete'&&
         closeoutRevision(entry,observed.events,observed.state)>(prior.revision??0);
     });
     const scheduled=scheduleLineCloseouts(eligible,rows,{batch:true,attempts:state.targets});

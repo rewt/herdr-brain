@@ -6,6 +6,7 @@ import { transact } from '../lib/store.mjs';
 import { validateEvent,canonical } from '../messages/schema.mjs';
 import { recordMessages } from '../messages/operator-inbox.mjs';
 import { validateOperatorText } from '../messages/operator-text.mjs';
+import {ownerIdentity} from '../lib/process-owner.mjs';
 import { identityRootAt } from '../messages/journal.mjs';
 import { protectRecordMutation } from '../lib/record-guard.mjs';
 import { installedContext,regularJSON } from './cutoff.mjs';
@@ -16,11 +17,13 @@ export function canonicalFailure(reason) {
     .replace(/\b\d{4}-\d\d-\d\d[T ]\d\d:\d\d:\d\d(?:\.\d+)?(?:Z|[+-]\d\d:\d\d)?\b/g,'<time>')
     .replace(/\b(pid|process)[ :=#]+\d+\b/gi,(_match,label)=>`${label.toLowerCase()}=<pid>`).slice(0,1024);
 }
-export function serviceRecordBinding({repo,org,env=process.env}) {
+export function serviceRecordBinding({repo,org,env=process.env,owner='pass'}) {
   const c=installedContext(repo,org);
   if(env.HERDR_ENV==='1'||env.HERDR_PANE_ID)throw Error('service inbox never borrows a native session context');
-  const owner=regularJSON(path.join(c.directory,'pass.lock','owner.json'));
-  if(owner?.pid!==process.pid)throw Error('service inbox requires its actual owned pass lock');
+  if(!['pass','closeout-turn'].includes(owner))throw Error('unknown service record owner');
+  const lock=regularJSON(path.join(c.directory,`${owner}.lock`,'owner.json'));
+  if(lock?.pid!==process.pid||owner==='closeout-turn'&&(!lock.identity||lock.identity!==ownerIdentity(process.pid)))
+    throw Error(`service inbox requires its actual owned ${owner} lock`);
   const root=identityRootAt(c.identity);if(!root)throw Error('service identity root is UNKNOWN');
   return {...c,identityName:path.basename(root),epoch:digest({identity:c.identity,org:c.org,installed_at:c.installation.at,source:c.installation.source,node:c.installation.node,target:c.installation.target})};
 }

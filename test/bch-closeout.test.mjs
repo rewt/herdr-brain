@@ -55,7 +55,7 @@ test('BCH old bound missing-folder hold settles current vacancy while keeping hi
 test('BCH legacy project claim settles an absent allocation without a dispatch binding or target',t=>{
   const f=partial(t,{absent:true,binding:'claim'});
   assert.equal(events(f).find(e=>e.type==='run.started').meta.dispatch_project,undefined);
-  assert.equal(events(f).find(e=>e.type==='report.ingested').closeout_targets,undefined);
+  assert.deepEqual(events(f).find(e=>e.type==='report.ingested').closeout_targets,[]);
   assert.deepEqual(f.refresh().settled,['R-1']);
   const row=events(f).find(e=>e.type==='closeout.vacancy-settled');
   assert.equal(row.resources.folder.preservation,'UNKNOWN');assert.equal(row.native_completion,false);

@@ -54,12 +54,13 @@ for (const mode of ['success', 'assertion', 'killed-worker', 'lost-reply']) {
     fs.writeFileSync(preload, `if(process.argv.includes('--worker')){const send=process.send.bind(process);process.send=(message,...args)=>message.fileTapComplete?true:send(message,...args);}`);
     fs.writeFileSync(file, `import test from ${JSON.stringify(local('./helpers/bounded-test.mjs'))};
 import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import assert from 'node:assert/strict';
-test('owned victim',()=>{
+import {waitForFile} from ${JSON.stringify(local('./helpers/file-wait.mjs'))};
+test('owned victim',async t=>{
 const scratch=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'owned-victim-')));
 fs.writeFileSync(path.join(scratch,'payload'),'owned');
 fs.writeFileSync(${JSON.stringify(published)},JSON.stringify({scratch,history:process.env.MONITOR_GATE_HISTORY_ROOT}));
 console.error('retained victim evidence');
-${mode === 'assertion' ? "assert.fail('intentional witness failure');" : mode === 'killed-worker' ? "process.kill(Number(process.env.HERDR_TEST_SUITE_PID),'SIGKILL');Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0);" : ''}
+${mode === 'assertion' ? "assert.fail('intentional witness failure');" : mode === 'killed-worker' ? "await waitForFile(process.env.MONITOR_TEST_FILE_SIGNAL_RECEIPT.replace('.signal.json','.stderr'),text=>text.includes('retained victim evidence'),{signal:t.signal});process.kill(Number(process.env.HERDR_TEST_SUITE_PID),'SIGKILL');Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0);" : ''}
 });`);
     // A new coordinator owns this journal; the enclosing test keeps its own
     // registry. Drop only the final file IPC reply, never its disk receipt.

@@ -278,7 +278,7 @@ function writeFakeHerdr(fixture, options = {}) {
   const state = join(fixture.root, "herdr-state.json");
 const source = `#!${process.execPath}
 import { execFileSync, spawn } from "node:child_process";
-import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 const args = process.argv.slice(2);
 const log = process.env.FAKE_HERDR_LOG;
@@ -287,7 +287,13 @@ const state = existsSync(statePath) ? JSON.parse(readFileSync(statePath, "utf8")
   opened: process.env.FAKE_HERDR_INITIALLY_OPENED === "1",
 };
 appendFileSync(log, JSON.stringify(args) + "\\n");
-const save = () => writeFileSync(statePath, JSON.stringify(state));
+// Detached dispatch helpers may still publish while the test reads. A reader
+// must see either complete snapshot, never a truncated in-place write.
+const save = () => {
+  const pending = statePath + '.' + process.pid + '.tmp';
+  writeFileSync(pending, JSON.stringify(state));
+  renameSync(pending, statePath);
+};
 const result = (id, value) => process.stdout.write(JSON.stringify({ id, result: value }) + "\\n");
 const stallObservation = stage => {
   if (!state.agent || !process.env.FAKE_RETIREMENT_OBSERVE_DELAY_MS) return;

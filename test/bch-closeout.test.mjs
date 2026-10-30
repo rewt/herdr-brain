@@ -13,10 +13,11 @@ import {gitProject} from '../lib/project.mjs';
 import {fold} from '../lib/state.mjs';
 import {runCloseoutTurn,CLOSEOUT_TURN_BUDGET_MS} from '../line-service/closeout-turn.mjs';
 
-function partial(t,{merged=true,absent=false,abandoned=false,envelope=true}={}){
+function partial(t,{merged=true,absent=false,abandoned=false,envelope=true,binding='dispatch'}={}){
   const f=setup(t,{occupied:false,direct:true,merged});selectCurrentCleanup(f);
-  const old=events(f);old.find(e=>e.type==='run.started').meta={lane:'topic',agent_session_id:'session',dispatch_project:f.common};
+  const old=events(f);old.find(e=>e.type==='run.started').meta={lane:'topic',agent_session_id:'session',...(binding==='dispatch'?{dispatch_project:f.common}:{})};
   fs.writeFileSync(f.eventFile,old.map(e=>JSON.stringify(e)+'\n').join(''));
+  if(binding==='claim')f.append([{type:'run.claimed',run:'R-1',project:f.common,record:f.org,owner:{controller:'brain',legacy:true}}]);
   if(absent){f.git(['worktree','remove',f.lane]);if(merged)f.git(['branch','-d','lane/topic']);f.state.workspaces=[];f.save();}
   const [source]=f.append([abandoned?{type:'run.abandoned',id:'R-1'}:{type:'report.ingested',run:'R-1',sha256:'fixture',report:{outcome:'done'}}]);
   if(!envelope){const rows=events(f);delete rows.find(e=>e.seq===source.seq).closeout_targets;
@@ -49,6 +50,26 @@ test('BCH old bound missing-folder hold settles current vacancy while keeping hi
   assert.equal(row.completed,true);assert.equal(row.completion_kind,'current-vacancy');assert.equal(row.native_completion,false);
   assert.equal(row.resources.folder.preservation,'UNKNOWN');assert.deepEqual(effects(f),[]);
   assert.deepEqual(f.drain({keys:[target.key],retrySafe:true}).evaluated,[]);
+});
+
+test('BCH legacy project claim settles an absent allocation without a dispatch binding or target',t=>{
+  const f=partial(t,{absent:true,binding:'claim'});
+  assert.equal(events(f).find(e=>e.type==='run.started').meta.dispatch_project,undefined);
+  assert.equal(events(f).find(e=>e.type==='report.ingested').closeout_targets,undefined);
+  assert.deepEqual(f.refresh().settled,['R-1']);
+  const row=events(f).find(e=>e.type==='closeout.vacancy-settled');
+  assert.equal(row.resources.folder.preservation,'UNKNOWN');assert.equal(row.native_completion,false);
+  assert.deepEqual(effects(f),[]);assert.deepEqual(f.read().actions,[]);
+});
+
+test('BCH explicit foreign dispatch retains a legacy target without vacancy settlement',t=>{
+  const f=setup(t,{occupied:false,direct:true,merged:true});selectCurrentCleanup(f);f.report();
+  const rows=events(f);assert.ok(rows.find(e=>e.type==='report.ingested').closeout_targets.length);
+  rows.find(e=>e.type==='run.started').meta.dispatch_project='/foreign/git';
+  fs.writeFileSync(f.eventFile,rows.map(e=>JSON.stringify(e)+'\n').join(''));
+  f.git(['worktree','remove',f.lane]);f.git(['branch','-d','lane/topic']);f.state.workspaces=[];f.save();
+  assert.deepEqual(refreshCloseouts({cwd:f.repo,org:f.org,env:f.env,retirementOptions:f.options}).settled,[]);
+  assert.equal(events(f).some(e=>e.type==='closeout.vacancy-settled'),false);assert.deepEqual(effects(f),[]);
 });
 
 test('BCH vacancy leaves a main-ancestor branch intact and records its exact head',t=>{

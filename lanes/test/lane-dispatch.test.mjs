@@ -12,6 +12,7 @@ import { planRetirement } from '../../lib/retire.mjs';
 import { ownerProcess } from '../../lib/process-owner.mjs';
 import { initialShellFile } from '../../lib/initial-shell.mjs';
 import { fixtureFleet } from '../../test/helpers/offline-herdr.mjs';
+import { until } from '../../test/helpers/producer-wait.mjs';
 import {
   HERE,
   LANE,
@@ -425,6 +426,42 @@ test('retirement hold: failed dispatch keeps its newly created tab', () => {
     rmSync(hold); const resumed = lane(fixture, ['dispatch', 'held-dispatch', '--json']);
     assert.equal(resumed.status, 1); assert.ok(fake.calls().some(a => a[0] === 'tab' && a[1] === 'close'));
   } finally { fixture.cleanup(); }
+});
+
+test('dispatch fixture readers retain a complete snapshot during a partial state write', async t => {
+  const fixture=makeFixture();let child,done;
+  const release=join(fixture.root,'release-state-write');
+  try {
+    const fake=writeFakeHerdr(fixture,{lanePath:fixture.repo,initiallyOpened:true});
+    const executable=join(fixture.bin,'herdr'),args=[executable,'workspace','list','--json'];
+    const initial=spawnSync(process.execPath,args,{cwd:fixture.repo,env:fixture.env,encoding:'utf8'});
+    assert.equal(initial.status,0,initial.stderr);
+    const before=fake.state(),opened=join(fixture.root,'state-write-opened'),preload=join(fixture.root,'pause-state-write.mjs');
+    writeFileSync(preload,`import fs from 'node:fs';
+import {syncBuiltinESMExports} from 'node:module';
+const write=fs.writeFileSync,target=${JSON.stringify(fixture.env.FAKE_HERDR_STATE)};
+fs.writeFileSync=function(file,bytes,...rest){
+  if(String(file)===target||String(file).startsWith(target+'.')){
+    write(file,String(bytes).slice(0,8),...rest);
+    write(${JSON.stringify(opened)},'');
+    while(!fs.existsSync(${JSON.stringify(release)}))Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,10);
+  }
+  return write(file,bytes,...rest);
+};
+syncBuiltinESMExports();\n`);
+    child=spawnChild(t,process.execPath,['--import',preload,...args],{cwd:fixture.repo,env:fixture.env});
+    done=waitForExit(child);
+    await until(()=>existsSync(opened),{signal:t.signal,description:'partial fixture state write',
+      producer:()=>({state:child.exitCode===null&&child.signalCode===null?'live':'exited'})});
+    assert.deepEqual(fake.state(),before,'the in-flight bytes must not replace the published snapshot');
+    writeFileSync(release,'');
+    const result=await done;assert.equal(result.code,0,result.stderr);
+    assert.equal(fake.state().workspaceLists,before.workspaceLists+1);
+  } finally {
+    writeFileSync(release,'');
+    if(done)await done;
+    fixture.cleanup();
+  }
 });
 
 test("dispatch retains initial tabs on environment and agent cwd failures", () => {

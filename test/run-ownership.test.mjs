@@ -15,7 +15,7 @@ import { fold } from '../lib/state.mjs';
 import { fold as oldFold } from './fixtures/state-pre-session-bind.mjs';
 import { claimRun, ownerBinding, fenceOwner, readOwnedRun, assertOwner, outstandingEffects, adoptedPromotionBinding, guardPromotionJob } from '../lib/run-owner.mjs';
 import { queueFor, enqueue } from '../promote/promote.mjs';
-import { readInbox } from '../supervisor/prompt-supervisor.mjs';
+import { readInbox, inboxTransaction } from '../supervisor/prompt-supervisor.mjs';
 import { receiptDirectory } from '../supervisor/context.mjs';
 import { spawnChild, waitForExit, childProcessEntry } from './helpers/child.mjs';
 import { lookupProcess } from './helpers/processes.mjs';
@@ -23,6 +23,7 @@ import { stopFixtureProcessTree } from './helpers/inbox.mjs';
 import { until } from './helpers/producer-wait.mjs';
 import { tierFiles } from './helpers/tier.mjs';
 import { loadTimeout } from '../lib/deadline.mjs';
+import { noticeLock } from '../supervisor/notice-lock.mjs';
 
 const source = path.resolve(import.meta.dirname, '..');
 const node = (f, file, args = [], extra = {}) => f.exec(process.execPath, [path.join(source, file), ...args], f.repo, { ORG_DIR: f.org, ...extra });
@@ -342,15 +343,29 @@ ${append}`));
 
 test('two TMPDIR watchers, repeated ingest and supervisor restarts produce one notice, review and enqueue', async t => {
   const f = fixture(t), run = f.start(); f.commit('correct\n'); f.report(run);
+  // Delivery includes several native reads under the drain lock. This tests
+  // single ownership, not a two-second delivery latency under release load.
+  f.env.SUPERVISOR_INPUT_WAIT_SECONDS = String(loadTimeout(30_000) / 1000);
   f.record(['ingest', f.show(run).report_path]); f.record(['ingest', f.show(run).report_path]);
   const a = path.join(f.root, 'tmp-a'), b = path.join(f.root, 'tmp-b'); fs.mkdirSync(a); fs.mkdirSync(b);
   const start = tmp => {
     const old = f.env.TMPDIR; f.env.TMPDIR = tmp;
     const child = f.concurrent(run, path.join(source, 'watch/watch.mjs'), ['--org', f.org, '--cwd', f.repo, '--start-grace', '0']);
     if (old === undefined) delete f.env.TMPDIR; else f.env.TMPDIR = old;
-    return child.done;
+    return child;
   };
-  const results = await Promise.all([start(a), start(b)]);
+  // Force the losing drain interleaving while retaining the original sender
+  // and notice. Release only after its contention observation is durable.
+  const inbox=path.join(f.org,'supervisor/inbox.log'),release=noticeLock(`${inbox}.drain.lock`);
+  const watchers=[];
+  try {
+    watchers.push(start(a),start(b));
+    await until(()=>inboxTransaction(inbox,entries=>entries.some(e=>e.id===`watch:${run}:final`&&e.notified)),{
+      signal:t.signal,description:'watcher observes the held inbox drain',
+      producer:()=>({state:watchers.some(w=>w.child.exitCode===null&&w.child.signalCode===null)?'live':'exited'}),
+    });
+  } finally { release(); }
+  const results = await Promise.all(watchers.map(w=>w.done));
   assert.ok(results.some(r => r.code === 0), results.map(r => r.stderr).join('\n'));
   for (const r of results) if (r.code !== 0) assert.match(r.stderr, /another watcher/);
   ok(node(f, 'watch/watch.mjs', [run, '--org', f.org, '--cwd', f.repo, '--start-grace', '0']));

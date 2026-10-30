@@ -171,7 +171,10 @@ test('settled history sweep has constant identity work and bounded log rows whil
   assert.deepEqual(identities,Array(8).fill(f.repo),'construction, five finite closeout guards, general scan and halt scan stay constant');
   assert.equal(historicalReads, 0); assert.equal(f.calls.length, 0);assert.equal(f.refreshes.length,1);
   const rows = fs.readFileSync(path.join(s.directory, 'passes.jsonl'), 'utf8').trim().split('\n').map(JSON.parse);
-  assert.deepEqual(rows.map(r=>r.action),['closeout-measurement','pass-start','review-retained','review-health','queue-order','engineering-idle-observation','engineering-idle','pass-complete']);
+  assert.deepEqual(rows.map(r=>r.action),['closeout-measurement','closeout-timing','pass-start','review-retained','review-health','queue-order','engineering-idle-observation','engineering-idle','pass-complete']);
+  const closeoutTiming=rows.find(r=>r.action==='closeout-timing');
+  assert.ok(Number.isFinite(closeoutTiming.duration_ms)&&closeoutTiming.duration_ms>=0);
+  assert.equal(closeoutTiming.budget_ms,720000);
   assert.equal(rows[0].measurement.file, path.join(s.directory, 'closeout-measurement.json'));
   assert.ok(rows[0].measurement.oldest.length <= 10, 'closeout census log samples stay bounded');
   const retained = rows.find(r => r.action === 'review-retained'); assert.ok(retained);

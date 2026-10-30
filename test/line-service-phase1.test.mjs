@@ -102,6 +102,106 @@ function admissionQueue(f){
   finally{process.chdir(cwd);}
 }
 
+const ordinaryPolicy=(f,policy)=>setConfig('ordinary_admission',JSON.stringify({selected_only:true,...policy}),{cwd:f.cwd,env:f.env,who:'explicit ordinary fixture wave'});
+
+test('ordinary admission read-only preview includes every pending exclusion and proposed named ancestors without applying policy',t=>{
+  const f=fixture(t,{reported:false});
+  f.add([{type:'item.closed',id:'ENG-1',as:'done'},{type:'item.added',id:'G-9',kind:'goal',title:'Wave'},
+    {type:'item.added',id:'ENG-10',role:'engineer',parent:'G-9',title:'Wave work'},
+    {type:'item.added',id:'ENG-11',role:'engineer',title:'Historical backlog'},
+    {type:'item.added',id:'ENG-12',role:'engineer',parent:'G-9',title:'Veto',meta:{queue_selected:false}}]);
+  ordinaryPolicy(f,{items:[]});
+  const events=fs.readFileSync(path.join(f.org,'events.jsonl')),bytes=fs.readFileSync(path.join(f.cwd,'.lane.json'));
+  const view=inspectReviewAdmission({repo:f.cwd,org:f.org,env:f.env,ordinaryPolicy:{selected_only:true,items:['G-9']}});
+  assert.equal(view.ordinary_admission_preview,true);
+  const byId=new Map(view.candidates.filter(c=>c.kind==='ordinary').map(c=>[c.item,c]));
+  assert.equal(byId.get('ENG-10').selected,true);assert.equal(byId.get('ENG-10').hold,null);
+  assert.equal(byId.get('ENG-11').hold.code,'ORDINARY_ADMISSION_NOT_SELECTED');
+  assert.equal(byId.get('ENG-12').hold.code,'ORDINARY_ADMISSION_DESELECTED');
+  const cli=spawnSync(process.execPath,[path.join(sourceRoot,'line-service/review-admission.mjs'),'--repo',f.cwd,'--org',f.org,'--ordinary-admission',JSON.stringify({selected_only:true,items:['G-9']})],{cwd:f.cwd,env:f.env,encoding:'utf8'});
+  assert.equal(cli.status,0,cli.stderr);assert.deepEqual(JSON.parse(cli.stdout).candidates,view.candidates);
+  assert.deepEqual(fs.readFileSync(path.join(f.org,'events.jsonl')),events);
+  assert.deepEqual(fs.readFileSync(path.join(f.cwd,'.lane.json')),bytes);
+  assert.equal(fs.existsSync(path.join(f.directory,'effects.json')),false,'preview creates no service effects');
+});
+
+test('ordinary admission selected wave starts concurrently up to the build pool in item-named lanes and resumes after report closeout',t=>{
+  const f=fixture(t,{reported:false});
+  f.add([{type:'item.closed',id:'ENG-1',as:'done'},{type:'item.added',id:'G-9',kind:'goal',title:'Selected wave'},
+    ...[10,11,12,13].map(n=>({type:'item.added',id:`ENG-${n}`,role:'engineer',parent:'G-9',title:`Selected ${n}`})),
+    {type:'item.added',id:'ENG-90',role:'engineer',priority:9999,title:'Unflagged historical backlog'},
+    {type:'item.added',id:'ENG-91',role:'engineer',parent:'G-9',title:'Deselected descendant',meta:{queue_selected:false}}]);
+  ordinaryPolicy(f,{items:['G-9']});
+  const config={dispatch:{max_sessions:2,max_review_sessions:3}},launched=[],journals=new Map();
+  const capacity=kind=>checkSessionCap({config,org:f.org,common:f.identity,kind,readProcess:()=>({ok:false})});
+  const s=admissionService(f,{haltAfter:100,capacity,command:(_exe,args)=>{
+    if(!args[0].endsWith('/dispatch/dispatch.mjs'))return{status:0,stdout:'{}',stderr:''};
+    const item=args[1],n=Number(item.slice(4)),run=`R-${n}`,journal=path.join(f.org,`dispatch/wave-${item}.json`);
+    assert.equal(args[args.indexOf('--lane')+1],`line-${item.toLowerCase()}-1`);
+    assert.ok(args.includes('--detach'));assert.equal(launched.includes(item),false,'each original launch occurs once');
+    launched.push(item);journals.set(item,journal);
+    fs.writeFileSync(journal,JSON.stringify({stage:'open',detached:true,common:f.identity,item,run,org:f.org}));
+    f.add([{type:'run.started',id:run,item,workspace:f.cwd,meta:{dispatch_project:f.identity}}]);
+    return{status:0,stdout:JSON.stringify({result:'detached',journal}),stderr:''};
+  }});
+  s.pass();assert.deepEqual(launched,['ENG-10','ENG-11']);
+  assert.throws(()=>capacity('build'),e=>e.code==='DISPATCH_SESSION_CAP'&&e.sessions.count===2);
+  assert.equal(capacity('review').count,0,'review slots remain separate');
+  const effects=JSON.parse(fs.readFileSync(path.join(f.directory,'effects.json')));
+  for(const [item,code]of [['ENG-90','ORDINARY_ADMISSION_NOT_SELECTED'],['ENG-91','ORDINARY_ADMISSION_DESELECTED']])
+    assert.ok(effects.ordinary_admission.held.some(h=>h.item===item&&h.code===code));
+  const original=fs.readFileSync(journals.get('ENG-10'));
+  f.add([{type:'report.ingested',run:'R-10',file:'reports/wave.md',report:{outcome:'done',artifacts:[],blockers:[],proposals:[],extra:{}}},
+    {type:'item.closed',id:'ENG-10',as:'done',completed_run:'R-10'}]);
+  s.pass();assert.deepEqual(launched,['ENG-10','ENG-11','ENG-12']);
+  assert.deepEqual(fs.readFileSync(journals.get('ENG-10')),original,'report completion frees capacity without replacing its attempt');
+  for(const item of ['ENG-13','ENG-90','ENG-91'])assert.equal(f.context().state.items.get(item).closed,null);
+});
+
+test('ordinary admission rereads policy and selection after capacity without starting a stale or failed attempt',t=>{
+  for(const change of ['policy','flag','ancestor']){
+    const f=fixture(t,{reported:false});f.add([{type:'item.closed',id:'ENG-1',as:'done'},
+      {type:'item.added',id:'G-9',kind:'goal',title:'Wave'},
+      {type:'item.added',id:'ENG-10',role:'engineer',title:'Selected',parent:'G-9'}]);
+    ordinaryPolicy(f,{items:['G-9']});let changed=false;
+    const s=admissionService(f,{capacity:()=>{
+      if(!changed){changed=true;if(change==='policy')ordinaryPolicy(f,{items:[]});
+        else f.add([{type:'item.updated',id:'ENG-10',fields:change==='flag'?{meta:{queue_selected:false}}:{parent:null}}]);}
+      return{count:0,cap:4};
+    }});s.pass();
+    assert.equal(changed,true);assert.equal(s.calls.some(a=>a[0].endsWith('/dispatch/dispatch.mjs')),false,change);
+    const effects=JSON.parse(fs.readFileSync(path.join(f.directory,'effects.json')));
+    assert.equal(Object.keys(effects.actions).some(k=>k.startsWith('dispatch:')),false,change);
+    assert.ok(effects.ordinary_admission.held.some(h=>h.stage==='launch-mutation'),change);
+  }
+});
+
+test('ordinary admission selection preserves review holds original UNKNOWN attempts and normal cleanup',t=>{
+  const f=fixture(t),policy=JSON.parse(fs.readFileSync(path.join(f.cwd,'.lane.json')));
+  policy.retirement={closeout_queue:true};fs.writeFileSync(path.join(f.cwd,'.lane.json'),JSON.stringify(policy));
+  const added=transact(f.org,events=>bindCloseoutSources({cwd:f.cwd,org:f.org,events,env:f.env,mutation:{add:[{type:'item.closed',id:'ENG-1',as:'done',completed_run:'R-1'}]}})).added;
+  publishCloseoutEvents({cwd:f.cwd,org:f.org,added,start:false,env:f.env});
+  f.add([{type:'item.added',id:'ENG-10',role:'engineer',title:'Selected',meta:{queue_selected:true}},
+    {type:'item.added',id:'ENG-90',role:'engineer',title:'Backlog'}]);
+  ordinaryPolicy(f,{});admissionPolicy(f,{});
+  const calls=[],s=admissionService(f,{haltAfter:100,command:(_exe,args)=>{calls.push(args);return{status:0,stdout:args[1]==='drain'?JSON.stringify({evaluated:[{key:added[0].closeout_targets[0].key,completed:true}]}):'{}',stderr:''};}});
+  s.pass();assert.ok(diagnostics(f).some(d=>d.action==='review-admission-held'&&d.item==='ENG-10'&&d.code==='REVIEW_ADMISSION_ORDINARY_HELD'));
+  assert.equal(closeoutCheckpoint(f).last_result.result.evaluated[0].completed,true,'normal original closeout drain still runs');
+  admissionPolicy(f,{hold_ordinary:false});
+  const item=f.context().state.items.get('ENG-10'),input=dispatchInput({...f.context(),item}),key=`dispatch:${item.id}:${input}`;
+  const effectsFile=path.join(f.directory,'effects.json'),effects=JSON.parse(fs.readFileSync(effectsFile));
+  const original={state:'started',owner:'line-service',error:'UNKNOWN original native outcome',receipt:{status:null,stdout:'original evidence'}};
+  effects.actions[key]=original;fs.writeFileSync(effectsFile,JSON.stringify(effects));
+  s.pass();
+  assert.equal(calls.some(a=>a[0].endsWith('/dispatch/dispatch.mjs')),false);
+  const kept=JSON.parse(fs.readFileSync(effectsFile)).actions[key];
+  for(const [field,value]of Object.entries(original))assert.deepEqual(kept[field],value);
+  assert.equal(kept.history,undefined);
+  f.add([{type:'item.updated',id:'ENG-10',fields:{meta:{queue_selected:false}}}]);
+  admissionService(f).pass();
+  assert.equal([...f.context().state.items.values()].some(i=>i.meta.halt_repair),false,'unselected backlog never manufactures a repair');
+});
+
 test('review admission queues and launches only exact allowlisted producer groups and canonical commits, visibly retaining every exclusion',t=>{
   const f=fixture(t);independentProducer(f);
   const canonical=[];for(const n of [1,2]){fs.writeFileSync(path.join(f.cwd,'unattributed'),String(n));f.git(['add','.'],f.cwd);f.git(['commit','-qm','Canonical source'],f.cwd);canonical.push(f.git(['rev-parse','HEAD'],f.cwd));}

@@ -58,6 +58,59 @@ holds without queueing or dispatching anything. An allowed row still needs every
 existing readiness, source, STOP/HOLD, cap and native check. No record event or
 fold change is required; old folds continue to read the record unchanged.
 
+## Selected-only ordinary admission
+
+`ordinary_admission` is a separate project lane policy, default
+`{"selected_only":false}`. Its supported writer is `record config set`;
+identity defaults and standalone routing files cannot supply it. An owner can
+preview a proposed selection without changing policy, record events, queues or
+native sessions:
+
+```sh
+node "$ACCEPTED_ROOT/line-service/review-admission.mjs" --repo /OWN/CANONICAL --org /OWN/RECORD --ordinary-admission '{"selected_only":true,"items":["G-9","ENG-42"]}'
+record config set ordinary_admission '{"selected_only":true,"items":["G-9","ENG-42"]}' --who-asked 'owning recorded wave selection'
+```
+
+With `selected_only:true`, an ordinary item needs its own
+`meta.queue_selected===true`, or an exact ID in `items` naming itself or an
+ancestor. The optional array is a named set; no globs or ID prefixes apply.
+Naming an ancestor deliberately selects its descendants, including future
+proposals; an ancestor's metadata flag alone does not. An item's explicit
+`queue_selected:false` vetoes the named set. Other readiness, ancestry holds,
+reserved decisions, STOP/HOLD, pools, native identity and original-attempt guards
+still apply. Selection does not serialize a wave: the existing detached starts
+fill the build pool using item-named lanes and normal report/cleanup paths.
+
+To let BCH start only its explicitly flagged wave while retaining its review
+freeze allowlists, its owner would set:
+
+```sh
+record config set ordinary_admission '{"selected_only":true}' --who-asked 'owning recorded selected-wave admission'
+record config set review_admission.hold_ordinary false --who-asked 'owning recorded selected-wave admission'
+```
+
+The second command changes only the ordinary hold; it preserves `enabled`,
+`producer_groups` and `canonical_commits`. Keeping `hold_ordinary:true` continues
+to hold every ordinary start, including explicitly selected items. BCH's owner
+must supply its actual project paths and selections; these examples do not edit
+another project. Preview with the same `--ordinary-admission` value first; it
+shows both policies, each ordinary item's record status and `selected` flag,
+and the effective `hold`. A null hold is selection permission, not a readiness
+or native launch guarantee.
+
+Every unselected open ordinary item remains in the record. Pass diagnostics and
+`effects.json.ordinary_admission.held` show typed
+`ORDINARY_ADMISSION_NOT_SELECTED` or `ORDINARY_ADMISSION_DESELECTED` reasons,
+including exclusions beyond the pass's start/cap limit. Admission rereads policy
+and current ancestry/flags after capacity observation before recording an effect.
+Intentional exclusions do not count as stalled ready work for idle repair.
+Reviews retain their independent exact allowlists; running workers, report intake,
+verdicts, cleanup and saved UNKNOWN attempts retain their existing paths.
+
+Disable or unset `ordinary_admission` to restore the legacy selection rule,
+including unflagged non-proposal items. No new record event or fold change is
+needed; older folds continue reading the same item metadata.
+
 ## Standing order and explicit selection
 
 The existing record's single open `meta.queue_order` owner declares the operator's

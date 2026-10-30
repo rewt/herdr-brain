@@ -47,8 +47,9 @@ import {queueOutcomeDecision,observeOutcomeDecisions} from './outcome-decision.m
 import {registerCloseoutWait,closeoutWait,closeoutWaitState,closeoutNextStage} from '../lib/closeout-status.mjs';
 import {runCloseoutTurn,CLOSEOUT_TURN_BUDGET_MS} from './closeout-turn.mjs';
 import {transact} from '../lib/store.mjs';
-import {readReviewAdmission,reviewAdmissionSubject} from './review-admission.mjs';
+import {readReviewAdmission,readOrdinaryAdmission,reviewAdmissionSubject} from './review-admission.mjs';
 import {reviewAdmissionHold} from '../lib/review-admission.mjs';
+import {ordinaryAdmissionHold} from '../lib/ordinary-admission.mjs';
 export { reviewAttempt } from './review.mjs';
 
 export const sourceRoot = fileURLToPath(new URL('../', import.meta.url));
@@ -274,10 +275,19 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       log({ action: 'pass-start', pid: process.pid, identity: project.identity, source: sourceRoot,source_head:bundleRelease().commit??sourceGit(sourceRoot,['rev-parse','HEAD']) });
       try { snapshot = current(); } catch (e) { log({ action: 'pass-held', reason: e.message }); return { held: e.message, directory }; }
       const admissionPolicy=readReviewAdmission(repo,childEnv);
-      effects.review_admission={schema:'review-admission-pass/v1',policy:admissionPolicy,held:[]};save();
+      const ordinaryPolicy=readOrdinaryAdmission(repo,childEnv);
+      effects.review_admission={schema:'review-admission-pass/v1',policy:admissionPolicy,held:[]};
+      effects.ordinary_admission={schema:'ordinary-admission-pass/v1',policy:ordinaryPolicy,held:[]};save();
+      const ordinaryHold=(item,state,stage,policy=ordinaryPolicy)=>{
+        const hold=ordinaryAdmissionHold(policy,{item,state});
+        if(hold){const row={stage,item:item.id,...hold};effects.ordinary_admission.held.push(row);noticesDirty=true;log({action:'ordinary-admission-held',...row});}
+        return hold;
+      };
+      // Retain every excluded open ordinary row, even beyond the start/cap limit.
+      for(const item of snapshot.state.items.values())if(!item.closed&&item.kind!=='goal')ordinaryHold(item,snapshot.state,'selection');
       const admit=(subject,stage,fresh=false)=>{
         const hold=reviewAdmissionHold(fresh?readReviewAdmission(repo,childEnv):admissionPolicy,reviewAdmissionSubject(subject));
-        if(!hold)return true;
+        if(!hold)return reviewAdmissionSubject(subject).kind!=='ordinary'||!ordinaryHold(subject.item,subject.state??snapshot.state,stage,fresh?readOrdinaryAdmission(repo,childEnv):ordinaryPolicy);
         const row={stage,item:subject.item?.id,run:subject.run?.id,head:subject.target?.head??subject.item?.meta.review_target?.head,...reviewAdmissionSubject(subject),...hold};
         effects.review_admission.held.push(row);noticesDirty=true;log({action:'review-admission-held',...row});return false;
       };
@@ -520,7 +530,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       const queueSelection = state => {
         const policy=queuePolicy(state);
         return JSON.stringify({policy,candidates:orderQueue(state,[...state.items.values()].filter(i=>!i.closed&&i.kind!=='goal'),policy)
-          .map(i=>[i.id,queueClass(state,i,policy),queueSelected(i)])});
+          .map(i=>[i.id,queueClass(state,i,policy),queueSelected(i,state,ordinaryPolicy)])});
       };
       const obsoleteDecision=observeOutcomeDecisions({identity:project.identity,org});
       const admitItems = (items,repair=false) => {
@@ -529,8 +539,8 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         if(expired()||!repair&&starts>=(maxStarts??config.dispatch?.max_sessions??7))break;
         snapshot=current();
         if(JSON.stringify(queuePolicy(snapshot.state))!==JSON.stringify(standing)||queueSelection(snapshot.state)!==selection){log({action:'queue-selection-changed'});break;}
-        if(!queueSelected(snapshot.state.items.get(item.id)))continue;
         if(!admit({item:snapshot.state.items.get(item.id)},'launch'))continue;
+        if(!queueSelected(snapshot.state.items.get(item.id),snapshot.state,ordinaryPolicy))continue;
         if(obsoleteDecision(snapshot.state.items.get(item.id),snapshot)){timings.outcome_decisions_deferred++;continue;}
         const input=dispatchInput({...snapshot,item:snapshot.state.items.get(item.id),org,identity:project.identity});
         if(!input)continue;
@@ -577,7 +587,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
           const occupancy = countCapacity(dispatchPool({item:snapshot.state.items.get(item.id),job:{reviewQueue:reviewTarget}}));latestOccupancy=occupancy; log({ action: 'capacity', ...occupancy });
           const dispatched = effect(continuation?`dispatch-preflight:${continuation.token}:${continuation.key}`:dispatchKey, fresh => {
             const current = fresh.state.items.get(item.id);
-            if (!current || !queueSelected(current) || obsoleteDecision(current,fresh) || itemLaunchHold(fresh.state,item.id,fresh.events) || dispatchInput({...fresh,item:current,org,identity:project.identity}) !== input || reserved(current) || (!continuation&&(reviewTarget ? reviewQueueRoute(config, current, fresh.state) : routeFor(current, config)) !== route)) throw Error('dispatch readiness or route changed');
+            if (!current || !queueSelected(current,fresh.state,readOrdinaryAdmission(repo,childEnv)) || obsoleteDecision(current,fresh) || itemLaunchHold(fresh.state,item.id,fresh.events) || dispatchInput({...fresh,item:current,org,identity:project.identity}) !== input || reserved(current) || (!continuation&&(reviewTarget ? reviewQueueRoute(config, current, fresh.state) : routeFor(current, config)) !== route)) throw Error('dispatch readiness or route changed');
             if(briefRecovery){
               if(sourceRecovery){
                 const proof=initialSourceRootRefusal({entry:effects.actions[key],events:fresh.events,item:item.id,outcome:originalDispatchOutcome({repo,org,common:project.identity,item:item.id,brief:path.join(directory,`${digest(key)}.ask.md`),events:fresh.events}),release:bundleRelease(),env:childEnv});
@@ -601,7 +611,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
             writeFileAtomic(brief, target ? reviewQueueBrief(current) : isDecision(current) ? decisionBrief(current) : `# ${current.title}\n\n${current.accept.join('\n')}\n\n${correction?.brief ?? ''}Work from the existing item fields/notes and accepted directions. The generated execution brief supplies role guidance and project routing.\n`, 0o600);
             return JSON.parse(cli('dispatch/dispatch.mjs', [item.id, '--repo', repo, '--org', org, '--lane', `${target ? 'review' : 'line'}-${item.id.toLowerCase()}-${current.runs.length + 1}`, '--route', route, '--brief', brief, ...(target ? ['--base', target.head] : correction ? ['--base', correction.base] : []),'--detach']));
           },undefined,undefined,Boolean(retryAdmission),Boolean(retryAdmission),fresh=>{
-            if(!admit({item:fresh.state.items.get(item.id)},'launch-mutation',true))return false;
+            if(!admit({item:fresh.state.items.get(item.id),state:fresh.state},'launch-mutation',true))return false;
             if(queueSelection(fresh.state)===selection)return true;
             log({action:'queue-selection-changed',item:item.id,stage:'after-capacity'});
             return false;
@@ -624,10 +634,11 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       const latestAdmission=readReviewAdmission(repo,childEnv);
       if(!latestAdmission.enabled||!latestAdmission.hold_ordinary)try {
         snapshot=observe();
-        const observation=haltObservation({...snapshot,org,identity:project.identity,config,actions:effects.actions,occupancy:latestOccupancy});
+        const haltConfig={...config,ordinary_admission:readOrdinaryAdmission(repo,childEnv)};
+        const observation=haltObservation({...snapshot,org,identity:project.identity,config:haltConfig,actions:effects.actions,occupancy:latestOccupancy});
         {
           if(observation.ready.length)try{latestOccupancy=countCapacity('build');}catch(e){latestOccupancy=e.sessions??{unknown:e.message};log({action:'halt-capacity-held',code:e.code,reason:e.message});}
-          const observed=haltObservation({...snapshot,org,identity:project.identity,config,actions:effects.actions,occupancy:latestOccupancy});
+          const observed=haltObservation({...snapshot,org,identity:project.identity,config:haltConfig,actions:effects.actions,occupancy:latestOccupancy});
           const route=config.routes?.['engineer-xhigh']?'engineer-xhigh':routeFor({role:'engineer',meta:{}},config);
           const completedPass=randomUUID();
           log({action:'engineering-idle-observation',pass:completedPass,observation:observed});

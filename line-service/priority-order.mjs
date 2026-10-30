@@ -1,9 +1,12 @@
 // Standing order selects among candidates; it never changes eligibility.
 import {ancestors,sortItems} from '../lib/state.mjs';
 import {isQueueReview} from './review-queue.mjs';
+import {ordinaryAdmissionHold} from '../lib/ordinary-admission.mjs';
+import {roleIs} from '../lib/roles.mjs';
 
-export function queueSelected(item) {
+export function queueSelected(item,state,ordinaryAdmission) {
   if(!item)return false;
+  if(ordinaryAdmission?.selected_only&&item.kind!=='goal'&&!roleIs(item,'REV'))return !ordinaryAdmissionHold(ordinaryAdmission,{item,state});
   if(item.meta.queue_selected===false)return false;
   // A captured post-code review is an existing landed-source obligation.
   // Report proposals need an explicit own-item selection; selecting their

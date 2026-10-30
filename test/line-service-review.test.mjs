@@ -176,7 +176,11 @@ test('settled history sweep has constant identity work and bounded log rows whil
   assert.ok(Number.isFinite(closeoutTiming.duration_ms)&&closeoutTiming.duration_ms>=0);
   assert.equal(closeoutTiming.budget_ms,720000);
   assert.equal(rows[0].measurement.file, path.join(s.directory, 'closeout-measurement.json'));
-  assert.ok(rows[0].measurement.oldest.length <= 10, 'closeout census log samples stay bounded');
+  // Settled item status does not supply the missing closeout origin proof.
+  const measurement = rows[0].measurement;
+  assert.equal(measurement.counts.denominator, 2036, 'the census includes the current report and all settled history');
+  assert.equal(measurement.counts.counts.unknown_origin, 2036, 'more than ten cohort rows have failing origin proof');
+  assert.equal(measurement.oldest.length, 10, 'closeout census log samples truncate a populated failing cohort');
   const retained = rows.find(r => r.action === 'review-retained'); assert.ok(retained);
   assert.equal(retained.notice_record.entry.count, 1);
   assert.equal(retained.notice_record.entry.scope.head, f.head);

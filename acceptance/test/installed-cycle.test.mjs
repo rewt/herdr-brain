@@ -89,9 +89,9 @@ for (const [mode, revision] of [...historical, ['current', 'HEAD']]) {
     const freeze = file => { const s = fs.lstatSync(file); if (s.isDirectory()) for (const name of fs.readdirSync(file)) freeze(path.join(file, name)); fs.chmodSync(file, s.mode & ~0o222); };
     freeze(bundle);
     fs.symlinkSync(bundle, path.join(home, 'current'));
-    for (const name of ['installed-cycle.mjs', 'installed-native.mjs']) fs.copyFileSync(path.join(source, 'acceptance', name), path.join(root, 'harness', name));
+    for (const name of ['installed-cycle.mjs', 'installed-native.mjs', 'installed-observations.mjs']) fs.copyFileSync(path.join(source, 'acceptance', name), path.join(root, 'harness', name));
     for (const name of ['fixture-policy.mjs', 'memory-fixture.mjs']) fs.copyFileSync(path.join(source, 'test/helpers', name), path.join(root, 'harness', name));
-    env.NODE_OPTIONS = `--import=${path.join(root, 'harness/fixture-policy.mjs')}`;
+    env.NODE_OPTIONS = `--import=${path.join(root, 'harness/fixture-policy.mjs')} --import=${path.join(root, 'harness/installed-observations.mjs')}`;
     fs.writeFileSync(path.join(root, 'bin/herdr'), `#!/bin/sh\nexec ${quote(process.execPath)} ${quote(path.join(root, 'harness/installed-native.mjs'))} "$@"\n`, { mode: 0o755 });
     fs.writeFileSync(path.join(root, 'bin/watch'), `#!/bin/sh\nexec ${quote(process.execPath)} ${quote(path.join(bundle, 'watch/watch.mjs'))} "$@" --record-only --retry-after 0.02 --start-grace 0\n`, { mode: 0o755 });
     for (const name of ['codex', 'claude']) fs.writeFileSync(path.join(root, 'bin', name), '#!/bin/sh\nexit 97\n', { mode: 0o755 });
@@ -115,7 +115,7 @@ for (const [mode, revision] of [...historical, ['current', 'HEAD']]) {
     const profile = `(version 1) (allow default) (deny network*)\n` +
       `(deny file-read* file-write* (require-all (subpath ${JSON.stringify(savedHome)}) (require-not (subpath ${JSON.stringify(path.dirname(process.execPath))})) ))\n`;
     fs.writeFileSync(path.join(root, 'sandbox.sb'), profile);
-    const result = spawnSync('/usr/bin/sandbox-exec', ['-f', path.join(root, 'sandbox.sb'), process.execPath, '--import', path.join(root, 'harness/fixture-policy.mjs'),
+    const result = spawnSync('/usr/bin/sandbox-exec', ['-f', path.join(root, 'sandbox.sb'), process.execPath, '--import', path.join(root, 'harness/fixture-policy.mjs'), '--import', path.join(root, 'harness/installed-observations.mjs'),
       path.join(root, 'harness/installed-cycle.mjs'), path.join(root, 'config.json')], { cwd: repo, env, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 });
     fs.writeFileSync(path.join(evidence, 'scenario-output.json'), JSON.stringify({ status: result.status, signal: result.signal,
       error: result.error?.message, stdout: result.stdout, stderr: result.stderr }, null, 2));

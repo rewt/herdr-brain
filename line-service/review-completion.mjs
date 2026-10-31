@@ -29,7 +29,7 @@ export const completionAttempts=(journal,runId)=>Object.entries(journal?.actions
 
 export function completionPlanningProof({events,state,repo,org,identity,runId,key,entry}){
   const p=reviewCompletionPlan({events,state,runId});
-  if(p.closed||p.fact.verdict!=='PASS'||key!==`review-complete:${runId}:${p.token}`)throw Error('original completion token/PASS verdict changed');
+  if(p.closed||key!==`review-complete:${runId}:${p.token}`)throw Error('original completion token/verdict changed');
   if(!entry||entry.state!=='held'||entry.owner!=='line-service'||entry.consumer!=='line-service'||entry.subject!==key||entry.execution_subject!==p.item.id||
     !/^[-a-zA-Z0-9_]{1,80}$/.test(entry.attempt??'')||entry.error!==conflict||entry.failure?.code!=='RECORD_PLANNING_CONFLICT'||entry.failure.kind!=='unknown'||
     entry.result!=null||entry.receipt!=null||entry.history!=null&&(!Array.isArray(entry.history)||entry.history.length)||entry.queue_recovery||entry.original_outcome||entry.commands?.length!==1||
@@ -118,7 +118,7 @@ export function reconcileReviewCompletion({repo,org,runId,key,env=process.env}){
         {type:'line-service.review-completion-reconciled',id,project:c.identity,org:c.org,item:item.id,run:runId,key,attempt:entry.attempt,proof,
           archive:{file:archive,sha256:hash(bytes)},source:{root,head:sourceHead,canonical_head:head},owner:'line-service',original_command_replayed:false},
         {type:'item.closed',id:item.id,as:'done',completed_run:runId,review_verdict:proof.verdict_seq,review_completion_reconciliation:id,
-          note:'Original pre-append completion failure reconciled against its already recorded PASS; original attempt and terminal receipt retained. Linked corrections and guarded physical retirement remain owned.'},
+          note:`Original pre-append completion failure reconciled against its already recorded ${events.find(e=>e.seq===proof.verdict_seq).verdict}; original attempt and terminal receipt retained. Linked corrections and guarded physical retirement remain owned.`},
       ],result:{result:'review_completion_reconciled',id,attempt:entry.attempt,existing:false}}});
       return bindCloseoutSources({cwd:c.repo,org:c.org,events,env,mutation});
     },{actor:'line-service',strictTail:true,replaySafe:true,lockOptions:{recover:false}});

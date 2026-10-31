@@ -20,7 +20,7 @@ function fixture(t,{verdict='FAIL'}={}){
   const head=f.git('rev-parse','HEAD'),workspace=path.join(f.ownerRoot,'review-lane');f.git('worktree','add','-qb','lane/review-source-1',workspace);
   const sourceText=`---\nrun: R-0\noutcome: done\nsummary: Landed source.\nartifacts:\n  - "Commit: ${head}"\n---\n`;fs.writeFileSync(path.join(org,'reports/R-0.md'),sourceText);
   const target={head,base,reportHash:hash(sourceText),evidence:path.join(org,'reports/R-0.md')},key=`ENG-1:${head}`,directory=serviceDirectory(org,identity),owner={controller:'brain',legacy:false,release:{id:'source',root:sourceRoot,commit:null,identity:gitProject(sourceRoot).identity}};
-  const text=`---\nrun: R-1\noutcome: done\nsummary: Completed independent judgment.\nverdict: ${verdict}\nproposals: []\n---\nVerdict: **${verdict}**\n${verdict==='FAIL'?'- [Major] source:1 - correction remains independently owned.\n':''}`;fs.writeFileSync(path.join(org,'reports/R-1.md'),text);
+  const text=`---\nrun: R-1\noutcome: done\nsummary: Completed independent judgment.\nverdict: ${verdict}\nproposals: []\n---\nVerdict: **${verdict}**\n${verdict!=='PASS'?'- [Major] source:1 - correction remains independently owned.\n':''}`;fs.writeFileSync(path.join(org,'reports/R-1.md'),text);
   transact(org,()=>({add:[{type:'item.added',id:'G-1',kind:'goal',title:'Goal'}, {type:'item.added',id:'ENG-1',role:'engineer',title:'Source',parent:'G-1'},
     {type:'run.started',id:'R-0',item:'ENG-1',workspace:f.cwd},{type:'run.claimed',run:'R-0',record:org,project:identity,owner},
     {type:'report.ingested',run:'R-0',file:'reports/R-0.md',sha256:hash(sourceText),report:{outcome:'done',artifacts:[`Commit: ${head}`],extra:{},blockers:[],proposals:[]}},
@@ -94,6 +94,7 @@ for(const change of ['report','STOP','claim'])test(`short review preparation ref
 function failedCompletion(t,{attempt='73313d79-0733-4adf-93b9-3cde935541d0',verdict='PASS'}={}){
   const f=fixture(t,{verdict}),release=noticeLock(path.join(f.directory,'pass.lock'));
   try{recordReviewResults(f.args);}finally{release();}
+  if(verdict!=='PASS'){const fix=[...f.context().state.items.values()].find(i=>i.meta.review_fix_of===f.key);assert.ok(fix);f.add([{type:'link.added',blocker:fix.id,blocked:'REV-1'}]);}
   const plan=reviewCompletionPlan({...f.context(),runId:'R-1'}),key=`review-complete:R-1:${plan.token}`,at=new Date().toISOString();
   const ref=commandIntent(f.directory,{exe:'line-operation',args:['review-complete',key],cwd:f.cwd,project:f.identity,org:f.org,subject:'REV-1',key,consumer:'line-service'});
   const error=Object.assign(Error('record planning conflict: source changed; no append was made'),{code:'RECORD_PLANNING_CONFLICT'});
@@ -186,15 +187,16 @@ for(const kind of ['status','signal','stdout','native-refusal','message','intent
   }finally{release();}
 });
 
-for(const kind of ['pre-typed','FAIL','token'])test(`ordinary line retains an unqualified ${kind} original across passes without writer effects`,t=>{
-  const f=failedCompletion(t,{verdict:kind==='FAIL'?'FAIL':'PASS'});
+for(const kind of ['pre-typed','missing-receipt','token'])test(`ordinary line retains an unqualified ${kind} original across passes without writer effects`,t=>{
+  const f=failedCompletion(t,{verdict:kind==='missing-receipt'?'FAIL':'PASS'});
   // Model an already installed line; first-install boundary creation has its
   // own landing lock and is outside the measured completion passes.
   const release=noticeLock(path.join(f.directory,'pass.lock'));
   try{ensureReviewBoundary(f.args);}finally{release();}
   if(kind==='pre-typed'){delete f.entry.commands;delete f.entry.consumer;delete f.entry.execution_subject;f.save();}
+  if(kind==='missing-receipt')fs.unlinkSync(f.ref.receipt);
   if(kind==='token')f.add([{type:'item.updated',id:'REV-1',fields:{title:'Changed review scope'}}]);
-  const original=JSON.stringify(f.entry),command=fs.readFileSync(f.ref.receipt),mkdir=fs.mkdirSync;
+  const original=JSON.stringify(f.entry),command=kind==='missing-receipt'?null:fs.readFileSync(f.ref.receipt),mkdir=fs.mkdirSync;
   const lock=path.join(f.identity,'lane-promote.lock');let landingLocks=0;
   fs.mkdirSync=function(file,...args){if(file===lock)landingLocks++;return mkdir.call(this,file,...args);};
   try{
@@ -206,7 +208,7 @@ for(const kind of ['pre-typed','FAIL','token'])test(`ordinary line retains an un
       const journal=JSON.parse(fs.readFileSync(f.file));
       assert.equal(JSON.stringify(journal.actions[f.key]),original);
       assert.equal(Object.keys(journal.actions).filter(k=>k.startsWith('review-complete:R-1:')).length,1);
-      assert.deepEqual(fs.readFileSync(f.ref.receipt),command);
+      if(command)assert.deepEqual(fs.readFileSync(f.ref.receipt),command);else assert.equal(fs.existsSync(f.ref.receipt),false);
       const commands=fs.readdirSync(path.join(f.directory,'command-receipts')).map(name=>JSON.parse(fs.readFileSync(path.join(f.directory,'command-receipts',name))));
       assert.equal(commands.some(c=>c.intent.exe==='line-operation'&&c.intent.args[0]==='review-completion-reconcile'),false);
       assert.equal(fs.readdirSync(path.join(f.directory,'active-commands')).length,0);
@@ -219,6 +221,37 @@ for(const kind of ['pre-typed','FAIL','token'])test(`ordinary line retains an un
       assert.equal(f.context().events.some(e=>e.type==='line-service.review-completion-reconciled'),false);
     }
   }finally{fs.mkdirSync=mkdir;}
+});
+
+for(const verdict of ['FAIL','NEEDS-WORK'])test(`ordinary line recovers an original ${verdict} completion once and retains its judgment and corrections`,t=>{
+  const f=failedCompletion(t,{verdict}),before=f.context();
+  const fact=before.events.find(e=>e.type==='change.reviewed'),fixes=[...before.state.items.values()].filter(i=>i.meta.review_fix_of===f.context().state.items.get('REV-1').meta.review_key);
+  assert.ok(fixes.length);
+  // Missing positive terminal proof must hold even a supported verdict. Restore
+  // the exact receipt to recover the retained attempt, without changing its token.
+  fs.unlinkSync(f.ref.receipt);
+  const calls=[],service=createLineService({repo:f.cwd,org:f.org,to:'fixture-supervisor',env:f.env,maxStarts:0,maxStepsPerStage:0,
+    command:(_exe,args)=>{calls.push(args);return{status:1,stderr:'No external command selected by this fixture'};}});
+  service.pass({reconcileCloseout:false});
+  assert.equal(f.context().state.items.get('REV-1').closed,null);
+  assert.equal(f.context().events.some(e=>e.type==='line-service.review-completion-reconciled'),false);
+  fs.writeFileSync(f.ref.receipt,f.command);
+  service.pass({reconcileCloseout:false});
+  service.pass({reconcileCloseout:false});
+  const c=f.context(),receipts=c.events.filter(e=>e.type==='line-service.review-completion-reconciled');
+  assert.equal(c.state.items.get('REV-1').closed?.as,'done');assert.equal(receipts.length,1);
+  assert.deepEqual(c.events.filter(e=>e.type==='change.reviewed'),[fact]);
+  assert.equal(c.state.items.get('ENG-1').closed,null);
+  for(const fix of fixes)assert.equal(c.state.items.get(fix.id).closed,null);
+  assert.deepEqual(JSON.parse(fs.readFileSync(f.file)).actions[f.key],f.entry);
+  assert.equal(Object.keys(JSON.parse(fs.readFileSync(f.file)).actions).filter(k=>k.startsWith('review-complete:R-1:')).length,1);
+  assert.deepEqual(fs.readFileSync(f.ref.receipt),f.command);
+  assert.equal(calls.some(args=>args.includes('review-complete')),false);
+  const close=c.events.find(e=>e.type==='item.closed'&&e.id==='REV-1');
+  assert.equal(close.review_verdict,fact.seq);assert.ok(close.note.includes(`recorded ${verdict}`));
+  const release=noticeLock(path.join(f.directory,'pass.lock'));
+  try{assert.equal(f.reconcile().existing,true);}finally{release();}
+  assert.equal(f.context().events.filter(e=>e.type==='line-service.review-completion-reconciled').length,1);
 });
 
 test('ordinary line consumes the original completion without invoking its command or minting another attempt',t=>{

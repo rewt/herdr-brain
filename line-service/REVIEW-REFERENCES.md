@@ -282,8 +282,9 @@ respective owners; these commands provide neither release nor adoption authority
 
 The ordinary line also reconciles an original `review-complete` attempt whose
 terminal `line-operation` receipt proves status 1 with the exact typed
-`RECORD_PLANNING_CONFLICT` pre-append diagnostic, when its immutable PASS verdict
-is already recorded. This is separate from queue continuation: it never invokes
+`RECORD_PLANNING_CONFLICT` pre-append diagnostic, when its immutable PASS, FAIL or
+NEEDS-WORK verdict is already recorded. Linked corrections stay open with their
+existing owners. This is separate from queue continuation: it never invokes
 the original completion command, creates a new effect attempt or launches a review.
 
 `review-completion.mjs --repo REPO --org ORG --run R-n --key ORIGINAL_KEY`

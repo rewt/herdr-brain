@@ -156,6 +156,7 @@ for(const initial of [false,true])for(const topic of ['launch-holds','launch-hol
 test(`record dispatch labels the ${initial?'initial':'separate'} tab with its item in lane ${topic}`,t=>{
   const x=nativeFixture(t,{initial,topic}),before=git(x.job.workspace,['branch','--show-current']);
   const result=x.dispatch();assert.equal(result.status,0,result.stderr);
+  assert.doesNotMatch(result.stdout + result.stderr, /DISPATCH_FAILED|ERR_REQUIRE_ASYNC_MODULE/);
   const calls=x.fake.calls(),label=`agent:${topic} [${x.item}]`;
   if(initial)assert.deepEqual(calls.find(a=>a[0]==='tab'&&a[1]==='rename'),['tab','rename','w-lane:t1',label]);
   else{

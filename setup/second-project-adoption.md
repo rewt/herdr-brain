@@ -1,16 +1,14 @@
 # Second-project adoption
 
-Source audit for ENG-1092 / R-1490 against **rc-20261030-98002dc75c**
-(`98002dc75cb064dd639e79c922ddeb98d3781bc2`). These are owner-run recipes,
-not evidence of live adoption. Brain's maintainer performs no BCH effects and
-does not read BCH's record or archive. Each project retains its own Git common
+These are owner-run recipes. Each project retains its own Git common
 directory, record, native supervisor, workspace, line and saved watchers.
+Use values from the adopting project's own accepted release and native session.
 
-| Question | Supported path or gap | Command | Release |
+| Question | Supported path or gap | Command | Availability |
 | --- | --- | --- | --- |
-| Q1: workspace and standard-slot enrollment | `record adopt` enrolls the existing invoking canonical native supervisor and its workspace, with KEEP plus observed-adoption controller evidence. It does not create the workspace or enroll arbitrary other occupied tabs. Missing chat creation has a separate scoped authorization. | `node "$ADOPTION_PRODUCT/bin/org.mjs" adopt . --inspect --expires "$ADOPTION_EXPIRY"`, then `adopt . --scope "$ADOPTION_SCOPE" --decision "$ADOPTION_ANSWER"` | Existing command in rc-20261030-98002dc75c. Native bootstrap / additional occupied-slot selection gap: ENG-1093, no carrying release yet. |
-| Q2: default triage holds | No native enforcement/materialization/activation adapter can satisfy these requirements today. A committed home Workspace containing only chat/supervisor is a supported narrower scope; existing explicit resources remain requirements. | First generate and commit the [initial workspace composition](#scope-the-initial-workspace), then capture adoption scope and enroll. After enrollment, run `node "$ADOPTION_PRODUCT/setup/setup.mjs" plan --project "$ADOPTION_PROJECT"`. | Scoping already in rc-20261030-98002dc75c. Automatic initial scope: ENG-1094, no carrying release yet. |
-| Q3: canonical native owner and line recipient | An actual distinct native supervisor in the new canonical project is required. A name, shell `cd`, actor or inherited pane is insufficient. Fresh release installation now has an exact plan/apply path; apply records the actual canonical cutoff and starts one job. | `launchd.mjs install --id initial-line --dry-run`, then the identical command with `--expected-plan SHA256`; exact bindings below | ENG-1095 source extension; requires a qualified READY release containing it. The audited rc-20261030-98002dc75c does not contain it. Native bootstrap remains ENG-1093. |
+| Q1: workspace and standard-slot enrollment | `record adopt` enrolls the existing invoking canonical native supervisor and its workspace, with KEEP plus observed-adoption controller evidence. It does not create the workspace or enroll arbitrary other occupied tabs. Missing chat creation has a separate scoped authorization. | `node "$ADOPTION_PRODUCT/bin/org.mjs" adopt . --inspect --expires "$ADOPTION_EXPIRY"`, then `adopt . --scope "$ADOPTION_SCOPE" --decision "$ADOPTION_ANSWER"` | Existing enrollment command. Native bootstrap and additional occupied-slot selection remain gaps. |
+| Q2: default triage holds | No native enforcement/materialization/activation adapter can satisfy these requirements today. A committed home Workspace containing only chat/supervisor is a supported narrower scope; existing explicit resources remain requirements. | First generate and commit the [initial workspace composition](#scope-the-initial-workspace), then capture adoption scope and enroll. After enrollment, run `node "$ADOPTION_PRODUCT/setup/setup.mjs" plan --project "$ADOPTION_PROJECT"`. | Existing manual scoping. Automatic initial scope remains a gap. |
+| Q3: canonical native owner and line recipient | An actual distinct native supervisor in the new canonical project is required. A name, shell `cd`, actor or inherited pane is insufficient. Fresh release installation now has an exact plan/apply path; apply records the actual canonical cutoff and starts one job. | `launchd.mjs install --id initial-line --dry-run`, then the identical command with `--expected-plan SHA256`; exact bindings below | Requires a qualified READY release containing fresh-install plan/apply support. Native bootstrap remains a gap. |
 
 Use a qualified release containing each required extension. Source changes and
 fixture checks do not prove live adoption or acceptance of a carrying release.
@@ -29,29 +27,30 @@ binding; owner disposition required". If already in that state, preserve the
 original binding and seek its owner's disposition rather than retrying adoption.
 
 Run from the **new project's canonical checkout inside its own actual native
-supervisor session**, under its owning identity. The old bch-cloak supervisor
-continues to own its existing project. A separate unique native name such as
-`supervisor-rehearsal` avoids trying to reuse `supervisor-opus` concurrently.
-This is a proposed name, not a claim that such a session exists. Its native
-cwd, workspace repository/common-directory binding, pane, terminal and live
+supervisor session**, under its owning identity. Each existing supervisor
+continues to own its existing project. Use a separate unique native name for
+the new project's actual supervisor. Its native cwd, workspace
+repository/common-directory binding, pane, terminal and live
 conversation must all agree. `HERDR_AGENT_NAME`, `HERDR_PANE_ID` and
 `HERDR_WORKSPACE_ID` must describe that real session; changing environment values
 does not create it. Brain currently has no command to bootstrap this prerequisite
-from the other project's supervisor (ENG-1093).
+from the other project's supervisor.
 
 Select the actual installed product root from the project's accepted READY
-release. Use the pinned runtime. For this ask the new project path is:
+release. Use the pinned Node 20.19.4 runtime. Replace the absolute-path
+placeholders below with that runtime, the accepted product root and the new
+project's canonical checkout:
 
 ```sh
-ADOPTION_NODE=/Users/rewt/.nvm/versions/node/v20.19.4/bin/node
-ADOPTION_PRODUCT=/ABS/installed/releases/rc-20261030-98002dc75c
-ADOPTION_PROJECT=/Users/rewt/development/bastian/covenant-shielded-pool-rehearsal-canonical
+ADOPTION_NODE=/ABS/path/to/node-v20.19.4/bin/node
+ADOPTION_PRODUCT=/ABS/installed/releases/ACCEPTED_READY_RELEASE
+ADOPTION_PROJECT=/ABS/path/to/new-project-canonical
 cd "$ADOPTION_PROJECT"
 export ORG_DIR="$ADOPTION_PROJECT/.org"
 # Set ORG_ACTOR to the actual new canonical supervisor's name.
 ADOPTION_EXPIRY=REPLACE_WITH_BOUNDED_FUTURE_UTC_TIMESTAMP
 "$ADOPTION_NODE" "$ADOPTION_PRODUCT/bin/org.mjs" adopt . \
-  --inspect --expires "$ADOPTION_EXPIRY" > /tmp/rehearsal-adoption-scope.json
+  --inspect --expires "$ADOPTION_EXPIRY" > /tmp/adoption-scope.json
 ```
 
 This is a scope capture, **not a write-free dry run**: it writes the canonical
@@ -64,15 +63,15 @@ publishes its home binding into the existing project-discovery union itself.
 Create a human question in the new owning record and store the returned JSON's
 **scope object**, unchanged, in that question's
 `meta.adoption_authorization` **before** the attributed human answers. For example,
-using the prepared new record's existing root `G-1`:
+set `ADOPTION_PARENT` to the prepared new record's existing owning goal:
 
 ```sh
 ADOPTION_QUESTION=$("$ADOPTION_NODE" "$ADOPTION_PRODUCT/bin/org.mjs" add \
-  'Authorize adopting this rehearsal workspace and supervisor?' \
-  --role human --parent G-1 --meta category=security)
+  'Authorize adopting this workspace and supervisor?' \
+  --role human --parent "$ADOPTION_PARENT" --meta category=security)
 ADOPTION_SCOPE_JSON=$("$ADOPTION_NODE" -e \
   'process.stdout.write(JSON.stringify(require(process.argv[1]).scope))' \
-  /tmp/rehearsal-adoption-scope.json)
+  /tmp/adoption-scope.json)
 "$ADOPTION_NODE" "$ADOPTION_PRODUCT/bin/org.mjs" set "$ADOPTION_QUESTION" \
   "meta.adoption_authorization=$ADOPTION_SCOPE_JSON"
 ```
@@ -109,10 +108,10 @@ include `create-standard-slot` (and `start-standard-slot` if needed). Run:
   --actor "$ORG_ACTOR" --actions create-standard-slot,start-standard-slot \
   --operator-decision "$ADOPTION_ACTION_ANSWER" --expires "$ADOPTION_EXPIRY"
 "$ADOPTION_NODE" "$ADOPTION_PRODUCT/setup/setup.mjs" apply \
-  --project "$ADOPTION_PROJECT" --workspace home > /tmp/rehearsal-setup.json
+  --project "$ADOPTION_PROJECT" --workspace home > /tmp/adoption-setup.json
 "$ADOPTION_NODE" "$ADOPTION_PRODUCT/setup/setup.mjs" apply \
   --project "$ADOPTION_PROJECT" --workspace home --execute \
-  --authorization "$ADOPTION_AUTHORIZATION" --plan /tmp/rehearsal-setup.json
+  --authorization "$ADOPTION_AUTHORIZATION" --plan /tmp/adoption-setup.json
 ```
 
 Here `ADOPTION_ACTION_ANSWER` names a separate exact action-scope human answer
@@ -162,35 +161,36 @@ Only canonical committed HEAD participates in discovery; staged/untracked files
 do not. A valid home Workspace suppresses implicit defaults, while independently
 committed top-level resources remain validated. Enrollment and other real holds
 still apply. This manual/generated configuration is a current workaround, not
-the product's desired agent-discovered default (ENG-1094).
+the product's desired agent-discovered default.
 
 ## Canonical native owner and line installation
 
 `messages/operator-inbox.mjs:nativeSender` checks the real native caller against
 its project/record. `line-service/launchd.mjs` additionally requires its canonical
 checkout, and `line-service/retarget.mjs:liveRecipient` requires a live recipient
-from that same Git identity. `--to supervisor-opus` cannot target the existing
-bch-cloak session for the rehearsal repo. Omit `--to` to select the installing
+from that same Git identity. A supervisor from another project cannot serve as
+the new project's recipient. Omit `--to` to select the installing
 canonical native owner, or explicitly name a real same-project recipient.
 Preserve all old project sessions, recipients, watchers and jobs.
 
-For Q3, select the exact accepted READY installed release containing ENG-1095,
-then run inside the new project's actual canonical native supervisor session.
-The audited release named above predates this extension. Do not set a development
-source override or run `cutoff --initialize` to simulate a release installation.
+For Q3, select the exact accepted READY installed release containing fresh-install
+plan/apply support, then run inside the new project's actual canonical native
+supervisor session.
+Do not set a development source override or run `cutoff --initialize` to simulate
+a release installation.
 The project must have clean canonical main, an accepted explicit release pin,
 no project STOP/HOLD, no retained service configuration, cutoff or UNKNOWN
 installation, and no loaded job for this project's exact launchd target.
 
 ```sh
-ADOPTION_PRODUCT=/ABS/installed/releases/QUALIFIED_RELEASE_WITH_ENG_1095
+ADOPTION_PRODUCT=/ABS/installed/releases/QUALIFIED_READY_RELEASE
 "$ADOPTION_NODE" "$ADOPTION_PRODUCT/line-service/launchd.mjs" install \
   --repo "$ADOPTION_PROJECT" --org "$ORG_DIR" --id initial-line \
   --herdr "$ADOPTION_HERDR" --socket "$HERDR_SOCKET_PATH" --interval 30 \
-  --dry-run > /tmp/rehearsal-line-plan.json
+  --dry-run > /tmp/adoption-line-plan.json
 ADOPTION_LINE_PLAN=$("$ADOPTION_NODE" --input-type=module -e \
   'import fs from "node:fs"; console.log(JSON.parse(fs.readFileSync(process.argv[1],"utf8")).expected_plan)' \
-  /tmp/rehearsal-line-plan.json)
+  /tmp/adoption-line-plan.json)
 # Inspect the full plan and its recipient, transport, runtime and cutoff first.
 "$ADOPTION_NODE" "$ADOPTION_PRODUCT/line-service/launchd.mjs" install \
   --repo "$ADOPTION_PROJECT" --org "$ORG_DIR" --id initial-line \
@@ -217,8 +217,6 @@ cutoff/config/STOP retained. Do not replace them, retry under another ID, edit
 receipts or replay bootstrap. Completed fresh installs use the existing
 stop/restart, retarget and release-upgrade controls; no migration is needed.
 Saved workers/watchers, pins, other project lines and UNKNOWN jobs are untouched.
-Only disposable fixtures were exercised for this change; no live adoption or
-release build was performed.
 
 `fleet join` has no dry run and only registers discovery/config; it does not
 create native ownership or standard-slot enrollment. The new install preview

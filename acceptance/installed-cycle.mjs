@@ -141,7 +141,11 @@ const idle = job => {
 };
 const report = (job, artifacts, extra = '', proposals = []) => {
   const r = state().runs.get(job.run), file = r.report_path;
-  fs.writeFileSync(file, `---\nrun: ${job.run}\noutcome: done\nsummary: Scripted installed work completed.\nheadline: The scratch work completed\nblockers: []\nproposals: ${JSON.stringify(proposals)}\nlearnings: []\nartifacts: ${JSON.stringify(artifacts)}\n${extra}---\n`);
+  // Use the record's supported JSON front matter for nested proposal payloads.
+  // Its small YAML subset does not parse inline JSON object arrays as YAML.
+  const data={run:job.run,outcome:'done',summary:'Scripted installed work completed.',headline:'The scratch work completed',
+    blockers:[],proposals,learnings:[],artifacts,...(extra?{verdict:extra.match(/^verdict: (\w+)\n$/)[1]}:{})};
+  fs.writeFileSync(file, `---\n${JSON.stringify(data)}\n---\n`);
   record(['check', file]); idle(job); return file;
 };
 if(mode==='canary') {

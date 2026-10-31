@@ -40,7 +40,7 @@ for(const merged of [true,false])test(`project HOLD releases a reported session 
     assert.ok(effects(f).some(e=>e.action===action),action);
   assert.deepEqual(events(f).slice(0,original.length),original);
   assert.equal(f.git(['rev-parse','main']),main,'no landing under HOLD');
-  assert.throws(()=>f.service.pass({reconcileCloseout:false}),/STOP\/HOLD prevents line-service effects/);
+  assert.match(f.service.pass({reconcileCloseout:false}).held,/STOP\/HOLD prevents line-service effects/);
   assert.ok(f.commands.every(args=>args[0].endsWith('/supervisor/closeout.mjs')),'no dispatch or start command');
   assert.ok(fs.existsSync(path.join(f.repo,'.lane/supervisor/HOLD')),'closeout does not clear HOLD');
 });
@@ -85,7 +85,11 @@ test(`project HOLD preserves ${kind} and its original allocation`,t=>{
     effect:'original-unknown',producer:'native-closeout/v2',outcome:{action:'agent-exit-requested',pane:'w:p'}}]);
   const original=events(f),calls=f.herdrCalls();
   if(kind.endsWith('STOP'))assert.throws(()=>f.service.closeout(),/STOP/);else f.service.closeout();
-  assert.deepEqual(f.read().actions,[]);assert.ok(fs.existsSync(f.lane));
+  if(kind==='dirty'){
+    assert.deepEqual(f.read().tabs,[],'finished session may close while unsaved work stays preserved');
+    assert.equal(effects(f).some(e=>e.action==='worktree-removed'),false);
+  }else assert.deepEqual(f.read().actions,[]);
+  assert.ok(fs.existsSync(f.lane));
   assert.equal(f.git(['rev-parse','lane/topic']),f.head);
   assert.deepEqual(events(f).slice(0,original.length),original);
   if(['refused','unknown'].includes(kind))assert.deepEqual(f.herdrCalls(),calls,'original refusal/UNKNOWN cannot replay');

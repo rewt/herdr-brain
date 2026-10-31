@@ -10,6 +10,7 @@ import {configFixture} from './helpers/config-home-fixture.mjs';
 import {loadEvents,transact} from '../lib/store.mjs';
 import {fold} from '../lib/state.mjs';
 import {gitProject} from '../lib/project.mjs';
+import {dispatchSourceBinding,deliveredSourceProof,guardedLanding} from '../lib/source-provenance.mjs';
 import {createLineService,sourceRoot,serviceDirectory} from '../line-service/line-service.mjs';
 import {discoverChanges,blockedChangeKey,dispatchInput,reviewResultEvents,morningDigest,recordReviewResults,canonicalReviewIndex,reviewHealth,ensureReviewBoundary,phase0Boundary} from '../line-service/phase1.mjs';
 import {reviewAttempt,selectedReviewConsumer} from '../line-service/review.mjs';
@@ -630,15 +631,28 @@ test('phase1 settled-history scan uses two Git index reads for thousands of old 
     const bytes=`---\nrun: ${run}\noutcome: done\nsummary: Producer ${n} source.\nheadline: Historical source is retained\nartifacts:\n  - "source: ${head}; base: ${previous}"\n---\n`,parsed=readReport(bytes);
     assert.deepEqual(parsed.errors,[]);fs.writeFileSync(path.join(org,file),bytes);
     return [{type:'item.added',id:item,title:`Producer ${n}`,role:'engineer'},
-      {type:'run.started',id:run,item,workspace:f.cwd,meta:{dispatch_record:org,dispatch_project:identity,dispatch_journal:dispatch,dispatch_attempt:token}},
+      {type:'run.started',id:run,item,workspace:f.cwd,meta:{dispatch_record:org,dispatch_project:identity,dispatch_journal:dispatch,dispatch_attempt:token,
+        agent:`worker-${n}`,pane:`pane-${n}`,terminal_id:`terminal-${n}`,agent_session_id:`session-${n}`}},
       {type:'run.claimed',run,record:org,project:identity,owner},
       {type:'report.ingested',run,item,file,sha256:hash(bytes),report:parsed.report},
       {type:'item.closed',id:item,as:'done',completed_run:run}];
   };
-  transact(org,()=>({add:[...heads.flatMap((head,i)=>producer(i+1,head,i?heads[i-1]:base)),
-    {type:'line-service.phase0',id:'after-history',project:identity,repo:f.cwd,org,source:sourceRoot,main:'main',canonical_head:heads.at(-1)}]}));
+  transact(org,()=>({add:heads.flatMap((head,i)=>producer(i+1,head,i?heads[i-1]:base))}));
   const context=()=>{const events=loadEvents(org).events;return{events,state:fold(events),repo:f.cwd,org,identity};};
+  const historical=context(),run=historical.state.runs.get(`R-${count}`),head=heads.at(-1),previous=heads.at(-2),w=run.meta;
+  // A real guarded receipt exists for this exact historical range and owner.
+  transact(org,()=>({add:[{type:'change.landed',run:run.id,item:run.item,project:identity,head,base:previous,
+    previous_main:previous,landing_tip:head,landed_at:new Date().toISOString(),
+    source:{...dispatchSourceBinding({...historical,run}),base:previous,head},
+    producer:{agent:w.agent,pane:w.pane,terminal:w.terminal_id,session:w.agent_session_id,ownership_generation:run.owner_generation}},
+    {type:'line-service.phase0',id:'after-history',project:identity,repo:f.cwd,org,source:sourceRoot,main:'main',canonical_head:head}]}));
   const c=context(),boundary=phase0Boundary(c.events,c);
+  const landing=c.events.find(e=>e.type==='change.landed'),project={canonical:f.cwd,identity};
+  assert.ok(landing.seq<boundary.seq);
+  assert.equal(guardedLanding({...c,run:c.state.runs.get(run.id),event:landing}),true);
+  const ownProof=deliveredSourceProof({...c,project,run:c.state.runs.get(run.id),git:(_repo,args)=>f.git(...args)});
+  assert.equal(ownProof.status,'covered');assert.equal(ownProof.coverage,'guarded');
+  assert.deepEqual(ownProof.ranges[0].landings,[landing.seq]);
   assert.equal(c.state.runs.size,count);
   for(const run of c.state.runs.values()){
     assert.ok(run.started.seq<run.owner_generation&&run.owner_generation<run.report.seq&&run.report.seq<boundary.seq);
@@ -663,8 +677,8 @@ test('phase1 settled-history scan uses two Git index reads for thousands of old 
   const {found,reads}=scan(c,'settled-history');
   assert.equal(found.changes.length,0);assert.equal(found.holds.length,0);assert.equal(found.unattributed.length,0);
   assert.deepEqual(reads,indexReads,'settled history has exactly two total Git subprocesses');
-  // The same old source cited by a genuinely new report stays UNKNOWN: history
-  // does not supply a guarded delivery receipt to a later producer.
+  // The historical receipt above covers the exact claimed range, but belongs
+  // to a different run/item: a new producer cannot borrow its guarded delivery.
   transact(org,()=>({add:producer(count+1,heads.at(-1),heads.at(-2))}));
   const {found:diagnostic,reads:diagnosticReads}=scan(context(),'fresh-unproven');
   assert.equal(diagnostic.changes.length,0);assert.equal(diagnostic.holds.length,1);
@@ -676,6 +690,10 @@ test('phase1 settled-history scan uses two Git index reads for thousands of old 
     ['merge-base','--is-ancestor',heads.at(-2),heads.at(-1)],
     ['rev-list',`${heads.at(-2)}..${heads.at(-1)}`]
   ].map(argv)],'fresh unproven claim has six total Git subprocesses: two index and four provenance');
+  assert.deepEqual(diagnostic.holds[0].source_provenance.ranges[0].landings,[]);
+  // Restoring the original attribution still resolves the same retained proof.
+  const after=context(),restored=deliveredSourceProof({...after,project,run:after.state.runs.get(run.id),git:(_repo,args)=>f.git(...args)});
+  assert.equal(restored.status,'covered');assert.deepEqual(restored.ranges[0].landings,[landing.seq]);
 });
 
 test('phase1 intended boundary preserves old cutover and unknown adoption-time facts under stopped native guards',t=>{

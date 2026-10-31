@@ -6,12 +6,12 @@ delete process.env.MONITOR_TEST_FILE_SIGNAL_RECEIPT;
 if (signalReceipt && process.env.NODE_TEST_CONTEXT === 'child-v8') {
   const [{ default: fs }, { constants }] = await Promise.all([import('node:fs'), import('node:os')]);
   let recorded = false;
-  const pending = new Map(), kill = process.kill;
+  const pending = new Map(), observing = new Set(['SIGINT', 'SIGTERM']), kill = process.kill;
   process.kill = function (pid, signal) {
     const sent = kill.call(this, pid, signal);
     const name = typeof signal === 'number'
       ? Object.keys(constants.signals).find(name => constants.signals[name] === signal) : signal ?? 'SIGTERM';
-    if (sent && pid === process.pid && ['SIGINT', 'SIGTERM'].includes(name) && !pending.has(name)) {
+    if (sent && pid === process.pid && observing.has(name) && !pending.has(name)) {
       // A self-signal queues JS delivery. With no remaining handles Node can
       // exit zero before dispatching it; retain one bounded handle until the
       // actual signal observer runs. Never mistake the request for delivery.
@@ -23,8 +23,12 @@ if (signalReceipt && process.env.NODE_TEST_CONTEXT === 'child-v8') {
     }
     return sent;
   };
+  // JS signal observers run only when the event loop can dispatch them. A
+  // synchronously blocked file needs the coordinator's owned SIGKILL teardown;
+  // an outer SIGINT/SIGTERM to that coordinator takes the same teardown path.
   for (const signal of ['SIGINT', 'SIGTERM']) {
     process.prependOnceListener(signal, () => {
+      observing.delete(signal);
       clearTimeout(pending.get(signal)); pending.delete(signal);
       if (!recorded) {
         fs.writeFileSync(signalReceipt, JSON.stringify({ pid: process.pid, signal,

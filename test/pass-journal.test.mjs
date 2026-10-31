@@ -60,6 +60,13 @@ test('first rotation waits for pre-upgrade finite owners without changing their 
   fs.rmSync(lock,{recursive:true});assert.equal(rotatePassJournal(file,{maxBytes:1}).rotated,true);assert.deepEqual([...readPassJournal(file)],rows());
 });
 
+test('first rotation ignores a proven dead pre-upgrade owner without removing its lock',t=>{
+  const file=fixture(t);fs.writeFileSync(file,bytes(rows()));
+  const child=spawnSync(process.execPath,['-e','process.exit(0)']);assert.equal(child.status,0);
+  const lock=path.join(path.dirname(file),'general-1.lock');fs.mkdirSync(lock);fs.writeFileSync(path.join(lock,'owner.json'),JSON.stringify({at:'2020-01-01T00:00:00Z',pid:child.pid}));
+  assert.equal(rotatePassJournal(file,{maxBytes:1}).rotated,true);assert.equal(fs.existsSync(lock),true);assert.deepEqual([...readPassJournal(file)],rows());
+});
+
 test('normal appends rotate at the limit and readers handle rows and unicode spanning compression members',t=>{
   const file=fixture(t),row={text:'猫'.repeat(400000)},text=bytes([row]);
   fs.writeFileSync(file,text.repeat(Math.ceil(PASS_JOURNAL_LIMIT/Buffer.byteLength(text))));
@@ -90,8 +97,8 @@ test('B4 lifecycle counts retain their exact event window across pass rotation',
   const before=measureLifecycle(input);rotatePassJournal(file,{maxBytes:1});assert.deepEqual(measureLifecycle(input),before);assert.equal(before.counts.starts,1);assert.equal(before.counts.reports_ingested,1);
 });
 
-test('real journal copy rotation preserves every byte and checkpoint with a durable receipt',{skip:!process.env.HERDR_PASS_JOURNAL_WITNESS},t=>{
-  const directory=process.env.HERDR_PASS_JOURNAL_WITNESS,file=path.join(directory,'passes.jsonl'),meta=JSON.parse(fs.readFileSync(path.join(directory,'copy.json'))),checkpoint=JSON.parse(fs.readFileSync(path.join(directory,'effects.json')));
+test('real journal copy rotation preserves every byte and checkpoint with a durable receipt',{skip:!process.env.HERDR_TEST_PASS_JOURNAL_WITNESS},t=>{
+  const directory=process.env.HERDR_TEST_PASS_JOURNAL_WITNESS,file=path.join(directory,'passes.jsonl'),meta=JSON.parse(fs.readFileSync(path.join(directory,'copy.json'))),checkpoint=JSON.parse(fs.readFileSync(path.join(directory,'effects.json')));
   const before=structuredClone(checkpoint);replayNoticeAudit(file,before);
   const receipt=rotatePassJournal(file),after=structuredClone(checkpoint);replayNoticeAudit(file,after);assert.deepEqual(after,before);
   assert.equal(receipt.segment.sha256,meta.sha256);assert.equal(receipt.segment.end,meta.bytes);assert.equal(fs.statSync(file).size,0);

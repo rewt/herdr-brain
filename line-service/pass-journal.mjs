@@ -18,7 +18,10 @@ function legacyOwner(file){
     const owner=path.join(path.dirname(file),name,'owner.json');
     if(fs.existsSync(owner)){
       let value;try{value=JSON.parse(fs.readFileSync(owner,'utf8'));}catch{return true;}
-      if(!Number.isFinite(Date.parse(value.at))||Date.parse(value.at)<deployedAt)return true;
+      if(!Number.isFinite(Date.parse(value.at))||Date.parse(value.at)<deployedAt){
+        if(Number.isSafeInteger(value.pid)&&value.pid>0){try{process.kill(value.pid,0);}catch(error){if(error.code==='ESRCH')continue;}}
+        return true;
+      }
     }
   }
   return false;

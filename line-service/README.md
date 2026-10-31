@@ -1284,7 +1284,8 @@ release coordinator's responsibility.
 an append, a live file of at least 16 MiB rotates; its normal bound is 16 MiB plus
 one appended row. The first rollover defers while an older finite scheduling or
 closeout owner still holds a pre-upgrade lock, so its physical checkpoint cannot
-be changed underneath it. Owners drain normally; no service restart is needed.
+be changed underneath it. Owners drain normally; no service restart is needed. A proven dead owner (ESRCH)
+does not defer rollover; its lock remains with the original lock consumer.
 
 Rotation renames the exact bytes into `passes.jsonl.segments/`, compresses them
 as independently indexed gzip members (at most 1 MiB uncompressed each), then
@@ -1315,7 +1316,7 @@ Focused checks for this seam: `test/pass-journal.test.mjs`,
 `test/line-service-producer.test.mjs`, `test/line-service.test.mjs`,
 `test/closeout-measurement.test.mjs`, `test/halt-repair.test.mjs` and
 `test/consumer-lifecycle.test.mjs`, in runner groups of at most four. Set
-`HERDR_PASS_JOURNAL_WITNESS` to an owned evidence directory with a real journal
+`HERDR_TEST_PASS_JOURNAL_WITNESS` to an owned evidence directory with a real journal
 copy, `effects.json` and `copy.json` (bytes, rows, SHA-256) to exercise and retain
 the large-copy rotation receipt. Never point the witness at the live service.
 

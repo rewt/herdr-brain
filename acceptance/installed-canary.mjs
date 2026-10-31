@@ -111,30 +111,32 @@ export async function runCanary(c) {
 
   // S7: exactly the existing immutable-root maintenance seam, while the
   // producer and its original callback remain captured and live.
-  const captured=()=>Object.fromEntries(journals().map(j=>[j.file,createHash('sha256').update(fs.readFileSync(j.file)).digest('hex')]));
-  const saved=captured(),installation=fs.readFileSync(path.join(directory,'installation.json'),'utf8'),plist=fs.readFileSync(path.join(directory,'service.plist'),'utf8');
-  assert.equal(ownerAlive(producer.watcher),true);
-  const {main:nextControls}=await import(new URL('../line-service/launchd.mjs',`file://${config.successor}/harness/`).href);
-  controls(['stop','--repo',repo,'--org',org],controlOptions);
-  checked(process.execPath,[path.join(bundle,'herdr/releases.mjs'),'pin',home,repo,'successor']);
-  git(['add','.herdr-release.json']);git(['commit','-qm','Select identical scratch successor']);
-  const forward=['upgrade','--repo',repo,'--org',org,'--id','canary-forward','--from-root',bundle,'--target-root',config.successor];
-  const forwardPlan=nextControls([...forward,'--dry-run'],controlOptions);
-  const forwardReceipt=nextControls([...forward,'--expected-plan',forwardPlan.archive.sha256],controlOptions);
-  // A nonexistent rollback target is rejected before a new maintenance effect.
-  const missing=['upgrade','--repo',repo,'--org',org,'--id','canary-missing','--from-root',config.successor,'--target-root',path.join(home,'releases/missing'),'--rollback','--dry-run'];
-  assert.throws(()=>nextControls(missing,controlOptions));
-  checked(process.execPath,[path.join(config.successor,'herdr/releases.mjs'),'pin',home,repo,'scenario']);
-  git(['add','.herdr-release.json']);git(['commit','-qm','Select original scratch candidate']);
-  const rollback=['upgrade','--repo',repo,'--org',org,'--id','canary-rollback','--from-root',config.successor,'--target-root',bundle,'--rollback'];
-  const rollbackPlan=nextControls([...rollback,'--dry-run'],controlOptions);
-  const rollbackReceipt=nextControls([...rollback,'--expected-plan',rollbackPlan.archive.sha256],controlOptions);
-  assert.equal(fs.readFileSync(path.join(directory,'installation.json'),'utf8'),installation);
-  assert.equal(fs.readFileSync(path.join(directory,'service.plist'),'utf8'),plist);
-  assert.deepEqual(captured(),saved);assert.equal(ownerAlive(producer.watcher),true);
-  controls(['restart','--repo',repo,'--org',org],controlOptions);
-  stage('S7',{forwardPlan,forwardReceipt,rollbackPlan,rollbackReceipt,jobsUnchanged:saved,callback:producer.to,
-    missingTargetRefused:true,originalInstallationRestored:true,originalPlistRestored:true});
+  if (!config.skipPassedCases.includes('S7')) {
+    const captured=()=>Object.fromEntries(journals().map(j=>[j.file,createHash('sha256').update(fs.readFileSync(j.file)).digest('hex')]));
+    const saved=captured(),installation=fs.readFileSync(path.join(directory,'installation.json'),'utf8'),plist=fs.readFileSync(path.join(directory,'service.plist'),'utf8');
+    assert.equal(ownerAlive(producer.watcher),true);
+    const {main:nextControls}=await import(new URL('../line-service/launchd.mjs',`file://${config.successor}/harness/`).href);
+    controls(['stop','--repo',repo,'--org',org],controlOptions);
+    checked(process.execPath,[path.join(bundle,'herdr/releases.mjs'),'pin',home,repo,'successor']);
+    git(['add','.herdr-release.json']);git(['commit','-qm','Select identical scratch successor']);
+    const forward=['upgrade','--repo',repo,'--org',org,'--id','canary-forward','--from-root',bundle,'--target-root',config.successor];
+    const forwardPlan=nextControls([...forward,'--dry-run'],controlOptions);
+    const forwardReceipt=nextControls([...forward,'--expected-plan',forwardPlan.archive.sha256],controlOptions);
+    // A nonexistent rollback target is rejected before a new maintenance effect.
+    const missing=['upgrade','--repo',repo,'--org',org,'--id','canary-missing','--from-root',config.successor,'--target-root',path.join(home,'releases/missing'),'--rollback','--dry-run'];
+    assert.throws(()=>nextControls(missing,controlOptions));
+    checked(process.execPath,[path.join(config.successor,'herdr/releases.mjs'),'pin',home,repo,'scenario']);
+    git(['add','.herdr-release.json']);git(['commit','-qm','Select original scratch candidate']);
+    const rollback=['upgrade','--repo',repo,'--org',org,'--id','canary-rollback','--from-root',config.successor,'--target-root',bundle,'--rollback'];
+    const rollbackPlan=nextControls([...rollback,'--dry-run'],controlOptions);
+    const rollbackReceipt=nextControls([...rollback,'--expected-plan',rollbackPlan.archive.sha256],controlOptions);
+    assert.equal(fs.readFileSync(path.join(directory,'installation.json'),'utf8'),installation);
+    assert.equal(fs.readFileSync(path.join(directory,'service.plist'),'utf8'),plist);
+    assert.deepEqual(captured(),saved);assert.equal(ownerAlive(producer.watcher),true);
+    controls(['restart','--repo',repo,'--org',org],controlOptions);
+    stage('S7',{forwardPlan,forwardReceipt,rollbackPlan,rollbackReceipt,jobsUnchanged:saved,callback:producer.to,
+      missingTargetRefused:true,originalInstallationRestored:true,originalPlistRestored:true});
+  }
 
   // Report A with two real intake controls. Source close and physical cleanup
   // must happen while its one original review has no verdict or worker.
@@ -148,7 +150,11 @@ export async function runCanary(c) {
     assert.match(service(0).pass().held,/STOP\/HOLD/);assert.ok(fs.existsSync(lane));
     assert.equal(native().workspaces[producer.worker.workspaceId].agent.name,producer.worker.agentName);fs.unlinkSync(file);
   }
-  service(0).pass();await until(()=>finished(producer)&&!fs.existsSync(lane),'A physical cleanup before review');
+  // Folder removal precedes branch deletion and empty-workspace closure.
+  // Observe the original closer through completion before asserting its effects.
+  service(0).pass();await until(()=>finished(producer)&&!fs.existsSync(lane)&&
+    !native().workspaces[producer.worker.workspaceId]&&events().some(e=>e.type==='closeout.evaluated'&&
+      e.run===producer.run&&e.reportCloseout&&e.completed),'A source, native and physical cleanup before review');
   assert.ok(noticeMs<=60000,'report availability exceeds declared 60 s observation');
   assert.ok(performance.now()-reportAt<=120000,'report cleanup exceeds declared 120 s observation');
   const reviewItems=()=>[...state().items.values()].filter(i=>i.meta.review_source_run===producer.run);
@@ -322,8 +328,9 @@ export async function runCanary(c) {
   await sharedCase();
   const {productFiles,payloadEntry}=await module('lib/product-files.mjs');
   assert.deepEqual(Object.fromEntries(productFiles(bundle).sort().map(f=>[f,payloadEntry(bundle,f)])),config.candidate.files);
-  write('outcome.json',{schema:'brain.installed-canary/v1',ready:false,fixtureOnly:true,scriptedMechanics:true,
-    candidate:config.candidate,cases:['S0','S1','S2','S3','S4','S5','S6','S7','S8','shared-observer'],status:failures.length?'FAIL':'PASS',failures,
+  write('outcome.json',{schema:config.skipPassedCases.length?'brain.installed-lifecycle-control/v1':'brain.installed-canary/v1',ready:false,fixtureOnly:true,scriptedMechanics:true,
+    candidate:config.candidate,cases:['S0','S1','S2','S3','S4','S5','S6','S7','S8','shared-observer'].filter(name=>!config.skipPassedCases.includes(name)),
+    skippedCases:config.skipPassedCases,wholeCanary:config.skipPassedCases.length?'UNRUN':'executed',status:failures.length?'FAIL':'PASS',failures,
     originalReview:review.id,reviewerSuites:0,base,head,ordinarySuccessor:b.run,limits:['No real model/native/account execution','No real probation/soak/adoption','Synthetic acceptance never qualifies real runtime'],
     packet:{stages:'stages.json',tuple:'original-candidate.json',equivalence:'candidate-equivalence.json',commands:'commands.jsonl',native:'../native-calls.jsonl',record:'../project/.org/events.jsonl'}});
   // Stop only owned fixture observers/watchers after preserving their original

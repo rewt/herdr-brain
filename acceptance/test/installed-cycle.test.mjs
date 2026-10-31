@@ -23,6 +23,8 @@ for (const [mode, revision] of [...historical, ['current', 'HEAD'], ['canary', n
     { skip: mode === 'canary' && !process.env.INSTALLED_CYCLE_BUNDLE }, t => {
     assert.equal(process.platform, 'darwin', 'this installed-consumer boundary requires macOS sandbox-exec');
     assert.equal(process.version, 'v20.19.4', 'use the project-pinned runtime');
+    const skipPassedCases = (process.env.INSTALLED_CYCLE_SKIP_PASSED_CASES ?? '').split(',').filter(Boolean);
+    assert.deepEqual(skipPassedCases.filter(name => name !== 'S7'), [], 'only the independent S7 upgrade case can be omitted from a lifecycle rerun');
     const root = fs.realpathSync(fs.mkdtempSync('/tmp/ic-'));
     const evidence = path.join(root, 'evidence'), development = path.join(root, 'development-unavailable');
     const env = harnessEnvironment(process.env, root);
@@ -141,6 +143,7 @@ for (const [mode, revision] of [...historical, ['current', 'HEAD'], ['canary', n
     fs.writeFileSync(path.join(root, 'native.json'), JSON.stringify({ repo, workspaces: {}, next: 0 }));
     const forbidden = [path.join(source, 'package.json'), path.join(savedHome, 'development/rewt/.org/config.json')];
     const config = { root, repo, org, home, bundle, successor, commit, mode, development, forbidden, candidate,
+      skipPassedCases: mode === 'canary' ? skipPassedCases : [],
       sharedOnly:mode==='canary'&&process.env.INSTALLED_CYCLE_SHARED_ONLY==='1' };
     fs.writeFileSync(path.join(root, 'config.json'), JSON.stringify(config, null, 2));
     // Deny the entire real home except the pinned interpreter. Descendants

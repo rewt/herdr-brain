@@ -60,7 +60,10 @@ function quiescent(c,runId,subject){
   const directory=path.join(c.directory,'active-commands');if(!fs.existsSync(directory))return;
   let own=0;
   for(const name of fs.readdirSync(directory)){
-    const file=path.join(directory,name),bytes=reviewPlain(file),intent=JSON.parse(bytes);
+    const file=path.join(directory,name);let bytes;
+    // Completed commands can be forgotten after the directory listing.
+    try{bytes=reviewPlain(file);}catch(error){if(error.code==='ENOENT')continue;throw error;}
+    const intent=JSON.parse(bytes);
     if(intent.subject!==subject)continue;
     try{readCommandResult({file,receipt:path.join(c.directory,'command-receipts',name),sha256:hash(bytes)});}
     catch(error){

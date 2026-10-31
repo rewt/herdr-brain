@@ -118,6 +118,40 @@ for(const attempt of ['73313d79-0733-4adf-93b9-3cde935541d0','ffd7d23a-e3c6-4db2
   }finally{release();}
 });
 
+for(const stage of ['lstatSync','realpathSync','readFileSync'])test(`original completion ignores an unrelated command forgotten during ${stage}`,t=>{
+  const f=failedCompletion(t),release=noticeLock(path.join(f.directory,'pass.lock'));
+  const ref=commandIntent(f.directory,{exe:'unrelated',args:[],cwd:f.cwd,project:f.identity,org:f.org,subject:'ENG-99'});
+  finishCommand(ref,{status:0});const terminal=fs.readFileSync(ref.receipt),read=fs[stage];let forgotten=false;
+  fs[stage]=Object.assign(function(file,...args){
+    if(file===ref.file&&!forgotten){forgotten=true;forgetActiveCommand(ref);}
+    return read.call(this,file,...args);
+  },read);
+  try{
+    assert.equal(f.reconcile().existing,false);assert.equal(forgotten,true);
+    assert.equal(f.context().state.items.get('REV-1').closed.as,'done');
+    assert.equal(f.context().events.filter(e=>e.type==='line-service.review-completion-reconciled').length,1);
+    assert.deepEqual(fs.readFileSync(f.file),f.original);assert.deepEqual(fs.readFileSync(f.ref.receipt),f.command);
+    assert.deepEqual(fs.readFileSync(ref.receipt),terminal);
+  }finally{fs[stage]=read;release();}
+});
+
+for(const kind of ['EACCES','malformed'])test(`original completion retains ${kind} active-command evidence and recovers after repair`,t=>{
+  const f=failedCompletion(t),release=noticeLock(path.join(f.directory,'pass.lock'));
+  const ref=commandIntent(f.directory,{exe:'unrelated',args:[],cwd:f.cwd,project:f.identity,org:f.org,subject:'ENG-99'});
+  finishCommand(ref,{status:0});const marker=fs.readFileSync(ref.file),read=fs.readFileSync;
+  if(kind==='malformed')fs.writeFileSync(ref.file,'{');
+  else fs.readFileSync=function(file,...args){if(file===ref.file)throw Object.assign(Error('denied marker read'),{code:'EACCES'});return read.call(this,file,...args);};
+  try{
+    assert.throws(f.reconcile,error=>kind==='malformed'?error instanceof SyntaxError:error.code==='EACCES');
+    assert.equal(f.context().state.items.get('REV-1').closed,null);
+    assert.equal(f.context().events.some(e=>e.type==='line-service.review-completion-reconciled'),false);
+    assert.deepEqual(fs.readFileSync(f.file),f.original);assert.deepEqual(fs.readFileSync(f.ref.receipt),f.command);
+    fs.readFileSync=read;fs.writeFileSync(ref.file,marker);
+    assert.equal(f.reconcile().existing,false);
+    assert.equal(f.context().events.filter(e=>e.type==='line-service.review-completion-reconciled').length,1);
+  }finally{fs.readFileSync=read;release();}
+});
+
 for(const kind of ['status','signal','stdout','native-refusal','message','intent','missing-receipt','active','history','token','claim','report','verdict','duplicate-verdict','blocker','reserved','ancestor-hold','STOP','HOLD','native-context','no-lock','unknown-command','archive'])test(`original completion retains ${kind} without a replacement or closure`,t=>{
   const f=failedCompletion(t),release=kind==='no-lock'?()=>{}:noticeLock(path.join(f.directory,'pass.lock'));
   try{

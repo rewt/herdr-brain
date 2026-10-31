@@ -232,6 +232,6 @@ test('the release archive includes the board and its dependency closure', t => {
   // Keep the full archive off the child-output buffer as the repository grows.
   execFileSync('git', ['archive', '--output', archive, 'HEAD']);
   // Inspect the archive without release activation, tags or a live gate.
-  const listing = execFileSync('tar', ['-tf', archive], { encoding: 'utf8' });
+  const listing = execFileSync('tar', ['-tf', archive], { encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 });
   for (const name of ['board/board.mjs', 'board/rows.mjs', 'board/brain.mjs', 'contrib/settle-watch.mjs', 'lib/cli-help.mjs']) assert.ok(listing.split('\n').includes(name), name);
 });

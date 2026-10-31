@@ -80,12 +80,15 @@ export function runReportIntake({project,org,cli,guard,maxSteps=8,budgetMs=CLOSE
     const own=fs.existsSync(file),previous=own?JSON.parse(fs.readFileSync(file,'utf8')):
       fs.existsSync(legacy)?JSON.parse(fs.readFileSync(legacy,'utf8')):null;
     if(previous&&(previous.schema!==(own?'line-report-intake/v1':'line-closeout-turn/v1')||previous.identity!==project.identity||previous.org!==org))throw Error('intake checkpoint identity changed');
-    const state={schema:'line-report-intake/v1',identity:project.identity,org,attempt:previous?.attempt??0,ingest:previous?.ingest??{}};
+    const state={schema:'line-report-intake/v1',identity:project.identity,org,attempt:previous?.attempt??0,ingest:previous?.ingest??{},
+      failures:own?previous.failures??{}:{},alarm_signature:own?previous.alarm_signature:undefined};
     const save=()=>writeFileAtomic(file,JSON.stringify(state)+'\n',0o600);
     const read=()=>{guard();code.verify();const loaded=loadEvents(org);if(loaded.tornTail)throw Error('incomplete closeout record');return{events:loaded.events,state:fold(loaded.events)};};
     const observed=read();let ingested=0;const errors=[];
     const pending=[...observed.state.runs.values()].filter(r=>ingestEligible(r,observed.state,project.identity,observed.events)&&fs.existsSync(r.report_path))
       .sort((a,b)=>(state.ingest[a.id]??0)-(state.ingest[b.id]??0)||a.started.seq-b.started.seq);
+    const pendingIds=new Set(pending.map(r=>r.id));
+    for(const id of Object.keys(state.failures))if(!pendingIds.has(id))delete state.failures[id];
     for(const run of pending){
       if(clock()-started>=Math.min(15000,budgetMs/3)||ingested>=maxSteps)break;
       state.ingest[run.id]=++state.attempt;state.pending={stage:'ingest',run:run.id};save();fault('before-ingest');
@@ -99,8 +102,27 @@ export function runReportIntake({project,org,cli,guard,maxSteps=8,budgetMs=CLOSE
           throw Error('original ingest project/claim is missing or foreign');
         cli('bin/org.mjs',['ingest',r.report_path,'--run',r.id,...(item.runs.at(-1)===r.id?['--if-current-run',r.id]:[])]);
         fault('after-ingest');
-      }catch(error){errors.push({run:run.id,stage:'ingest',reason:error.message});}
+        delete state.failures[run.id];
+      }catch(error){
+        errors.push({run:run.id,stage:'ingest',reason:error.message});
+        const prior=state.failures[run.id];
+        state.failures[run.id]=prior?.reason===error.message?{...prior,turns:prior.turns+1}:
+          {reason:error.message,turns:1,first_seen:new Date(now()).toISOString()};
+      }
       ingested++;delete state.pending;save();
+    }
+    // Intake must expose its own failures even while the closeout owner is busy.
+    // This checkpoint owns visibility only; diagnostics never invoke ingestion.
+    const current=read();
+    for(const id of Object.keys(state.failures))if(!ingestEligible(current.state.runs.get(id),current.state,project.identity,current.events))delete state.failures[id];
+    const alarms=Object.entries(state.failures).filter(([,failure])=>failure.turns>=3).sort(([a],[b])=>a.localeCompare(b))
+      .map(([run,failure])=>({run,stage:'ingest',reason:failure.reason,first_seen:failure.first_seen}));
+    const signature=JSON.stringify(alarms);
+    if(signature!==state.alarm_signature){
+      if(alarms.length||state.alarm_signature&&state.alarm_signature!=='[]')fs.appendFileSync(path.join(directory,'closeout.log'),JSON.stringify({
+        action:'report-intake-supervisor-alarm',at:new Date(now()).toISOString(),owner:'project-supervisor',count:alarms.length,
+        scopes:alarms,authority:'visibility only; original holds and effects retained'})+'\n',{mode:0o600});
+      state.alarm_signature=signature;
     }
     state.completed_at=new Date(now()).toISOString();state.errors=errors;state.remaining=Math.max(0,pending.length-ingested);save();
     return{ingested,errors,remaining:state.remaining,attempts:state.ingest};

@@ -243,6 +243,39 @@ function ingestReports(f,calls){
   };
 }
 
+test('three repeated ingest failures emit one grouped diagnostic while closeout is occupied and recovery clears it',t=>{
+  const f=fixture(t),calls=[];reportCandidate(f,'R-2');
+  const lock=path.join(f.directory,'closeout-turn.lock'),release=noticeLock(lock),owner=fs.readFileSync(path.join(lock,'owner.json'));
+  const checkpoint=()=>JSON.parse(fs.readFileSync(path.join(f.directory,'report-intake.json')));
+  const alarms=()=>fs.existsSync(path.join(f.directory,'closeout.log'))?
+    fs.readFileSync(path.join(f.directory,'closeout.log'),'utf8').trim().split('\n').map(JSON.parse)
+      .filter(row=>row.action==='report-intake-supervisor-alarm'):[];
+  let failed=true;
+  const cli=(file,args)=>{
+    if(args[0]==='ingest'&&failed){calls.push(args);throw Error('report validation failed');}
+    return ingestReports(f,calls)(file,args);
+  };
+  try{
+    for(let turn=1;turn<=4;turn++){
+      assert.equal(runCloseoutTurn({...f.args,cli}).already_running,true);
+      assert.equal(calls.length,turn,'only the scheduled ingest attempt runs');
+      assert.equal(checkpoint().failures['R-2'].turns,turn);
+      assert.equal(alarms().length,turn<3?0:1,'unchanged failures dedupe across fresh turns');
+      assert.equal(events(f).some(e=>e.type==='report.ingested'),false);
+      assert.deepEqual(fs.readFileSync(path.join(lock,'owner.json')),owner);
+    }
+    const [alarm]=alarms();assert.equal(alarm.owner,'project-supervisor');assert.equal(alarm.count,1);
+    assert.deepEqual(alarm.scopes,[{run:'R-2',stage:'ingest',reason:'report validation failed',first_seen:checkpoint().failures['R-2'].first_seen}]);
+    failed=false;
+    runCloseoutTurn({...f.args,cli});assert.equal(calls.length,5);
+    assert.equal(events(f).filter(e=>e.type==='report.ingested'&&e.run==='R-2').length,1);
+    assert.deepEqual(checkpoint().failures,{});assert.deepEqual(checkpoint().errors,[]);
+    assert.equal(alarms().length,2);assert.equal(alarms()[1].count,0);assert.deepEqual(alarms()[1].scopes,[]);
+    runCloseoutTurn({...f.args,cli});assert.equal(calls.length,5);assert.equal(alarms().length,2);
+    assert.deepEqual(f.read().actions,[],'diagnostics never acquire or replay native closeout effects');
+  }finally{release();}
+});
+
 test('report intake commits while both closeout and scheduling owners retain their original locks',t=>{
   const f=fixture(t),calls=[];reportCandidate(f,'R-2');
   const locks=['closeout-turn.lock','pass.lock'].map(name=>path.join(f.directory,name));

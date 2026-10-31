@@ -647,7 +647,7 @@ test('phase1 creates one queue item per whole producer change with immutable evi
 });
 
 test('phase1 named producer queue validation leaves unrelated producer files unread while preserving the global ownership index',t=>{
-  const f=fixture(t),other=independentProducer(f),before=process.cwd(),env=installedService(f),c=f.context(),
+  const f=fixture(t),other=independentProducer(f),before=process.cwd(),env={...installedService(f),ORG_ACTOR:'line-service'},c=f.context(),
     full=discoverChanges(c),expected=full.changes.find(change=>change.run.id==='R-1').target;
   assert.equal(full.changes.length,2);
   const denied=new Set([path.join(f.org,'reports/R-3.md'),path.join(f.org,'dispatch/independent.json')]),read=fs.readFileSync,reads=[];

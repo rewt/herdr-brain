@@ -6,6 +6,7 @@ import path from 'node:path';
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {createHash} from 'node:crypto';
+import {expiredCloseoutControl} from './installed-closeout-control.mjs';
 import {processControlPid, setProcessControl} from './installed-observations.mjs';
 
 export function processContinuityControl({ownerAlive, lookupProcess, observe = () => {}}) {
@@ -27,20 +28,6 @@ export function processContinuityControl({ownerAlive, lookupProcess, observe = (
   } finally {
     setProcessControl(null);
   }
-}
-
-export async function expiredCloseoutControl({runCloseoutTurn, until, options}) {
-  let deadline, contentions=0;
-  // Lock absence cannot reserve the next turn. Retry only the supported
-  // contention result, within the caller's existing bounded observation.
-  await until(()=>{
-    let ticks=0;
-    deadline=runCloseoutTurn({...options,budgetMs:0,clock:()=>ticks++});
-    if(deadline.already_running===true){contentions++;return false;}
-    return true;
-  },'expired-budget control acquired its finite turn');
-  assert.equal(deadline.steps,0);assert.equal(deadline.backlog_classified,0);
-  return {deadline,contentions};
 }
 
 export async function runCanary(c) {

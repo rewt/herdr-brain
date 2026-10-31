@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {execFileSync} from 'node:child_process';
-import {expiredCloseoutControl} from '../installed-canary.mjs';
+import {expiredCloseoutControl} from '../installed-closeout-control.mjs';
 import {runCloseoutTurn,closeoutServiceDirectory} from '../../line-service/closeout-turn.mjs';
 import {retirementLock} from '../../lib/retire-lock.mjs';
 import {gitProject} from '../../lib/project.mjs';

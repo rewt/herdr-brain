@@ -122,7 +122,7 @@ for (const [mode, revision] of [...historical, ['current', 'HEAD'], ['canary', n
       freeze(successor);
     }
     fs.symlinkSync(bundle, path.join(home, 'current'));
-    for (const name of ['installed-cycle.mjs', 'installed-canary.mjs', 'installed-native.mjs', 'installed-observations.mjs']) fs.copyFileSync(path.join(source, 'acceptance', name), path.join(root, 'harness', name));
+    for (const name of ['installed-cycle.mjs', 'installed-canary.mjs', 'installed-closeout-control.mjs', 'installed-native.mjs', 'installed-observations.mjs']) fs.copyFileSync(path.join(source, 'acceptance', name), path.join(root, 'harness', name));
     for (const name of ['fixture-policy.mjs', 'memory-fixture.mjs']) fs.copyFileSync(path.join(source, 'test/helpers', name), path.join(root, 'harness', name));
     env.NODE_OPTIONS = `--import=${path.join(root, 'harness/fixture-policy.mjs')} --import=${path.join(root, 'harness/installed-observations.mjs')}`;
     fs.writeFileSync(path.join(root, 'bin/herdr'), `#!/bin/sh\nexec ${quote(process.execPath)} ${quote(path.join(root, 'harness/installed-native.mjs'))} "$@"\n`, { mode: 0o755 });

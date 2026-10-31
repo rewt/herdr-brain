@@ -60,7 +60,10 @@ function fixture(t,{diffBytes=0}={}){
 }
 
 test('typed zero-native disposition preserves original evidence and permits one ordinary review',t=>{
-  const f=fixture(t),before=f.captured(),bytes=fs.readFileSync(f.reference);
+  const f=fixture(t);
+  f.prepare({run:'R-1',head:f.head,base:f.base,stage:'worker',native_launch_attempted:false,
+    metadata:[{commits:[f.head],source_base:f.base,ownedScope:{head:f.head,base:f.base}}]});
+  const before=f.captured(),bytes=fs.readFileSync(f.reference);
   assert.match(reviewAttempt(f.context().item,f.context()),/typed review reference UNKNOWN/);
   const result=resolveReviewReference(f.args());assert.equal(result.existing,false);
   assert.deepEqual(f.captured().subarray(0,before.length),before);assert.deepEqual(fs.readFileSync(f.reference),bytes);
@@ -659,6 +662,50 @@ for(const disposition of ['mapped-review','superseded'])test(`${disposition} bin
   assert.equal([...next.state.items.values()].filter(i=>i.role==='reviewer').length,1);
 });
 
+function escapedFile(f,name,bytes){
+  const file=f.ownerRoot+'/../another-owner/'+name;
+  fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,bytes);
+  assert.equal(fs.existsSync(file),true,'the escape control must reach an existing file');
+  return file;
+}
+
+test('inspection refuses an existing escaped report-artifact reference before reading it',t=>{
+  const f=fixture(t),file=escapedFile(f,'review-reference.json',fs.readFileSync(f.reference));
+  const c=f.context(),ingested=c.events.find(e=>e.type==='report.ingested');
+  f.add([{type:'report.ingested',run:ingested.run,item:ingested.item,file:ingested.file,sha256:ingested.sha256,
+    report:{...ingested.report,artifacts:[...ingested.report.artifacts,file]}}]);
+  const before=f.captured(),bytes=fs.readFileSync(file);
+  const result=inspectReviewReferences({repo:f.repo,org:f.org,runId:'R-1'}).references.find(r=>r.file===file);
+  assert.deepEqual(result,{file,error:'foreign reference stays UNKNOWN; no cross-identity read'});
+  assert.deepEqual(f.captured(),before);assert.deepEqual(fs.readFileSync(file),bytes);
+});
+
+for(const producer of [false,true])test(`recursive ${producer?'producer':'barrier'} head and base aliases refuse contradictory commits`,t=>{
+  const f=fixture(t),mutations=[
+    v=>v.ownedScope={head:f.base},v=>v.source_head=f.base,v=>v.review={head:f.base},
+    v=>v.commits=[f.head,f.base],v=>v.metadata=[{reviewed_commit:f.base}],
+    v=>v.metadata={ownedScope:{base:f.head}},v=>v.source_base=f.head,v=>v.bases=[f.base,f.head],
+  ];
+  for(const mutate of mutations){
+    const value=producer?producerHandoff(f):{run:'R-1',head:f.head,base:f.base,stage:'worker',native_launch_attempted:false};
+    mutate(value);f.prepare(value);const before=f.captured(),bytes=fs.readFileSync(f.reference);
+    assert.throws(()=>resolveReviewReference(f.args()),/one exact landed head\/base/);
+    assert.deepEqual(f.captured(),before);assert.deepEqual(fs.readFileSync(f.reference),bytes);
+  }
+});
+
+for(const producer of [false,true])test(`recursive ${producer?'producer':'barrier'} native binding spellings retain the original fence`,t=>{
+  const f=fixture(t),keys=['pane_id','terminal_id','agent_session','agent_session_id','session_id','sessionBinding','process_pid'];
+  for(const nested of [false,true])for(const key of keys){
+    const value=producer?{...producerHandoff(f),native_launch_attempted:false}:{run:'R-1',head:f.head,base:f.base,stage:'worker',native_launch_attempted:false};
+    const binding={[key]:key==='sessionBinding'?{value:'original-native-session'}:'original-native-binding'};
+    Object.assign(value,nested?{metadata:[{binding}]}:binding);
+    f.prepare(value);const before=f.captured(),bytes=fs.readFileSync(f.reference);
+    assert.throws(()=>resolveReviewReference(f.args()),/UNKNOWN\/started\/refused/);
+    assert.deepEqual(f.captured(),before);assert.deepEqual(fs.readFileSync(f.reference),bytes);
+  }
+});
+
 for(const kind of ['unknown','started','worker','verdict','refused','wrong-head','wrong-base','contradictory-head','contradictory-base','foreign','foreign-dot','hold','ancestor-hold','stop','wrong-supervisor','claim','decision','hash','ambiguous-scope','occupied'])test(`reference disposition refuses ${kind} and preserves the original`,t=>{
   const f=fixture(t),value={run:'R-1',head:f.head,base:f.base,stage:'worker',native_launch_attempted:false};let options={};
   if(kind==='unknown')delete value.native_launch_attempted;
@@ -672,7 +719,7 @@ for(const kind of ['unknown','started','worker','verdict','refused','wrong-head'
   if(kind==='contradictory-base')value.deliveryRange={head:f.head,base:f.head};
   f.prepare(value);
   if(kind==='foreign')options.resolution='/another-owner/input.json';
-  if(kind==='foreign-dot')options.resolution=f.ownerRoot+'/../another-owner/input.json';
+  if(kind==='foreign-dot')options.resolution=escapedFile(f,'input.json',fs.readFileSync(f.resolution));
   if(kind==='hold')f.add([{type:'item.updated',id:'ENG-1',fields:{meta:{hold:true}}}]);
   if(kind==='ancestor-hold')f.add([{type:'item.added',id:'G-1',kind:'goal',meta:{hold:true}},{type:'item.updated',id:'ENG-1',fields:{parent:'G-1'}}]);
   if(kind==='stop')fs.writeFileSync(path.join(f.directory,'STOP'),'stop');
@@ -686,7 +733,7 @@ for(const kind of ['unknown','started','worker','verdict','refused','wrong-head'
   }
   if(kind==='occupied')fs.mkdirSync(path.join(f.directory,'pass.lock'));
   const before=f.captured(),bytes=fs.readFileSync(f.reference);
-  assert.throws(()=>resolveReviewReference({...f.args(),...options}));assert.deepEqual(f.captured(),before);assert.deepEqual(fs.readFileSync(f.reference),bytes);
+  assert.throws(()=>resolveReviewReference({...f.args(),...options}),kind==='foreign-dot'?/review reference cannot read another identity/:undefined);assert.deepEqual(f.captured(),before);assert.deepEqual(fs.readFileSync(f.reference),bytes);
 });
 
 for(const producer of [false,true])test(`tampered archives and progressed ${producer?'producer handoff':'barrier'} references remain held at normal admission`,t=>{

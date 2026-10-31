@@ -11,6 +11,24 @@ import {lineDirectory} from './cutoff.mjs';
 
 export const referenceRevision=({events,identity,org,item,run,target})=>Math.max(0,...events.filter(e=>e.type==='review.reference-resolved'&&e.project===identity&&e.org===org&&e.item===item&&e.run===run&&sameCapturedTarget(e.target,target)).map(e=>e.seq));
 
+// Use the fence's recursive attribution for every full commit alias, including
+// arrays. Callers still validate explicitly declared aliases for malformed IDs.
+export function referenceCommits(value,pattern=/head|commit|reviewed/i){
+  const out=new Set();
+  const visit=(v,key='')=>{
+    if(typeof v==='string'&&pattern.test(key)&&/^[a-f0-9]{40}(?:[a-f0-9]{24})?$/.test(v))out.add(v);
+    else if(Array.isArray(v))for(const x of v)visit(x,key);
+    else if(v&&typeof v==='object')for(const[k,x]of Object.entries(v))visit(x,k);
+  };
+  visit(value);return out;
+}
+
+function nativeBinding(value){
+  if(!value||typeof value!=='object')return false;
+  return Object.entries(value).some(([key,v])=>v!=null&&(
+    /agent|pane|terminal|session|pid/i.test(key)||nativeBinding(v)));
+}
+
 // This marker attributes worker to the producer. It is not an automatic queue
 // exemption: original bytes, exact landed scope and supervisor disposition bind
 // the positive never-queued proof below.
@@ -103,19 +121,26 @@ export function referenceProof({events,state,repo,org,item,run,target,input,obse
   if(hash(bytes)!==input.reference_sha256)throw Error('original review reference bytes changed');
   capturedRange({repo,target});captureEvidence(target);
   const producer=producerReportHandoff(value);
+  // Historical producer handoffs explicitly distinguish dependency/cumulative
+  // scope from their own source. Preserve that type's established attribution.
+  const attributed=producer?Object.fromEntries(Object.entries(value).filter(([k])=>!['interleavedDependency','cumulativeScope'].includes(k))):value;
   const heads=[value.head,value.deliveryRange?.head,value.review_target?.head,value.reviewed_head,value.commit,
+    ...referenceCommits(attributed),
     ...(producer?[value.ownedScope?.head,value.source]:[])].filter(v=>v!=null);
   const bases=[value.base,value.deliveryRange?.base,value.review_target?.base,
+    ...referenceCommits(attributed,/base/i),
     ...(producer?[value.ownedScope?.base]:[])].filter(v=>v!=null);
   if(!heads.length||heads.some(h=>h!==target.head)||bases.some(b=>b!==target.base))throw Error('reference needs one exact landed head/base; scope is UNKNOWN or contradictory');
   if(input.disposition==='needs-review'){
     if(producer){
       const worker=effectiveWorkerIdentity(state.runs.get(run),state),review=value.review;
+      // The top-level producer watcher has its own closed, record-bound proof.
+      const nativeFields=Object.fromEntries(Object.entries(value).filter(([k])=>k!=='watcher'));
       const queueFlags=[...['queueAttempted','queueMutation','queueCommandAttempted','parallelReviewStarted','waitedForVerdict'].filter(k=>Object.hasOwn(value,k)).map(k=>value[k]),
         ...['queueAttempted','queueCommandAttempted','parallelReviewStarted','waitedForVerdict'].filter(k=>review&&Object.hasOwn(review,k)).map(k=>review[k])];
       if(input.review_item!=null||![value.run,value.source_run].filter(v=>v!=null).length||
         [value.run,value.source_run].some(v=>v!=null&&v!==run)||[value.item,value.source_item].some(v=>v!=null&&v!==item)||
-        worker.identity_conflict||typeof value.worker!=='string'||value.worker!==worker.agent||
+        worker.identity_conflict||typeof value.worker!=='string'||value.worker!==worker.agent||nativeBinding(nativeFields)||
         ['type','kind','role'].some(k=>value[k]!=null)||queueFlags.some(v=>v!==false)||
         Object.hasOwn(value,'stage')||
         Object.hasOwn(value,'native_launch_attempted')&&value.native_launch_attempted!==false||
@@ -132,7 +157,7 @@ export function referenceProof({events,state,repo,org,item,run,target,input,obse
     }
     // A missing launch flag or missing process is not positive zero-native proof.
     // Only a serialized pre-native barrier may enter ordinary queue admission.
-    if(input.review_item!=null||(value.source_run??value.run)!==run||value.item&&value.item!==item||value.source_item&&value.source_item!==item||value.native_launch_attempted!==false||!['open','start','worker'].includes(value.stage)||
+    if(input.review_item!=null||(value.source_run??value.run)!==run||value.item&&value.item!==item||value.source_item&&value.source_item!==item||value.native_launch_attempted!==false||!['open','start','worker'].includes(value.stage)||nativeBinding(value)||
       ['worker','reviewer','review','launchProcess','sessionBinding','watcher','verdict','review_item','review_run','agent','pane','terminal','session','pid','reviewer_session','reviewer_pane'].some(k=>value[k]!=null)||
       /EPERM|EACCES|refus|identity|ownership|reserved|HOLD|STOP/i.test(value.error??''))throw Error('reference native outcome remains UNKNOWN/started/refused; retain the original attempt');
     return{kind:'positive-pre-native-barrier',reference_sha256:hash(bytes)};

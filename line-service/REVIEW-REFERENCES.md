@@ -142,6 +142,14 @@ to the landed target; duplicate identical aliases are allowed. Conflicting,
 short, multiple or absent heads refuse. Any populated base aliases must equal
 the captured base. These older locations do not fill in an unresolved landed
 range, alter the target, or relax the existing captured diff/evidence checks.
+Other head/commit/reviewed keys and base keys are collected recursively,
+including arrays, using the same visitor as fence attribution. The producer
+type's explicit `interleavedDependency` and `cumulativeScope` metadata remain
+distinct from its source; ordinary references have no such exception.
+Native agent, pane, terminal, session and PID keys refuse at any nesting depth,
+including spellings such as `pane_id`, `agent_session_id` and `sessionBinding`.
+The producer's top-level watcher still uses its separate closed, record-bound
+proof above.
 Review identities, launch evidence, review item/run or verdicts contradict a
 never-queued producer handoff and remain held. An explicit started/uncertain
 native flag or conflicting source run/item also refuses.

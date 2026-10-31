@@ -15,7 +15,7 @@ import {canonical} from '../messages/schema.mjs';
 import {effectiveWorkerIdentity} from '../lib/worker-identity.mjs';
 import {additionalTarget,disjointCapture,captureEvidence} from './review-targets.mjs';
 import {producerReviewObservation} from './review-observation.mjs';
-import {producerReportHandoff,resolvedReference} from './review-reference-proof.mjs';
+import {producerReportHandoff,resolvedReference,referenceCommits as heads} from './review-reference-proof.mjs';
 import {resolvedQueuePlanning} from './review-queue-proof.mjs';
 
 const codeRoot = fs.realpathSync(fileURLToPath(new URL('../', import.meta.url)));
@@ -117,9 +117,6 @@ function changeReviewAttempt(item,{org,identity,events,state,repo,effects,target
     return true;
   };
   const tokens=new Set([item.id,...item.runs]);
-  const heads=value=>{
-    const out=new Set();const visit=(v,key='')=>{if(typeof v==='string'&&/head|commit|reviewed/i.test(key)&&!/^base$/i.test(key)&&commit(v))out.add(v);else if(Array.isArray(v))for(const x of v)visit(x,key);else if(v&&typeof v==='object')for(const[k,x]of Object.entries(v))visit(x,k);};visit(value);return out;
-  };
   const matches=(value,runHint)=>{
     if(!value)return false;const named=heads(value);
     const sameGroup=contains(value,new Set(runs))||value.reportHash===target.reportHash||value.review_target?.reportHash===target.reportHash;

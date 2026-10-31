@@ -646,6 +646,30 @@ test('phase1 creates one queue item per whole producer change with immutable evi
   }finally{process.chdir(before);}
 });
 
+test('phase1 named producer queue validation leaves unrelated producer files unread while preserving the global ownership index',t=>{
+  const f=fixture(t),other=independentProducer(f),before=process.cwd(),env=installedService(f),c=f.context(),
+    full=discoverChanges(c),expected=full.changes.find(change=>change.run.id==='R-1').target;
+  assert.equal(full.changes.length,2);
+  const denied=new Set([path.join(f.org,'reports/R-3.md'),path.join(f.org,'dispatch/independent.json')]),read=fs.readFileSync,reads=[];
+  const mocked=t.mock.method(fs,'readFileSync',(file,...args)=>{
+    if(typeof file==='string'&&denied.has(file)){reads.push(file);throw Error('unrelated producer source read');}
+    return read(file,...args);
+  });
+  process.chdir(f.cwd);
+  try{
+    const mutation=queueReviewMutation({...f.context(),runId:'R-1',env});f.add(mutation.add);
+    const next=f.context(),item=next.state.items.get(mutation.result.review_item);
+    assert.deepEqual(validateQueuedReview({...next,item}),expected);
+    assert.deepEqual(reads,[],'one queued producer cannot scan the other producer at every start/launch fence');
+    const scoped=discoverChanges({...next,runId:'R-1'});
+    assert.deepEqual(scoped.changes.map(change=>change.run.id),['R-1']);
+    const foreign=scoped.index.entries.find(row=>row.head===other);
+    assert.equal(foreign.attribution,'report-claim');assert.equal(foreign.run,'R-3','foreign ownership still comes from the complete canonical index');
+    assert.throws(()=>queueReviewMutation({...next,runId:'R-3',env}),/unrelated producer source read/,'the selected producer still needs its real immutable evidence');
+  }finally{process.chdir(before);mocked.mock.restore();}
+  const all=discoverChanges(f.context());assert.equal(all.changes.length,2,'general discovery still sees both producers');
+});
+
 function partialReview(f,id,{head,base,run,verdict,held=false}){
   const c=f.context(),whole=discoverChanges(c).changes.find(x=>x.run.id==='R-1'),target={...whole.target,head,base,diff_sha256:hash(f.git(['diff','--no-ext-diff','--no-textconv',base,head],f.cwd)),scope:{base,commits:[head],claims:[head],unresolved:[],deferred:false}};delete target.source_group;
   const rows=[{type:'item.added',id,role:'reviewer',title:'Retained exact partial',meta:{review_source_item:'ENG-1',review_source_run:'R-1',review_key:`ENG-1:${head}`,review_target:target,review_round_cap:1,review_cutover:whole.cutoff,...(held?{hold:true}:{})}}];

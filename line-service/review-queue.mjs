@@ -81,7 +81,7 @@ function source({ state, events, org, repo, identity, runId, head, base,env=proc
   const current = readOwnedRun(org, run.id);
   requireController(current, 'brain'); assertOwner(current, { owner: run.owner, generation: run.owner_generation });
   queueConsumer({ run,env });
-  const discovered=discoverChanges({state,events,org,repo,identity});
+  const discovered=discoverChanges({state,events,org,repo,identity,runId});
   const whole=discovered.changes.filter(c=>c.run.id===runId);let choices=whole.filter(c=>!head||c.target.head===head),capturedOriginal=false;
   if(!head&&choices.length>1)choices=choices.filter(c=>choices.every(other=>{try{git(repo,['merge-base','--is-ancestor',other.target.head,c.target.head]);return true;}catch{return false;}}));
   // A supplemental target exists only beside retained captures, so a recomputed

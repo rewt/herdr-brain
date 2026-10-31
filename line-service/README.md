@@ -1248,6 +1248,13 @@ its original source binding and its evaluated, held-owner, failed or handoff
 outcome in the turn checkpoint and completion result. These scheduling facts
 grant no native/Git authority and never complete an UNKNOWN attempt.
 
+An exact queued-review start validates only its named producer's report, dispatch
+and full source group. It retains the complete canonical ownership index, peer
+captures, original attempt checks and all fresh launch guards. General discovery
+still accounts for every producer and unattributed commit. Unrelated producer
+files no longer prolong the shared session-admission lock before deferred record
+start; a saved in-flight dispatcher retains its original loaded implementation.
+
 Each `closeout.evaluated` now carries independent `resources.session`, `.folder`
 and `.branch` dispositions. Only exact `closeout.effect` receipts establish
 `closed`, `removed`, `deleted` or `retained`; `absent` is a current allocation

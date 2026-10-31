@@ -191,7 +191,7 @@ export function observeReviewHealth({repo,org,index,passId,errorCounts,prior,env
     gap_passes:counts.missing_queue||counts.coverage_gaps.length?(prior?.gap_passes??0)+1:0};
 }
 
-export function discoverChanges({events,state,repo,org,identity,boundary,readGit=git,pendingOnly=false,index,heldCache}) {
+export function discoverChanges({events,state,repo,org,identity,boundary,readGit=git,pendingOnly=false,index,heldCache,runId}) {
   const changes=[],holds=[],unattributed=[];
   try{boundary??=phase0Boundary(events,{repo,org,identity});}catch(e){return {changes,holds:[{reason:e.message}]};}
   index??=canonicalReviewIndex({events,state,repo,org,identity,boundary,readGit});const eligible=new Set(index.heads);
@@ -201,6 +201,10 @@ export function discoverChanges({events,state,repo,org,identity,boundary,readGit
     const list=landed.get(e.run)??[];list.push(e.head);landed.set(e.run,list);
   }
   for(const run of state.runs.values()) {
+    // Exact queue validation owns one producer. Keep the full canonical graph,
+    // attribution and peer queues, but never re-read every other producer's
+    // report, dispatch and Git range at each pre-native/start boundary.
+    if(runId!==undefined&&run.id!==runId)continue;
     const item=state.items.get(run.item);
     // Non-engineer reports can cite reviewed/researched source. Only positive
     // own-landing receipts make those runs producers, never report references.
@@ -273,7 +277,7 @@ export function discoverChanges({events,state,repo,org,identity,boundary,readGit
     }catch(e){holds.push({item:item.id,run:run.id,reason:e.message,...(e.source_provenance?{source_provenance:e.source_provenance}:{})});}
     }finally{if(holds.length>holdStart)cached?.retain(holds.slice(holdStart).map(h=>h.reason).join('; '));}
   }
-  for(const row of index.entries)if(row.attribution==='missing'){
+  if(runId===undefined)for(const row of index.entries)if(row.attribution==='missing'){
     const selector=canonicalSelector(row.head),retained=queues.filter(q=>q.meta.review_source_selector===selector);
     if(pendingOnly&&retained.length)continue;
     try{unattributed.push({selector,target:retained.length===1?validateAdditionalTarget({repo,org,identity,index,state,events,target:retained[0].meta.review_target}):canonicalTarget({repo,org,identity,index,head:row.head})});}catch(e){holds.push({head:row.head,reason:e.message});}

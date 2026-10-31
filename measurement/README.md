@@ -1,5 +1,8 @@
 # Consumer lifecycle baseline
 
+Supervisor retirement adds a read-only [duty/absence coverage annex](RETIREMENT-COVERAGE.md)
+to the existing installed soak; it creates no second observation service.
+
 `bin/measure-lifecycle.mjs` is a dependency-free, model-free historical reader.
 It prints JSON to stdout and never changes a record, runs a native command, or
 closes anything. Redirect output only to your own evidence directory.

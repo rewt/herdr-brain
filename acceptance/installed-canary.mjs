@@ -6,6 +6,28 @@ import path from 'node:path';
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {createHash} from 'node:crypto';
+import {processControlPid, setProcessControl} from './installed-observations.mjs';
+
+export function processContinuityControl({ownerAlive, lookupProcess, observe = () => {}}) {
+  const original = {pid:processControlPid,ppid:0,pgid:processControlPid,identity:`0:${processControlPid}`,
+    command:'[canary-process-control]',state:'S'};
+  const check = phase => observe(phase, original);
+  try {
+    setProcessControl(original);
+    assert.equal(ownerAlive(original), true);check('original');
+    setProcessControl({...original,identity:'0:1'});
+    assert.equal(ownerAlive(original), false, 'a reused PID is not the original launch');check('reused');
+    setProcessControl(null);
+    assert.equal(ownerAlive(original), false, 'an absent process is not continuity');check('absent');
+    setProcessControl({...original,identity:'malformed'});
+    assert.equal(lookupProcess(original.pid, {identityOnly:true}).ok, false, 'invalid births must not become evidence');check('malformed');
+    setProcessControl(original);
+    assert.equal(ownerAlive(original), true);check('recovered');
+    return {scratch:original,pidReuseRefused:true,absentProcessRefused:true,malformedIdentityRefused:true,originalRestored:true};
+  } finally {
+    setProcessControl(null);
+  }
+}
 
 export async function runCanary(c) {
   const {config,write,stage,module,env,run,checked,git,record,state,journals,service,audit,project,directory,
@@ -57,8 +79,8 @@ export async function runCanary(c) {
   }
 
   // The unchanged installed writer must commit the original launch binding
-  // before the first input. Exercise death/reuse and recovery at the declared
-  // process-source seam without replaying dispatch or sending another prompt.
+  // before the first input. Fault a separate controller-local scratch PID at
+  // the declared seam; the live producer's native/process rows stay untouched.
   const launch = producer.launchProcess, binding = events().find(e => e.type === 'run.session_bound' && e.run === producer.run);
   assert.equal(producer.sessionBinding.status, 'bound');
   assert.deepEqual(binding.process, launch);assert.equal(binding.session, producer.worker.agentSessionId);
@@ -68,20 +90,14 @@ export async function runCanary(c) {
   assert.equal(input[0].process.pid, launch.pid);assert.equal(input[0].process.identity, launch.identity);
   const {lookupProcess} = await module('lib/processes.mjs');
   const originalProcess = native().workspaces[producer.worker.workspaceId].agentProcess;
+  assert.notEqual(launch.pid, processControlPid);
   assert.equal(ownerAlive(launch), true);
-  try {
-    changeNative(n => n.workspaces[producer.worker.workspaceId].agentProcess.identity = '0:1');
-    assert.equal(ownerAlive(launch), false, 'a reused PID is not the original launch');
-    changeNative(n => delete n.workspaces[producer.worker.workspaceId].agentProcess);
-    assert.equal(ownerAlive(launch), false, 'an absent process is not continuity');
-    changeNative(n => n.workspaces[producer.worker.workspaceId].agentProcess = {...originalProcess, identity:'malformed'});
-    assert.equal(lookupProcess(launch.pid, {identityOnly:true}).ok, false, 'invalid births must not become evidence');
-  } finally {
-    changeNative(n => n.workspaces[producer.worker.workspaceId].agentProcess = originalProcess);
-  }
+  const processControl = processContinuityControl({ownerAlive,lookupProcess,
+    observe:()=>assert.equal(ownerAlive(launch), true, 'producer continuity survives each scratch fault')});
+  assert.deepEqual(native().workspaces[producer.worker.workspaceId].agentProcess, originalProcess);
   assert.equal(ownerAlive(launch), true);
-  stage('launch-process-control', {launch,bindingSeq:binding.seq,input:input[0],pidReuseRefused:true,
-    absentProcessRefused:true,malformedIdentityRefused:true,originalRestored:true,prompts:prompts(producer).length});
+  stage('launch-process-control', {launch,bindingSeq:binding.seq,input:input[0],...processControl,
+    producerUnaffected:true,prompts:prompts(producer).length});
 
   // Complete ordinary A without injecting faults into its original watcher.
   // STOP intentionally ends a per-run watcher, so promotion boundary controls

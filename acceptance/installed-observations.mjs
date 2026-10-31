@@ -12,6 +12,14 @@ import { syncBuiltinESMExports } from 'node:module';
 import { fileURLToPath } from 'node:url';
 
 const root = fs.realpathSync(process.env.INSTALLED_CYCLE_ROOT);
+// Fault controls belong only to the controller's module instance. No native
+// workspace references this PID, and product children never inherit its row.
+export const processControlPid = 2_000_000_001;
+let processControl = null;
+export function setProcessControl(row) {
+  if (row !== null && row.pid !== processControlPid) throw Error('foreign process control PID');
+  processControl = row;
+}
 // Declared native observation seam: the installed observer speaks its normal
 // protocol to an in-memory scratch transport. No real socket is ever opened.
 // Deliberately send no hints: only its unchanged 30 s safety timer can recover.
@@ -61,9 +69,9 @@ childProcess.spawnSync = function (file, args = [], options = {}) {
     const pid = Number(args.at(-1)), scripted = pid > 1_000_000_000;
     fs.appendFileSync(path.join(root, 'evidence/native-observations.jsonl'), JSON.stringify({ file, args, caller: process.pid, scripted }) + '\n');
     if (scripted) {
-      const native = JSON.parse(fs.readFileSync(path.join(root, 'native.json')));
-      const row = Object.values(native.workspaces).flatMap(w => [w.shellProcess, ...(w.agent ? [w.agentProcess] : [])])
-        .find(p => p?.pid === pid);
+      const row = pid === processControlPid ? processControl : Object.values(
+        JSON.parse(fs.readFileSync(path.join(root, 'native.json'))).workspaces)
+        .flatMap(w => [w.shellProcess, ...(w.agent ? [w.agentProcess] : [])]).find(p => p?.pid === pid);
       return { status: row ? 0 : 1, signal: null, stdout: row ? JSON.stringify(row) + '\n' : '', stderr: '' };
     }
   }

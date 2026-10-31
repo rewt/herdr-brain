@@ -76,17 +76,31 @@ test('local page keeps recorded active/held/unknown work and source/report/revie
   assert.equal(row('ENG-3').owner, null);
   assert.equal(row('ENG-3').next_action, null);
   assert.equal(row('ENG-4').stage.label, 'Unknown');
+  assert.deepEqual(row('ENG-896').review.items, []);
+  assert.equal(row('ENG-896').review.status, 'unknown');
   assert.equal(row('ENG-5').status, 'done');
   assert.equal(row('ENG-5').open, true);
   assert.equal(row('ENG-5').source_landed.head, 'a'.repeat(40));
   assert.equal(row('ENG-5').report_ingested.run, 'R-5');
   assert.equal(row('ENG-5').review.status, 'review pending');
+  assert.deepEqual(row('ENG-5').review.items.map(r => r.id), ['REV-1']);
   assert.equal(row('ENG-5').completion, 'derived done; acceptance unknown');
   assert.equal(row('ENG-1').source_landed, null);
   assert.equal(row('ENG-1').report_ingested, null);
   assert.doesNotMatch(JSON.stringify(doc), /PRIVATE REPORT BODY/);
   assert.equal(doc.auxiliary.delivery.status, 'missing');
   assert.ok(doc.freshness.indicators.includes('delivery-missing'));
+
+  const closedParent = record([...fixtures(), { type: 'item.closed', id: 'ENG-896', as: 'done' }]);
+  const parent = collectProjectPage({ org: closedParent, project, now: NOW }).work.find(w => w.id === 'ENG-896');
+  assert.equal(parent.status, 'done');
+  assert.deepEqual(parent.review.items, []);
+  assert.equal(parent.open, false);
+
+  const legacy = record([...fixtures(), item('REV-2', 'Legacy review', { role: 'reviewer', parent: 'ENG-3' })]);
+  const legacyRow = collectProjectPage({ org: legacy, project, now: NOW }).work.find(w => w.id === 'ENG-3');
+  assert.deepEqual(legacyRow.review.items.map(r => r.id), ['REV-2']);
+  assert.equal(legacyRow.review.status, 'review pending');
 
   const correction = record([...fixtures(),
     { type: 'change.reviewed', item: 'ENG-5', head: 'a'.repeat(40), verdict: 'FAIL', review_item: 'REV-1', review_run: 'R-8' },

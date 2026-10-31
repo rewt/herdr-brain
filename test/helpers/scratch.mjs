@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { syncBuiltinESMExports } from 'node:module';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { lookupProcess } from '../../lib/processes.mjs';
 
 export const SCRATCH_JOURNAL = 'HERDR_TEST_SCRATCH_JOURNAL';
@@ -40,6 +40,46 @@ function probeGroup(pid) {
   catch (error) {
     return error.code === 'ESRCH' ? { ok: true, absent: true } : { ok: false, error: error.message };
   }
+}
+
+// A recursive unlink is not transactional: EACCES can arrive after siblings
+// have gone. Checkpoint the complete tree outside scratch before the first
+// unlink, and retain that verified copy on any removal failure. Reflinks avoid
+// duplicating file blocks where the filesystem supports them.
+function fingerprint(root) {
+  const hash = createHash('sha256'), buffer = Buffer.allocUnsafe(1024 * 1024);
+  const visit = (file, name) => {
+    const stat = fs.lstatSync(file);
+    const type = stat.isSymbolicLink() ? 'link' : stat.isDirectory() ? 'directory' : stat.isFile() ? 'file' : null;
+    if (!type) throw Error(`unsupported scratch entry: ${file}`);
+    hash.update(JSON.stringify([name, type, stat.mode & 0o7777, type === 'file' ? stat.size : null]));
+    if (type === 'link') hash.update(JSON.stringify(fs.readlinkSync(file)));
+    else if (type === 'directory') for (const child of fs.readdirSync(file).sort()) visit(path.join(file, child), path.join(name, child));
+    else {
+      const fd = fs.openSync(file, 'r');
+      try { let size; while ((size = fs.readSync(fd, buffer, 0, buffer.length, null))) hash.update(buffer.subarray(0, size)); }
+      finally { fs.closeSync(fd); }
+    }
+  };
+  visit(root, '.');
+  return hash.digest('hex');
+}
+
+function checkpoint(row, journal) {
+  const evidence = fs.realpathSync(path.dirname(journal));
+  if (evidence === row.root || evidence.startsWith(row.root + path.sep)) throw Error('scratch contains its recovery evidence');
+  const directory = evidenceDirectory(path.join(evidence, 'preserved-'));
+  const copy = path.join(directory, 'tree');
+  row.preservation = { directory, root: copy, verified: false };
+  const before = fingerprint(row.root);
+  fs.cpSync(row.root, copy, { recursive: true, dereference: false, verbatimSymlinks: true,
+    preserveTimestamps: true, mode: fs.constants.COPYFILE_FICLONE, force: false, errorOnExist: true });
+  if (fingerprint(copy) !== before || fingerprint(row.root) !== before || !samePath(row, stamp(row.root)))
+    throw Error('scratch changed during preservation');
+  row.preservation = { ...row.preservation, verified: true, sha256: before };
+  fs.writeFileSync(path.join(directory, 'preservation.json'), JSON.stringify({
+    schema: 'test-scratch-preservation/v1', journal, source: row, at: new Date().toISOString(),
+  }) + '\n', { flag: 'wx', mode: 0o600 });
 }
 
 export function recoverScratch(journal, { joined, suite, lookup = lookupProcess, groupProbe = probeGroup } = {}) {
@@ -84,16 +124,34 @@ export function recoverScratch(journal, { joined, suite, lookup = lookupProcess,
   // Classify every registration before removing ancestors. An escaped live
   // owner or an unknown nested root must survive another owner's recursive rm.
   const protectedRoots = results.filter(row => row.status === 'retained' && path.isAbsolute(row.root ?? '')).map(row => row.root);
+  const overlapsRetained = file => protectedRoots.some(root => root === file || root.startsWith(file + path.sep) || file.startsWith(root + path.sep));
+  // Preserve every eligible registration before deleting any nested tree.
+  // Otherwise an ancestor's later checkpoint could already be missing evidence.
+  for (const row of results.filter(row => row.status === 'eligible')) {
+    try {
+      if (overlapsRetained(row.root)) throw Error('contains retained scratch');
+      checkpoint(row, journal);
+    } catch (error) {
+      row.status = 'retained'; row.retention = 'unknown'; row.reason = error.message === 'contains retained scratch'
+        ? error.message : `preservation refused; source untouched: ${error.message}`;
+      protectedRoots.push(row.root);
+    }
+  }
   for (const row of results.filter(row => row.status === 'eligible').sort((a, b) => b.root.length - a.root.length)) {
     try {
-      if (protectedRoots.some(root => root === row.root || root.startsWith(row.root + path.sep))) {
+      if (overlapsRetained(row.root)) {
         row.reason = 'contains retained scratch';
       } else if (fs.realpathSync(row.root) !== row.root || !samePath(row, stamp(row.root))) {
         row.reason = 'path identity changed';
-      } else { fs.rmSync(row.root, { recursive: true }); row.status = 'removed'; continue; }
+      } else { fs.rmSync(row.root, { recursive: true }); row.status = 'removed'; }
     } catch (error) {
-      if (error.code === 'ENOENT') { row.status = 'absent'; continue; }
-      row.reason = error.message;
+      // ENOENT during recursion is not proof that the whole root is absent.
+      row.reason = `removal failed; whole evidence preserved at ${row.preservation.root}: ${error.message}`;
+    }
+    if (row.status === 'removed') {
+      try { fs.rmSync(row.preservation.directory, { recursive: true }); delete row.preservation; }
+      catch (error) { row.preservation.cleanup_error = error.message; }
+      continue;
     }
     row.status = 'retained'; row.retention = 'unknown'; protectedRoots.push(row.root);
   }

@@ -1,0 +1,42 @@
+import test from '../../test/helpers/bounded-test.mjs';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fixtureFleet } from '../../test/helpers/offline-herdr.mjs';
+import { makeFixture, ignoreLaneState, openLane, commitFile, git, lane, laneProcess, waitForFile } from './lane-fixture.mjs';
+
+test('running lane check finishes under a new project HOLD and only landing is refused', async t => {
+  const f = makeFixture(); t.after(() => f.cleanup());
+  fixtureFleet(t, f.root); f.env.HERDR_MONITOR_FLEET = process.env.HERDR_MONITOR_FLEET;
+  ignoreLaneState(f);
+  const topic = 'hold-check', workspace = openLane(f, topic);
+  commitFile(workspace, 'owned.txt', 'owned work\n', 'Owned change');
+  const head = git(workspace, ['rev-parse', 'HEAD']), base = git(f.repo, ['rev-parse', 'main']);
+  const marker = path.join(f.repo, '.lane/supervisor/HOLD'), ready = path.join(f.root, 'check-ready');
+  const script = path.join(f.root, 'check.mjs');
+  fs.writeFileSync(script, `import fs from 'node:fs';
+    fs.writeFileSync(${JSON.stringify(ready)}, 'running');
+    const timer = setInterval(() => {
+      if (!fs.existsSync(${JSON.stringify(marker)})) return;
+      clearInterval(timer);
+      console.log('TAP version 13\\nok 1 - running check observed HOLD and completed\\n1..1\\n# tests 1\\n# pass 1\\n# fail 0');
+    }, 20);`);
+  const command = `'${process.execPath}' '${script}'`;
+  const check = laneProcess(f, ['check', '--cmd', command], { cwd: workspace });
+  await waitForFile(ready, text => text === 'running');
+  assert.equal(check.child.exitCode, null);
+  fs.mkdirSync(path.dirname(marker), { recursive: true }); fs.writeFileSync(marker, 'proving HOLD\n');
+  const completed = await check.completed;
+  assert.equal(completed.code, 0, completed.stderr + completed.stdout);
+  const gate = JSON.parse(fs.readFileSync(path.join(workspace, '.lane/gate.json')));
+  assert.equal(gate.head, head); assert.equal(gate.executed, true); assert.equal(gate.exit_code, 0);
+  assert.equal(gate.node_version, process.version); assert.equal(gate.command, command);
+  assert.match(fs.readFileSync(gate.log, 'utf8'), /observed HOLD and completed/);
+  const held = lane(f, ['promote', topic, '--expected-head', head]);
+  assert.equal(held.status, 1); assert.match(held.stderr, /PROMOTION_HELD/);
+  assert.equal(git(f.repo, ['rev-parse', 'main']), base);
+  assert.equal(git(workspace, ['rev-parse', 'HEAD']), head);
+  assert.equal(git(workspace, ['status', '--porcelain']), '');
+  assert.equal(fs.readFileSync(marker, 'utf8'), 'proving HOLD\n');
+  console.error(`HOLD_CHECK_WITNESS: ${JSON.stringify({ head, base, gate, landing_exit: held.status, landing_refusal: held.stderr.trim() })}`);
+});

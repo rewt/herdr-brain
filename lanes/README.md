@@ -133,6 +133,21 @@ HOLD returns `PROMOTION_HELD: supervisor HOLD exists; nothing merged` and keeps
 the lane branch and worktree. After the supervisor clears the marker, a fresh
 request must pass the current native, claim, source and Git guards.
 
+Project HOLD fences new line effects and landing. It does not cancel an already
+running owned `lane check`: let that check and its evidence hooks finish, then
+attempt landing through the usual fresh guard. A worker wrapper must not turn
+HOLD observation into a signal to an in-flight check. Explicit cancellation and
+the runner's owned-process safety controls keep their existing behavior.
+
+Scratch recovery checkpoints every eligible owned tree beside its durable
+journal before unlinking any tree. Content, modes and symlink targets are
+verified before deletion; copy failures leave source untouched. An unlink
+failure retains the whole verified copy and its `preservation.json` receipt,
+even if the original recursive removal already deleted siblings. Unknown/live
+owners and retained descendants still prevent deletion. Successful reclamation
+removes its temporary checkpoint; failed preservation/removal evidence stays
+with the attempt for its owner to reconcile, without changing permissions.
+
 `lane promote TOPIC --expected-head FULL_COMMIT_HASH` checks an authorized head
 under the promotion lock and refuses tip changes or a required rebase. Queue
 callers use the same check. Add `--if-current-run R-n --org /record` to recheck

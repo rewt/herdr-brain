@@ -35,6 +35,9 @@ Use BCH's own supported entry under its identity rather than importing this
 Brain-relative command. Clean Git, the actual worktree/common directory, native
 identity, claim generation, source ownership, expected head, main CAS/FF and
 STOP/HOLD remain enforced. No test, review or report readiness gate is added.
+For Brain, project HOLD blocks new line effects and landing; let an already
+running owned check and its evidence hooks finish. Do not add a wrapper that
+signals an in-flight check merely because HOLD appeared.
 If main moved, rebase in the owned lane, resolve real conflicts, and capture the
 new full head before requesting promotion. Protected commands use the prescribed
 native approval path. A native refusal stops that effect; an UNKNOWN attempt is

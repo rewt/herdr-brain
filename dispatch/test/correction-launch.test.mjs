@@ -2,7 +2,8 @@ import test from '../../test/helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import {fixture,promptCalls} from './dispatch-fixture.mjs';
+import {fixture,promptCalls,pauseHook,until} from './dispatch-fixture.mjs';
+import {ADMISSION_WAIT_MS,loadTimeout} from '../../lib/deadline.mjs';
 
 const launches=f=>f.calls().filter(c=>c.type==='lane'&&c.a[0]==='dispatch');
 function correction(t,{author=false,merged=false,sameLane=false}={}) {
@@ -112,6 +113,54 @@ for(const change of ['head','dirty','rewind'])test(`fresh main-based fix refuses
   } else assert.equal(saved.failure.code,'DISPATCH_INPUT_CHANGED');
   assert.equal(saved.native_launch_attempted,false);
   assert.equal(launches(f).length,0);assert.equal(promptCalls(f).length,0);
+});
+
+for(const recovered of [false,true])test(`fresh main-based fix ${recovered?'launches recovered':'refuses dirty'} allocation after preparation`,async t=>{
+  const f=correction(t),base=f.git(['rev-parse','HEAD']);
+  const hook=pauseHook(f,`const rename=fs.renameSync;let once=true;
+fs.renameSync=function(from,to) {
+ const result=rename.call(this,from,to);
+ if(once && String(to).startsWith(${JSON.stringify(path.join(f.org,'dispatch')+path.sep)}) && String(to).endsWith('.json') && JSON.parse(read(to)).stage==='worker') {
+  once=false;pause();
+ }
+ return result;
+};`);
+  const pending=f.concurrent([f.item,'--lane','topic','--route','engineer','--brief',f.brief],hook);
+  let result,prepared;
+  try {
+    await until(()=>fs.existsSync(hook.PAUSE_MARKER),loadTimeout(ADMISSION_WAIT_MS));
+    prepared=job(f);
+    assert.equal(prepared.stage,'worker');
+    assert.equal(prepared.correctionLaunchProtocol,1);assert.equal(prepared.correction.ref,undefined);
+    assert.equal(prepared.base,base);assert.equal(prepared.correction.base,base);
+    assert.equal(f.calls().filter(c=>c.type==='lane'&&c.a[0]==='prepare').length,1);
+    assert.equal(f.git(['rev-parse','HEAD'],prepared.workspace),base);
+    assert.equal(f.git(['status','--porcelain=v1'],prepared.workspace),'');
+    assert.equal(prepared.native_launch_attempted,false);assert.equal(launches(f).length,0);
+    const unsaved=path.join(prepared.workspace,'unsaved');
+    fs.writeFileSync(unsaved,'changed allocation after preparation');
+    assert.equal(f.git(['status','--porcelain=v1'],prepared.workspace),'?? unsaved');
+    if(recovered)fs.unlinkSync(unsaved);
+  } finally {
+    fs.writeFileSync(hook.PAUSE_RELEASE,'go');
+    result=await pending.done;
+  }
+  const saved=job(f);
+  assert.equal(f.jobs().length,1);assert.equal(saved.run,prepared.run);
+  assert.equal(saved.base,base);assert.equal(f.git(['rev-parse','HEAD'],saved.workspace),base);
+  if(recovered) {
+    assert.equal(result.code,0,result.stderr);
+    assert.equal(saved.stage,'complete');assert.equal(saved.failure,undefined);
+    assert.equal(launches(f).length,1);assert.equal(promptCalls(f).length,1);
+    assert.ok(saved.watcher.pid);
+  } else {
+    assert.equal(result.code,1,result.stderr);
+    assert.equal(saved.failure.code,'DISPATCH_INPUT_CHANGED');
+    assert.match(saved.error,/launched fresh fix source changed before prompt or launch/);
+    assert.equal(saved.native_launch_attempted,false);
+    assert.equal(launches(f).length,0);assert.equal(promptCalls(f).length,0);
+    assert.equal(f.git(['status','--porcelain=v1'],saved.workspace),'?? unsaved');
+  }
 });
 
 for(const merged of [false,true])test(`fresh fix refuses changed ${merged?'previously merged retained':'unlanded'} author branch before native launch`,t=>{

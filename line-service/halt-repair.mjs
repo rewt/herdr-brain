@@ -82,7 +82,7 @@ export function completeHaltPass({repo,org,env,pass,previous,observation,route,a
       add.push(intentFirstCreation({type:'item.added',id:item,kind:'work',role:'engineer',priority:2600,
         title:'Diagnose and repair stalled engineering admission',
         accept:['Diagnose this exact engineering-idle episode and fix its concrete admission cause through normal native dispatch. Preserve item/ancestor/reserved holds, ownership, STOP/HOLD and resource guards. '+uncertainOutcomeDoctrine],
-        meta:{halt_repair:1,halt_episode:episode,route,purpose:'Restore productive engineering admission for the recorded idle episode.',
+        meta:{queue_selected:true,halt_repair:1,halt_episode:episode,route,purpose:'Restore productive engineering admission for the recorded idle episode.',
           scope:`One bounded diagnosis/fix of episode ${episode}. ${evidence} Do not create recursive halt repairs or take reserved actions. File unrelated work separately.`,
           evidence,halt_evidence:{audit,effects,pass,signature:observation.signature},halt_pass:pass,halt_threshold:after}}));
     }

@@ -36,6 +36,7 @@ import {setConfig} from '../lib/config-command.mjs';
 import {readProjectPolicy} from '../lib/config-policy.mjs';
 import {haltObservation,completeHaltPass} from '../line-service/halt-repair.mjs';
 import {inspectReviewAdmission} from '../line-service/review-admission.mjs';
+import {queueSelected} from '../line-service/priority-order.mjs';
 
 const hash=b=>createHash('sha256').update(b).digest('hex');
 function fixture(t,{reported=true,role='engineer'}={}){
@@ -218,6 +219,38 @@ test('ordinary admission rereads policy and selection after capacity without sta
     assert.equal(Object.keys(effects.actions).some(k=>k.startsWith('dispatch:')),false,change);
     assert.ok(effects.ordinary_admission.held.some(h=>h.stage==='launch-mutation'),change);
   }
+});
+
+test('ordinary admission selected-only halt repair is selected and dispatched once through normal repair admission',t=>{
+  const f=fixture(t,{reported:false});
+  f.add([{type:'item.closed',id:'ENG-1',as:'done'},
+    {type:'item.added',id:'ENG-10',role:'engineer',title:'Selected stalled work'}]);
+  const policy={selected_only:true,items:['ENG-10']};
+  ordinaryPolicy(f,policy);admissionPolicy(f,{hold_ordinary:false});
+  let capacityCalls=0;const dispatched=[];
+  const s=admissionService(f,{capacity:kind=>{
+    assert.equal(kind,'build');
+    // The selected work stalls, then capacity is free for the repair in this pass.
+    if(++capacityCalls===1)throw Object.assign(Error('build pool occupied'),{code:'DISPATCH_SESSION_CAP',sessions:{kind:'build',count:1,cap:1,sessions:[]}});
+    return{count:0,cap:1,sessions:[]};
+  },command:(_exe,args)=>{
+    if(!args[0].endsWith('/dispatch/dispatch.mjs'))return{status:0,stdout:'{}',stderr:''};
+    const {state}=f.context(),item=state.items.get(args[1]);
+    assert.equal(item.meta.halt_repair,1);assert.equal(queueSelected(item,state,policy),true);
+    dispatched.push(args);return{status:0,stdout:JSON.stringify({result:'detached'}),stderr:''};
+  }});
+  s.pass();
+  const {state}=f.context(),repairs=[...state.items.values()].filter(i=>i.meta.halt_repair===1);
+  assert.equal(repairs.length,1);const [repair]=repairs;
+  assert.equal(repair.meta.queue_selected,true);assert.equal(queueSelected(repair,state,policy),true);
+  assert.equal(dispatched.length,1);assert.equal(dispatched[0][1],repair.id);
+  assert.equal(dispatched[0][dispatched[0].indexOf('--lane')+1],`line-${repair.id.toLowerCase()}-1`);
+  assert.ok(dispatched[0].includes('--detach'));assert.equal(capacityCalls,3);
+  const rows=diagnostics(f);
+  assert.ok(rows.some(r=>r.action==='capacity-held'&&r.item==='ENG-10'));
+  assert.ok(rows.some(r=>r.action==='engineering-idle'&&r.item===repair.id&&r.dispatch===true));
+  const effects=JSON.parse(fs.readFileSync(path.join(f.directory,'effects.json')));
+  assert.equal(effects.ordinary_admission.held.some(h=>h.item===repair.id),false);
 });
 
 test('ordinary admission idle repair audits adopted policy before its record transaction and keeps the source revision',async t=>{

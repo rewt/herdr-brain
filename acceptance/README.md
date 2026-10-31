@@ -204,7 +204,7 @@ idle observer. It then requires the actual safety-repair row, and retains the
 vanished consumer's durable failed step and original held registration.
 
 After a fixture correction with a retained passing S7 packet on the same exact
-candidate, `INSTALLED_CYCLE_SKIP_PASSED_CASES=S7` omits that independent
+candidate, `INSTALLED_CYCLE_SKIP_PASSED_CASES=S7` omits the S7
 upgrade/rollback case from the lifecycle rerun. No other case can be omitted by
 this selector. Isolation and candidate equality are prerequisites on every new
 scratch allocation. The result uses `brain.installed-lifecycle-control/v1`, lists
@@ -212,3 +212,12 @@ only executed cases and marks `wholeCanary: UNRUN`; combine it with the original
 S7 evidence explicitly, preserving the original red gate. S1 waits for the
 original completed closeout evaluation and native workspace absence as well as
 folder removal, within the unchanged 120-second limit.
+
+S7 is not state-independent of the later lifecycle cases: it runs after A lands
+and before A reports, adds two pin-selection commits to scratch main, and stops
+and restarts the scratch launchd service. With S7 omitted, the later cases run
+on scratch main with two fewer commits and without that preceding maintenance
+cycle. Combining the retained S7 evidence with the subset therefore does not
+prove those later cases after S7's maintenance. The impact is limited because
+line passes run in-process via `service(0).pass()` and S7 restores the scenario
+pin; retain this limitation alongside the combined case evidence.

@@ -137,6 +137,7 @@ suites never block this command. Original attempts and rollback remain intact.
 | `landing` | `status: "PASS"`, selected/affected `scope`, and nonempty `evidence` of actual passing lane checks |
 | `majors` | Explicit applicable-review `scope`, `unresolved: []`, `corrections: [{item, scope, evidence}]`; an empty corrections array means no applicable Majors, attested in the scope |
 | `fullSuite` | Optional `{status: "UNRUN" | "FAIL" | "PASS" | "UNKNOWN", details: "actual result and retained evidence locations"}`; absence records UNRUN |
+| `coordinatorItem` | Owning record item for the coordinator disposition |
 | `attestationDigest`, `attestationSeq` | Exact packet reconciliation recorded as described below |
 
 Each evidence reference is `{file: "/absolute/plain/file", sha256: "..."}`.
@@ -147,15 +148,24 @@ soak, all-run/rescue accounting, holds and review corrections through A2/A3/A4;
 this command consumes their evidence and does not implement the canary itself.
 Landing and Major-correction evidence must be completed `lane-validation/v1`
 receipts with `executed: true`, exit zero, no signal/timeout, Node v20.19.4 and a
-source head ancestral to the candidate. Each such reference also supplies the
-exact sorted `changedFiles` since that head and an explicit `reconciliation`
+full source commit head present in the canonical repository. Pre-rebase heads
+need not be ancestors of the candidate. Each such reference supplies the exact
+sorted `git diff --name-only RECEIPT_HEAD CANDIDATE` as `changedFiles` and an explicit `reconciliation`
 explaining why the selected passing scope still applies. Preserve original red
 attempts and name the correction item; never replace a failure with a green label.
 
 Compute SHA-256 of `JSON.stringify(packet)` **before** adding `attestationDigest`
 and `attestationSeq`. Using the owning project's source record command, record
 `note ITEM 'Consumer release offer reconciled: DIGEST' --decision`, then add that
-note's event sequence and digest to the packet. The decision binds the exact
+note's event sequence and digest to the packet. The note must belong to
+`coordinatorItem` and its actor must match the canonical project's `promote.to`
+(default `supervisor-herdr`). Each canary stage file must itself state
+`candidateCommit` equal to the packet commit and `status: "PASS"`. The verifier
+also reads recorded Major finding links for this project's reviewed commits
+contained in the candidate. Every applicable Major needs its verified
+`correction.discharged` proof at a commit contained in the candidate and its
+correction item in `majors.corrections`; a done/closed correction or an empty
+self-declared inventory does not clear that obligation. The decision binds the exact
 candidate, canary, selected landing scope, applicable Major inventory and full
 suite's informational status. It grants no native or outward authority.
 

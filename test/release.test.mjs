@@ -59,8 +59,10 @@ else if(a[1]==='unlink'){if(process.env.FIXTURE_UNLINK_FAIL)process.exit(9);fs.w
 function offerFixture(f, tag = 't1') {
   const sha = bytes => createHash('sha256').update(bytes).digest('hex');
   const commit = f.git('rev-parse', tag).trim(), org = path.join(f.repo, '.org');
-  const env = { ...f.env, ORG_DIR: org, ORG_ACTOR: 'fixture-coordinator' };
-  const record = (...args) => execFileSync(process.execPath, [path.resolve('bin/org.mjs'), ...args], { cwd: f.repo, env, encoding: 'utf8' });
+  const env = { ...f.env, ORG_DIR: org, ORG_ACTOR: 'supervisor-herdr' };
+  const recordAs = (actor, ...args) => execFileSync(process.execPath, [path.resolve('bin/org.mjs'), ...args],
+    { cwd: f.repo, env: { ...env, ORG_ACTOR: actor }, encoding: 'utf8' });
+  const record = (...args) => recordAs(env.ORG_ACTOR, ...args);
   if (!fs.existsSync(org)) record('init', org);
   const item = record('add', 'Consumer offer fixture').trim();
   const receipt = path.join(f.root, `${tag}-landing.json`), canary = path.join(f.root, `${tag}-canary.json`);
@@ -69,22 +71,28 @@ function offerFixture(f, tag = 't1') {
   fs.writeFileSync(canary, JSON.stringify({ fixture: true, candidateCommit: commit, status: 'PASS' }));
   const reference = file => ({ file, sha256: sha(fs.readFileSync(file)) });
   const landing = () => ({ ...reference(receipt), changedFiles: [], reconciliation: 'Fixture checks apply to the identical candidate source.' });
-  const packet = { schema: 'consumer-release-offer/v1', commit,
+  const packet = { schema: 'consumer-release-offer/v1', commit, coordinatorItem: item,
     manifestSha256: sha(fs.readFileSync(path.join(f.release(tag), '.release-manifest.json'))),
     canary: { status: 'PASS', scope: 'Fixture A2 installed, A3 admission and A4 actual soak reconciliation.',
       evidence: ['installed', 'probation', 'soak'].map(stage => ({ stage, ...reference(canary) })) },
     landing: { status: 'PASS', scope: 'Fixture affected producer check selection.', evidence: [landing()] },
     majors: { scope: 'All fixture candidate reviews accounted; the sole Major is corrected and checked.', unresolved: [],
       corrections: [{ item: 'ENG-fixture-major', scope: 'Original fixture Major corrected and specifically checked.', evidence: [landing()] }] } };
-  const publish = (value = packet, attest = true) => {
+  const publish = (value = packet, attest = true, actor = env.ORG_ACTOR, target = item) => {
     const attestationDigest = sha(JSON.stringify(value));
-    if (attest) record('note', item, `Consumer release offer reconciled: ${attestationDigest}`, '--decision');
+    if (attest) recordAs(actor, 'note', target, `Consumer release offer reconciled: ${attestationDigest}`, '--decision');
     const events = fs.readFileSync(path.join(org, 'events.jsonl'), 'utf8').trim().split('\n').map(line => JSON.parse(line));
     const file = path.join(f.root, `${tag}-offer.json`);
     fs.writeFileSync(file, JSON.stringify({ ...value, attestationDigest, attestationSeq: events.at(-1).seq }) + '\n');
     return file;
   };
-  return { packet, publish, receipt, canary };
+  // Synthetic immutable record facts are isolated to this fixture's own record.
+  const append = event => {
+    const file = path.join(org, 'events.jsonl'), rows = fs.readFileSync(file, 'utf8').trim().split('\n');
+    const value = { seq: JSON.parse(rows.at(-1)).seq + 1, at: new Date().toISOString(), by: 'fixture', ...event };
+    fs.appendFileSync(file, JSON.stringify(value) + '\n'); return value;
+  };
+  return { packet, publish, receipt, canary, record, append };
 }
 test('consumer offer refuses missing canary, landing evidence, unresolved Majors and unrecorded disposition', t => {
   const f = scratch(t); f.ok(['build', 't1', '--landing-checks']);
@@ -135,11 +143,97 @@ test('consumer offer refuses altered, red, wrong-runtime and stale-source landin
     const ref = { ...q.packet.landing.evidence[0], sha256: sha(fs.readFileSync(q.receipt)) };
     const packet = { ...q.packet, landing: { ...q.packet.landing, evidence: [ref] }, majors: { ...q.packet.majors, corrections: [] } };
     const result = f.run(['offer', 't1', q.publish(packet)]);
-    assert.notEqual(result.status, 0); assert.match(result.stderr, /passing pinned-runtime check|not an ancestor/);
+    assert.notEqual(result.status, 0); assert.match(result.stderr, /passing pinned-runtime check|scope reconciliation/);
   }
   fs.writeFileSync(q.receipt, original);
   const file = q.publish(); fs.appendFileSync(q.canary, ' ');
   assert.match(f.run(['offer', 't1', file]).stderr, /evidence changed/);
+});
+test('consumer offer reconciles sibling producer heads for landing and Major corrections without replay', t => {
+  const f = scratch(t); f.ok(['build', 't2', '--landing-checks']); const q = offerFixture(f, 't2');
+  const candidate = q.packet.commit;
+  // Candidate C (t2) and producer R are siblings off t1, with a nonempty tree delta.
+  const base = f.git('rev-parse', 't1').trim();
+  const sibling = f.git('commit-tree', 't1^{tree}', '-p', base, '-m', 'pre-rebase producer R').trim();
+  assert.equal(f.git('merge-base', sibling, candidate).trim(), base);
+  assert.notEqual(sibling, candidate);
+  const changedFiles = f.git('diff', '--name-only', sibling, candidate).trim().split('\n').sort();
+  assert.ok(changedFiles.length > 0);
+  const receipt = JSON.parse(fs.readFileSync(q.receipt));
+  const reference = (head, files = changedFiles, reconciliation = 'The selected producer checks cover C after rebasing R; reconcile the exact tree delta.') => {
+    fs.writeFileSync(q.receipt, JSON.stringify({ ...receipt, head }));
+    return { file: q.receipt, sha256: createHash('sha256').update(fs.readFileSync(q.receipt)).digest('hex'), changedFiles: files, reconciliation };
+  };
+  const packet = row => ({ ...q.packet, landing: { ...q.packet.landing, evidence: [row] },
+    majors: { ...q.packet.majors, corrections: [{ ...q.packet.majors.corrections[0], evidence: [row] }] } });
+  for (const [head, files, reconciliation, pattern] of [
+    [sibling, [], 'Incorrect delta', /scope reconciliation/],
+    [sibling, changedFiles, '', /scope reconciliation/],
+    ['f'.repeat(40), changedFiles, 'Missing object', /cat-file|canonical commit/],
+    [f.git('rev-parse', 't1^{tree}').trim(), changedFiles, 'Tree is not a commit', /canonical commit/],
+  ]) {
+    const result = f.run(['offer', 't2', q.publish(packet(reference(head, files, reconciliation)))]);
+    assert.notEqual(result.status, 0); assert.match(result.stderr, pattern);
+    assert.equal(fs.existsSync(path.join(f.home, 'offers/t2.json')), false);
+  }
+  const valid = reference(sibling);
+  // Exercise the Major-correction verifier independently of landing evidence.
+  const invalidFix = packet({ ...valid, changedFiles: [] });
+  invalidFix.landing.evidence = [valid];
+  assert.match(f.run(['offer', 't2', q.publish(invalidFix)]).stderr, /scope reconciliation/);
+  f.ok(['offer', 't2', q.publish(packet(valid))]);
+  assert.equal(fs.existsSync(f.gateLog), false, 'no producer or broad check replay');
+});
+test('consumer offer binds canary content, coordinator actor and disposition item', t => {
+  const f = scratch(t); f.ok(['build', 't1', '--landing-checks']); const q = offerFixture(f);
+  const other = q.record('add', 'Unrelated disposition item').trim();
+  for (const [actor, item] of [['another-worker', q.packet.coordinatorItem], ['supervisor-herdr', other]]) {
+    const result = f.run(['offer', 't1', q.publish(q.packet, true, actor, item)]);
+    assert.notEqual(result.status, 0); assert.match(result.stderr, /recorded coordinator disposition/);
+  }
+  const original = fs.readFileSync(q.canary);
+  for (const change of [{ status: 'FAIL' }, { status: 'INCOMPLETE' }, { candidateCommit: f.git('rev-parse', 't2').trim() }]) {
+    fs.writeFileSync(q.canary, JSON.stringify({ ...JSON.parse(original), ...change }));
+    const sha256 = createHash('sha256').update(fs.readFileSync(q.canary)).digest('hex');
+    const packet = { ...q.packet, canary: { ...q.packet.canary, evidence: q.packet.canary.evidence.map(row => ({ ...row, sha256 })) } };
+    const result = f.run(['offer', 't1', q.publish(packet)]);
+    assert.notEqual(result.status, 0); assert.match(result.stderr, /canary evidence must pass for the exact candidate/);
+  }
+  fs.writeFileSync(q.canary, original);
+  f.write('.promote.json', JSON.stringify({ to: 'fixture-coordinator' }));
+  f.git('add', '.promote.json'); f.git('commit', '-qm', 'Fixture canonical coordinator');
+  assert.match(f.run(['offer', 't1', q.publish()]).stderr, /recorded coordinator disposition/);
+  f.ok(['offer', 't1', q.publish(q.packet, true, 'fixture-coordinator')]);
+});
+test('consumer offer checks recorded Major obligations and requires a contained verified discharge', t => {
+  const f = scratch(t); f.ok(['build', 't1', '--landing-checks']); const q = offerFixture(f);
+  const source = q.record('add', 'Reviewed fixture source').trim(), correction = q.record('add', 'Fixture Major correction').trim();
+  q.append({ type: 'run.started', id: 'R-fixture-source', item: source, meta: { dispatch_project: path.join(f.repo, '.git') } });
+  // A completed/closed correction and self-attested empty inventory cannot erase a Major.
+  const binding = q.append({ type: 'review.finding-linked', correction_item: correction, source_item: source,
+    finding_key: 'fixture-major-key', finding: { severity: 'major', text: 'Fixture final-release obligation' }, head: q.packet.commit });
+  const run = 'R-fixture-correction';
+  q.append({ type: 'item.updated', id: correction, fields: { meta: { review_source_run: 'R-fixture-source' } } });
+  q.append({ type: 'run.started', id: run, item: correction });
+  const claim = q.append({ type: 'run.claimed', run });
+  q.append({ type: 'report.ingested', run, sha256: 'fixture-report', report: { outcome: 'done' } });
+  q.append({ type: 'item.closed', id: correction, as: 'done' });
+  const packet = { ...q.packet, majors: { ...q.packet.majors, corrections: [{ ...q.packet.majors.corrections[0], item: correction }] } };
+  const refuse = value => {
+    const result = f.run(['offer', 't1', q.publish(value)]);
+    assert.notEqual(result.status, 0); assert.match(result.stderr, /recorded Major/);
+  };
+  refuse(packet);
+  const discharge = { type: 'correction.discharged', item: correction, run, report_sha256: 'fixture-report', claim_generation: claim.seq,
+    review_key: `${source}:${q.packet.commit}`, findings: [{ key: binding.finding_key, finding_seq: binding.seq, head: f.git('rev-parse', 't2').trim() }] };
+  q.append({ type: 'change.landed', item: correction, run, head: discharge.findings[0].head, project: path.join(f.repo, '.git'),
+    producer: { ownership_generation: claim.seq } });
+  q.append(discharge); refuse(packet);
+  q.append({ type: 'change.landed', item: correction, run, head: q.packet.commit, project: path.join(f.repo, '.git'),
+    producer: { ownership_generation: claim.seq } });
+  q.append({ ...discharge, findings: [{ ...discharge.findings[0], head: q.packet.commit }] });
+  refuse({ ...packet, majors: { ...packet.majors, corrections: [] } });
+  f.ok(['offer', 't1', q.publish(packet)]);
 });
 test('optional full and live preparation alone cannot qualify a new consumer offer', t => {
   const f = scratch(t); f.ok(['build', 't1', '--live']);

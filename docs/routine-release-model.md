@@ -45,7 +45,11 @@ results, full source range/producer selection and the complete applicable Major
 inventory. Semantic coverage remains the coordinator's responsibility: a hash
 or a green check filename alone does not establish that coverage. A canary FAIL,
 INCOMPLETE or missing actual soak is not PASS. Reuse valid producer receipts;
-reconcile ancestor checks and changes explicitly instead of replaying green runs.
+reconcile ancestor or pre-rebase checks against the exact candidate tree delta
+instead of replaying green runs. The verifier checks recorded applicable Major
+finding discharges, the canonical coordinator and owning disposition item, and
+PASS/candidate bindings inside the canary stage files. Genuine soak and semantic
+coverage remain with the release coordinator.
 
 The full-suite field defaults to UNRUN. FAIL, UNKNOWN, PASS and UNRUN are all
 informational and never veto an otherwise qualified offer. Retain original

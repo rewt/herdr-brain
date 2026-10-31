@@ -54,6 +54,7 @@ Work
   record nudge --id ID --run R-n --project COMMON_DIR --actor NAME --occurred-at ISO_TIME
           --stage STAGE --action TEXT --reason TEXT --evidence REF
                                           journal one manual lifecycle intervention (idempotent)
+  record witness evaluate [--item ID ...] [--dry-run]  evaluate recorded live witness specs; result notes only
   record messages send --id ID --summary TEXT [--kind KIND --run R-n --item ID --question HUM-n]
   record messages send --file ENVELOPE    store an existing session.message.v1 envelope
   record messages digest [--limit 5 --after SEQ --json]  pull a short operator digest
@@ -218,7 +219,7 @@ function mutate(ctx, fn, authority, { deferCloseout = false } = {}) {
   }
   // Event derivation and read-only guards precede the append lock. Intake and
   // queue-review defer their immutable/native effects to the final commit hook.
-  const planned = new Set(['add', 'block', 'unblock', 'note', 'amend-accept', 'ask', 'answer', 'set', 'close', 'reopen', 'start', 'worker', 'abandon', 'lesson', 'ingest', 'sync', 'queue-review', 'messages', 'nudge']);
+  const planned = new Set(['add', 'block', 'unblock', 'note', 'amend-accept', 'ask', 'answer', 'set', 'close', 'reopen', 'start', 'worker', 'abandon', 'lesson', 'ingest', 'sync', 'queue-review', 'messages', 'nudge', 'witness']);
   // Only event derivation may refresh on a race. Commit hooks never replay;
   // the store permits one refresh after a committed, idempotent config audit.
   // Message preparation includes its fresh native sender observation. It may
@@ -1180,6 +1181,7 @@ const COMMANDS = {
   lookup: argv => import('../lib/lookup.mjs').then(module => module.lookupCommand(argv, { out })),
   messages: async argv => (await import('../messages/record-command.mjs')).messagesCommand(argv, { openOrg, mutate, out }),
   nudge: async argv => (await import('../measurement/nudge-command.mjs')).nudgeCommand(argv, { openOrg, mutate, out }),
+  witness: async argv => (await import('../measurement/witness-command.mjs')).witnessCommand(argv, { openOrg, mutate, out }),
   lesson, lessons,
   'complete-batch': argv => completeBatchCommand(argv, { openOrg, mutate, out }),
   releases: argv => releasesCommand(argv, { openOrg, out }),

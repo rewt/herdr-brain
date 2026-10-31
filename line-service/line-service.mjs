@@ -58,6 +58,7 @@ import {appendPassJournal,withPassJournal,passJournalSize,readPassJournal} from 
 import {negativeEvaluationCache,sourceEvaluationInputs} from './evaluation-cache.mjs';
 import {observeGeneralOwners} from './general-owner-alarm.mjs';
 import {consumeExceptions,returnExceptionReports,checkExceptionTriage} from './exception-triage.mjs';
+import {pendingWitnesses} from '../measurement/live-witnesses.mjs';
 export { reviewAttempt } from './review.mjs';
 
 export const sourceRoot = fileURLToPath(new URL('../', import.meta.url));
@@ -881,6 +882,12 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         timing: { ...timings,pass_lock_ms:timings.pass_lock_ms+performance.now()-lockedAt,
           pass_lock_max_segment_ms:Math.max(timings.pass_lock_max_segment_ms,performance.now()-lockedAt),duration_ms,
           other_scan_and_guard_ms: Math.max(0, duration_ms - timings.effect_command_ms - timings.record_snapshot_ms) } });
+      // Reuse this finite turn after its completion row is durable. A witness
+      // result is just an item note; it cannot select, close or authorize work.
+      if([...snapshot.state.items.values()].some(item=>pendingWitnesses(item).length)){
+        try{current();cli('bin/org.mjs',['witness','evaluate']);}
+        catch(error){log({action:'live-witness-held',reason:error.message});}
+      }
       return { result: 'pass-complete', directory };
     } finally {commandTurn=undefined;try{if(release)checkpointNotices?.();}finally{try{heartbeat('finished');}finally{if(release){
       log({action:'schedule-unlocked',pass:passAt,pid:process.pid,duration_ms:performance.now()-lockedAt});release();release=null;

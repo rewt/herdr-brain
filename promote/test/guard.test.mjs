@@ -266,12 +266,22 @@ test('native green guard refuses an unreviewed Node launcher argument', async t 
   // flags are not inherited by the separate lane promotion process.
   const probe = path.join(f.root, 'launcher-drift.mjs');
   fs.writeFileSync(probe, `import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { withPromotionGuard } from ${JSON.stringify(pathToFileURL(path.join(f.repo, 'promote/guard.mjs')).href)};
-assert.throws(() => withPromotionGuard(${JSON.stringify(f.guard)}, () => assert.fail('drifted launcher integrated')), {
-  message: 'GREEN_REACH_UNKNOWN: Node launcher drift; nothing merged'
-});
+try {
+  withPromotionGuard(${JSON.stringify(f.guard)}, () => {
+    assert.ok(fs.existsSync(${JSON.stringify(path.join(f.org, 'lock'))}));
+    console.log('admitted');
+  });
+} catch (error) {
+  console.log(error.message);
+}
 `);
-  f.ok(f.exec(process.execPath, ['--no-warnings', probe]));
+  // Use the identical child and fixture for admission, drift refusal and recovery.
+  assert.equal(f.ok(f.exec(process.execPath, [probe])), 'admitted');
+  assert.equal(f.ok(f.exec(process.execPath, ['--no-warnings', probe])),
+    'GREEN_REACH_UNKNOWN: Node launcher drift; nothing merged');
+  assert.equal(f.ok(f.exec(process.execPath, [probe])), 'admitted');
   assert.equal(f.git(['rev-parse', 'main'], f.project), f.base);
   assert.equal(fs.existsSync(path.join(f.org, 'lock')), false);
   assert.equal(fs.existsSync(f.checked), false);

@@ -1318,3 +1318,38 @@ Focused checks for this seam: `test/pass-journal.test.mjs`,
 `HERDR_PASS_JOURNAL_WITNESS` to an owned evidence directory with a real journal
 copy, `effects.json` and `copy.json` (bytes, rows, SHA-256) to exercise and retain
 the large-copy rotation receipt. Never point the witness at the live service.
+
+## Unchanged negative evaluations
+
+The general pass retains negative admission and source-discovery observations in
+`effects.json#negative_evaluations`. Entries bind the actual project/record and
+source revision, dependency events and folded subjects, ancestors, linked
+prerequisites and review/question children, admission policy, brief/report/request
+files, and workspace/Git input metadata. Fingerprinting uses filesystem reads,
+including absence, rather than invoking Git in deleted workspaces. Inventories
+larger than 4096 paths, linked directory trees or unreadable inputs are evaluated
+fresh. The bound declines caching; it never truncates a fingerprint. Common
+source/policy changes conservatively invalidate their dependent observations.
+
+Only negative evaluations can be skipped. Ready candidates, capacity failures,
+original attempts/UNKNOWN continuation readback, and all effect-boundary guards
+remain fresh. A cache hint cannot start work, authorize review, clear a hold,
+replace an attempt or waive final-release coverage. Cache misses retain the
+existing hold diagnostics; hits retain the original diagnosis without repeating
+its hold/eligibility rows. The journal remains under the existing scheduling lock
+and inherits interleaved writes when that lock is yielded. `pass-complete` records
+`evaluations` (evaluated/skipped by stage) and the open candidate `backlog`.
+
+Read historical pass counts and duration through the B4 measurement entry:
+
+```sh
+node bin/measure-lifecycle.mjs --passes /own/evidence/passes.jsonl \
+  --from 2026-10-30T23:30:00Z --cutoff 2026-10-31T03:00:00Z
+```
+
+The reader streams large journals. PID-bound passes have per-pass hold and
+admission-eligible counts; older rows without PID retain unknown per-pass counts
+and separate window totals. Compare backlog, source revision, cache warmup and
+completion coverage alongside duration. Fixture reductions alone do not establish
+that a live line became faster. No installed service, runtime pin or watcher is
+changed by this cache.

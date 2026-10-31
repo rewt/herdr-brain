@@ -191,7 +191,7 @@ export function observeReviewHealth({repo,org,index,passId,errorCounts,prior,env
     gap_passes:counts.missing_queue||counts.coverage_gaps.length?(prior?.gap_passes??0)+1:0};
 }
 
-export function discoverChanges({events,state,repo,org,identity,boundary,readGit=git,pendingOnly=false,index}) {
+export function discoverChanges({events,state,repo,org,identity,boundary,readGit=git,pendingOnly=false,index,heldCache}) {
   const changes=[],holds=[],unattributed=[];
   try{boundary??=phase0Boundary(events,{repo,org,identity});}catch(e){return {changes,holds:[{reason:e.message}]};}
   index??=canonicalReviewIndex({events,state,repo,org,identity,boundary,readGit});const eligible=new Set(index.heads);
@@ -206,6 +206,11 @@ export function discoverChanges({events,state,repo,org,identity,boundary,readGit
     // own-landing receipts make those runs producers, never report references.
     if(!item||!roleIs(item,'ENG')&&!landed.has(run.id)||roleIs(state.items.get(item.parent),'REV')||item.meta.review_fix_of)continue;
     const group=producerGroupKey(item.id,run.id,run.report?.sha256),backfills=[...authorized.values()].filter(e=>e.run===run.id&&e.item===item.id),tokens=claimedCommitTokens(run.report?.artifacts??[]),nativeQueues=queues.filter(q=>!archived.has(q.id)&&sameProducerQueue(q,item.id,run.id)&&q.meta.review_target?.evidence_kind==='native-landings/v1');
+    const relevant=(landed.get(run.id)??[]).length||backfills.length||tokens.some(token=>index.heads.some(head=>head.startsWith(token)));
+    if(!relevant&&!(tokens.length&&run.report?.seq>boundary.seq))continue;
+    const cached=heldCache?.(item,run);if(cached?.skip)continue;
+    const holdStart=holds.length;
+    try {
     // Settled history remains two batched Git index reads, no per-report disk
     // or native inventory. An immutable report's intermediate heads are one group.
     if(!(landed.get(run.id)??[]).length&&!backfills.length&&!tokens.some(token=>index.heads.some(head=>head.startsWith(token)))){
@@ -266,6 +271,7 @@ export function discoverChanges({events,state,repo,org,identity,boundary,readGit
           if(extra)changes.push({item,run,target:extra,cutoff});
         }
     }catch(e){holds.push({item:item.id,run:run.id,reason:e.message,...(e.source_provenance?{source_provenance:e.source_provenance}:{})});}
+    }finally{if(holds.length>holdStart)cached?.retain(holds.slice(holdStart).map(h=>h.reason).join('; '));}
   }
   for(const row of index.entries)if(row.attribution==='missing'){
     const selector=canonicalSelector(row.head),retained=queues.filter(q=>q.meta.review_source_selector===selector);

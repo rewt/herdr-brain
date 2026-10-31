@@ -99,6 +99,14 @@ HOLD exists; nothing merged`; STOP retains its existing refusal. Both keep the
 branch and worktree. Once the supervisor clears the marker, a fresh request
 rechecks the current source, native identity, claim and Git fences.
 
+For queued trains, HOLD present at capture produces a terminal `outcome: refused`,
+code `PROMOTION_HELD` for each request, with no validation or landing. It does not park those
+requests in the queue. Clearing HOLD alone does not replay them: explicitly
+enqueue fresh requests with current authorization; the original refusal results
+remain in queue history. The pre-lock memory gate's STOP handling is separate:
+a resumed train keeps its existing attempt checkpoint rather than replacing it
+with a fresh pre-execution refusal. HOLD does not change that recovery contract.
+
 On success the worker runs the shared retirement planner and executor scoped to
 its promoted lane, after record reconciliation. A kept or occupied pane prevents
 Git-only worktree removal. Cleanup refusal/failure is retained as

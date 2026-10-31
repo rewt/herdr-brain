@@ -17,6 +17,7 @@ import { invokeHerdr as invoke } from './herdr-edge.mjs';
 import { fixtureInboxEnrolled } from '../messages/fixture.mjs';
 import { inboxPath, readInbox } from '../messages/inbox-read.mjs';
 import { recipientOutcomes } from '../messages/recipient-outcome.mjs';
+import { captureWorkerException } from './exception-source.mjs';
 export { inboxPath, readInbox } from '../messages/inbox-read.mjs';
 
 const SELF = fileURLToPath(import.meta.url);
@@ -378,7 +379,9 @@ export function enqueueSupervisor(to, message, options = {}) {
       // Never rewrite an already journalled notice to invent independence.
       return;
     }
+    const exception=options.projectSupervisor?captureWorkerException({message,project,correlation:ordering,cwd:options.cwd??process.cwd()}):undefined;
     append({ type: 'notice', id, to, message, correlation: ordering, project,
+      ...(exception?{exception}:{}),
       ...(options.projectSupervisor ? { recipient_role: 'project-supervisor' } : {}),
       owner: 'supervisor-inbox', herdr: options.herdr ?? 'herdr', attempts, retrySeconds,
       title: options.title ?? 'Supervisor notice queued', sound: options.sound ?? 'request' });

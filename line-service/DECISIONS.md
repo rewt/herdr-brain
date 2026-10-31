@@ -49,6 +49,49 @@ session, with the project supervisor supplying routing and its recommendation.
 It adds guidance for future workers, not a resolver/model service or
 proof of live overnight success. See [measurement and dated sources](../docs/reports/ENG-936/decision.md).
 
+## Finite exception intake
+
+`exception-triage.mjs` consumes explicit worker exceptions/questions from the
+existing supervisor inbox during a normal line pass. New originating worker
+notices capture the verified native worker, original dispatch/run/claim, current
+owning and ancestor intent/decisions, source head/diff, and project/record policy.
+The inbox keeps its original ID, recipient and all delivery attempts. Its
+transport state is never a handling acknowledgement.
+
+One captured run/claim incident gets one `supervisor.exception-disposition` in
+the owning record. Duplicate notices point to that original disposition. A safe
+incident can select one ordinary engineering triage item, using normal dispatch,
+claims, capacity, report intake and closeout. At most one such owner is active.
+The worker explicitly acknowledges responsibility in its item note, then returns
+a finite report. A question needs its original recommendation and full intent;
+the session reasons only within existing delegation. This does not re-enable
+automatic blocked-work, backlog or review/dispatch judges.
+
+Stale/missing tuples, untracked source, missing/foreign supervisor bindings,
+expired requesting sessions, UNKNOWN/refused delivery, held/reserved work and a
+busy finite owner retain the recorded project supervisor as recovery custodian.
+No timer or subsequent idle pass replaces them. Existing diagnostic alarms get
+a retained custodian disposition; an already open halt repair remains their
+finite owner. The completed-idle detector continues through `halt-repair.mjs`.
+STOP/HOLD prevents intake. Malformed inbox journals retain their bytes and stop
+this consumer. No consumer calls a model, repairs native effects, changes saved
+recipients, creates a second queue or starts a scheduler.
+
+Selection and the launch/prompt fences recheck the captured subject, claim,
+source, intent and policy. A finished triage cannot automatically redispatch;
+its existing custodian owns any allowed one-reframe/park decision. The line
+records an immutable report pointer on the original requesting item. A current
+done answer returns once through the existing worker inbox/effects path; stale
+or unresolved reports remain custodian-owned. The requesting owner must recheck
+native/claim/source/HOLD/STOP. A return is agent evidence, never an applied
+decision, a human answer, or permission to clear an original refusal.
+
+ENG-939 retains routine notice routing and safe rotation, including all saved
+callbacks; this intake does not migrate those recipients. Native-only recovery
+remains with the actual canonical supervisor pending separately authorized SR3.
+Installed/live acceptance and the retirement absence window require their own
+recorded witnesses; focused source fixtures do not establish them.
+
 ## Historical captured decision contract
 
 The following contract is retained for original captured work and recovery.

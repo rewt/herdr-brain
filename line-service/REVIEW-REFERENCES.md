@@ -250,3 +250,25 @@ uses the normal record `queue-review` and dispatch path where eligible. Do not
 manually queue a replacement, restart a service, or retry an original UNKNOWN
 effect. Final release coverage and actual BCH acceptance remain with their
 respective owners; these commands provide neither release nor adoption authority.
+
+## Original completion planning failures
+
+The ordinary line also reconciles an original `review-complete` attempt whose
+terminal `line-operation` receipt proves status 1 with the exact typed
+`RECORD_PLANNING_CONFLICT` pre-append diagnostic, when its immutable PASS verdict
+is already recorded. This is separate from queue continuation: it never invokes
+the original completion command, creates a new effect attempt or launches a review.
+
+`review-completion.mjs --repo REPO --org ORG --run R-n --key ORIGINAL_KEY`
+inspects the exact original read-only. The writer is available only to the
+installed line's actual pass/subject owner. It rechecks the terminal intent and
+result, original completion token, claim generation, exact source verdict and
+report bytes, independent blockers, reserved/ancestor holds, STOP/HOLD, command
+uncertainty and clean source/head CAS. It preserves the original journal entry
+and terminal receipt byte for byte, archives them immutably, and atomically
+appends `line-service.review-completion-reconciled` and review-item closure.
+Identical readback is idempotent; changed or UNKNOWN originals remain held with
+their owner in the existing pass audit. Even a changed completion token cannot
+mint a replacement for a retained original. The existing source-bound closer
+owns session/folder release; historical successful closer receipts are reused,
+never replaced by another physical cleanup or a fabricated success.

@@ -8,24 +8,26 @@ import {gitProject} from '../lib/project.mjs';
 import {loadEvents,transact} from '../lib/store.mjs';
 import {fold} from '../lib/state.mjs';
 import {noticeLock} from '../supervisor/notice-lock.mjs';
-import {sourceRoot,serviceDirectory} from '../line-service/line-service.mjs';
+import {sourceRoot,serviceDirectory,createLineService} from '../line-service/line-service.mjs';
 import {recordReviewResults,recordReviewCompletion,reviewCompletionPlan} from '../line-service/phase1.mjs';
+import {inspectReviewCompletion,reconcileReviewCompletion} from '../line-service/review-completion.mjs';
+import {commandIntent,finishCommand,forgetActiveCommand} from '../lib/command-receipt.mjs';
 import {chainFor,terminalReason} from '../lib/retire.mjs';
 import {readCloseoutEntries} from '../lib/closeout.mjs';
 const hash=b=>createHash('sha256').update(b).digest('hex');
-function fixture(t){
+function fixture(t,{verdict='FAIL'}={}){
   const f=configFixture(t,{custom:true}),org=f.env.ORG_DIR,identity=gitProject(f.cwd).identity,base=f.git('rev-parse','HEAD');fs.writeFileSync(path.join(f.cwd,'source'),'actual changed source');f.git('add','source');f.git('commit','-qm','Source change');
   const head=f.git('rev-parse','HEAD'),workspace=path.join(f.ownerRoot,'review-lane');f.git('worktree','add','-qb','lane/review-source-1',workspace);
   const sourceText=`---\nrun: R-0\noutcome: done\nsummary: Landed source.\nartifacts:\n  - "Commit: ${head}"\n---\n`;fs.writeFileSync(path.join(org,'reports/R-0.md'),sourceText);
   const target={head,base,reportHash:hash(sourceText),evidence:path.join(org,'reports/R-0.md')},key=`ENG-1:${head}`,directory=serviceDirectory(org,identity),owner={controller:'brain',legacy:false,release:{id:'source',root:sourceRoot,commit:null,identity:gitProject(sourceRoot).identity}};
-  const text='---\nrun: R-1\noutcome: done\nsummary: Completed independent judgment.\nverdict: FAIL\nproposals: []\n---\nVerdict: **FAIL**\n- [Major] source:1 - correction remains independently owned.\n';fs.writeFileSync(path.join(org,'reports/R-1.md'),text);
+  const text=`---\nrun: R-1\noutcome: done\nsummary: Completed independent judgment.\nverdict: ${verdict}\nproposals: []\n---\nVerdict: **${verdict}**\n${verdict==='FAIL'?'- [Major] source:1 - correction remains independently owned.\n':''}`;fs.writeFileSync(path.join(org,'reports/R-1.md'),text);
   transact(org,()=>({add:[{type:'item.added',id:'G-1',kind:'goal',title:'Goal'}, {type:'item.added',id:'ENG-1',role:'engineer',title:'Source',parent:'G-1'},
     {type:'run.started',id:'R-0',item:'ENG-1',workspace:f.cwd},{type:'run.claimed',run:'R-0',record:org,project:identity,owner},
     {type:'report.ingested',run:'R-0',file:'reports/R-0.md',sha256:hash(sourceText),report:{outcome:'done',artifacts:[`Commit: ${head}`],extra:{},blockers:[],proposals:[]}},
     {type:'item.added',id:'REV-1',role:'reviewer',title:'Review',parent:'G-1',meta:{review_source_item:'ENG-1',review_source_run:'R-0',review_key:key,review_target:target,review_round_cap:1}},
     {type:'run.started',id:'R-1',item:'REV-1',workspace,meta:{lane:'review-source-1',agent:'reviewer',pane:'review:p',worker_workspace:'review-w',terminal_id:'review-term',agent_session_id:'review-sid'}},
     {type:'run.claimed',run:'R-1',record:org,project:identity,owner},
-    {type:'report.ingested',run:'R-1',file:'reports/R-1.md',sha256:hash(text),report:{run:'R-1',outcome:'done',summary:'Judgment complete',blockers:[],proposals:[],extra:{verdict:'FAIL'}}}]}));
+    {type:'report.ingested',run:'R-1',file:'reports/R-1.md',sha256:hash(text),report:{run:'R-1',outcome:'done',summary:'Judgment complete',blockers:[],proposals:[],extra:{verdict}}}]}));
   const policy=JSON.parse(fs.readFileSync(path.join(f.cwd,'.lane.json')));policy.retirement={closeout_queue:true};fs.writeFileSync(path.join(f.cwd,'.lane.json'),JSON.stringify(policy));f.git('add','.lane.json');f.git('commit','-qm','Fixture closeout policy');
   fs.mkdirSync(directory,{recursive:true});fs.writeFileSync(path.join(directory,'installation.json'),JSON.stringify({at:'2026-10-27T01:00:00Z',repo:f.cwd,org,source:sourceRoot,node:process.execPath,file:path.join(directory,'service.plist'),target:`gui/${process.getuid()}/dev.herdr.line.${path.basename(directory)}`}));
   const env={...f.env};delete env.HERDR_ENV;delete env.HERDR_PANE_ID;
@@ -87,4 +89,92 @@ for(const change of ['report','STOP','claim'])test(`short review preparation ref
   fs.mkdirSync=function(file,...args){const out=mkdir.call(this,file,...args);if(file===path.join(f.org,'lock')&&!injected){injected=true;if(change==='report')fs.appendFileSync(path.join(f.org,'reports/R-1.md'),'changed');if(change==='STOP')fs.writeFileSync(path.join(f.directory,'STOP'),'stop');if(change==='claim')fs.appendFileSync(path.join(f.org,'events.jsonl'),JSON.stringify({seq:f.context().events.at(-1).seq+1,type:'future.unknown'})+'\n');}return out;};
   try{assert.throws(()=>recordReviewResults(f.args),/conflict/);assert.equal(f.context().events.some(e=>e.type==='change.reviewed'),false);}
   finally{fs.mkdirSync=mkdir;release();}
+});
+
+function failedCompletion(t,{attempt='73313d79-0733-4adf-93b9-3cde935541d0'}={}){
+  const f=fixture(t,{verdict:'PASS'}),release=noticeLock(path.join(f.directory,'pass.lock'));
+  try{recordReviewResults(f.args);}finally{release();}
+  const plan=reviewCompletionPlan({...f.context(),runId:'R-1'}),key=`review-complete:R-1:${plan.token}`,at=new Date().toISOString();
+  const ref=commandIntent(f.directory,{exe:'line-operation',args:['review-complete',key],cwd:f.cwd,project:f.identity,org:f.org,subject:'REV-1',key,consumer:'line-service'});
+  const error=Object.assign(Error('record planning conflict: source changed; no append was made'),{code:'RECORD_PLANNING_CONFLICT'});
+  finishCommand(ref,{status:1,stderr:error.message,error});forgetActiveCommand(ref);
+  const entry={state:'held',owner:'line-service',subject:key,execution_subject:'REV-1',attempt,consumer:'line-service',at,commands:[ref],error:error.message,failure:{code:error.code,kind:'unknown'},finished_at:new Date().toISOString()};
+  const file=path.join(f.directory,'effects.json'),save=()=>fs.writeFileSync(file,JSON.stringify({identity:f.identity,org:f.org,actions:{[key]:entry}}));save();
+  const args={...f.args,key},original=fs.readFileSync(file),command=fs.readFileSync(ref.receipt);
+  return{...f,key,entry,ref,file,save,original,command,reconcile:()=>reconcileReviewCompletion(args),inspect:()=>inspectReviewCompletion(args)};
+}
+for(const attempt of ['73313d79-0733-4adf-93b9-3cde935541d0','ffd7d23a-e3c6-4db2-b4ef-794375479499'])test(`original completion reconciles ${attempt} once without replay or changing original bytes`,t=>{
+  const f=failedCompletion(t,{attempt}),before=f.context().events.length,inspected=f.inspect();
+  assert.equal(inspected.proof.attempt,attempt);assert.equal(f.context().events.length,before);
+  const release=noticeLock(path.join(f.directory,'pass.lock'));
+  try{
+    const result=f.reconcile();assert.equal(result.existing,false);assert.equal(f.reconcile().existing,true);
+    const c=f.context(),receipts=c.events.filter(e=>e.type==='line-service.review-completion-reconciled');assert.equal(receipts.length,1);
+    assert.equal(c.state.items.get('REV-1').closed.as,'done');assert.equal(c.state.items.get('ENG-1').closed,null);
+    assert.equal(receipts[0].proof.verdict_seq,inspected.proof.verdict_seq);assert.equal(receipts[0].original_command_replayed,false);
+    assert.deepEqual(fs.readFileSync(f.file),f.original);assert.deepEqual(fs.readFileSync(f.ref.receipt),f.command);
+    const archive=JSON.parse(fs.readFileSync(receipts[0].archive.file));assert.deepEqual(archive.original,f.entry);assert.deepEqual(archive.command,JSON.parse(f.command));
+    assert.ok(readCloseoutEntries(f.identity).some(e=>e.run==='R-1'&&e.signal==='landed'));
+  }finally{release();}
+});
+
+for(const kind of ['status','signal','stdout','native-refusal','message','intent','missing-receipt','active','history','token','claim','report','verdict','duplicate-verdict','blocker','reserved','ancestor-hold','STOP','HOLD','native-context','no-lock','unknown-command','archive'])test(`original completion retains ${kind} without a replacement or closure`,t=>{
+  const f=failedCompletion(t),release=kind==='no-lock'?()=>{}:noticeLock(path.join(f.directory,'pass.lock'));
+  try{
+    if(['status','signal','stdout','native-refusal','message','intent'].includes(kind)){
+      const command=JSON.parse(f.command);
+      if(kind==='status')command.result.status=0;
+      if(kind==='signal')command.result.signal='SIGTERM';
+      if(kind==='stdout')command.result.stdout='unknown effects';
+      if(kind==='native-refusal')command.result.error.code='NATIVE_REFUSAL';
+      if(kind==='message')command.result.stderr='record planning conflict';
+      if(kind==='intent')command.intent.args=['some-other-operation',f.key];
+      fs.writeFileSync(f.ref.receipt,JSON.stringify(command));
+    }
+    if(kind==='missing-receipt')fs.unlinkSync(f.ref.receipt);
+    if(kind==='active'){f.entry.state='started';f.save();}
+    if(kind==='history'){f.entry.history=[{attempt:'older'}];f.save();}
+    if(kind==='token')f.add([{type:'item.updated',id:'REV-1',fields:{title:'Changed review scope'}}]);
+    if(kind==='claim')f.add([{type:'run.claimed',run:'R-1',record:f.org,project:f.identity,owner:f.context().state.runs.get('R-1').owner}]);
+    if(kind==='report')fs.appendFileSync(path.join(f.org,'reports/R-1.md'),'changed bytes');
+    if(kind==='verdict')f.add([{type:'item.updated',id:'REV-1',fields:{meta:{review_target:{...f.context().state.items.get('REV-1').meta.review_target,head:'a'.repeat(40)}}}}]);
+    if(kind==='duplicate-verdict'){const {seq,at,by,...fact}=f.context().events.find(e=>e.type==='change.reviewed');f.add([fact]);}
+    if(kind==='blocker')f.add([{type:'item.added',id:'ENG-99',role:'engineer',title:'Independent blocker'},{type:'link.added',blocker:'ENG-99',blocked:'REV-1'}]);
+    if(kind==='reserved')f.add([{type:'item.updated',id:'REV-1',fields:{meta:{operator_reserved:true}}}]);
+    if(kind==='ancestor-hold')f.add([{type:'item.updated',id:'G-1',fields:{meta:{hold:true}}}]);
+    if(kind==='STOP')fs.writeFileSync(path.join(f.directory,'STOP'),'stop');
+    if(kind==='HOLD'){fs.mkdirSync(path.join(f.cwd,'.lane/supervisor'),{recursive:true});fs.writeFileSync(path.join(f.cwd,'.lane/supervisor/HOLD'),'hold');}
+    if(kind==='native-context')f.env.HERDR_ENV='1';
+    if(kind==='unknown-command')commandIntent(f.directory,{exe:'unknown',args:[],cwd:f.cwd,project:f.identity,org:f.org,subject:'REV-1'});
+    if(kind==='archive'){const file=path.join(f.org,'evidence/review-completion-reconciliation',`completion-${f.entry.attempt}.json`);fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,'changed archive');}
+    const original=fs.readFileSync(f.file);assert.throws(f.reconcile);
+    assert.equal(f.context().state.items.get('REV-1').closed,null);assert.equal(f.context().events.some(e=>e.type==='line-service.review-completion-reconciled'),false);assert.deepEqual(fs.readFileSync(f.file),original);
+  }finally{release();}
+});
+
+test('ordinary line consumes the original completion without invoking its command or minting another attempt',t=>{
+  const f=failedCompletion(t),calls=[];
+  const service=createLineService({repo:f.cwd,org:f.org,to:'fixture-supervisor',env:f.env,maxStarts:0,maxStepsPerStage:0,
+    command:(_exe,args)=>{calls.push(args);return{status:1,stderr:'No external command selected by this fixture'};}});
+  service.pass({reconcileCloseout:false});
+  const c=f.context();assert.equal(c.state.items.get('REV-1').closed?.as,'done');
+  const journal=JSON.parse(fs.readFileSync(f.file));assert.deepEqual(journal.actions[f.key],f.entry);
+  assert.equal(Object.keys(journal.actions).filter(k=>k.startsWith('review-complete:R-1:')).length,1);
+  assert.equal(c.events.filter(e=>e.type==='line-service.review-completion-reconciled').length,1);
+  assert.equal(calls.some(args=>args.includes('review-complete')),false);
+});
+
+for(const change of ['unrelated','claim','report'])test(`original completion preparation ${change==='unrelated'?'refreshes one unrelated append':`retains a late ${change}`}`,t=>{
+  const f=failedCompletion(t),release=noticeLock(path.join(f.directory,'pass.lock')),mkdir=fs.mkdirSync;let injected=false;
+  fs.mkdirSync=function(file,...args){const out=mkdir.call(this,file,...args);if(file===path.join(f.org,'lock')&&!injected){
+    injected=true;
+    const event=change==='claim'?{type:'run.claimed',run:'R-1',record:f.org,project:f.identity,owner:f.context().state.runs.get('R-1').owner}:{type:'note.added',id:'ENG-1',text:'Unrelated work'};
+    fs.appendFileSync(path.join(f.org,'events.jsonl'),JSON.stringify({seq:f.context().events.at(-1).seq+1,at:new Date().toISOString(),...event})+'\n');
+    if(change==='report')fs.appendFileSync(path.join(f.org,'reports/R-1.md'),'changed');
+  }return out;};
+  try{
+    if(change==='unrelated')assert.equal(f.reconcile().existing,false);else assert.throws(f.reconcile);
+    assert.equal(injected,true);assert.equal(f.context().events.filter(e=>e.type==='line-service.review-completion-reconciled').length,change==='unrelated'?1:0);
+    assert.deepEqual(fs.readFileSync(f.file),f.original);assert.deepEqual(fs.readFileSync(f.ref.receipt),f.command);
+  }finally{fs.mkdirSync=mkdir;release();}
 });

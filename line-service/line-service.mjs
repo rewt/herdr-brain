@@ -24,6 +24,7 @@ import { parseArgs, isMain } from '../lib/cli-help.mjs';
 import { reviewAttempt, readServiceJournal } from './review.mjs';
 import {referenceRevision} from './review-reference-proof.mjs';
 import {reviewQueueNoMutation} from './review-queue-outcome.mjs';
+import {completionAttempts,reconcileReviewCompletion} from './review-completion.mjs';
 import { queueConsumer, isQueueReview, validateQueuedReview, reviewQueueBrief, reviewQueueRoute } from './review-queue.mjs';
 import { roleIs } from '../lib/roles.mjs';
 import { recordLineNotice,canonicalFailure } from './record-inbox.mjs';
@@ -503,8 +504,21 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       snapshot = current();
       for(const item of snapshot.state.items.values())if(isQueueReview(item)&&!item.closed){
         const run=snapshot.state.runs.get(item.runs.at(-1));if(!run?.report||run.report.outcome!=='done')continue;
-        try{const plan=reviewCompletionPlan({events:snapshot.events,state:snapshot.state,runId:run.id});effect(`review-complete:${run.id}:${plan.token}`,()=>outside('review-complete',`review-complete:${run.id}:${plan.token}`,()=>recordReviewCompletion({repo,org,runId:run.id,env:childEnv})),undefined,undefined,true);}
-        catch(e){note(`review-complete:${run.id}`,e.message,{item:item.id,run:run.id});}
+        const originals=completionAttempts(effects,run.id);
+        try{
+          if(originals.length){
+            if(originals.length!==1)throw Error('original completion attempts ambiguous; no replacement');
+            const [key,entry]=originals[0];
+            if(entry.state==='complete')throw Error('original completed outcome lacks review closure; retain original');
+            // Use a separate bookkeeping command, never append another command
+            // to the original entry or mint a replacement effect/attempt.
+            withSubject(`review-completion-reconcile:${run.id}`,()=>outside('review-completion-reconcile',`review-completion-reconcile:${run.id}`,
+              ()=>reconcileReviewCompletion({repo,org,runId:run.id,key,env:childEnv})));
+            continue;
+          }
+          const plan=reviewCompletionPlan({events:snapshot.events,state:snapshot.state,runId:run.id});effect(`review-complete:${run.id}:${plan.token}`,()=>outside('review-complete',`review-complete:${run.id}:${plan.token}`,()=>recordReviewCompletion({repo,org,runId:run.id,env:childEnv})),undefined,undefined,true);
+        }
+        catch(e){log({action:'review-completion-held',schema:'review-completion-held/v1',item:item.id,run:run.id,originals:originals.map(([key,entry])=>({key,attempt:entry.attempt})),owner:'project-supervisor',reason:e.message,original_command_replayed:false});note(`review-complete:${run.id}`,e.message,{item:item.id,run:run.id});}
       }
       snapshot=current();
       let closeSteps=0;

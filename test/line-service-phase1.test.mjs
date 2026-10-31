@@ -506,12 +506,54 @@ test('phase1 owes every landed build commit after the boundary even after item c
 });
 
 test('phase1 settled-history scan uses two Git index reads for thousands of old reports',t=>{
-  const f=fixture(t),c=f.context(),state=fold(c.events),old=c.run;
-  const boundary=phase0Boundary(c.events,c);
-  // Settled history predates adoption; a new report citing old source remains diagnostic.
-  state.runs.clear();for(let n=1;n<=2035;n++)state.runs.set(`R-${n}`,{...old,id:`R-${n}`,report:{...old.report,seq:boundary.seq-1,artifacts:[`Commit: ${f.base}`]}});
-  let reads=0;const found=discoverChanges({...c,state,readGit:(repo,args)=>{reads++;return f.git(args,repo);}});
-  assert.equal(found.changes.length,0);assert.equal(found.holds.length,0);assert.equal(reads,2);
+  const f=configFixture(t,{custom:true}),org=f.env.ORG_DIR,identity=gitProject(f.cwd).identity,base=f.git('rev-parse','HEAD'),count=2035;
+  // Each historical producer owns a real, distinct source delta. Batch creation
+  // keeps fixture setup cheap without fabricating hashes or derived run state.
+  const imports=[];
+  for(let n=1;n<=count;n++){
+    const message=`Historical producer ${n}\n`,content=`${n}\n`;
+    imports.push(`commit refs/heads/main\nmark :${n}\ncommitter Fixture <fixture@example.invalid> 1793055600 +0000\ndata ${Buffer.byteLength(message)}\n${message}from ${n===1?base:`:${n-1}`}\nM 100644 inline settled-history\ndata ${Buffer.byteLength(content)}\n${content}\n`);
+  }
+  const imported=spawnSync('git',['-C',f.cwd,'fast-import','--quiet'],{env:f.env,input:imports.join(''),encoding:'utf8'});
+  assert.equal(imported.status,0,imported.stderr);f.git('reset','--hard','main');
+  const heads=f.git('rev-list','--reverse',`${base}..main`).split('\n');assert.equal(heads.length,count);
+  fs.mkdirSync(path.join(org,'dispatch'),{recursive:true});
+  const owner={controller:'brain',legacy:false,release:{id:'source',root:sourceRoot,commit:null,identity:gitProject(sourceRoot).identity}};
+  const producer=(n,head,previous)=>{
+    const run=`R-${n}`,item=`ENG-${n}`,token=`history-${n}`,dispatch=path.join(org,`dispatch/${token}.json`),file=`reports/${run}.md`;
+    fs.writeFileSync(dispatch,JSON.stringify({token,stage:'complete',run,item,org,common:identity,workspace:f.cwd,base:previous}));
+    const bytes=`---\nrun: ${run}\noutcome: done\nsummary: Producer ${n} source.\nheadline: Historical source is retained\nartifacts:\n  - "source: ${head}; base: ${previous}"\n---\n`,parsed=readReport(bytes);
+    assert.deepEqual(parsed.errors,[]);fs.writeFileSync(path.join(org,file),bytes);
+    return [{type:'item.added',id:item,title:`Producer ${n}`,role:'engineer'},
+      {type:'run.started',id:run,item,workspace:f.cwd,meta:{dispatch_record:org,dispatch_project:identity,dispatch_journal:dispatch,dispatch_attempt:token}},
+      {type:'run.claimed',run,record:org,project:identity,owner},
+      {type:'report.ingested',run,item,file,sha256:hash(bytes),report:parsed.report},
+      {type:'item.closed',id:item,as:'done',completed_run:run}];
+  };
+  transact(org,()=>({add:[...heads.flatMap((head,i)=>producer(i+1,head,i?heads[i-1]:base)),
+    {type:'line-service.phase0',id:'after-history',project:identity,repo:f.cwd,org,source:sourceRoot,main:'main',canonical_head:heads.at(-1)}]}));
+  const context=()=>{const events=loadEvents(org).events;return{events,state:fold(events),repo:f.cwd,org,identity};};
+  const c=context(),boundary=phase0Boundary(c.events,c);
+  assert.equal(c.state.runs.size,count);
+  for(const run of c.state.runs.values()){
+    assert.ok(run.started.seq<run.owner_generation&&run.owner_generation<run.report.seq&&run.report.seq<boundary.seq);
+    const dispatch=JSON.parse(fs.readFileSync(run.meta.dispatch_journal,'utf8')),bytes=fs.readFileSync(path.join(org,run.report.file));
+    assert.equal(dispatch.run,run.id);assert.equal(dispatch.item,run.item);assert.equal(dispatch.workspace,run.workspace);
+    assert.equal(hash(bytes),run.report.sha256);assert.equal(readReport(bytes).report.run,run.id);
+    assert.deepEqual(run.report.artifacts,[`source: ${heads[Number(run.id.slice(2))-1]}; base: ${dispatch.base}`]);
+  }
+  const reads=[],readGit=(_repo,args)=>{reads.push(args);return f.git(...args);};
+  const found=discoverChanges({...c,readGit});
+  assert.equal(found.changes.length,0);assert.equal(found.holds.length,0);assert.equal(found.unattributed.length,0);
+  assert.deepEqual(reads,[['rev-parse','refs/heads/main'],['rev-list','--parents',`${heads.at(-1)}..${heads.at(-1)}`]]);
+  // The same old source cited by a genuinely new report stays UNKNOWN: history
+  // does not supply a guarded delivery receipt to a later producer.
+  transact(org,()=>({add:producer(count+1,heads.at(-1),heads.at(-2))}));
+  const diagnostic=discoverChanges({...context(),readGit});
+  assert.equal(diagnostic.changes.length,0);assert.equal(diagnostic.holds.length,1);
+  assert.equal(diagnostic.holds[0].run,`R-${count+1}`);assert.equal(diagnostic.holds[0].source_provenance.status,'unknown');
+  assert.match(diagnostic.holds[0].source_provenance.ranges[0].reason,/lacks guarded or proven legacy dispatch\/run\/claim evidence/);
+  assert.equal(reads.length,4,'each scan retains exactly two batched index reads');
 });
 
 test('phase1 intended boundary preserves old cutover and unknown adoption-time facts under stopped native guards',t=>{

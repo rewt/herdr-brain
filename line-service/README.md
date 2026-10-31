@@ -1265,11 +1265,16 @@ start; a saved in-flight dispatcher retains its original loaded implementation.
 Original-binding refresh counts early identity/ownership keeps in its existing
 target budget too. A historical retention census cannot append continuously for
 the whole deadline merely because no executable binding was created. Original
-keeps and UNKNOWNs remain unchanged, and unobserved subjects retain fair priority.
+keeps and UNKNOWNs remain unchanged. One bounded `closeout.refresh-examined`
+batch records the selected allocation tuples, including unchanged keeps, so
+deduplicated reasons cannot pin later allocations behind the refresh budget.
 Within report cleanup, original report sequence orders subjects that still lack
-an exact-source evaluation. Failed admission checkpoints cannot place them behind
-every newly arriving report. After a real evaluation, normal retry fairness
-applies; the closer still owns every fresh admission and effect guard.
+an exact-source evaluation. The finite turn checkpoints a source/key cursor
+before each report dispatch and continues after it next turn, wrapping at the
+end. A skipped drain cannot pin the queue, and old admission counters cannot
+bury a report behind new arrivals. The cursor grants no evaluation or effect.
+After a real evaluation, normal retry fairness applies; the closer still owns
+every fresh admission and effect guard.
 Read-only project identity and selected lane registration use semantic read
 projections during record planning. Unrelated worktree HEADs are not those
 results. Explicit head observations remain exact, and the projection's final

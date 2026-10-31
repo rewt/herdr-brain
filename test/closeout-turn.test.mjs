@@ -122,6 +122,34 @@ test('two wakeups share one owner and checkpoint a kept target before serving an
   assert.equal(checkpoint.pending,undefined);assert.equal(checkpoint.continuation.reconcile_committed_sources,true);
 });
 
+test('a recorded fence refusal with an empty drain yields to a newer report on a later one-step turn',t=>{
+  const f=fixture(t),[source]=f.report(),old=source.closeout_targets[0],
+    secondLane=f.lane+'-second';
+  f.git(['worktree','add','-qb','lane/second',secondLane,f.head]);
+  f.append([{type:'closeout.command-failed',identity:f.common,key:old.key,source:{seq:source.seq,type:source.type},
+    run:'R-1',failure:{kind:'fence'},reason:'original native refusal'},
+    {type:'item.added',id:'ENG-2',role:'engineer',title:'Newer finished report'},
+    {type:'run.started',id:'R-2',item:'ENG-2',workspace:secondLane,meta:{lane:'second'}}]);
+  const [next]=f.append([{type:'report.ingested',run:'R-2',sha256:'second',report:{outcome:'done'}}]),newer=next.closeout_targets[0],
+    original=events(f),calls=f.herdrCalls(),seen=[];
+  const cli=(file,argv)=>{
+    if(argv[0]==='refresh')return '{}';
+    const key=JSON.parse(argv[argv.indexOf('--keys')+1])[0];seen.push(key);
+    // Exercise actual executor admission for the refused subject. The newer
+    // subject's stub only proves selection and grants no native authority.
+    return JSON.stringify(key===old.key?f.drain({keys:[key],retrySafe:true}):{evaluated:[]});
+  };
+  const first=runCloseoutTurn({...f.args,cli}),second=runCloseoutTurn({...f.args,cli});
+  assert.equal(first.steps,1);assert.equal(second.steps,1);
+  assert.deepEqual(first.errors,[]);assert.deepEqual(second.errors,[]);
+  assert.deepEqual(seen,[old.key,newer.key]);
+  assert.equal(first.subjects[0].status,'not-evaluated');assert.deepEqual(first.subjects[0].evaluations,[]);
+  const all=events(f);assert.deepEqual(all.slice(0,original.length),original);
+  assert.equal(all.some(e=>['closeout.evaluated','closeout.effect'].includes(e.type)&&e.key===old.key),false);
+  assert.deepEqual(f.herdrCalls(),calls);assert.deepEqual(f.read().actions,[]);
+  assert.equal(fs.existsSync(f.lane),true);
+});
+
 test('new defect decisions follow independent report cleanup and existing decisions spend no later decision slots',t=>{
   const f=fixture(t);fs.writeFileSync(path.join(f.scratch,'.identity-root'),'fixture');
   fs.writeFileSync(f.file,JSON.stringify({...f.receipt,at:new Date().toISOString()}));f.report();

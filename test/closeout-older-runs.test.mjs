@@ -25,6 +25,26 @@ test('finite refresh counts early identity keeps against its target budget and a
   assert.deepEqual(events(f).slice(0,original.length),original);assert.deepEqual(f.herdrCalls(),calls);
   assert.deepEqual(f.read().actions,[],'missing identity and original UNKNOWNs grant no replacement native effect');
 });
+test('finite refresh reexamines unchanged early keeps over repeated complete censuses',t=>{
+  const f=setup(t,{direct:true,bound:true,merged:true});selectCurrentCleanup(f);f.report();
+  for(let n=2;n<=7;n++)f.append([{type:'item.added',id:`ENG-${n}`,role:'engineer',title:'Original missing identity'},
+    {type:'run.started',id:`R-${n}`,item:`ENG-${n}`,workspace:f.lane+`-missing-${n}`,meta:{dispatch_project:f.common}},
+    {type:'report.ingested',run:`R-${n}`,sha256:`original-${n}`,report:{outcome:'done'}}]);
+  const original=events(f),calls=f.herdrCalls(),seen=[];
+  for(let turn=0;turn<9;turn++){
+    const before=events(f),result=refreshCloseouts({cwd:f.repo,org:f.org,env:f.env,retirementOptions:f.options,maxTargets:2}),
+      added=events(f).slice(before.length),checkpoint=added.filter(e=>e.type==='closeout.refresh-examined');
+    assert.equal(result.selected,2);assert.equal(result.kept.length,2);assert.deepEqual(result.created,[]);
+    seen.push(result.kept.map(row=>row.run));
+    assert.equal(checkpoint.length,1,'one bounded examination append per refresh');
+    assert.equal(checkpoint[0].targets.length,2);
+    assert.equal(added.filter(e=>e.type==='closeout.kept').length,turn<3?2:0,'unchanged reasons remain deduplicated');
+  }
+  assert.deepEqual(seen.slice(3,6),seen.slice(0,3));assert.deepEqual(seen.slice(6,9),seen.slice(0,3));
+  assert.equal(new Set(seen.flat()).size,6);
+  assert.deepEqual(events(f).slice(0,original.length),original);assert.deepEqual(f.herdrCalls(),calls);assert.deepEqual(f.read().actions,[]);
+});
+
 import {disposeStoppedAllocations} from '../lib/closeout-allocations.mjs';
 import {fold} from '../lib/state.mjs';
 import {gitProject} from '../lib/project.mjs';

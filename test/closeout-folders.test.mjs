@@ -88,6 +88,30 @@ test('an unobserved older report precedes newly arrived reports after admission 
   assert.equal(select([{type:'closeout.evaluated',key:old.key,source:{seq:99,type:'cleanup.bound'},seq:3000,completed:false}])[0],'old-report','another source cannot supply this report observation');
 });
 
+test('a never-evaluated older report yields bounded one-step slots to every newer report',()=>{
+  for(const withLegacy of [false,true]){
+    const old={key:'old-report',reportCloseout:true,source:{seq:100,type:'report.ingested'},panes:[{}]},
+      newer=Array.from({length:6},(_,i)=>({key:`new-${i}`,reportCloseout:true,source:{seq:101+i,type:'report.ingested'},panes:[{}]})),
+      legacy={key:'legacy',signal:'landed',source:{seq:1},panes:[]},attempts={[old.key]:2582},seen=new Set(),rows=[];
+    let reportCursor;
+    const maxSteps=1,bound=(newer.length+1)*(withLegacy?2:1);
+    for(let turn=1;turn<=bound;turn++){
+      // Reproduce a skipped drain: the old counter keeps increasing but no
+      // exact-source closeout.evaluated row is ever earned by any report.
+      attempts[old.key]++;
+      const selected=scheduleLineCloseouts([old,...newer,...(withLegacy?[legacy]:[])],rows,
+        {batch:true,attempts,turn,reportCursor}).slice(0,maxSteps);
+      for(const {entry}of selected){
+        attempts[entry.key]=3000+turn;seen.add(entry.key);
+        if(entry.reportCloseout)reportCursor={seq:entry.source.seq,key:entry.key};
+      }
+      if(turn===1)assert.equal(selected[0].entry.key,old.key,'historical counters cannot bury the oldest report');
+    }
+    assert.ok(newer.every(entry=>seen.has(entry.key)),`every newer report gets a slot within ${bound} turns`);
+    assert.deepEqual(rows,[],'no scheduling checkpoint fabricates an evaluation');
+  }
+});
+
 test('line classifies parked UNKNOWN and missing preservation without replay, and retains unreported allocation truth',t=>{
   const f=setup(t,{direct:true,bound:true});selectCurrentCleanup(f);f.report();const entry=target(f);
   f.append([{type:'closeout.effect',identity:f.common,key:entry.key,source:entry.source,effect:'original',producer:'native-closeout/v2',

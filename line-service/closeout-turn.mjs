@@ -205,7 +205,7 @@ function closeoutTurn({project,org,cli,guard,env=process.env,maxSteps=8,budgetMs
       return status==='complete'&&
         closeoutRevision(entry,observed.events,observed.state)>(prior.revision??0);
     });
-    const scheduled=scheduleLineCloseouts(eligible,rows,{batch:true,attempts:state.targets,turn:state.turn});
+    const scheduled=scheduleLineCloseouts(eligible,rows,{batch:true,attempts:state.targets,turn:state.turn,reportCursor:state.report_cursor});
     state.subjects=subjects;
     for(const {entry,sessionsOnly}of scheduled){
       if(expired()||steps>=maxSteps)break;
@@ -216,7 +216,9 @@ function closeoutTurn({project,org,cli,guard,env=process.env,maxSteps=8,budgetMs
       // Checkpoint before dispatch: crashes cannot keep selecting the oldest
       // kept target ahead of its independent peers. Native UNKNOWN stays owned
       // by the closer's exact original intent, never this scheduling checkpoint.
-      state.targets[entry.key]=++state.attempt;state.pending={stage:'closeout',key:entry.key,source:entry.source};save();fault('before-closeout');
+      state.targets[entry.key]=++state.attempt;
+      if(entry.reportCloseout)state.report_cursor={seq:entry.source.seq,key:entry.key};
+      state.pending={stage:'closeout',key:entry.key,source:entry.source};save();fault('before-closeout');
       try{
         guard();code.verify();
         const result=JSON.parse(cli('supervisor/closeout.mjs',['drain','--repo',project.canonical,'--org',org,

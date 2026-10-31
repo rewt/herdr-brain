@@ -11,6 +11,7 @@ import { nextItemId, fold } from '../lib/state.mjs';
 import { fold as oldFold } from './fixtures/state-v0.mjs';
 import { protectRecordMutation } from '../lib/record-guard.mjs';
 import {bindCleanupEntry} from '../lib/closeout.mjs';
+import {canonicalReviewIndex} from '../line-service/phase1.mjs';
 import {setup as closeoutFixture,events as closeoutEvents} from './helpers/closeout-fixture.mjs';
 
 function fixture(t) {
@@ -34,6 +35,18 @@ function onAcquisition(f, t, action) {
   };
   t.after(() => { fs.mkdirSync = original; });
 }
+
+for(const change of ['unrelated','main','sealed'])test(`review Git planning ${change==='unrelated'?'ignores unrelated lane refs':`refuses ${change} changes`}`,t=>{
+  const f=fixture(t);f.git(['init','-qb','main']);f.git(['config','user.name','Planner']);f.git(['config','user.email','planner@example.invalid']);f.git(['commit','--allow-empty','-qm','base']);
+  const base=f.git(['rev-parse','HEAD']),lane=path.join(f.root,'other-lane');f.git(['worktree','add','-qb','lane/other',lane]);
+  const move=()=>execFileSync('git',['-C',change==='main'?f.root:lane,'commit','--allow-empty','-qm','concurrent source']);
+  const boundary={main:'main',canonical_head:base},identity=path.join(f.root,'.git');
+  const index=()=>canonicalReviewIndex({events:[],state:fold([]),repo:f.root,org:f.dir,identity,boundary});
+  if(change==='sealed')onAcquisition(f,t,move);
+  const plan=()=>{const first=index();if(change!=='sealed'){move();assert.deepEqual(index(),first);}return{add:[{type:'future.review-observed'}]};};
+  if(change==='unrelated')assert.equal(planTransaction(f.dir,plan).added.length,1);
+  else{assert.throws(()=>planTransaction(f.dir,plan),isRecordSourceConflict);assert.deepEqual(loadEvents(f.dir).events,[]);}
+});
 
 test('project identity projections tolerate unrelated worktree commits during planning while retaining the append fence',t=>{
   const f=fixture(t);f.git(['init','-qb','main']);f.git(['config','user.name','Planner']);f.git(['config','user.email','planner@example.invalid']);f.git(['commit','--allow-empty','-qm','base']);

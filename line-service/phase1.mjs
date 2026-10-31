@@ -1,6 +1,6 @@
 // Landed-change facts and record-derived decisions. No native effects/models.
 import fs from '../lib/record-observation.mjs';
-import {observeGit} from '../lib/record-observation.mjs';
+import {observeGit,observeGitQuery} from '../lib/record-observation.mjs';
 import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
@@ -50,12 +50,23 @@ export function recordReviewCompletion({repo,org,runId,env=process.env}){
     const file=path.resolve(org,p.run.report.file??'');if(!file.startsWith(org+path.sep)||hash(fs.readFileSync(file))!==p.run.report.sha256)throw Error('immutable review completion bytes changed');
     const mutation=protectRecordMutation({org,state,events,command:'line-service completed review',mutation:{add:[{type:'item.closed',id:p.item.id,as:'done',completed_run:runId,review_verdict:p.fact.seq,note:`Independent ${p.fact.verdict} judgment recorded for ${p.fact.review_key}; linked corrections remain owned and open. Preserve callbacks, HOLD, archives and guarded physical retirement.`}]}});
     return bindCloseoutSources({cwd:repo,org,events,env,mutation});
-  },{actor:'line-service',strictTail:true,lockOptions:{recover:false}});
+  // This derivation has no native/publication callback. Rebuild the selected
+  // review's full plan on a pre-append race; a real HOLD, claim, report or
+  // verdict refusal still stops, and nested record effects revoke replay.
+  },{actor:'line-service',strictTail:true,replaySafe:true,lockOptions:{recover:false}});
   publishCloseoutEvents({cwd:repo,org,added:result.added,start:false,env});return{review_closed:result.added.some(e=>e.type==='item.closed'),run:runId};
 }
 
 const hash=b=>createHash('sha256').update(b).digest('hex');
-const git=(repo,args)=>{observeGit(repo);return execFileSync('git',['--no-optional-locks','-C',repo,...args],{encoding:'utf8',timeout:10000,stdio:['ignore','pipe','pipe'],maxBuffer:32*1024*1024}).trim();};
+const git=(repo,args)=>{
+  const read=()=>execFileSync('git',['--no-optional-locks','-C',repo,...args],{encoding:'utf8',timeout:10000,stdio:['ignore','pipe','pipe'],maxBuffer:32*1024*1024}).trim();
+  // Ref/object queries own their semantic result, not every other lane's
+  // refs/index/registration throughout planning. Exact main and producer heads
+  // are still queried; the existing physical seal fences the append boundary.
+  // Status also consumes worktree/index state and keeps the conservative fence.
+  if(args[0]==='status'){observeGit(repo);return read();}
+  return observeGitQuery(JSON.stringify([repo,args]),read);
+};
 const ancestor=(repo,a,b)=>{try{git(repo,['merge-base','--is-ancestor',a,b]);return true;}catch{return false;}};
 export function phase0Boundary(events,{repo,org,identity}) {
   const rows=events.filter(e=>e.type==='line-service.phase0'&&e.project===identity&&e.org===org&&/^[a-f0-9]{40}(?:[a-f0-9]{24})?$/.test(e.canonical_head??''));

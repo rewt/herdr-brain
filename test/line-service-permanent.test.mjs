@@ -60,6 +60,27 @@ test('permanent flow completion retains missing verdict held reopened foreign-ow
   }
 });
 
+for(const change of ['unrelated','hold','claim','STOP','report'])test(`completion preparation ${change==='unrelated'?'refreshes an unrelated append once':`retains a late ${change} refusal`}`,t=>{
+  const f=fixture(t),release=noticeLock(path.join(f.directory,'pass.lock')),mkdir=fs.mkdirSync;let injected=false;
+  recordReviewResults(f.args);
+  fs.mkdirSync=function(file,...args){const out=mkdir.call(this,file,...args);if(file===path.join(f.org,'lock')&&!injected){
+    injected=true;
+    const event=change==='hold'?{type:'item.updated',id:'REV-1',fields:{meta:{hold:true}}}:change==='claim'?{type:'run.claimed',run:'R-1',record:f.org,project:f.identity,owner:{...f.context().state.runs.get('R-1').owner,controller:'foreign'}}:{type:'note.added',id:'ENG-99',text:'Unrelated work continues'};
+    fs.appendFileSync(path.join(f.org,'events.jsonl'),JSON.stringify({seq:f.context().events.at(-1).seq+1,...event})+'\n');
+    if(change==='STOP')fs.writeFileSync(path.join(f.directory,'STOP'),'stop');
+    if(change==='report')fs.appendFileSync(path.join(f.org,'reports/R-1.md'),'changed');
+  }return out;};
+  try{
+    if(change==='unrelated')assert.equal(recordReviewCompletion(f.args).review_closed,true);
+    else assert.throws(()=>recordReviewCompletion(f.args),/judgment|OWNED|STOP|bytes changed/);
+    assert.equal(injected,true);
+    const closed=f.context().events.filter(e=>e.type==='item.closed'&&e.id==='REV-1');
+    assert.equal(closed.length,change==='unrelated'?1:0);
+    const conflicts=fs.readFileSync(path.join(f.org,'record-conflicts.jsonl'),'utf8').trim().split('\n').map(JSON.parse);
+    assert.deepEqual(conflicts.map(c=>[c.attempt,c.retry,c.effects_started,c.record_effects]),[[1,true,false,false]]);
+  }finally{fs.mkdirSync=mkdir;release();}
+});
+
 for(const change of ['report','STOP','claim'])test(`short review preparation refuses a late ${change} before publishing a verdict`,t=>{
   const f=fixture(t),release=noticeLock(path.join(f.directory,'pass.lock')),mkdir=fs.mkdirSync;let injected=false;
   fs.mkdirSync=function(file,...args){const out=mkdir.call(this,file,...args);if(file===path.join(f.org,'lock')&&!injected){injected=true;if(change==='report')fs.appendFileSync(path.join(f.org,'reports/R-1.md'),'changed');if(change==='STOP')fs.writeFileSync(path.join(f.directory,'STOP'),'stop');if(change==='claim')fs.appendFileSync(path.join(f.org,'events.jsonl'),JSON.stringify({seq:f.context().events.at(-1).seq+1,type:'future.unknown'})+'\n');}return out;};

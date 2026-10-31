@@ -15,6 +15,7 @@ export class HerdrClient extends EventEmitter {
     paneReadTimeoutMs = 2_000,
     minBackoffMs = 250,
     maxBackoffMs = 5_000,
+    maxFrameBytes = 16 * 1024 * 1024,
     connect = (path) => net.createConnection(path),
   } = {}) {
     super();
@@ -23,6 +24,8 @@ export class HerdrClient extends EventEmitter {
     this.paneReadTimeoutMs = paneReadTimeoutMs;
     this.minBackoffMs = minBackoffMs;
     this.maxBackoffMs = maxBackoffMs;
+    if (!Number.isSafeInteger(maxFrameBytes) || maxFrameBytes < 1) throw new Error('invalid Herdr frame limit');
+    this.maxFrameBytes = maxFrameBytes;
     this.connect = connect;
     this.nextId = 1;
     this.backoffMs = minBackoffMs;
@@ -67,6 +70,7 @@ export class HerdrClient extends EventEmitter {
       socket.on("connect", () => socket.write(`${JSON.stringify({ id, method, params })}\n`));
       socket.on("data", (chunk) => {
         buffer += chunk;
+        if (Buffer.byteLength(buffer) > this.maxFrameBytes) { finish(new Error('Herdr response exceeds frame limit')); return; }
         for (;;) {
           const newline = buffer.indexOf("\n");
           if (newline < 0) return;
@@ -159,7 +163,9 @@ export class HerdrClient extends EventEmitter {
       })}\n`);
     });
     socket.on("data", (chunk) => {
+      if (this.destroyed || this.closed || generation !== this.generation || this.subscriptionSocket !== socket) return;
       buffer += chunk;
+      if (Buffer.byteLength(buffer) > this.maxFrameBytes) { this.emit('connectionError', new Error('Herdr subscription exceeds frame limit')); socket.destroy(); return; }
       for (;;) {
         const newline = buffer.indexOf("\n");
         if (newline < 0) return;
@@ -174,6 +180,7 @@ export class HerdrClient extends EventEmitter {
           socket.destroy();
           return;
         }
+        if (!message || typeof message !== "object" || Array.isArray(message)) { this.emit("connectionError", new Error("Invalid Herdr subscription envelope")); socket.destroy(); return; }
         if (message.id === id) {
           if (message.error !== undefined) {
             this.emit("connectionError", new Error(`Herdr ${message.error.code}: ${message.error.message}`));
@@ -184,7 +191,9 @@ export class HerdrClient extends EventEmitter {
             this.emit("ready");
           }
         } else if (message.event !== undefined && message.data !== undefined) {
+          if (!ready) { this.emit('connectionError', new Error('Herdr event before subscription acknowledgement')); socket.destroy(); return; }
           this.emit("event", message);
+          if (message.event === 'events_lost') { socket.destroy(); return; }
         }
       }
     });

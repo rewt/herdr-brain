@@ -308,3 +308,24 @@ test("subscribe after close does not open another socket", async t => {
     client.close();
   }
 });
+
+test('subscription loss invalidates the stream and reconnect requires a fresh acknowledgement', async () => {
+  let connections=0;
+  const client=new HerdrClient({socketPath:'fake.sock',minBackoffMs:5,maxBackoffMs:10,connect:fakeServer((socket,request)=>{
+    connections++;socket.receive({id:request.id,result:{type:'subscription_started'}});
+    if(connections===1)socket.receive({event:'events_lost',data:{}});
+  })});
+  let ready=0,lost=0;const recovered=new Promise(resolve=>client.on('ready',()=>{if(++ready===2)resolve();}));
+  client.on('event',event=>{if(event.event==='events_lost')lost++;});
+  try{client.subscribe([{type:'pane.closed'}]);await recovered;assert.equal(lost,1);assert.equal(connections,2);}finally{client.close();}
+});
+
+test('oversized or unacknowledged subscription frames disconnect without accepting an observation', async () => {
+  for(const mode of ['oversized','unacknowledged']){
+    const client=new HerdrClient({socketPath:'fake.sock',maxFrameBytes:128,connect:fakeServer((socket)=>{
+      socket.receiveChunk(mode==='oversized'?'x'.repeat(129):JSON.stringify({event:'pane.closed',data:{}})+'\n');
+    })});
+    const error=once(client,'connectionError');let events=0;client.on('event',()=>events++);
+    try{client.subscribe([{type:'pane.closed'}]);assert.match((await error)[0].message,/frame limit|before subscription acknowledgement/);assert.equal(events,0);}finally{client.close();}
+  }
+});

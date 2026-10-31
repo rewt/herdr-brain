@@ -46,6 +46,7 @@ const { values: opt, positionals } = parseArgs({ usage: "Usage: node dispatch/di
   repo: { type: 'string', default: process.cwd() }, org: { type: 'string', default: process.env.ORG_DIR },
   lane: { type: 'string' }, route: { type: 'string' }, brief: { type: 'string' }, report: { type: 'string' },
   awaited: { type: 'boolean' }, 'awaited-step': { type: 'string' },
+  'watch-mode': {type:'string'},
   to: { type: 'string' }, base: { type: 'string' }, extra: { type: 'string' },
   reuse: { type: 'string' }, retry: { type: 'string' }, status: { type: 'string' },
   'resume-session': { type: 'string' },
@@ -62,6 +63,8 @@ const cli = (name, fallback) => opt[`${name}-cli`] ? [opt[`${name}-cli`]] : [pro
 let recordCLI = cli('org', '../bin/org.mjs');
 let laneCLI = cli('lane', '../lanes/lane.mjs');
 let watchCLI = cli('watch', '../watch/watch.mjs');
+if(opt['watch-mode']!==undefined&&!['process','shared'].includes(opt['watch-mode']))throw Error('--watch-mode must be process or shared');
+if(opt['watch-mode']!==undefined&&(opt.retry||opt.status||opt.reuse||opt['resume-session']))throw Error('--watch-mode applies only to a new ordinary dispatch; retain saved watcher mode');
 const invocationKeys = ['controller', 'org-cli', 'lane-cli', 'watch-cli'];
 const invocation = () => Object.fromEntries(invocationKeys.filter(key => opt[key] !== undefined).map(key => [key, opt[key]]));
 const invocationFlags = () => Object.entries(invocation()).flatMap(([key, value]) => [`--${key}`, value]);
@@ -363,7 +366,7 @@ function ensureWatcher() {
     job.to ??= job.worker.agentName;
     save();
     job.watcher = json(command(watchCLI, [job.run, '--controller', opt.controller, '--org', job.org, '--to', job.to,
-      '--cwd', job.repo, ...(job.resumeDeliveryProtocol ? ['--agent', job.resumeDelivery.agentName] : []), '--detach', '--log', path.join(job.org, 'dispatch', `${job.run}.watch.log`),
+      '--cwd', job.repo, ...(job.resumeDeliveryProtocol ? ['--agent', job.resumeDelivery.agentName] : []), ...(job.watchMode==='shared'?['--shared']:['--detach', '--log', path.join(job.org, 'dispatch', `${job.run}.watch.log`)]),
       ...(opt['org-cli'] ? ['--org-cli', opt['org-cli']] : []),...(job.recordOnlyNotices?['--record-only']:[])], undefined, true));
     save();
   } else {
@@ -549,7 +552,7 @@ async function main() {
     fs.mkdirSync(directory, { recursive: true });
     journal = path.join(directory, `${token}.json`);
     job = { token, repo, org, common, predecessor, release: bundleRelease(), sourceSelection: sourceSelection ?? null,
-      invocation: invocation(),
+      invocation: invocation(), watchMode:opt['watch-mode']??'process',
       operatorRecordCommand: [process.execPath, local('../bin/org.mjs')],
       operatorRecordRoot: bundleRelease().root,
       operatorPlainText: true,

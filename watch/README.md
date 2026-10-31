@@ -115,3 +115,79 @@ and a supervisor settles a reported run with `supervisor.mjs handle`.
 
 Internal response waits adapt to measured machine load; see the
 [deadline inventory](../docs/reference/load-deadlines.md) for allowances and preserved safety checks.
+
+## Shared project observation (opt-in; no live migration)
+
+An explicitly started project observer can replace resident watchers **for new
+ordinary dispatches**. Existing watchers and saved recipients finish unchanged.
+No installed plist, pin, hook, running service or saved job is rewritten by this
+feature. The canonical project supervisor owns starting/stopping the observer
+through its existing native execution path, after the normal installation or
+canary authorization. A worker must not activate it on a live consumer.
+
+```sh
+# Pinned Node, canonical checkout, adopting project's actual record/transport:
+node watch/observer.mjs --repo /project --org /record
+node watch/observer.mjs --repo /project --org /record --status
+# Once the matching observer is alive, an authorized new ordinary dispatch:
+node dispatch/dispatch.mjs ENG-n --repo /project --org /record --lane topic \
+  --route engineer --brief ask.md --watch-mode shared
+```
+
+The existing watch entry also supports `--shared` in place of `--detach`.
+Registration requires the original Brain claim, exact live worker name, pane,
+workspace, terminal, native session and checkout, plus a matching project/source/
+socket observer with a live kernel birth. It refuses an existing per-run watcher
+or callback receipt. The returned PID/birth belongs to the shared host; it means
+the duty is durable and its host exists, **not** that a native subscription or a
+report has been accepted. Retries adopt the saved mode and duty. There is no
+fallback to a different executor, runtime, watcher or recipient.
+
+The observer reuses `lanes/board/herdr-client.mjs`. It attaches filesystem hints
+before catch-up, subscribes to lifecycle facts, then refreshes after subscription
+acknowledgement. Events invalidate observations; their payloads never replace an
+authoritative snapshot. A hint during refresh forces another refresh. A rejected
+pane rejects the entire set; unavailable native state stays unavailable, and a
+new acknowledged set is required for readiness. Frame limits, reconnect and
+`events_lost` handling belong to the existing adapter. Socket device/inode/times
+scope the server generation; this is an observation boundary, not a replay
+cursor or a guarantee of continuous native history across a handoff.
+
+Only registrations and selected compact record facts stay resident. At most two
+finite original `watch.mjs --step` consumers run concurrently; their original
+watcher locks, claims, mutations and inbox remain authoritative. A child carries
+no caller pane/session or inherited guard override. It never runs `agent wait`.
+Grace clocks and notice dedup state are checkpointed in `watch/steps/R-n.json`.
+The registration in `watch/shared/R-n.json` names its consumer, wake facts and
+stuck owner. An unfinished duty blocks claim transfer even after report ingestion.
+Unknown callback acknowledgements stay with the original inbox owner. A live
+finite child survives a host restart; a proven dead child resumes the same duty
+and stable notice IDs. Failed consumers retain a held receipt under
+`watch/observer/held/`; restarting the host does not replay them.
+
+| Watcher duty | Consumer and retained evidence |
+| --- | --- |
+| Exact report validation and report-available hash | Original finite watcher, existing record check and report-available producer |
+| Working/unknown report, initial startup and late-report grace | Original watcher state machine, persisted original deadlines |
+| Blocked, invalid, no-report, unavailable and long-running notices | Original watcher notices and sequence-bound IDs; long notice retains its original payload |
+| Final report and process-end clock | Original watcher, original final notice ID and process-end journal |
+| Queued, refused or uncertain input | Existing durable inbox owner and original recipient; no replacement delivery |
+| Claim change, abandonment, ingestion and STOP/HOLD | Fresh record/ownership guards before effects; held state and original registrations survive |
+| Report-to-review and resource closeout | Existing finite line intake and single record queue-review/guarded closer; observer grants no lifecycle authority |
+
+One named **coarse-safety-reconciliation** runs every 30 seconds. It recovers a
+lost final native/file hint even if nothing else happens. Normal operation
+targets zero repairs. The detection bound is one safety interval **plus the
+measured snapshot/record read and finite-consumer queue/runtime**; native outages,
+STOP/HOLD, failed consumers and external input gates are explicit holds, not a
+false wall-clock completion promise. The observer records safety repairs,
+readiness, RSS, queue and consumer times, and exact claim/occupant/server-bound
+completion/state-change counters in `watch/observer/observations.jsonl` for
+ENG-1036. Cache loss causes reconciliation; it cannot manufacture an effect.
+
+`--once` performs a finite reconciliation for offline/integration use. Project
+STOP/HOLD or the observer's own STOP ends a resident host; clearing a marker does
+not restart it. SIGTERM/SIGINT drain already owned finite children and release
+the singleton host lock. The supervisor retains restart and rollback ownership;
+an unknown host/child birth is never reclaimed on age alone. Source landing and
+focused tests do not activate this mode or qualify installed/live acceptance.

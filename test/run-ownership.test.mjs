@@ -281,6 +281,7 @@ test('every outstanding effect kind refuses transfer and an override cannot waiv
     ['unreconciled-landing', () => put(queue.file, { identity: queue.project.identity, pending: [], current: null, results: [{ ...job, outcome: 'promoted', reconciliation: { state: 'pending' } }] })],
     ['cleanup', () => put(queue.file, { identity: queue.project.identity, pending: [], current: null, results: [{ ...job, outcome: 'refused', cleanup: { state: 'pending' } }] })],
     ['uncertain-delivery', () => put(watch, { intent: 'delivery', inbox, deliveries: ['notice'] })],
+    ['shared-observation', () => put(path.join(f.org,'watch/shared',`${run}.json`), {schema:'brain.shared-watch/v1',run,org:f.org,ownership:current})],
     ['pending-callback', () => { fs.mkdirSync(path.dirname(inbox), { recursive: true }); fs.writeFileSync(inbox, JSON.stringify({ type: 'notice', id: 'notice', message: `[org-report] run=${run} item=ENG-1` }) + '\n'); }],
     ['dispatch-callback', () => put(path.join(f.org, 'dispatch/callback.json'), { run, stage: 'complete' })],
   ];
@@ -289,7 +290,7 @@ test('every outstanding effect kind refuses transfer and an override cannot waiv
     const r = bookkeeping(f, transferArgs(run, current), { ORG_GUARD_OVERRIDE: 'one' });
     assert.equal(r.status, 1, `${kind}: ${r.stdout}`); assert.match(r.stderr, /RUN_CLAIM_TRANSFER_REFUSED/, kind);
     assert.deepEqual(binding(f, run), current);
-    for (const file of [settleFile, request, queue.file, watch, inbox, path.join(f.org, 'dispatch/callback.json')]) fs.rmSync(file, { force: true });
+    for (const file of [settleFile, request, queue.file, watch, inbox, path.join(f.org, 'dispatch/callback.json'),path.join(f.org,'watch/shared',`${run}.json`)]) fs.rmSync(file, { force: true });
   }
   fs.rmdirSync(path.join(f.org, 'dispatch')); // Only the synthetic callback receipt used this directory.
   ok(node(f, 'bin/org.mjs', transferArgs(run, current)));

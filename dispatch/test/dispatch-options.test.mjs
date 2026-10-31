@@ -89,3 +89,12 @@ test('hook dialog detection handles ANSI, borders, plural counts and wrapping wi
   assert.equal(codexProfile(['-p', 'old', '--profile=new']), 'new');
   assert.equal(codexProfile([]), undefined);
 });
+
+import {fixture} from './dispatch-fixture.mjs';
+test('shared watcher selection is saved only for a new dispatch and retained on its original retry',t=>{
+  const f=fixture(t),r=f.start(['--watch-mode','shared']);assert.equal(r.status,0,r.stderr);
+  const job=JSON.parse(fs.readFileSync(f.jobs()[0]));assert.equal(job.watchMode,'shared');
+  const arms=f.calls().filter(c=>c.type==='watch');assert.equal(arms.length,1);assert.ok(arms[0].a.includes('--shared'));assert.ok(!arms[0].a.includes('--detach'));
+  const retry=f.dispatch(['--retry',job.run,'--watch-mode','process']);assert.equal(retry.status,1);assert.match(retry.stderr,/retain saved watcher mode/);
+  assert.equal(JSON.parse(fs.readFileSync(f.jobs()[0])).watchMode,'shared');
+});

@@ -18,9 +18,13 @@ import { bundleRelease, continueRelease, forwardRelease } from '../lib/releases.
 
 import { acquireWatcherLock } from './lock.mjs';
 import { createRunEventTail } from './record-tail.mjs';
+import {registrationFile, stepFile, readJson, nativeBinding, sameNative, observerReceipt, digest} from './shared.mjs';
+import {herdrSocketPath} from '../lanes/board/herdr-client.mjs';
+import {openRecordReader} from '../lib/record-reader.mjs';
+import {effectiveWorkerIdentity} from '../lib/worker-identity.mjs';
 import { readReport } from '../lib/report.mjs';
 import { BRAIN_CONTROLLER, readOwnedRun, requireController, assertOwner, fenceOwner, continueOwnerRelease } from '../lib/run-owner.mjs';
-import { writeFileAtomic } from '../lib/store.mjs';
+import { writeFileAtomic,transact } from '../lib/store.mjs';
 import { findOrgDir, LOG_FILE } from '../lib/store.mjs';
 import { observeProcessEnd } from '../lib/run-timing.mjs';
 import { inboxPath, promptSupervisor, readInbox } from '../supervisor/prompt-supervisor.mjs';
@@ -53,6 +57,8 @@ const { values: opt, positionals, tokens } = parseArgs({ usage: "Usage: node wat
     inbox: { type: 'string' },
     'org-cli': { type: 'string' },
     herdr: { type: 'string', default: 'herdr' },
+    shared: { type: 'boolean', default: false },
+    step: { type: 'boolean', default: false },
     spawn: { type: 'boolean', default: false },
     detach: { type: 'boolean', default: false },
     'record-only':{type:'boolean',default:false},
@@ -81,12 +87,15 @@ function numberOption(name, { min = 0 } = {}) {
   return value;
 }
 
-const startGraceMs = loadTimeout(numberOption('start-grace') * 1_000);
+let startGraceMs = loadTimeout(numberOption('start-grace') * 1_000);
 const idleGraceMs = numberOption('idle-grace') * 1_000;
 const longAfterMs = numberOption('long-after') * 1_000;
 const retryAfterMs = numberOption('retry-after') * 1_000;
 const deliveryAttempts = numberOption('delivery-attempts', { min: 1 });
 const dry = opt['dry-run'];
+if ((opt.shared || opt.step) && (opt.spawn || opt.detach || opt['close-tab-on-exit'] || dry) || opt.shared && opt.step) throw Error('shared/step observation cannot combine with detached, visible or dry-run watch');
+let deferStep;
+let sharedRegistration;
 let ownership;
 const recordFile = path.join(opt.org, LOG_FILE);
 const watchReceipt = path.join(opt.org, 'watch', `${runId}.json`);
@@ -107,7 +116,7 @@ function finishWatch() {
 }
 const orgCommand = opt['org-cli'] ? [opt['org-cli']] : [process.execPath, LOCAL_ORG];
 const log = (message) => process.stdout.write(`${new Date().toTimeString().slice(0, 8)}  ${message}\n`);
-const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const delay = (ms) => opt.step && deferStep ? deferStep(ms) : new Promise((resolve) => setTimeout(resolve, ms));
 
 function run(command, args, { env } = {}) {
   return spawnSync(command, args, {
@@ -135,18 +144,31 @@ function jsonResult(result, label) {
 }
 
 function readRun() {
-  return jsonResult(org(['show', runId, '--json']), `org show ${runId}`);
+  if(opt.step){
+    const reader=openRecordReader(recordFile);
+    try{
+      if(reader.tornTail)throw Error('incomplete record prevents finite watcher observation');
+      const current=reader.state.runs.get(runId);if(!current)throw Error('original run is missing');
+      return {...current,meta:effectiveWorkerIdentity(current,reader.state)};
+    }finally{reader.close();}
+  }
+  return jsonResult(org(['show', runId, '--json', ...(opt.step ? ['--compact'] : [])]), `org show ${runId}`);
 }
 
 function agentStatus(agent) {
-  const result = run(opt.herdr, ['agent', 'get', agent]);
+  let result = run(opt.herdr, ['agent', 'get', agent]);
+  if(sharedRegistration&&result.status!==0){
+    try{if(JSON.parse(result.stderr||result.stdout).error?.code==='agent_not_found')result=run(opt.herdr,['agent','get',sharedRegistration.native.pane]);}catch{}
+  }
   if (result.error) return { state: 'unavailable', error: result.error.message };
   try {
     const body = JSON.parse(result.status === 0 ? result.stdout : (result.stderr || result.stdout));
     if (body.error?.code === 'agent_not_found') return { state: null };
     if (body.error) return { state: 'unavailable', error: `${body.error.code}: ${body.error.message}` };
-    const state = (body.result ?? body).agent?.agent_status;
-    return state ? { state, sequence: (body.result ?? body).agent.state_change_seq } : { state: 'unavailable', error: 'Herdr returned no agent state' };
+    const native = (body.result ?? body).agent;
+    if (sharedRegistration && !sameNative(sharedRegistration.native, native)) return {state:'unavailable',error:'original native occupant changed; retained for the recorded stuck owner'};
+    const state = native?.agent_status;
+    return state ? { state, native, sequence: native.state_change_seq, completion: native.completion_seq } : { state: 'unavailable', error: 'Herdr returned no agent state' };
   } catch (error) {
     const detail = (result.stderr || result.stdout).trim();
     return { state: 'unavailable', error: detail || `invalid Herdr response (${error.message})` };
@@ -201,6 +223,7 @@ function fileStamp(file) {
 }
 
 function waitForSignal(agent, until, reportPath, timeoutMs, beforeStamp, recordChanged, stopFile) {
+  if (opt.step) return deferStep(timeoutMs);
   return new Promise((resolve) => {
     let settled = false;
     let watcher;
@@ -270,8 +293,17 @@ async function deliver(message, sound = 'request', id, { allowQueued = false } =
   if (dry) return true;
   if(opt['record-only']){
     reserveWatch('record-only',id);
-    const r=org(['note',runId,`[watch record-only] ${message}`]);
-    if(r.error||r.status!==0)throw Error(`record-only watch notice refused: ${r.stderr||r.error?.message||r.status}`);
+    if(opt.step){
+      transact(opt.org,events=>{
+        assertOwner(readOwnedRun(opt.org,runId,events),ownership);
+        const text=`[watch record-only] ${message}`,prior=events.find(e=>e.type==='note.added'&&e.id===runId&&e.watch_notice_id===id);
+        if(prior){if(prior.text!==text||digest(prior.watch_ownership)!==digest(ownership))throw Error('original watcher notice changed');return{add:[]};}
+        return{add:[{type:'note.added',id:runId,text,decision:false,watch_notice_id:id,watch_ownership:ownership}]};
+      },{strictTail:true,actor:process.env.ORG_ACTOR??'watch'});
+    }else{
+      const r=org(['note',runId,`[watch record-only] ${message}`]);
+      if(r.error||r.status!==0)throw Error(`record-only watch notice refused: ${r.stderr||r.error?.message||r.status}`);
+    }
     finishWatch();return true;
   }
   reserveWatch('delivery', id);
@@ -437,26 +469,34 @@ async function watch() {
   log(`watching ${runId} (${item}): worker ${agent}, report ${reportPath}, supervisor ${opt.to}`);
   if (process.send) process.send({ ready: runId, identity: ownerIdentity(process.pid) });
 
-  let lastNotice;
-  let lastUnavailableLog;
-  let pendingUnavailable;
-  let longNotified = false;
-  let longNotice;
-  let longNoticeId;
-  let longNextAt;
-  let idleGraceUntil;
-  let observedWorking = false;
-  let lastWorkingAt;
-  let startupWaitingLogged = false;
-  let noticeSequence = 0;
-  let previousState;
-  const armedAt = Date.now();
-  const startedAt = Date.parse(current.started?.at ?? '') || Date.now();
+  const signature = digest({ownership, org:opt.org,cwd:opt.cwd,to:opt.to,agent,reportPath,
+    recordOnly:opt['record-only'],startGrace:opt['start-grace'],idleGraceMs,longAfterMs,retryAfterMs});
+  const saved = opt.step ? readJson(stepFile(opt.org,runId)) : null;
+  if(saved?.resolved_start_grace_ms!==undefined)startGraceMs=saved.resolved_start_grace_ms;
+  if (saved && saved.signature !== signature) throw Error('saved watcher step binding changed; retain it');
+  let {lastNotice,lastUnavailableLog,pendingUnavailable,longNotified=false,longNotice,longNoticeId,longNextAt,
+    idleGraceUntil,observedWorking=false,lastWorkingAt,startupWaitingLogged=false,noticeSequence=0,previousState,
+    availableHash,armedAt=Date.now(),startedAt=Date.parse(current.started?.at ?? '') || Date.now()} = saved?.state ?? {};
+  const checkpoint = (phase, timeoutMs, error) => {
+    if (!opt.step) return;
+    const state = {lastNotice,lastUnavailableLog,pendingUnavailable,longNotified,longNotice,longNoticeId,longNextAt,
+      idleGraceUntil,observedWorking,lastWorkingAt,startupWaitingLogged,noticeSequence,previousState,availableHash,armedAt,startedAt};
+    const file=stepFile(opt.org,runId);fs.mkdirSync(path.dirname(file),{recursive:true});
+    writeFileAtomic(file,JSON.stringify({schema:'brain.watch-step/v1',run:runId,signature,ownership,phase,state,resolved_start_grace_ms:startGraceMs,
+      pid:process.pid,identity:ownerIdentity(process.pid),at:new Date().toISOString(),rss_bytes:process.memoryUsage().rss,high_water_rss_bytes:process.resourceUsage().maxRSS*1024,
+      next_at:timeoutMs===undefined?null:Date.now()+Math.max(0,timeoutMs),...(error?{error}: {})})+'\n');
+  };
+  deferStep = timeoutMs => {checkpoint('waiting',timeoutMs);throw Object.assign(Error('finite watch deferred'),{code:'WATCH_DEFERRED'});};
+  checkpoint('running');
+  // A crash restarts this same duty and stable notice IDs. Inbox uncertainty
+  // remains with its original delivery owner; no replacement is introduced.
+  const finishStep = error => checkpoint(error?'failed':'complete',undefined,error?.message);
+  try {
   const sendOnce = async (message, sound, { fatal = false, id } = {}) => {
     if (message === lastNotice) return true;
     try {
       const digest = crypto.createHash('sha256').update(message).digest('hex');
-      await deliver(message, sound, id ?? `watch:${runId}:${noticeSequence}:${digest}`, { allowQueued: !fatal });
+      await deliver(message, sound, id ?? `watch:${runId}:${noticeSequence}:${digest}`, { allowQueued: !fatal || opt.step });
       lastNotice = message;
       return true;
     } catch (error) {
@@ -468,7 +508,7 @@ async function watch() {
   const deliverFinal = (report) => deliver(reportNotice({
     run: runId, item, outcome: report.outcome, headline: report.headline ?? report.summary,
     report: reportPath, check: 'pass',
-  }), 'done', `watch:${runId}:final`);
+  }), 'done', `watch:${runId}:final`, {allowQueued:opt.step});
 
   if (dry) {
     const status = agentStatus(agent);
@@ -478,15 +518,18 @@ async function watch() {
     return;
   }
 
-  let availableHash;
   for (;;) {
     // Capture the cursor before reading state so an append during inspection
     // is still checked after the filesystem subscriptions become live.
     const recordChanged = createRunEventTail(recordFile, { run: runId, item });
-    if (fs.existsSync(stopFile)) { log('Supervisor STOP; stopping without delivery'); return; }
+    if (fs.existsSync(stopFile) || opt.step && (fs.existsSync(path.join(canonical,'.lane/supervisor/HOLD')) || fs.existsSync(path.join(opt.org,'STOP')))) { checkpoint('held');log('Supervisor STOP/HOLD; stopping without delivery'); return; }
     let owned;
     try { owned = assertOwner(readOwnedRun(opt.org, runId), ownership); } catch (error) { log(`${error.message}; stopping without delivery`); return; }
     current = readRun();
+    if(opt.step){
+      const m=current.meta,n=sharedRegistration.native;
+      if(m.identity_conflict||m.agent!==n.agent||m.pane!==n.pane||m.worker_workspace!==n.workspace||m.terminal_id!==n.terminal||current.workspace!==n.cwd||m.agent_session_id&&m.agent_session_id!==n.session)throw Error('original record/native worker binding changed; retain shared duty');
+    }
     if (owned.abandoned || current.abandoned) {
       log(`${runId} was abandoned; stopping`);
       return;
@@ -503,14 +546,16 @@ async function watch() {
     }
     const beforeStamp = fileStamp(reportPath);
     let report = reportState(reportPath);
-    if(report.kind==='valid')try{
+    const publishAvailable = () => {if(report.kind==='valid')try{
       const hash=crypto.createHash('sha256').update(fs.readFileSync(reportPath)).digest('hex');
       if(hash!==availableHash){const hint=org(['report-available','--run',runId,'--sha256',hash]);
         if(!hint.error&&hint.status===0)availableHash=hash;}
-    }catch{/* The original watcher continues; the finite line reconciles lost hints. */}
+    }catch{/* The original watcher continues; the finite line reconciles lost hints. */}};
+    if(!opt.step)publishAvailable();
     const status = agentStatus(agent);
     const observedAt = new Date().toISOString();
     const state = status.state;
+    if(opt.step&&state!=='unavailable')publishAvailable();
     if (status.sequence !== undefined) noticeSequence = status.sequence;
     else if (state === 'working' && previousState !== 'working') noticeSequence++;
     previousState = state;
@@ -634,6 +679,35 @@ async function watch() {
       await delay(retryAfterMs);
     }
   }
+  } catch(error) {
+    if(error.code==='WATCH_DEFERRED') return;
+    finishStep(error);throw error;
+  }
+  finally {if(opt.step && readJson(stepFile(opt.org,runId))?.phase==='running') finishStep();}
+}
+
+function registerShared() {
+  const current=readRun(),project=gitProject(opt.cwd),source=bundleRelease().root;
+  const host=observerReceipt(opt.org,{repo:project.canonical,project:project.identity,source,socket:herdrSocketPath()});
+  if(fs.existsSync(path.join(project.canonical,'.lane/supervisor/STOP')) || fs.existsSync(path.join(project.canonical,'.lane/supervisor/HOLD'))) throw Error('STOP/HOLD prevents shared registration');
+  const file=registrationFile(opt.org,runId),prior=readJson(file);
+  if(prior){
+    if(digest(prior.ownership)!==digest(ownership)||prior.to!==opt.to||prior.cwd!==opt.cwd||prior.source!==source)throw Error('original shared observation binding changed');
+  }else{
+    if(current.meta?.watcher_pid||fs.existsSync(watchReceipt))throw Error('existing watcher/receipt retained; live watcher migration is excluded');
+    const native=jsonResult(run(opt.herdr,['agent','get',opt.agent??current.meta?.agent]),'original worker').agent;
+    const binding=nativeBinding(native),m=current.meta??{};
+    if(!sameNative(binding,native)||binding.agent!==m.agent||binding.pane!==m.pane||binding.workspace!==m.worker_workspace||binding.terminal!==m.terminal_id||binding.cwd!==current.workspace||m.agent_session_id&&binding.session!==m.agent_session_id)throw Error('exact original native worker binding required');
+    const argv=watcherArgs('--shared');
+    fenceOwner(opt.org,runId,ownership,()=>{
+      fs.mkdirSync(path.dirname(file),{recursive:true});
+      if(fs.existsSync(file))throw Error('shared registration raced; retain original');
+      writeFileAtomic(file,JSON.stringify({schema:'brain.shared-watch/v1',run:runId,org:opt.org,project:project.identity,repo:project.canonical,cwd:opt.cwd,source,release:bundleRelease(),ownership,
+        native:binding,to:opt.to,report:path.resolve(opt.report??current.report_path),argv,
+        consumer:'watch/watch.mjs --step',wake_fact:'native lifecycle, report/record change or coarse-safety-reconciliation',stuck_owner:opt.to})+'\n');
+    });
+  }
+  process.stdout.write(JSON.stringify({run:runId,pid:host.pid,identity:host.identity,log:host.log,shared:file,release:bundleRelease()})+'\n');
 }
 
 try {
@@ -664,7 +738,13 @@ try {
   const forwarded = ownership ? null : saved ? (saved.root === actual.root ? null : continueRelease('watch/watch.mjs', saved))
     : forwardRelease('watch/watch.mjs', opt.cwd);
   if (forwarded !== null) process.exit(forwarded);
-  if (opt.detach && !dry) {
+  if(opt.step){
+    sharedRegistration=readJson(registrationFile(opt.org,runId));
+    if(!sharedRegistration||digest(sharedRegistration.ownership)!==digest(ownership)||sharedRegistration.to!==opt.to||sharedRegistration.cwd!==opt.cwd||sharedRegistration.source!==bundleRelease().root)throw Error('original shared registration required');
+  }
+  if (opt.shared || !opt.step && readJson(registrationFile(opt.org,runId))) {
+    const release=acquireLock();try{registerShared();}finally{release();}
+  } else if (opt.detach && !dry) {
     await detachWatcher();
   } else if (opt.spawn) {
     spawnWatcher();

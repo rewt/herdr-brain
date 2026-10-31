@@ -1,0 +1,123 @@
+import test from '../../test/helpers/bounded-test.mjs';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import {spawnSync} from 'node:child_process';
+import {EventEmitter} from 'node:events';
+import {createObserver,SAFETY_RECONCILIATION_MS} from '../observer.mjs';
+import {sharedDirectory,stepFile,nativeBinding,observerReceipt} from '../shared.mjs';
+import {gitProject} from '../../lib/project.mjs';
+
+const source=path.resolve(import.meta.dirname,'../..');
+function fixture(t,{count=1,consume,alive=()=>false}={}){
+  const root=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'run-observer-'))),repo=path.join(root,'project'),org=path.join(repo,'.org'),socket=path.join(root,'socket');
+  fs.mkdirSync(repo);fs.mkdirSync(org);fs.writeFileSync(socket,'original server');
+  const fleet=process.env.HERDR_MONITOR_FLEET;process.env.HERDR_MONITOR_FLEET=path.join(root,'fleet');
+  const git=(...args)=>{const r=spawnSync('git',args,{cwd:repo,encoding:'utf8'});assert.equal(r.status,0,r.stderr);return r.stdout.trim();};
+  git('init','-qb','main');const project=gitProject(repo),rows=[],calls=[],record=new Map(),duties=[],agents=[];
+  const ownership={owner:{controller:'brain',legacy:false,release:{id:'source',commit:null,root:source,identity:project.identity}},generation:2};
+  fs.mkdirSync(sharedDirectory(org),{recursive:true});fs.mkdirSync(path.dirname(stepFile(org,'R-1')),{recursive:true});
+  for(let i=1;i<=count;i++){
+    const run=`R-${i}`,native={name:`worker-${i}`,pane_id:`w1:p${i}`,workspace_id:'w1',terminal_id:`term-${i}`,agent_session:{value:`session-${i}`},cwd:repo,
+      agent_status:'working',state_change_seq:5,completion_seq:0};agents.push(native);
+    const d={schema:'brain.shared-watch/v1',run,org,repo,project:project.identity,cwd:repo,source,ownership,native:nativeBinding(native),
+      report:path.join(root,`${run}.md`),to:'supervisor-test',argv:[run,'--org',org,'--cwd',repo,'--to','supervisor-test'],
+      consumer:'watch/watch.mjs --step',wake_fact:'native lifecycle, report/record change or coarse-safety-reconciliation',stuck_owner:'supervisor-test'};
+    duties.push(d);fs.writeFileSync(path.join(sharedDirectory(org),run+'.json'),JSON.stringify(d));record.set(run,{generation:2,owner:ownership.owner,report:null,abandoned:null});
+  }
+  let clock=100_000;
+  class Client extends EventEmitter{
+    subscriptions=[];available=true;refresh;
+    async snapshot(){if(this.refresh)await this.refresh();if(!this.available)throw Error('server unavailable');return structuredClone({protocol:22,version:'fixture',agents,panes:agents.map(a=>({pane_id:a.pane_id}))});}
+    subscribe(s){this.subscriptions.push(s);}
+    close(){}
+  }
+  const client=new Client();let observer;
+  const save=(run,phase='waiting',extra={})=>fs.writeFileSync(stepFile(org,run),JSON.stringify({phase,ownership,next_at:null,...extra}));
+  const build=()=>observer=createObserver({repo,org,socket,client,now:()=>clock,subjects:()=>record,log:r=>rows.push(r),alive,
+    consume:async d=>{calls.push(d.run);if(consume)return consume(d,{save,observer});save(d.run);return{code:0};}});
+  build();
+  t.after(async()=>{await observer.close();if(fleet===undefined)delete process.env.HERDR_MONITOR_FLEET;else process.env.HERDR_MONITOR_FLEET=fleet;fs.rmSync(root,{recursive:true,force:true});});
+  return {repo,org,socket,project,client,agents,duties,rows,calls,record,save,build,get observer(){return observer;},advance:ms=>clock+=ms};
+}
+async function drain(f){await f.observer.idle();await new Promise(resolve=>setImmediate(resolve));await f.observer.idle();}
+
+test('one observer binds counters and consumes duplicate/reversed hints once without per-run residents',async t=>{
+  const f=fixture(t,{count:8});await f.observer.reconcile('startup');await drain(f);
+  assert.equal(f.calls.length,8);f.calls.length=0;
+  f.agents[0].agent_status='blocked';f.agents[0].state_change_seq=6;
+  for(let i=0;i<10;i++)f.client.emit('event',{event:'pane.agent_status_changed',data:{pane_id:'w1:p1',state_change_seq:1}});
+  await drain(f);assert.deepEqual(f.calls,['R-1']);
+  const bound=f.rows.findLast(r=>r.action==='observation'&&r.run==='R-1');
+  assert.equal(bound.state_change_seq,6);assert.equal(bound.native.session,'session-1');assert.equal(bound.claim,2);assert.ok(bound.server);
+  assert.equal(f.observer.counters.repairs,0);assert.ok(f.rows.every(r=>r.active===undefined||r.active<=2));
+});
+
+test('lost final native and file hints recover with no later event at the named coarse bound',async t=>{
+  const f=fixture(t);await f.observer.reconcile('startup');await drain(f);f.calls.length=0;
+  fs.writeFileSync(f.duties[0].report,'a final report');f.agents[0].agent_status='done';f.agents[0].state_change_seq=7;f.agents[0].completion_seq=7;
+  f.advance(SAFETY_RECONCILIATION_MS);await f.observer.tick();await drain(f);
+  assert.deepEqual(f.calls,['R-1']);assert.equal(f.observer.counters.repairs,1);
+  const repair=f.rows.find(r=>r.action==='safety-repair');assert.equal(repair.current.completion_seq,7);
+  await f.observer.tick();await drain(f);assert.equal(f.calls.length,1);
+  t.diagnostic(JSON.stringify({witness:'lost-final-hint',recovery_ms:SAFETY_RECONCILIATION_MS,repairs:1,handoffs:1,lost:0,duplicate:0}));
+});
+
+test('events during authoritative refresh invalidate it and subscription readiness requires acknowledgement',async t=>{
+  const f=fixture(t);let first=true;
+  f.client.refresh=async()=>{if(first){first=false;f.client.emit('event',{event:'pane.agent_status_changed',data:{}});}};
+  await f.observer.reconcile('startup');await drain(f);
+  assert.ok(f.observer.counters.reconciliations>=2);assert.equal(f.rows.findLast(r=>r.action==='reconciled').ready,false);
+  f.client.emit('ready');await drain(f);assert.equal(f.rows.findLast(r=>r.action==='reconciled').ready,true);
+  f.client.emit('connectionError',Error('invalid pane rejects the entire set'));f.agents.length=0;
+  await f.observer.reconcile('rejected');await drain(f);
+  assert.equal(f.rows.findLast(r=>r.action==='reconciled').ready,false);
+  assert.ok(f.client.subscriptions.at(-1).every(s=>!s.pane_id));
+  assert.equal(f.rows.findLast(r=>r.action==='observation').bound,false);
+});
+
+test('server replacement resets the observation boundary and never attributes counters to a new occupant',async t=>{
+  const f=fixture(t);await f.observer.reconcile('startup');await drain(f);
+  const before=f.rows.findLast(r=>r.action==='observation').server;
+  fs.renameSync(f.socket,f.socket+'.old');fs.writeFileSync(f.socket,'replacement server');
+  f.agents[0].state_change_seq=1;f.agents[0].agent_session.value='replacement session';
+  f.client.emit('disconnected');await drain(f);
+  const after=f.rows.findLast(r=>r.action==='observation');assert.notEqual(after.server,before);assert.equal(after.bound,false);assert.equal(after.state_change_seq,null);
+  f.client.available=false;await f.observer.reconcile('unavailable');await drain(f);
+  assert.equal(f.rows.findLast(r=>r.action==='observation').unavailable,'server unavailable');
+});
+
+test('host restart retains live finite owner then reconstructs the same duty after proven death',async t=>{
+  let live=true;const f=fixture(t,{alive:()=>live});f.save('R-1','running',{pid:88,identity:'original birth'});
+  await f.observer.reconcile('startup');await drain(f);assert.equal(f.calls.length,0);
+  await f.observer.close();live=false;f.build();await f.observer.reconcile('startup');await drain(f);
+  assert.deepEqual(f.calls,['R-1']);assert.equal(f.duties[0].native.session,'session-1');
+});
+
+test('finite consumer failure remains held across observer restart and cannot be replaced by a new registration',async t=>{
+  const f=fixture(t,{consume:async()=>({code:1})});await f.observer.reconcile('startup');await drain(f);
+  assert.equal(f.calls.length,1);assert.equal(f.observer.counters.consumer_failures,1);
+  await f.observer.close();f.build();await f.observer.reconcile('startup');await drain(f);assert.equal(f.calls.length,1);
+  const file=path.join(sharedDirectory(f.org),'R-1.json'),d=JSON.parse(fs.readFileSync(file));d.to='alternate';fs.writeFileSync(file,JSON.stringify(d));
+  await assert.rejects(f.observer.reconcile('changed'),/held observation registration changed/);
+});
+
+test('STOP and HOLD retain every saved duty and do not begin a finite consumer',async t=>{
+  const f=fixture(t);fs.mkdirSync(path.join(f.repo,'.lane/supervisor'),{recursive:true});
+  for(const name of ['STOP','HOLD']){
+    const file=path.join(f.repo,'.lane/supervisor',name);fs.writeFileSync(file,'original hold');
+    assert.deepEqual(await f.observer.reconcile('held'),{held:true});assert.equal(f.calls.length,0);fs.unlinkSync(file);
+  }
+  await f.observer.reconcile('startup');await drain(f);assert.equal(f.calls.length,1);assert.ok(fs.existsSync(path.join(sharedDirectory(f.org),'R-1.json')));
+});
+
+test('observer receipts reject PID reuse and a different project/server/source without fallback',t=>{
+  const f=fixture(t),directory=path.join(f.org,'watch/observer');
+  const saved={org:f.org,repo:f.repo,project:f.project.identity,source,socket:f.socket,pid:77,identity:'original'};
+  fs.writeFileSync(path.join(directory,'owner.json'),JSON.stringify(saved));
+  const expected={repo:f.repo,project:f.project.identity,source,socket:f.socket};
+  assert.equal(observerReceipt(f.org,expected,()=>true).pid,77);
+  assert.throws(()=>observerReceipt(f.org,expected,()=>false),/matching live/);
+  assert.throws(()=>observerReceipt(f.org,{...expected,socket:'foreign'},()=>true),/matching live/);
+});

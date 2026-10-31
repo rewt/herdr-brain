@@ -114,10 +114,56 @@ test('two wakeups share one owner and checkpoint a kept target before serving an
   };
   const first=runCloseoutTurn({...f.args,cli});
   assert.equal(first.steps,1);assert.equal(first.continuation.closeout,1);assert.equal(nested.already_running,true);
+  assert.equal(first.subjects[0].key,target.key);assert.equal(first.subjects[0].status,'evaluated');
+  assert.equal(first.subjects[0].evaluations[0].completed,false);
   runCloseoutTurn({...f.args,cli});
   assert.deepEqual(seen,[target.key,second.key]);
   const checkpoint=JSON.parse(fs.readFileSync(path.join(f.directory,'closeout-turn.json')));
   assert.equal(checkpoint.pending,undefined);assert.equal(checkpoint.continuation.reconcile_committed_sources,true);
+});
+
+test('new defect decisions follow independent report cleanup and existing decisions spend no later decision slots',t=>{
+  const f=fixture(t);fs.writeFileSync(path.join(f.scratch,'.identity-root'),'fixture');
+  fs.writeFileSync(f.file,JSON.stringify({...f.receipt,at:new Date().toISOString()}));f.report();
+  const secondLane=f.lane+'-defect';f.git(['worktree','add','-qb','lane/defect',secondLane,f.head]);
+  f.append([{type:'item.added',id:'ENG-2',role:'engineer',title:'Original held allocation'},
+    {type:'run.started',id:'R-2',item:'ENG-2',workspace:secondLane,meta:{lane:'defect',dispatch_project:f.common}}]);
+  const [source]=f.append([{type:'report.ingested',run:'R-2',sha256:'second',report:{outcome:'done'}}]),entry=source.closeout_targets[0];
+  const [refusal]=f.append([{type:'closeout.evaluated',identity:f.common,key:entry.key,source:{seq:source.seq,type:source.type},
+    run:entry.run,item:entry.item,revision:source.seq,completed:false,reason:'EPERM native refusal'}]);
+  const original=events(f),decisions=()=>[...fold(events(f)).items.values()].filter(i=>i.meta.uncertain_outcome);
+  let closed=false;
+  const result=runCloseoutTurn({...f.args,fault:stage=>{
+    if(stage==='before-closeout')assert.equal(decisions().length,0,'decision creation cannot delay independent cleanup');
+    if(stage==='after-closeout')closed=!fs.existsSync(f.lane);
+  }});
+  assert.equal(closed,true);assert.deepEqual(result.errors,[]);assert.equal(result.subjects[0].evaluations[0].completed,true);
+  assert.equal(result.subjects[0].evaluations[0].resources.folder.status,'removed');
+  assert.deepEqual(result.decisions,{existing:0,attempted:1});assert.equal(decisions().length,1);
+  assert.equal(decisions()[0].meta.uncertain_outcome.check.subject.key,entry.key);
+  const next=runCloseoutTurn(f.args);assert.deepEqual(next.errors,[]);assert.deepEqual(next.decisions,{existing:1,attempted:0});
+  assert.equal(decisions().length,1);assert.equal(fs.existsSync(secondLane),true);
+  assert.deepEqual(events(f).slice(0,original.length),original);assert.deepEqual(events(f).find(e=>e.seq===refusal.seq),refusal);
+});
+
+test('a failed subject keeps its original binding and receipt while an independent subject completes in the same turn',t=>{
+  const f=fixture(t);f.report();const target=currentCloseoutEntries(f.common,f.org,events(f))[0];
+  const secondLane=f.lane+'-second';f.git(['worktree','add','-qb','lane/second',secondLane,f.head]);
+  f.append([{type:'item.added',id:'ENG-2',role:'engineer',title:'Independent target'},
+    {type:'run.started',id:'R-2',item:'ENG-2',workspace:secondLane,meta:{lane:'second'}}]);
+  const [source]=f.append([{type:'report.ingested',run:'R-2',sha256:'second',report:{outcome:'done'}}]),second=source.closeout_targets[0];
+  const result=runCloseoutTurn({...f.args,maxSteps:2,cli:(file,args)=>{
+    if(args[0]==='refresh')return '{}';
+    const key=JSON.parse(args[args.indexOf('--keys')+1])[0];
+    if(key===target.key)throw Error('locked: original project owner; owner is live or unknown');
+    assert.equal(key,second.key);return JSON.stringify({evaluated:[{key,source:{seq:source.seq,type:source.type},completed:true}]});
+  }});
+  assert.equal(result.steps,2);assert.equal(result.subjects[0].status,'failed');assert.equal(result.subjects[0].run,target.run);
+  assert.deepEqual(result.subjects[0].source,target.source);assert.match(result.subjects[0].reason,/original project owner/);
+  assert.equal(result.subjects[1].status,'evaluated');assert.equal(result.subjects[1].evaluations[0].completed,true);
+  assert.equal(result.errors.length,1);assert.equal(result.errors[0].key,target.key);
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(f.directory,'closeout-turn.json'))).subjects,result.subjects);
+  assert.deepEqual(f.read().actions,[],'the stubbed independent completion grants no native or Git authority');
 });
 
 test('crash before ingest and a dropped availability wake reconcile the original report',t=>{

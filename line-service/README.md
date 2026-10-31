@@ -1237,6 +1237,17 @@ adoption obligations.
 
 ## Finite report and closeout turns
 
+Finite selection alternates current report allocations and legacy continuations,
+with fair attempt order inside each group and a rotating first group across
+turns. A checkpointed admission failure cannot bury a finished report behind
+every unattempted historical key; legacy cleanup still receives bounded service.
+Selection reuses already recorded defect decisions without per-defect service
+discovery. Only a bounded tail of still-current new defects enters the original
+guarded decision writer after independent cleanup. Each dispatched subject keeps
+its original source binding and its evaluated, held-owner, failed or handoff
+outcome in the turn checkpoint and completion result. These scheduling facts
+grant no native/Git authority and never complete an UNKNOWN attempt.
+
 Each `closeout.evaluated` now carries independent `resources.session`, `.folder`
 and `.branch` dispositions. Only exact `closeout.effect` receipts establish
 `closed`, `removed`, `deleted` or `retained`; `absent` is a current allocation

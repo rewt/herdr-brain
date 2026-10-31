@@ -11,6 +11,7 @@ import {uncertainOutcomeDoctrine} from '../lib/uncertain-outcome.mjs';
 import {closeoutNextStage,closeoutWait,closeoutWaitState} from '../lib/closeout-status.mjs';
 import {readCloseoutEntries,closeoutEvaluations} from '../lib/closeout.mjs';
 const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
+export const outcomeDecisionKey=(identity,org,key)=>createHash('sha256').update(JSON.stringify([identity,org,key])).digest('hex');
 
 // Admission and idle diagnosis observe the same queued cleanup policy. Cache
 // only within one scan; a fresh event snapshot refreshes its cleanup view.
@@ -42,7 +43,7 @@ export function obsoleteOutcomeDecision(item,{events,entries,evaluations}) {
 }
 export function queueOutcomeDecision({repo,org,env,check,owner='pass'}) {
   if(owner!=='pass'&&(owner!=='closeout-turn'||!check.key.startsWith('closeout:')))throw Error('finite closeout owner may queue only closeout decisions');
-  const binding=serviceRecordBinding({repo,org,env,owner}),key=createHash('sha256').update(JSON.stringify([binding.identity,org,check.key])).digest('hex');
+  const binding=serviceRecordBinding({repo,org,env,owner}),key=outcomeDecisionKey(binding.identity,org,check.key);
   const guard=()=>{
     serviceRecordBinding({repo,org,env,owner});
     for(const file of [path.join(binding.directory,'STOP'),path.join(repo,'.lane/supervisor/STOP'),path.join(repo,'.lane/supervisor/HOLD')])if(fs.existsSync(file))throw Error('STOP/HOLD prevents outcome decision');

@@ -54,6 +54,30 @@ test('legacy physical continuations cannot starve behind repeatedly eligible dir
   assert.deepEqual(scheduleLineCloseouts([direct,legacy],[],{batch:true,attempts:{direct:10}}).map(x=>x.entry.key),['legacy','direct']);
 });
 
+test('a lock-contended report gets a bounded slot beside a never-attempted legacy backlog',()=>{
+  const direct={key:'report',reportCloseout:true,source:{seq:3000},panes:[{}]},
+    legacy=Array.from({length:30},(_,i)=>({key:`old-${i}`,signal:'landed',source:{seq:i+1},panes:[]}));
+  for(const turn of [1,2]){
+    const selected=scheduleLineCloseouts([...legacy,direct],[],{batch:true,attempts:{report:2568},turn});
+    assert.ok(selected.slice(0,2).some(x=>x.entry.key==='report'),'an admission refusal cannot bury the report behind every historical key');
+    assert.ok(selected.slice(0,2).some(x=>x.entry.key.startsWith('old-')),'legacy cleanup retains its slot');
+    assert.equal(new Set(selected.map(x=>x.entry.key)).size,31);
+    assert.equal(selected.find(x=>x.entry.key==='report').sessionsOnly,false);
+    assert.deepEqual(selected.filter(x=>x.entry.key!=='report').map(x=>x.entry.key),legacy.map(x=>x.key));
+  }
+});
+
+test('one-step turns rotate report and legacy service even with unequal historical attempt counters',()=>{
+  const direct={key:'report',reportCloseout:true,source:{seq:3000},panes:[{}]},
+    legacy=Array.from({length:30},(_,i)=>({key:`old-${i}`,signal:'landed',source:{seq:i+1},panes:[]})),attempts={report:2568};
+  const selected=[];
+  for(let turn=1;turn<=4;turn++){
+    const first=scheduleLineCloseouts([...legacy,direct],[],{batch:true,attempts,turn})[0];
+    selected.push(first.entry.key);attempts[first.entry.key]=2568+turn;
+  }
+  assert.deepEqual(selected,['report','old-0','report','old-1']);
+});
+
 test('line classifies parked UNKNOWN and missing preservation without replay, and retains unreported allocation truth',t=>{
   const f=setup(t,{direct:true,bound:true});selectCurrentCleanup(f);f.report();const entry=target(f);
   f.append([{type:'closeout.effect',identity:f.common,key:entry.key,source:entry.source,effect:'original',producer:'native-closeout/v2',

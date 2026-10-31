@@ -13,7 +13,7 @@ import {requireController,readOwnedRun} from '../lib/run-owner-guard.mjs';
 import {currentCloseoutEntries,closeoutEvaluations,closeoutEvaluation,closeoutRevision,
   scheduleLineCloseouts,directCloseoutObservation,publishCloseoutEvents,lineServiceOwnsCleanup,unpublishedCloseoutSources,actionableCloseout} from '../lib/closeout.mjs';
 import {closeoutNextStage,closeoutWait,closeoutWaitState,registerCloseoutWait,unresolvedGitRemoval} from '../lib/closeout-status.mjs';
-import {queueOutcomeDecision} from './outcome-decision.mjs';
+import {queueOutcomeDecision,outcomeDecisionKey,obsoleteOutcomeDecision} from './outcome-decision.mjs';
 import {recordCloseoutTurn} from './closeout-measurement.mjs';
 import {missingCloseoutBinding} from '../lib/closeout-facts.mjs';
 import {reconcileCloseoutBacklog} from '../lib/closeout-backlog.mjs';
@@ -177,6 +177,9 @@ function closeoutTurn({project,org,cli,guard,env=process.env,maxSteps=8,budgetMs
     const entries=currentCloseoutEntries(project.identity,org,observed.events,{onInvalid:()=>{}}),
       rows=closeoutEvaluations(project.identity,org,observed.events),evaluations=new Map(rows.map(e=>[e.key,e]));
     for(const entry of entries)if(entry.reportCloseout){const prior=closeoutEvaluation(entry,observed.events);if(prior)evaluations.set(entry.key,prior);else evaluations.delete(entry.key);}
+    const knownDecisions=new Set([...observed.state.items.values()].map(i=>i.meta.uncertain_outcome?.key).filter(Boolean)),
+      decisions=[],subjects=[];
+    let existingDecisions=0;
     const eligible=entries.filter(entry=>{
       if(expired())return false;
       if(entry.project!==project.canonical||entry.org!==org)return false;
@@ -184,12 +187,13 @@ function closeoutTurn({project,org,cli,guard,env=process.env,maxSteps=8,budgetMs
       const next=prior&&closeoutNextStage(entry,prior,observed.events,entries);
       const wait=prior&&closeoutWait(entry,prior,observed.events),status=closeoutWaitState(wait,observed.events);
       if(prior&&!next&&['defect','failed'].includes(status)){
-        try{
-          guard();code.verify();
-          const key=`closeout:${entry.key}`;
-          queueOutcomeDecision({repo:project.canonical,org,env,owner:'closeout-turn',check:{key,
-            subject:{item:entry.item,run:entry.run,key:entry.key,head:entry.head,source:entry.source},wait,status}});
-        }catch(error){if(error.code==='CLOSEOUT_CODE_CHANGED')throw error;errors.push({key:entry.key,stage:'outcome-decision',reason:error.message});}
+        const key=`closeout:${entry.key}`;
+        // Selection is read-only. Existing decisions already own these defects;
+        // no per-defect native/source discovery or record fold is needed. New
+        // decisions run after cleanup with their original fresh mutation guards.
+        if(knownDecisions.has(outcomeDecisionKey(project.identity,org,key)))existingDecisions++;
+        else decisions.push({entry,check:{key,
+          subject:{item:entry.item,run:entry.run,key:entry.key,head:entry.head,source:entry.source},wait,status}});
         return false;
       }
       // Match the executor's admission before spending a finite step. Legacy
@@ -201,7 +205,8 @@ function closeoutTurn({project,org,cli,guard,env=process.env,maxSteps=8,budgetMs
       return status==='complete'&&
         closeoutRevision(entry,observed.events,observed.state)>(prior.revision??0);
     });
-    const scheduled=scheduleLineCloseouts(eligible,rows,{batch:true,attempts:state.targets});
+    const scheduled=scheduleLineCloseouts(eligible,rows,{batch:true,attempts:state.targets,turn:state.turn});
+    state.subjects=subjects;
     for(const {entry,sessionsOnly}of scheduled){
       if(expired()||steps>=maxSteps)break;
       // Do not spend the final seconds repeating a removal preflight that
@@ -217,14 +222,29 @@ function closeoutTurn({project,org,cli,guard,env=process.env,maxSteps=8,budgetMs
         const result=JSON.parse(cli('supervisor/closeout.mjs',['drain','--repo',project.canonical,'--org',org,
           '--keys',JSON.stringify([entry.key]),'--no-restart','--retry-safe','--deadline',String(Math.floor(now()+Math.max(1,budgetMs-(clock()-started)))),
           ...(sessionsOnly?['--sessions-only']:[])]));
-        if(result.restart)throw Object.assign(Error('closer returned a guarded code handoff'),{code:'CLOSEOUT_CODE_CHANGED',binding:result.restart.old,current:result.restart.current});
+        subjects.push({key:entry.key,run:entry.run,source:entry.source,
+          status:result.restart?'source-handoff':result.already_running?'owned':result.evaluated?.length?'evaluated':'not-evaluated',
+          evaluations:(result.evaluated??[]).map(({key,source,completed,reason,resources})=>({key,source,completed,reason,resources}))});
+        if(result.restart){save();throw Object.assign(Error('closer returned a guarded code handoff'),{code:'CLOSEOUT_CODE_CHANGED',binding:result.restart.old,current:result.restart.current});}
         state.last_result={key:entry.key,result};fault('after-closeout');
-      }catch(error){if(error.code==='CLOSEOUT_CODE_CHANGED')throw error;errors.push({key:entry.key,stage:'closeout',reason:error.message});}
+      }catch(error){if(error.code==='CLOSEOUT_CODE_CHANGED')throw error;errors.push({key:entry.key,stage:'closeout',reason:error.message});
+        subjects.push({key:entry.key,run:entry.run,source:entry.source,status:'failed',reason:error.message});}
       steps++;delete state.pending;save();
     }
     // Reserve a bounded original-binding refresh even while direct keeps stay
     // eligible. Otherwise the old backlog can never acquire its first target.
     if(!refreshed)refresh();
+    let decisionSteps=0;
+    for(const {entry,check}of decisions){
+      if(expired()||decisionSteps>=maxSteps)break;
+      decisionSteps++;
+      try{
+        const current=read(),entries=currentCloseoutEntries(project.identity,org,current.events,{onInvalid:()=>{}}),
+          evaluations=new Map(closeoutEvaluations(project.identity,org,current.events).map(e=>[e.key,e]));
+        if(obsoleteOutcomeDecision({meta:{uncertain_outcome:{check}}},{events:current.events,entries,evaluations}))continue;
+        queueOutcomeDecision({repo:project.canonical,org,env,owner:'closeout-turn',check});
+      }catch(error){if(error.code==='CLOSEOUT_CODE_CHANGED')throw error;errors.push({key:entry.key,stage:'outcome-decision',reason:error.message});}
+    }
     // One grouped diagnostic, deduplicated by unchanged scope/reason. Counting
     // kept turns never re-invokes or reads an unresolved native effect.
     const final=read(),latest=new Map(closeoutEvaluations(project.identity,org,final.events).map(e=>[e.key,e]));
@@ -248,9 +268,9 @@ function closeoutTurn({project,org,cli,guard,env=process.env,maxSteps=8,budgetMs
       state.alarm_signature=signature;
     }
     state.completed_at=new Date(now()).toISOString();state.errors=errors;state.continuation={
-      ingest:intake.remaining??0,closeout:Math.max(0,scheduled.length-steps),reconcile_committed_sources:true};
+      ingest:intake.remaining??0,closeout:Math.max(0,scheduled.length-steps),decisions:decisions.length-decisionSteps,reconcile_committed_sources:true};
     save();fault('before-ack');
     return{result:'closeout-turn-complete',ingested,steps,backlog_classified:backlog.length,
-      backlog_reconcile_ms:state.backlog_reconcile_ms,errors,continuation:state.continuation};
+      backlog_reconcile_ms:state.backlog_reconcile_ms,subjects,decisions:{existing:existingDecisions,attempted:decisionSteps},errors,continuation:state.continuation};
   }finally{release();}
 }

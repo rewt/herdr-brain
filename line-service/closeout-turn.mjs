@@ -36,7 +36,12 @@ function ingestEligible(run,state,identity,events) {
 export function runCloseoutTurn(options) {
   const clock=options.clock??(()=>performance.now()),now=options.now??(()=>Date.now()),started=clock();
   let successor=false,contended=false;
-  try{const result=closeoutTurn(options);contended=Boolean(result.already_running);return result;}
+  try{
+    // Intake has its own finite owner. A retained closeout command must never
+    // prevent the next scheduled wake from committing a finished report.
+    const intake=runReportIntake(options),result=closeoutTurn({...options,intake});
+    contended=Boolean(result.already_running);return result;
+  }
   catch(error){
     // The old turn's finally has released every owner/native/record lock. Join
     // exactly one fresh physical-code process inside the ORIGINAL allowance;
@@ -60,27 +65,29 @@ function measureTurn({project,org,env=process.env,now=()=>Date.now(),measure=rec
   catch(error){try{fs.appendFileSync(path.join(closeoutServiceDirectory(org,project.identity),'closeout.log'),JSON.stringify({action:'closeout-measurement-failed',
     at:new Date(now()).toISOString(),reason:error.message})+'\n',{mode:0o600});}catch{/* Diagnostics cannot alter the turn result. */}}
 }
-function closeoutTurn({project,org,cli,guard,env=process.env,maxSteps=8,budgetMs=CLOSEOUT_TURN_BUDGET_MS,
+export function runReportIntake({project,org,cli,guard,maxSteps=8,budgetMs=CLOSEOUT_TURN_BUDGET_MS,
   clock=()=>performance.now(),now=()=>Date.now(),fault=()=>{}}) {
-  const directory=closeoutServiceDirectory(org,project.identity),file=path.join(directory,'closeout-turn.json');
+  const directory=closeoutServiceDirectory(org,project.identity),file=path.join(directory,'report-intake.json');
   fs.mkdirSync(directory,{recursive:true});
   let release;
-  try{release=retirementLock(path.join(directory,'closeout-turn.lock'));}
+  try{release=retirementLock(path.join(directory,'report-intake.lock'));}
   catch(error){if(error.message.startsWith('locked:'))return{already_running:true};throw error;}
   try{
-    guard();const code=bindCloseoutCode(project);
-    const state=fs.existsSync(file)?JSON.parse(fs.readFileSync(file,'utf8')):
-      {schema:'line-closeout-turn/v1',identity:project.identity,org,attempt:0,ingest:{},targets:{}};
-    if(state.schema!=='line-closeout-turn/v1'||state.identity!==project.identity||state.org!==org)throw Error('closeout checkpoint identity changed');
-    const save=()=>writeFileAtomic(file,JSON.stringify(state)+'\n',0o600),started=clock(),expired=()=>clock()-started>=budgetMs;
+    guard();const code=bindCloseoutCode(project),started=clock();
+    // Migrate only the fair intake cursor. The old checkpoint remains intact;
+    // closeout and intake never write one another's scheduling authority.
+    const legacy=path.join(directory,'closeout-turn.json');
+    const previous=fs.existsSync(file)?JSON.parse(fs.readFileSync(file,'utf8')):
+      fs.existsSync(legacy)?JSON.parse(fs.readFileSync(legacy,'utf8')):null;
+    if(previous&&(previous.identity!==project.identity||previous.org!==org))throw Error('intake checkpoint identity changed');
+    const state={schema:'line-report-intake/v1',identity:project.identity,org,attempt:previous?.attempt??0,ingest:previous?.ingest??{}};
+    const save=()=>writeFileAtomic(file,JSON.stringify(state)+'\n',0o600);
     const read=()=>{guard();code.verify();const loaded=loadEvents(org);if(loaded.tornTail)throw Error('incomplete closeout record');return{events:loaded.events,state:fold(loaded.events)};};
-    let observed=read(),ingested=0,steps=0;const errors=[];
-    // The file is only a validation candidate. Reconcile all committed run
-    // sources, so losing an availability hint or dying before ingest is safe.
+    const observed=read();let ingested=0;const errors=[];
     const pending=[...observed.state.runs.values()].filter(r=>ingestEligible(r,observed.state,project.identity,observed.events)&&fs.existsSync(r.report_path))
       .sort((a,b)=>(state.ingest[a.id]??0)-(state.ingest[b.id]??0)||a.started.seq-b.started.seq);
     for(const run of pending){
-      if(expired()||clock()-started>=Math.min(15000,budgetMs/3)||ingested>=maxSteps)break;
+      if(clock()-started>=Math.min(15000,budgetMs/3)||ingested>=maxSteps)break;
       state.ingest[run.id]=++state.attempt;state.pending={stage:'ingest',run:run.id};save();fault('before-ingest');
       try{
         const current=read(),r=current.state.runs.get(run.id),item=current.state.items.get(r?.item);
@@ -95,7 +102,26 @@ function closeoutTurn({project,org,cli,guard,env=process.env,maxSteps=8,budgetMs
       }catch(error){errors.push({run:run.id,stage:'ingest',reason:error.message});}
       ingested++;delete state.pending;save();
     }
-    observed=read();
+    state.completed_at=new Date(now()).toISOString();state.errors=errors;state.remaining=Math.max(0,pending.length-ingested);save();
+    return{ingested,errors,remaining:state.remaining,attempts:state.ingest};
+  }finally{release();}
+}
+function closeoutTurn({project,org,cli,guard,env=process.env,maxSteps=8,budgetMs=CLOSEOUT_TURN_BUDGET_MS,intake={},
+  clock=()=>performance.now(),now=()=>Date.now(),fault=()=>{}}) {
+  const directory=closeoutServiceDirectory(org,project.identity),file=path.join(directory,'closeout-turn.json');
+  fs.mkdirSync(directory,{recursive:true});
+  let release;
+  try{release=retirementLock(path.join(directory,'closeout-turn.lock'));}
+  catch(error){if(error.message.startsWith('locked:'))return{already_running:true};throw error;}
+  try{
+    guard();const code=bindCloseoutCode(project);
+    const state=fs.existsSync(file)?JSON.parse(fs.readFileSync(file,'utf8')):
+      {schema:'line-closeout-turn/v1',identity:project.identity,org,attempt:0,ingest:{},targets:{}};
+    if(state.schema!=='line-closeout-turn/v1'||state.identity!==project.identity||state.org!==org)throw Error('closeout checkpoint identity changed');
+    const save=()=>writeFileAtomic(file,JSON.stringify(state)+'\n',0o600),started=clock(),expired=()=>clock()-started>=budgetMs;
+    const read=()=>{guard();code.verify();const loaded=loadEvents(org);if(loaded.tornTail)throw Error('incomplete closeout record');return{events:loaded.events,state:fold(loaded.events)};};
+    let observed=read(),steps=0;const ingested=intake.ingested??0,errors=[...(intake.errors??[])];
+    if(intake.attempts)state.ingest=intake.attempts; // compatibility diagnostic only
     const backlogStarted=clock();
     const backlog=reconcileCloseoutBacklog({project,org,events:observed.events,state:observed.state,expired,
       guard:()=>{guard();code.verify();}});
@@ -152,6 +178,7 @@ function closeoutTurn({project,org,cli,guard,env=process.env,maxSteps=8,budgetMs
       rows=closeoutEvaluations(project.identity,org,observed.events),evaluations=new Map(rows.map(e=>[e.key,e]));
     for(const entry of entries)if(entry.reportCloseout){const prior=closeoutEvaluation(entry,observed.events);if(prior)evaluations.set(entry.key,prior);else evaluations.delete(entry.key);}
     const eligible=entries.filter(entry=>{
+      if(expired())return false;
       if(entry.project!==project.canonical||entry.org!==org)return false;
       const prior=evaluations.get(entry.key);if(prior?.completed)return false;
       const next=prior&&closeoutNextStage(entry,prior,observed.events,entries);
@@ -221,7 +248,7 @@ function closeoutTurn({project,org,cli,guard,env=process.env,maxSteps=8,budgetMs
       state.alarm_signature=signature;
     }
     state.completed_at=new Date(now()).toISOString();state.errors=errors;state.continuation={
-      ingest:Math.max(0,pending.length-ingested),closeout:Math.max(0,scheduled.length-steps),reconcile_committed_sources:true};
+      ingest:intake.remaining??0,closeout:Math.max(0,scheduled.length-steps),reconcile_committed_sources:true};
     save();fault('before-ack');
     return{result:'closeout-turn-complete',ingested,steps,backlog_classified:backlog.length,
       backlog_reconcile_ms:state.backlog_reconcile_ms,errors,continuation:state.continuation};

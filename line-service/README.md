@@ -155,6 +155,21 @@ action on the same subject. On return the pass reacquires the scheduling lock
 and reloads the journal in place before writing its result. Other passes' receipts
 are inherited. Productive command time does not consume the scheduling allowance.
 
+Two lifetime owner locks, `general-0.lock` and `general-1.lock`, bound retained
+general passes before loading the record. One slow foreground owner still permits
+an independent admission pass, while repeated wakes cannot accumulate full-record
+scans and retained snapshots without limit. The existing `pass.lock` continues to
+serialize scans and journal writes. Live or unknown owners keep their slots;
+only the existing receipted dead-owner recovery can reclaim one.
+
+Report intake precedes closeout-owner acquisition and uses its own finite
+`report-intake.lock` and fair cursor in `report-intake.json`. Each scheduled wake
+can therefore ingest finished reports while another turn retains the closeout
+owner or a general pass owns scheduling. Intake keeps the existing bounded
+selection, fresh project/source/claim/current-run/STOP/HOLD checks and guarded
+ingest command. Contention retains the original owner; the next wake reconciles
+the committed report facts. No saved watcher or native attempt is replaced.
+
 Each saved command names its consumer, completion wake fact and stuck owner.
 The foreground helper persists its exact terminal result before replying, even
 if the scheduling parent has exited. A missing result remains UNKNOWN, with no

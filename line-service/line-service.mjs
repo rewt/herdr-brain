@@ -192,6 +192,19 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
     log({action:'general-pass-lock-recovery',schema:'line-pass-lock-recovery/v1',project:project.identity,org,...recovery});
   }});
   function pass() {
+    // pass.lock serializes scans, but is deliberately yielded for foreground
+    // effects. Keep at most two whole passes (one slow owner plus independent
+    // admission) instead of retaining a full record for every scheduled wake.
+    let releaseGeneral;
+    for(let slot=0;slot<2&&!releaseGeneral;slot++)try{
+      releaseGeneral=noticeLock(path.join(directory,`general-${slot}.lock`),{onRecovery:recovery=>{
+        observe();log({action:'general-owner-recovery',...recovery});
+      }});
+    }catch(error){if(!error.message.startsWith('locked:'))throw error;}
+    if(!releaseGeneral){log({action:'general-owner-held',reason:'two finite general passes already own the scheduling allowance'});return{already_running:true};}
+    try{return generalPass();}finally{releaseGeneral();}
+  }
+  function generalPass() {
     const closeoutStarted=workClock();
     let closeout_ms;
     try { closeoutOrHold(closeout, log); }

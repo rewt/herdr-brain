@@ -169,6 +169,33 @@ function ingestReports(f,calls){
   };
 }
 
+test('report intake commits while both closeout and scheduling owners retain their original locks',t=>{
+  const f=fixture(t),calls=[];reportCandidate(f,'R-2');
+  const locks=['closeout-turn.lock','pass.lock'].map(name=>path.join(f.directory,name));
+  const releases=locks.map(lock=>noticeLock(lock)),owners=locks.map(lock=>fs.readFileSync(path.join(lock,'owner.json')));
+  try{
+    const result=runCloseoutTurn({...f.args,cli:ingestReports(f,calls)});
+    assert.equal(result.already_running,true,'closeout remains with its original owner');
+    assert.equal(events(f).filter(e=>e.type==='report.ingested'&&e.run==='R-2').length,1);
+    assert.equal(calls.length,1);
+    const checkpoint=JSON.parse(fs.readFileSync(path.join(f.directory,'report-intake.json')));
+    assert.equal(checkpoint.ingest['R-2'],1);assert.deepEqual(checkpoint.errors,[]);
+    for(let n=0;n<locks.length;n++)assert.deepEqual(fs.readFileSync(path.join(locks[n],'owner.json')),owners[n]);
+    runCloseoutTurn({...f.args,cli:ingestReports(f,calls)});
+    assert.equal(calls.length,1,'next wake consumes committed intake without replay');
+  }finally{for(const release of releases.toReversed())release();}
+});
+
+test('report intake retains an occupied intake owner and resumes on the next wake',t=>{
+  const f=fixture(t),calls=[];reportCandidate(f,'R-2');
+  const lock=path.join(f.directory,'report-intake.lock'),release=noticeLock(lock),owner=fs.readFileSync(path.join(lock,'owner.json'));
+  try{
+    runCloseoutTurn({...f.args,cli:ingestReports(f,calls)});
+    assert.deepEqual(calls,[]);assert.deepEqual(fs.readFileSync(path.join(lock,'owner.json')),owner);
+  }finally{release();}
+  runCloseoutTurn({...f.args,cli:ingestReports(f,calls)});assert.equal(calls.length,1);
+});
+
 test('historical and foreign report files spend no finite ingest slots across repeated turns',t=>{
   const f=fixture(t),calls=[];
   reportCandidate(f,'R-2');f.append([{type:'item.closed',id:'ENG-2',as:'done'}]);

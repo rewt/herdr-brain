@@ -47,7 +47,8 @@ createLineService({repo,org,to:'supervisor-test',env:process.env,haltAfter:100,m
   const release=acquireSessionCapLock(common);
   try{checkSessionCap({config,org,common,kind:'build'});fs.mkdirSync(jobs,{recursive:true});fs.writeFileSync(file,JSON.stringify({common,repo,org,item,token:item,stage:'starting',native_launch_attempted:false}));}finally{release();}
   fs.appendFileSync(path.join(root,'launches.jsonl'),JSON.stringify({item,at:Date.now(),pid:process.pid})+'\\n');
-  if(item==='ENG-1'){
+  if(item==='ENG-1'||item==='ENG-2'&&fs.existsSync(path.join(root,'block-second'))){
+   fs.writeFileSync(path.join(root,'blocked-'+item),'original command entered');
    fs.writeFileSync(path.join(root,'blocked'),'original command entered');
    while(!fs.existsSync(path.join(root,'release')))Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,15);
    const release=acquireSessionCapLock(common);try{fs.unlinkSync(file);}finally{release();}
@@ -110,6 +111,24 @@ for(const mode of ['available','full','crashed'])test(`scheduling yields slow A 
   const rows=f.rows();evidence(t,mode,{launches:f.launches(),lock_segments:rows.filter(r=>r.action==='schedule-unlocked'),
     completions:rows.filter(r=>r.action==='pass-complete'),admission:rows.filter(r=>r.action.startsWith('admission-')||r.action==='capacity-held'),actions:f.journal().actions,
     capacity_waits:f.journal().capacity_waits??{},command_results:fs.readdirSync(path.join(f.directory,'command-receipts')).map(name=>JSON.parse(fs.readFileSync(path.join(f.directory,'command-receipts',name))))});
+});
+
+test('two retained general owners bound repeated wakes before another full-record scan',async t=>{
+  const f=fixture(t,3),a=f.start();await until(()=>fs.existsSync(path.join(f.root,'blocked')));
+  fs.writeFileSync(path.join(f.root,'block-second'),'hold independent effect');f.add('ENG-2');
+  const b=f.start();await until(()=>fs.existsSync(path.join(f.root,'blocked-ENG-2')));
+  f.add('ENG-3');const before=f.rows().filter(r=>r.action==='pass-start').length;
+  const actions=f.journal().actions,owners=[0,1].map(n=>fs.readFileSync(path.join(f.directory,`general-${n}.lock/owner.json`)));
+  for(let n=0;n<3;n++){const wake=f.start();assert.equal((await wake.done).code,0);}
+  assert.equal(f.rows().filter(r=>r.action==='pass-start').length,before,'no extra snapshot/backlog scan starts');
+  assert.equal(f.rows().filter(r=>r.action==='general-owner-held').length,3);
+  assert.deepEqual(f.journal().actions,actions,'pending effects remain unchanged');
+  for(let n=0;n<owners.length;n++)assert.deepEqual(fs.readFileSync(path.join(f.directory,`general-${n}.lock/owner.json`)),owners[n]);
+  assert.deepEqual(f.launches().map(r=>r.item),['ENG-1','ENG-2']);
+  fs.writeFileSync(path.join(f.root,'release'),'original effects may finish');
+  assert.equal((await a.done).code,0);assert.equal((await b.done).code,0);
+  const next=f.start();assert.equal((await next.done).code,0);
+  assert.equal(f.launches().filter(r=>r.item==='ENG-3').length,1);
 });
 
 test('STOP appearing during slow A preserves its receipt and prevents B native admission',async t=>{

@@ -81,7 +81,12 @@ test(`shared discharge compares canonical record paths (record-only: ${recordOnl
   f.put(f.files.duty,{...f.duty,org:savedAlias});
   f.put(f.files.host,{...f.host,org:savedAlias});
   f.put(f.files.receipt,{...f.receipt,inbox:path.join(savedAlias,'supervisor/inbox.log')});
-  const aliasedProof=()=>{const p=proof();p.run.meta.dispatch_record=savedAlias;return p;};
+  const aliasedProof=()=>{
+    const p=proof();p.run.meta.dispatch_record=savedAlias;
+    // The original launch and its session binding must agree on the spelling.
+    for(const bind of p.state.sessionBindings.get(p.run.id)??[])bind.dispatch.record=savedAlias;
+    return p;
+  };
   if(!recordOnly)f.inbox({...f.notice,project:{...f.notice.project,org:savedAlias},correlation:{...f.notice.correlation,record:savedAlias}});
   assert.equal(sharedWatcherDischarged(aliasedProof()),true,'canonicalize saved paths too');
   assert.equal(sharedWatcherDischarged({...aliasedProof(),org:f.org}),true,'canonical caller with aliased receipts');

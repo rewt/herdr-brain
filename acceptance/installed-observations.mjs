@@ -4,10 +4,35 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import childProcess from 'node:child_process';
+import net from 'node:net';
+import {Duplex} from 'node:stream';
+import {EventEmitter} from 'node:events';
 import { syncBuiltinESMExports } from 'node:module';
 import { fileURLToPath } from 'node:url';
 
 const root = fs.realpathSync(process.env.INSTALLED_CYCLE_ROOT);
+// Declared native observation seam: the installed observer speaks its normal
+// protocol to an in-memory scratch transport. No real socket is ever opened.
+// Deliberately send no hints: only its unchanged 30 s safety timer can recover.
+if(process.argv[1]?.endsWith('/watch/observer.mjs')) {
+  net.createConnection=function(socket,...args){
+    if(socket!==process.env.HERDR_SOCKET_PATH)throw Error('foreign observer transport');
+    const stream=new Duplex({read(){},write(bytes,_encoding,done){
+      for(const line of bytes.toString().trim().split('\n')) {
+        const request=JSON.parse(line),native=JSON.parse(fs.readFileSync(path.join(root,'native.json'))),ws=Object.values(native.workspaces);
+        const result=request.method==='session.snapshot'?{type:'session_snapshot',snapshot:{protocol:22,version:'scripted-installed-canary',
+          agents:ws.flatMap(w=>w.agent?[{...w.agent,state_change_seq:native.seq??1,completion_seq:native.seq??1}]:[]),panes:ws.map(w=>w.pane)}}:
+          request.method==='events.subscribe'?{type:'subscription_started'}:null;
+        if(!result)throw Error('unexpected observer request');
+        fs.appendFileSync(path.join(root,'evidence/observer-transport.jsonl'),JSON.stringify({at:new Date().toISOString(),request,result})+'\n');
+        this.push(JSON.stringify({id:request.id,result})+'\n');
+      }done();
+    }});
+    stream.setEncoding('utf8');stream.setTimeout=()=>stream;
+    queueMicrotask(()=>stream.emit('connect'));return stream;
+  };
+  if(process.env.INSTALLED_CYCLE_DROP_HINTS==='1')fs.watch=()=>Object.assign(new EventEmitter(),{close(){}});
+}
 fs.appendFileSync(path.join(root,'evidence/executables.jsonl'),JSON.stringify({pid:process.pid,node:process.execPath,
   entry:process.argv[1],cwd:process.cwd()})+'\n');
 // sandbox-exec drops the host preload. Propagate this local native fixture

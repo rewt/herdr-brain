@@ -1,0 +1,312 @@
+// Extension of the installed-cycle scenario. The controller and all product
+// children run inside its kernel-denied scratch world. Native/model responses,
+// launchctl and account/open-file observations are explicitly scripted.
+import fs from 'node:fs';
+import path from 'node:path';
+import assert from 'node:assert/strict';
+import {spawn} from 'node:child_process';
+import {createHash} from 'node:crypto';
+
+export async function runCanary(c) {
+  const {config,write,stage,module,env,run,checked,git,record,state,journals,service,audit,project,directory,
+    producer,item,successorItem,base,until,idle,report,controls,controlOptions,ownerAlive}=c;
+  const {root,repo,org,home,bundle,commit}=config;
+  const {loadRecord,transact}=await module('lib/store.mjs');
+  const events=()=>loadRecord(org).events;
+  const nativeFile=path.join(root,'native.json');
+  const native=()=>JSON.parse(fs.readFileSync(nativeFile));
+  const changeNative=fn=>{const n=native();fn(n);n.seq=(n.seq??1)+1;fs.writeFileSync(nativeFile,JSON.stringify(n));};
+  const calls=()=>fs.readFileSync(path.join(root,'native-calls.jsonl'),'utf8').trim().split('\n').map(JSON.parse);
+  const prompts=job=>calls().filter(a=>a[0]==='agent'&&a[1]==='prompt'&&a[2]===job.worker.agentName&&a[3]!=='/exit');
+  const workerEnv=job=>({...env,HERDR_ENV:'1',HERDR_PANE_ID:job.worker.pane,HERDR_WORKSPACE_ID:job.worker.workspaceId,
+    HERDR_TAB_ID:job.worker.tabId,CODEX_THREAD_ID:job.worker.agentSessionId,ORG_ACTOR:job.worker.agentName});
+  const promote=job=>checked(process.execPath,[path.join(job.release.root,'lanes/lane.mjs'),'promote',job.lane,'--expected-head-from-worktree'],
+    {cwd:job.worker.cwd,env:workerEnv(job)});
+  const available=job=>state().runs.get(job.run).report||events().some(e=>e.type==='report.available'&&e.run===job.run);
+  const finished=job=>state().runs.get(job.run).report&&state().items.get(job.item).closed;
+  const land=(job,file)=>{
+    const before=git(['rev-parse','HEAD'],job.worker.cwd);
+    fs.writeFileSync(path.join(job.worker.cwd,file),'Installed ordinary work\n');
+    git(['add',file],job.worker.cwd);git(['commit','-qm','Scripted ordinary installed work'],job.worker.cwd);
+    const head=git(['rev-parse','HEAD'],job.worker.cwd);promote(job);assert.equal(git(['rev-parse','main']),head);
+    return {base:before,head};
+  };
+  const complete=async(job,artifacts,extra='')=>{
+    const at=new Date().toISOString(),start=performance.now();report(job,artifacts,extra);
+    await until(()=>available(job),'actual watcher report notice');
+    const availability=performance.now()-start;
+    service(0).pass();
+    await until(()=>finished(job)&&!fs.existsSync(job.worker.cwd),'same-turn source close and folder removal');
+    const after=events(),ingested=after.filter(e=>e.type==='report.ingested'&&e.run===job.run);
+    assert.equal(ingested.length,1);assert.equal(native().workspaces[job.worker.workspaceId],undefined);
+    assert.equal(git(['branch','--list','lane/'+job.lane]),'');
+    const receipts=after.filter(e=>e.run===job.run&&e.type.startsWith('closeout.'));
+    assert.ok(receipts.some(e=>e.type==='closeout.effect'&&e.outcome?.action==='worktree-removed'),JSON.stringify(receipts));
+    const result={run:job.run,item:job.item,report_at:at,watcher_notice_ms:availability,total_ms:performance.now()-start,
+      ingested:ingested[0].seq,receipts,folderRemoved:true,nativeReleased:true,branchDeletedAfterAncestry:true};
+    write(job.run+'-completion.json',result);return result;
+  };
+
+  // S4 between dispatch and promotion: preserve the original attempt, head,
+  // watcher and folder while each independent project guard is present.
+  const lane=producer.worker.cwd;
+  fs.writeFileSync(path.join(lane,'answer.txt'),'Installed consumer change\n');
+  git(['add','answer.txt'],lane);git(['commit','-qm','Scripted installed canary change'],lane);
+  const head=git(['rev-parse','HEAD'],lane);
+  const selectionGuards=[];
+  for(const name of ['STOP','HOLD']) {
+    const file=path.join(repo,'.lane/supervisor',name);fs.writeFileSync(file,'Fixture-owned between-stage hold\n');
+    const result=run(process.execPath,[path.join(bundle,'lanes/lane.mjs'),'promote',producer.lane,'--expected-head-from-worktree'],{cwd:lane,env:workerEnv(producer)});
+    assert.notEqual(result.status,0);assert.match(result.stderr+result.stdout,/STOP|HOLD|stopped|hold/i);
+    assert.equal(git(['rev-parse','main']),base);assert.ok(fs.existsSync(lane));
+    assert.throws(()=>service(0).pass(),/STOP\/HOLD/);
+    selectionGuards.push({name,status:result.status,stdout:result.stdout,stderr:result.stderr});fs.unlinkSync(file);
+  }
+  promote(producer);assert.equal(git(['rev-parse','main']),head);
+  stage('S4-boundary',{originalAttempt:producer.token,head,guards:selectionGuards,resumedOriginal:true});
+
+  // S7: exactly the existing immutable-root maintenance seam, while the
+  // producer and its original callback remain captured and live.
+  const captured=()=>Object.fromEntries(journals().map(j=>[j.file,createHash('sha256').update(fs.readFileSync(j.file)).digest('hex')]));
+  const saved=captured(),installation=fs.readFileSync(path.join(directory,'installation.json'),'utf8'),plist=fs.readFileSync(path.join(directory,'service.plist'),'utf8');
+  assert.equal(ownerAlive(producer.watcher),true);
+  const {main:nextControls}=await import(new URL('../line-service/launchd.mjs',`file://${config.successor}/harness/`).href);
+  controls(['stop','--repo',repo,'--org',org],controlOptions);
+  checked(process.execPath,[path.join(bundle,'herdr/releases.mjs'),'pin',home,repo,'successor']);
+  git(['add','.herdr-release.json']);git(['commit','-qm','Select identical scratch successor']);
+  const forward=['upgrade','--repo',repo,'--org',org,'--id','canary-forward','--from-root',bundle,'--target-root',config.successor];
+  const forwardPlan=nextControls([...forward,'--dry-run'],controlOptions);
+  const forwardReceipt=nextControls([...forward,'--expected-plan',forwardPlan.archive.sha256],controlOptions);
+  // A nonexistent rollback target is rejected before a new maintenance effect.
+  const missing=['upgrade','--repo',repo,'--org',org,'--id','canary-missing','--from-root',config.successor,'--target-root',path.join(home,'releases/missing'),'--rollback','--dry-run'];
+  assert.throws(()=>nextControls(missing,controlOptions));
+  checked(process.execPath,[path.join(config.successor,'herdr/releases.mjs'),'pin',home,repo,'scenario']);
+  git(['add','.herdr-release.json']);git(['commit','-qm','Select original scratch candidate']);
+  const rollback=['upgrade','--repo',repo,'--org',org,'--id','canary-rollback','--from-root',config.successor,'--target-root',bundle,'--rollback'];
+  const rollbackPlan=nextControls([...rollback,'--dry-run'],controlOptions);
+  const rollbackReceipt=nextControls([...rollback,'--expected-plan',rollbackPlan.archive.sha256],controlOptions);
+  assert.equal(fs.readFileSync(path.join(directory,'installation.json'),'utf8'),installation);
+  assert.equal(fs.readFileSync(path.join(directory,'service.plist'),'utf8'),plist);
+  assert.deepEqual(captured(),saved);assert.equal(ownerAlive(producer.watcher),true);
+  controls(['restart','--repo',repo,'--org',org],controlOptions);
+  stage('S7',{forwardPlan,forwardReceipt,rollbackPlan,rollbackReceipt,jobsUnchanged:saved,callback:producer.to,
+    missingTargetRefused:true,originalInstallationRestored:true,originalPlistRestored:true});
+
+  // Report A with two real intake controls. Source close and physical cleanup
+  // must happen while its one original review has no verdict or worker.
+  const proposals=[{role:'engineer',title:'Ordinary retained canary proposal',why:'Scripted intake control'},
+    {role:'engineer',title:'Reserved retained canary proposal',why:'Scripted reserved control',extra:{operator_reserved:true}}];
+  report(producer,[`source: ${head}; base: ${base}`],'',proposals);
+  const reportAt=performance.now();await until(()=>available(producer),'A watcher availability');
+  const noticeMs=performance.now()-reportAt;
+  for(const name of ['STOP','HOLD']) {
+    const file=path.join(repo,'.lane/supervisor',name);fs.writeFileSync(file,'Fixture-owned report cleanup boundary\n');
+    assert.throws(()=>service(0).pass(),/STOP\/HOLD/);assert.ok(fs.existsSync(lane));
+    assert.equal(native().workspaces[producer.worker.workspaceId].agent.name,producer.worker.agentName);fs.unlinkSync(file);
+  }
+  service(0).pass();await until(()=>finished(producer)&&!fs.existsSync(lane),'A physical cleanup before review');
+  assert.ok(noticeMs<=60000,'report availability exceeds declared 60 s observation');
+  assert.ok(performance.now()-reportAt<=120000,'report cleanup exceeds declared 120 s observation');
+  const reviewItems=()=>[...state().items.values()].filter(i=>i.meta.review_source_run===producer.run);
+  assert.equal(reviewItems().length,1);const review=reviewItems()[0];
+  assert.equal(review.runs.length,0);assert.equal(review.meta.review_round_cap,1);
+  assert.deepEqual({base:review.meta.review_target.base,head:review.meta.review_target.head},{base,head});
+  assert.match(git(['show',`${head}:answer.txt`]),/Installed consumer change/);
+  assert.equal(native().workspaces[producer.worker.workspaceId],undefined);
+  assert.equal(git(['branch','--list','lane/'+producer.lane]),'');
+  stage('S1',{item,run:producer.run,base,head,report_to_cleanup_ms:performance.now()-reportAt,
+    review:review.id,reviewRuns:0,sourceClosed:true,nativeReleased:true,folderRemoved:true,sourceReadableAfterRemoval:true,
+    watcherNoticeMs:noticeMs,closeout:events().filter(e=>e.run===producer.run&&e.type.startsWith('closeout.')),
+    firstTurn:JSON.parse(fs.readFileSync(path.join(directory,'closeout-turn.json'))),cleanupHeldAtReportBoundary:['STOP','HOLD']});
+
+  // Exhaust the original finite allowance. The production turn may neither
+  // register a wait nor issue another command; subsequent ordinary scheduling
+  // still dispatches B and the original A review, without an item start/nudge.
+  const {runCloseoutTurn}=await module('line-service/closeout-turn.mjs');
+  const waits=events().filter(e=>e.type==='closeout.waiting');let ticks=0;
+  const deadline=runCloseoutTurn({project,org,env,guard:()=>{},budgetMs:0,clock:()=>ticks++,measure:()=>{},
+    cli:()=>assert.fail('expired original turn issued a command')});
+  assert.equal(deadline.steps,0);assert.equal(deadline.backlog_classified,0);
+  assert.deepEqual(events().filter(e=>e.type==='closeout.waiting'),waits);
+  const intake=[...state().items.values()].filter(i=>i.created.run===producer.run);
+  assert.equal(intake.filter(i=>i.meta.proposal_intake).length,2);
+  const {proposalDisposition,proposalToken}=await module('lib/proposal-intake.mjs');
+  const ordinary=intake.find(i=>i.title===proposals[0].title),reserved=intake.find(i=>i.title===proposals[1].title);
+  const authority={native_caller:{name:'scratch-supervisor',terminal_id:'control-terminal'}};
+  const disposition=id=>({state:state(),events:events(),id,expect:proposalToken(state(),id),cut:'selection',why:'Explicit scratch selection cut',authority});
+  const mutation=proposalDisposition(disposition(ordinary.id));transact(org,()=>mutation);
+  assert.throws(()=>proposalDisposition(disposition(reserved.id)),/retained|unselected dependency-free/);
+  assert.equal(state().items.get(reserved.id).runs.length,0);
+  const startedAt=performance.now();service(8).pass();
+  const b=journals().find(j=>j.item===successorItem),reviewJob=journals().find(j=>j.item===review.id);
+  assert.ok(b,audit());assert.ok(reviewJob,audit());assert.equal(b.stage,'complete');assert.equal(reviewJob.stage,'complete');
+  assert.equal(b.release.root,bundle);assert.equal(reviewJob.release.root,bundle);
+  assert.equal(state().runs.get(reviewJob.run).report,null);
+  assert.equal(prompts(b).length,1);assert.equal(reviewItems().length,1);
+  assert.ok(performance.now()-startedAt<=120000,'eligible successor native input exceeds declared 120 s observation');
+  stage('S6',{proposals:intake.map(i=>({id:i.id,title:i.title,meta:i.meta})),ordinaryDisposition:mutation,
+    reservedRetained:true,deadline,originalWaitCount:waits.length,waitCount:events().filter(e=>e.type==='closeout.waiting').length,
+    successorNativeInputMs:performance.now()-startedAt});
+  const bSource=land(b,'successor.txt');
+  const bCompletion=await complete(b,[`source: ${bSource.head}; base: ${bSource.base}`]);
+  assert.equal(state().runs.get(reviewJob.run).report,null,'B completes with A review pending');
+  const reviewCompletion=await complete(reviewJob,[],'verdict: PASS\n');
+  assert.equal(reviewItems().length,1);assert.equal(state().items.get(review.id).runs.length,1);
+  assert.equal(events().filter(e=>e.type==='change.reviewed'&&e.review===review.id).length ||
+    events().filter(e=>e.type==='change.reviewed'&&e.head===head).length,1);
+  assert.equal(calls().some(a=>a[0]==='pane'&&a[1]==='run'&&/test\/helpers|npm test/.test(a[3]??'')),false);
+  stage('S2',{ordinaryUnits:[{item,run:producer.run,base,head},{item:successorItem,run:b.run,...bSource}],
+    bCompletion,reviewCompletion,originalReview:review.id,originalReviewRun:reviewJob.run,reviewerSuites:0});
+  async function drainReviews(){
+    // Pin commits and B's landing have their own canonical review obligations.
+    // Account for those explicitly, without manufacturing another review of A.
+    service(8).pass();
+    for(const job of journals())if(job.stage==='complete'&&!state().runs.get(job.run).report&&state().items.get(job.item).meta.review_key)
+      await complete(job,[],'verdict: PASS\n');
+  }
+  await drainReviews();
+
+  // S8 equivalent installed same-release policy control: use the supported
+  // record selection policy, not a rebuild. The demo's real owner remains live
+  // acceptance owner; its offline control is not silently counted here.
+  const policyItem=record(['add','Same-release selected configuration control','--role','engineer']).match(/ENG-\d+/)[0];
+  record(['set',policyItem,'meta.queue_selected=false']);service(1).pass();
+  assert.equal(state().items.get(policyItem).runs.length,0);
+  record(['set',policyItem,'meta.queue_selected=true']);service(2).pass();
+  const policyJob=journals().find(j=>j.item===policyItem);assert.ok(policyJob,audit());assert.equal(policyJob.release.commit,commit);
+  // This clean unlanded branch is retained by the real closer. An unsaved file
+  // on a different allocation is tested below, never removed by fixture fiat.
+  fs.writeFileSync(path.join(policyJob.worker.cwd,'unlanded.txt'),'Keep unlanded work\n');
+  git(['add','unlanded.txt'],policyJob.worker.cwd);git(['commit','-qm','Retained unlanded control'],policyJob.worker.cwd);
+  const unlanded=git(['rev-parse','HEAD'],policyJob.worker.cwd);
+  report(policyJob,[]);await until(()=>available(policyJob),'policy watcher');service(0).pass();
+  await until(()=>!fs.existsSync(policyJob.worker.cwd),'safe unlanded folder closeout');
+  assert.equal(git(['rev-parse','refs/heads/lane/'+policyJob.lane]),unlanded);
+  assert.equal(state().items.get(reserved.id).runs.length,0);
+  stage('S8',{selection:'equivalent supported record queue_selected policy',reason:'ENG-1041 live demonstration remains with its owner',
+    item:policyItem,run:policyJob.run,commit,root:policyJob.release.root,unselectedRuns:0,selectedPrompts:prompts(policyJob).length,
+    reservedRuns:0,unlandedBranchRetained:unlanded,effectivePolicy:state().items.get(policyItem).meta});
+
+  // Script native refusal and lost replies on separate original attempts. Two
+  // subsequent normal turns must not retry or replace either original input.
+  const uncertainItem=record(['add','Retain original lost reply','--role','engineer']).match(/ENG-\d+/)[0];
+  fs.writeFileSync(path.join(root,'lose-prompt-reply'),'scripted reply loss');service(1).pass();fs.unlinkSync(path.join(root,'lose-prompt-reply'));
+  const unknown=journals().find(j=>j.item===uncertainItem);assert.ok(unknown,audit());
+  const refusedItem=record(['add','Retain explicitly refused input','--role','engineer']).match(/ENG-\d+/)[0];
+  fs.writeFileSync(path.join(root,'refuse-prompt'),'scripted native fence');service(1).pass();fs.unlinkSync(path.join(root,'refuse-prompt'));
+  const refused=journals().find(j=>j.item===refusedItem);assert.ok(refused,audit());
+  const originals=new Map([unknown,refused].map(j=>[j.file,fs.readFileSync(j.file)]));
+  for(let i=0;i<2;i++)service(0).pass();
+  for(const job of [unknown,refused]){
+    assert.deepEqual(fs.readFileSync(job.file),originals.get(job.file));assert.equal(prompts(job).length,1);
+    assert.equal(journals().filter(j=>j.item===job.item).length,1);assert.ok(fs.existsSync(job.worker.cwd));
+  }
+  stage('S3',{reconciliationTurns:2,attempts:[unknown,refused].map(j=>({item:j.item,run:j.run,token:j.token,stage:j.stage,error:j.error,
+    journal:j.file,sha256:createHash('sha256').update(originals.get(j.file)).digest('hex'),prompts:prompts(j).length,folderKept:true}))});
+
+  // S5 missing-folder control: move only this explicitly disposable fixture
+  // allocation to a retained archive. Absence never authorizes another input.
+  const missingArchive=path.join(root,'missing-allocation-retained');fs.renameSync(unknown.worker.cwd,missingArchive);
+  for(let i=0;i<2;i++)service(0).pass();
+  assert.deepEqual(fs.readFileSync(unknown.file),originals.get(unknown.file));assert.equal(prompts(unknown).length,1);
+  assert.equal(state().runs.get(unknown.run).report,null);assert.ok(fs.existsSync(missingArchive));
+  const {legacyExitQualification,legacyExitAllocation,observeLegacyExitAbsence}=await module('lib/closeout-legacy-exits.mjs');
+  const entry={reportCloseout:true,common:project.identity,project:repo,key:'scripted-legacy',source:{seq:1,type:'report.ingested'},
+    cwd:refused.worker.cwd,run:'R-legacy',item:'ENG-legacy',panes:[{run:'R-legacy',agent:'old-worker',pane:'old:p',workspace:'old',terminal:'old-term',session:'old-session',tab:'old:t'}]};
+  const fact={identity:entry.common,key:entry.key,source:entry.source};
+  const intent={type:'closeout.effect',...fact,seq:2,at:'2026-10-30T00:00:00Z',effect:'original-legacy-exit',producer:'native-closeout/v2',
+    outcome:{action:'agent-exit-requested',run:entry.run,pane:'old:p',tab_id:'old:t',occupant:['old-worker','codex','old:p','old',entry.cwd,'old-term','old-session'],shell:{pid:1,identity:'old-shell',command:'[sh]'}}};
+  const native_result={action:'skip-close',reason:'occupant or shell identity changed during agent exit'};
+  const legacy=[intent,{type:'closeout.evaluated',...fact,seq:3,completed:false,native_result,code:{code:{kind:'checkout',root:repo,common:project.identity,
+    commit,graph:'closer-imports/v1',files:'b52b10e3883eb09e2692c14e41ea771cb4604ce38363e3693d2cea88dc50bce5'},epoch:{branch:'main',tip:commit}}},
+    {type:'closeout.command-failed',...fact,seq:4,intent:intent.effect,native_result,failure:{kind:'unknown',code:'OUTCOME_UNKNOWN'}}];
+  assert.ok(legacyExitQualification(entry,intent,legacy));
+  const model=(cwd,session)=>({items:new Map([[entry.item,{runs:[entry.run,'R-successor']}]]),runs:new Map([['R-successor',
+    {id:'R-successor',workspace:cwd,report:{outcome:'done'},meta:{agent:'new',pane:'new:p',terminal_id:'new-term',agent_session_id:session}}]])});
+  assert.equal(legacyExitAllocation(entry,legacy,model(entry.cwd,'new-session')),false);
+  assert.equal(legacyExitAllocation(entry,legacy,model(entry.cwd+'-new','old-session')),false);
+  assert.equal(legacyExitAllocation(entry,legacy,model(entry.cwd+'-new','new-session')),true);
+  const snapshot={errors:[],nativeInventory:{complete:true,panes:[]},agents:[]};
+  assert.ok(observeLegacyExitAbsence(entry,intent,legacy,snapshot,new Date().toISOString()));
+  assert.equal(observeLegacyExitAbsence(entry,intent,legacy,{...snapshot,agents:[native().workspaces[refused.worker.workspaceId].agent]},new Date().toISOString()),undefined);
+  assert.ok(fs.existsSync(refused.worker.cwd));assert.equal(git(['rev-parse','HEAD'],refused.worker.cwd),git(['rev-parse','refs/heads/lane/'+refused.lane]));
+  write('legacy-control.json',{fixtureOnly:true,entry,legacy,reusedLaneRefused:true,reusedSessionRefused:true,separateFinishedAccepted:true});
+  stage('S5',{missingFolder:true,missingArchive,originalAttempt:unknown.token,journalUnchanged:true,prompts:1,reconciliationTurns:2,
+    legacyFixture:'legacy-control.json',legacyUnknownRetained:true,reusedLaneRefused:true,reusedSessionRefused:true,successorFolderAndBranchSurvive:true});
+
+  // Dirty preservation through actual report closeout, with capacity permitting
+  // unrelated work despite the original uncertain/refused allocations.
+  const dirtyItem=record(['add','Retain unsaved installed work','--role','engineer']).match(/ENG-\d+/)[0];service(1).pass();
+  const dirty=journals().find(j=>j.item===dirtyItem);assert.ok(dirty,audit());
+  fs.writeFileSync(path.join(dirty.worker.cwd,'unsaved.txt'),'Keep unsaved fixture work\n');
+  report(dirty,[]);await until(()=>available(dirty),'dirty control report');service(0).pass();
+  assert.equal(fs.readFileSync(path.join(dirty.worker.cwd,'unsaved.txt'),'utf8'),'Keep unsaved fixture work\n');
+  stage('S1-preservation',{dirtyRun:dirty.run,folderKept:true,unsavedBytes:'Keep unsaved fixture work\n',unlandedBranchRetained:unlanded,
+    closeout:events().filter(e=>e.run===dirty.run&&e.type.startsWith('closeout.'))});
+
+  await sharedCase();
+  const {productFiles,payloadEntry}=await module('lib/product-files.mjs');
+  assert.deepEqual(Object.fromEntries(productFiles(bundle).sort().map(f=>[f,payloadEntry(bundle,f)])),config.candidate.files);
+  write('outcome.json',{schema:'brain.installed-canary/v1',ready:false,fixtureOnly:true,scriptedMechanics:true,
+    candidate:config.candidate,cases:['S0','S1','S2','S3','S4','S5','S6','S7','S8','shared-observer'],status:'PASS',
+    originalReview:review.id,reviewerSuites:0,base,head,ordinarySuccessor:b.run,limits:['No real model/native/account execution','No real probation/soak/adoption','Synthetic acceptance never qualifies real runtime'],
+    packet:{stages:'stages.json',tuple:'original-candidate.json',equivalence:'candidate-equivalence.json',commands:'commands.jsonl',native:'../native-calls.jsonl',record:'../project/.org/events.jsonl'}});
+  // Stop only owned fixture observers/watchers after preserving their original
+  // journals and proving they cannot be replayed. Dirty/UNKNOWN files archive.
+  for(const job of journals())if(job.watchMode!=='shared'&&job.watcher&&ownerAlive(job.watcher))process.kill(job.watcher.pid,'SIGTERM');
+  await until(()=>journals().every(j=>j.watchMode==='shared'||!j.watcher||!ownerAlive(j.watcher)),'owned watcher teardown');
+  await until(()=>!fs.existsSync(path.join(directory,'closeout-turn.lock')),'finite closeout teardown');
+  for(const [file,bytes]of originals)assert.deepEqual(fs.readFileSync(file),bytes);
+  stage('fixture-teardown',{originalJournalsUnchanged:true,watchersStopped:true,retainedWorkArchived:true});
+
+  async function sharedCase(){
+    // Real observer entry, real 30 s safety reconciliation and real original
+    // finite watcher consumers; only snapshot/account/transport and dropped
+    // hint inputs are scripted. No per-run resident process is created.
+    fs.writeFileSync(process.env.HERDR_SOCKET_PATH,'scripted protocol-22 socket identity');
+    const log=path.join(root,'evidence/shared-observer.log'),fd=fs.openSync(log,'a');
+    const observer=spawn(process.execPath,[path.join(bundle,'watch/observer.mjs'),'--repo',repo,'--org',org],
+      {cwd:repo,env:{...env,INSTALLED_CYCLE_DROP_HINTS:'1'},stdio:['ignore',fd,fd]});fs.closeSync(fd);
+    const ownerFile=path.join(org,'watch/observer/owner.json');
+    try {
+      await until(()=>fs.existsSync(ownerFile),'shared observer owner receipt');
+      const owner=JSON.parse(fs.readFileSync(ownerFile));assert.equal(owner.pid,observer.pid);assert.equal(owner.source,bundle);
+      fs.writeFileSync(path.join(root,'shared-watch'),'shared dispatch');
+      const sharedItem=record(['add','Shared installed observation control','--role','engineer']).match(/ENG-\d+/)[0];service(1).pass();
+      const job=journals().find(j=>j.item===sharedItem);assert.ok(job,audit());assert.equal(job.watchMode,'shared');assert.equal(job.watcher.pid,owner.pid);
+      const step=path.join(org,'watch/steps',job.run+'.json'),observations=path.join(org,'watch/observer/observations.jsonl');
+      const rows=()=>fs.existsSync(observations)?fs.readFileSync(observations,'utf8').trim().split('\n').filter(Boolean).map(JSON.parse):[];
+      await until(()=>fs.existsSync(step),'initial shared finite watcher');
+      const baseline=rows().filter(r=>r.action==='safety-repair').length;
+      changeNative(n=>{n.workspaces[job.worker.workspaceId].agent.agent_status='blocked';});
+      await until(()=>events().some(e=>e.type==='note.added'&&e.id===job.run&&e.text.includes('[watch-blocked]')),'lost blocked hint recovered by 30 s safety timer');
+      const blockedNotes=events().filter(e=>e.type==='note.added'&&e.id===job.run&&e.text.includes('[watch-blocked]'));
+      assert.equal(blockedNotes.length,1);
+      // Vanish the native worker without changing its original binding.
+      const original=native().workspaces[job.worker.workspaceId].agent;
+      changeNative(n=>{delete n.workspaces[job.worker.workspaceId].agent;});
+      await until(()=>events().some(e=>e.type==='note.added'&&e.id===job.run&&e.text.includes('gone')),'lost vanished hint recovered');
+      // The fatal missing-worker observation correctly retains its original
+      // duty. A report for a separate shared run proves report + cleanup.
+      const vanishedStep=JSON.parse(fs.readFileSync(step));assert.ok(['failed','waiting','complete'].includes(vanishedStep.phase));
+      const reportItem=record(['add','Shared report and cleanup control','--role','engineer']).match(/ENG-\d+/)[0];service(1).pass();
+      const reportJob=journals().find(j=>j.item===reportItem);assert.ok(reportJob,audit());assert.equal(reportJob.watchMode,'shared');
+      await until(()=>fs.existsSync(path.join(org,'watch/steps',reportJob.run+'.json')),'report shared duty first observation');
+      report(reportJob,[]);
+      await until(()=>events().some(e=>e.type==='note.added'&&e.id===reportJob.run&&e.watch_notice_id===`watch:${reportJob.run}:final`),'lost report hint recovered by original finite watcher');
+      service(0).pass();await until(()=>!fs.existsSync(reportJob.worker.cwd),'shared report physical cleanup');
+      assert.equal(events().filter(e=>e.type==='report.ingested'&&e.run===reportJob.run).length,1);
+      assert.equal(native().workspaces[reportJob.worker.workspaceId],undefined);
+      assert.equal(journals().filter(j=>j.item===sharedItem||j.item===reportItem).length,2);
+      const repairs=rows().filter(r=>r.action==='safety-repair');assert.ok(repairs.length>baseline);
+      const reconciled=rows().filter(r=>r.action==='reconciled'&&r.reason==='safety');assert.ok(reconciled.length>=3);
+      assert.ok(rows().every(r=>r.active===undefined||r.active<=2));
+      stage('shared-observer',{source:bundle,owner,run:job.run,reportRun:reportJob.run,watchMode:'shared',perRunResidents:0,
+        droppedHints:['native blocked','native vanished','report file'],safetyMs:30000,reconciled,repairs,blockedNotes,
+        vanishedStep,originalBinding:original,reportOnce:true,reportFolderRemoved:true,reportNativeReleased:true,consumerCap:2});
+    } finally {
+      if(fs.existsSync(path.join(root,'shared-watch')))fs.unlinkSync(path.join(root,'shared-watch'));
+      if(observer.exitCode===null&&observer.signalCode===null){const closed=new Promise(resolve=>observer.once('close',resolve));observer.kill('SIGTERM');await closed;}
+    }
+  }
+}

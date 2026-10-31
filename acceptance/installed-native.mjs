@@ -55,6 +55,9 @@ else if (group === 'agent' && verb === 'start') {
 else if (group === 'agent' && verb === 'list') result = { agents: all.flatMap(w => w.agent ? [w.agent] : []) };
 else if (group === 'agent' && verb === 'prompt') {
   if (!agent) missing();
+  if(args[3]!=='/exit'&&fs.existsSync(path.join(root,'refuse-prompt'))) {
+    console.error(JSON.stringify({error:{code:'NATIVE_REFUSAL',message:'scripted explicit input refusal'}}));process.exit(1);
+  }
   if (args[3] === '/exit') delete workspace.agent;
   else agent.agent_status = 'working';
   changed = true;

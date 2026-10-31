@@ -130,3 +130,57 @@ payload: this tests root selection and lifecycle mechanics; the historical
 stale-fold refusal is a separate runtime compatibility control. Scripted
 launchctl observations are retained in `scripted-controls.jsonl`; executable
 paths in `executables.jsonl`; roots, plans and job digests in `stages.json`.
+
+The frozen-candidate extension uses the same scenario and project runner:
+
+```sh
+INSTALLED_CYCLE_BUNDLE=/absolute/read-only/bundle \
+INSTALLED_CYCLE_COMMIT=FULL_SOURCE_COMMIT \
+INSTALLED_CYCLE_TREE=FULL_SOURCE_TREE \
+INSTALLED_CYCLE_MANIFEST_SHA256=ORIGINAL_MANIFEST_SHA256 \
+INSTALLED_CYCLE_EVIDENCE=/absolute/archive/unique-attempt \
+node test/helpers/run.mjs --test-name-pattern='^installed-only canary ' acceptance/test/installed-cycle.test.mjs
+```
+
+Use pinned Node 20.19.4 through the owning lane's `check --cmd`. Supply a
+previously frozen bundle, never a mutable `current` symlink. The commit, original
+manifest digest and complete runtime inventory are verified before effects;
+the source tree comes from the retained validation metadata, or the coordinator's
+explicit tuple for an unqualified scratch build. No source fallback occurs in
+this mode. Without an explicit bundle the canary case is SKIP/UNRUN. Historical
+broken/fixed witnesses are reused, not replayed by this selection.
+
+`brain.installed-canary/v1` is the packet contract for probation and soak owners.
+`outcome.json` names the original `brain.installed-candidate/v1` tuple, S0–S8
+and shared-observer results, immutable consumer base/head, original review and
+zero reviewer suites. `stages.json` includes UTC boundaries and monotonic spans;
+`commands.jsonl`, `executables.jsonl`, the complete scratch record and dispatch
+journals retain actual commands, runtime roots, attempts and effect receipts.
+`candidate-equivalence.json` compares every runtime file/hash/mode with the
+original bundle; both manifests are retained separately. Fixture READY changes
+only scratch release metadata and never qualifies the original runtime.
+
+S1/S2 finish two ordinary units with A's source/session/folder retired before
+its original review starts, B starts/completes while that verdict is pending,
+and the original cap1 review then completes without suites. Canonical reviews
+of scratch policy/pin commits are separately accounted. S3/S5 retain lost and
+refused original input, missing-folder evidence and scripted legacy UNKNOWN
+qualification/reused-lane/session controls using the installed implementation.
+The legacy facts are visibly synthetic, not historical success receipts.
+S4 places independent selection, promotion and report-cleanup STOP/HOLD controls.
+S6 runs real proposal intake/disposition and an exhausted original finite turn.
+S7 uses the existing archived upgrade/rollback intent with a live captured
+producer/watcher, plus a refused missing-target control. S8 uses supported
+record selection policy on the same installed release as its explicit equivalent
+to the owner-held ENG-1041 live demo. Unlanded branches and dirty/UNKNOWN work
+are retained in the durable archive before disposable scratch is removed.
+
+The shared case starts the candidate's actual `watch/observer.mjs`, dispatches
+with `--watch-mode shared`, and uses original finite `watch --step` consumers.
+Native snapshots/subscription acknowledgement use a declared in-memory protocol
+22 seam, while native and file hints are deliberately dropped. The unchanged
+30-second safety timer must recover blocked, vanished and report observations;
+the report is ingested once and physical cleanup is verified. A vanished duty's
+original failure remains held, never replaced. Consumer concurrency remains two.
+This extends mechanics evidence only; genuine native execution, probation,
+the real-work soak, activation and adoption remain with their recorded owners.

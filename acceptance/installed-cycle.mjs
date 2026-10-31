@@ -11,7 +11,9 @@ const { root, bundle, repo, org, home, commit, mode, forbidden } = config;
 const evidence = path.join(root, 'evidence');
 const write = (name, value) => fs.writeFileSync(path.join(evidence, name), JSON.stringify(value, null, 2) + '\n');
 const stages = [];
-const stage = (name, detail) => { stages.push({ name, ...detail }); write('stages.json', stages); };
+let previousStage=performance.now(),previousAt=new Date().toISOString();
+const stage = (name, detail) => { const end=performance.now(),at=new Date().toISOString();
+  stages.push({name,started_at:previousAt,at,duration_ms:end-previousStage,...detail});previousStage=end;previousAt=at;write('stages.json', stages); };
 const module = relative => import(pathToFileURL(path.join(bundle, relative)).href);
 // Positive kernel probes: neither in-process nor child fallback can read the
 // development checkout or real user configuration. These precede product calls.
@@ -30,6 +32,16 @@ assert.equal(fs.existsSync(config.development), false);
 const { fleetPath } = await module('lib/fleet.mjs');
 assert.ok(fleetPath().startsWith(root + path.sep));
 stage('isolation', { forbidden, development: config.development, fleet: fleetPath(), childFleet: process.env.HERDR_MONITOR_FLEET, node: process.version });
+if(mode==='canary') {
+  const {productFiles,payloadEntry}=await module('lib/product-files.mjs');
+  const files=Object.fromEntries(productFiles(bundle).sort().map(file=>[file,payloadEntry(bundle,file)]));
+  assert.deepEqual(files,config.candidate.files);
+  assert.equal(createHash('sha256').update(JSON.stringify(files)).digest('hex'),config.candidate.inventorySha256);
+  const manifest=JSON.parse(fs.readFileSync(path.join(bundle,'.release-manifest.json')));
+  assert.equal(manifest.commit,config.candidate.commit);
+  write('candidate-equivalence.json',{original:config.candidate,fixtureManifest:manifest,identicalRuntime:true,fixtureOnly:true,ready:false});
+  stage('S0',{tuple:config.candidate,identicalRuntime:true,fixtureOnly:true,wrongCommitRefused:true,wrongManifestRefused:true,driftRefused:true});
+}
 const env = { ...process.env, ORG_DIR: org, ORG_ACTOR: 'line-service' };
 const run = (exe, args, options = {}) => {
   const result = spawnSync(exe, args, { cwd: repo, env, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024, ...options });
@@ -51,13 +63,13 @@ const base = git(['rev-parse', 'HEAD']);
 const directory = serviceDirectory(org, project.identity);
 fs.mkdirSync(directory, { recursive: true });
 // An offline service binding, not a launchd installation or release attestation.
-const initialSource=mode==='current'?config.development:bundle;
+const initialSource=['current','canary'].includes(mode)?config.development:bundle;
 fs.writeFileSync(path.join(directory, 'installation.json'), JSON.stringify({ at: '2026-10-30T00:00:00Z', repo, org, source: initialSource, node: process.execPath,
   phase:'installed',file: path.join(directory, 'service.plist'), target: `gui/${process.getuid()}/dev.herdr.line.${path.basename(directory)}` })+'\n');
 const boundary = { id: 'installed-scenario', project: project.identity, repo, org, source: initialSource, main: 'main', canonical_head: base };
 transact(org, () => ({ add: ['line-service.cutover', 'line-service.phase0'].map(type => ({ type, ...boundary })) }));
 let controls,controlOptions,loaded=false;
-if(mode==='current') {
+if(mode==='current'||mode==='canary') {
   const agent={name:'scratch-supervisor',cwd:repo,pane_id:'control-pane',workspace_id:'control-workspace',terminal_id:'control-terminal',agent_session:{value:'control-session'}};
   const command=(exe,args,options)=>{
     if(exe==='/usr/bin/plutil')return run(exe,args,options);
@@ -83,14 +95,28 @@ if(mode==='current') {
 }
 const state = () => loadRecord(org).state;
 const item = record(['add', 'Complete the installed scratch cycle', '--role', 'engineer']).match(/ENG-\d+/)[0];
+let successorItem;
+if(mode==='canary') {
+  successorItem=record(['add','Complete the ordinary successor','--role','engineer']).match(/ENG-\d+/)[0];
+  record(['block',successorItem,'--by',item]);
+}
 const journals = () => fs.readdirSync(path.join(org, 'dispatch')).filter(n => n.endsWith('.json') && !n.endsWith('.routes.json'))
   .map(n => ({ file: path.join(org, 'dispatch', n), ...JSON.parse(fs.readFileSync(path.join(org, 'dispatch', n))) }));
 // Join dispatch in the original call so each stage is observed before moving
 // on. All other product commands execute unchanged; native/model IO is scripted.
 const command = (exe, args, options) => run(exe, args[0]?.endsWith('/dispatch/dispatch.mjs')
-  ? [...args.filter(a => a !== '--detach'), '--watch-cli', path.join(root, args[0].startsWith(config.successor??'\0')?'bin/watch-successor':'bin/watch')] : args, options);
+  ? [...args.filter(a => a !== '--detach'), '--watch-cli', path.join(root, args[0].startsWith(config.successor??'\0')?'bin/watch-successor':'bin/watch'),
+    ...(fs.existsSync(path.join(root,'shared-watch'))?['--watch-mode','shared']:[])] : args, options);
 const service = maxStarts => createLineService({ repo, org, to: 'scratch-supervisor', runtimeHome: home,
   env: { ...env, HERDR_BRAIN_ROOT: config.development }, maxStarts, haltAfter: 100, command });
+if(mode==='canary') {
+  for(const file of [path.join(directory,'STOP'),path.join(repo,'.lane/supervisor/STOP'),path.join(repo,'.lane/supervisor/HOLD')]) {
+    fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,'Fixture-owned selection hold\n');
+    assert.throws(()=>service(1).pass(),/STOP\/HOLD/);
+    assert.equal(state().runs.size,0);fs.unlinkSync(file);
+  }
+  stage('S4-selection',{guards:['service STOP','project STOP','project HOLD'],runs:0});
+}
 service(1).pass();
 const auditRows = () => readPassJournal(path.join(directory,'passes.jsonl'));
 const audit = () => {let tail='';for(const row of auditRows())tail=(tail+JSON.stringify(row)+'\n').slice(-65536);return tail;};
@@ -113,11 +139,17 @@ const idle = job => {
   const file = path.join(root, 'native.json'), native = JSON.parse(fs.readFileSync(file));
   native.workspaces[job.worker.workspaceId].agent.agent_status = 'idle'; fs.writeFileSync(file, JSON.stringify(native));
 };
-const report = (job, artifacts, extra = '') => {
+const report = (job, artifacts, extra = '', proposals = []) => {
   const r = state().runs.get(job.run), file = r.report_path;
-  fs.writeFileSync(file, `---\nrun: ${job.run}\noutcome: done\nsummary: Scripted installed work completed.\nheadline: The scratch work completed\nblockers: []\nproposals: []\nlearnings: []\nartifacts: ${JSON.stringify(artifacts)}\n${extra}---\n`);
+  fs.writeFileSync(file, `---\nrun: ${job.run}\noutcome: done\nsummary: Scripted installed work completed.\nheadline: The scratch work completed\nblockers: []\nproposals: ${JSON.stringify(proposals)}\nlearnings: []\nartifacts: ${JSON.stringify(artifacts)}\n${extra}---\n`);
   record(['check', file]); idle(job); return file;
 };
+if(mode==='canary') {
+  const {runCanary}=await import('./installed-canary.mjs');
+  await runCanary({config,write,stage,module,env,run,checked,git,record,state,journals,service,audit,auditRows,
+    project,directory,producer,item,successorItem,base,until,idle,report,controls,controlOptions,ownerAlive});
+  process.exit(0);
+}
 if (mode === 'fixed') {
   // The historical witness stops at real installed dispatch; it must not be
   // described as current lifecycle coverage.

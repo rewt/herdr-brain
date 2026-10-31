@@ -29,6 +29,20 @@ export function processContinuityControl({ownerAlive, lookupProcess, observe = (
   }
 }
 
+export async function expiredCloseoutControl({runCloseoutTurn, until, options}) {
+  let deadline, contentions=0;
+  // Lock absence cannot reserve the next turn. Retry only the supported
+  // contention result, within the caller's existing bounded observation.
+  await until(()=>{
+    let ticks=0;
+    deadline=runCloseoutTurn({...options,budgetMs:0,clock:()=>ticks++});
+    if(deadline.already_running===true){contentions++;return false;}
+    return true;
+  },'expired-budget control acquired its finite turn');
+  assert.equal(deadline.steps,0);assert.equal(deadline.backlog_classified,0);
+  return {deadline,contentions};
+}
+
 export async function runCanary(c) {
   const {config,write,stage,module,env,run,checked,git,record,state,journals,service,audit,project,directory,
     producer,item,successorItem,base,until,idle,report,controls,controlOptions,ownerAlive}=c;
@@ -172,12 +186,11 @@ export async function runCanary(c) {
   // Exhaust the original finite allowance. The production turn may neither
   // register a wait nor issue another command; subsequent ordinary scheduling
   // still dispatches B and the original A review, without an item start/nudge.
-  await until(()=>!fs.existsSync(path.join(directory,'closeout-turn.lock')),'original closeout turn completed before the expired-budget control');
   const {runCloseoutTurn}=await module('line-service/closeout-turn.mjs');
-  const waits=events().filter(e=>e.type==='closeout.waiting');let ticks=0;
-  const deadline=runCloseoutTurn({project,org,env,guard:()=>{},budgetMs:0,clock:()=>ticks++,measure:()=>{},
-    cli:()=>assert.fail('expired original turn issued a command')});
-  assert.equal(deadline.steps,0);assert.equal(deadline.backlog_classified,0);
+  const waits=events().filter(e=>e.type==='closeout.waiting');
+  const {deadline,contentions}=await expiredCloseoutControl({runCloseoutTurn,until,
+    options:{project,org,env,guard:()=>{},measure:()=>{},
+      cli:()=>assert.fail('expired original turn issued a command')}});
   assert.deepEqual(events().filter(e=>e.type==='closeout.waiting'),waits);
   const intake=[...state().items.values()].filter(i=>i.created.run===producer.run);
   assert.equal(intake.filter(i=>i.meta.proposal_intake).length,2);
@@ -196,7 +209,7 @@ export async function runCanary(c) {
   assert.equal(prompts(b).length,1);assert.equal(reviewItems().length,1);
   assert.ok(performance.now()-startedAt<=120000,'eligible successor native input exceeds declared 120 s observation');
   stage('S6',{proposals:intake.map(i=>({id:i.id,title:i.title,meta:i.meta})),ordinaryDisposition:mutation,
-    reservedRetained:true,deadline,originalWaitCount:waits.length,waitCount:events().filter(e=>e.type==='closeout.waiting').length,
+    reservedRetained:true,deadline,contentions,originalWaitCount:waits.length,waitCount:events().filter(e=>e.type==='closeout.waiting').length,
     successorNativeInputMs:performance.now()-startedAt});
   const bSource=land(b,'successor.txt');
   const bCompletion=await complete(b,[`source: ${bSource.head}; base: ${bSource.base}`]);

@@ -13,7 +13,7 @@ import {gitProject} from '../lib/project.mjs';
 import {createLineService,sourceRoot,serviceDirectory} from '../line-service/line-service.mjs';
 import {discoverChanges,blockedChangeKey,dispatchInput,reviewResultEvents,morningDigest,recordReviewResults,canonicalReviewIndex,reviewHealth,ensureReviewBoundary,phase0Boundary} from '../line-service/phase1.mjs';
 import {reviewAttempt,selectedReviewConsumer} from '../line-service/review.mjs';
-import {queueReviewMutation,reviewQueueRoute,validateQueuedReview} from '../line-service/review-queue.mjs';
+import {queueReviewMutation,reviewQueueRoute,validateQueuedReview,reviewQueueBrief} from '../line-service/review-queue.mjs';
 import {ROUTE_PRESET} from '../lanes/preset.mjs';
 import {loadDiscoveredRoutes,resolveRoute} from '../lanes/routes.mjs';
 import {fixture as dispatchFixture,promptCalls} from '../dispatch/test/dispatch-fixture.mjs';
@@ -28,7 +28,8 @@ import {readReport} from '../lib/report.mjs';
 import {recoverInactiveReview,observeReviewProgress,recoverServiceReview} from '../line-service/review-recovery.mjs';
 import {claimedCommitTokens} from '../settle/review-range.mjs';
 import {capturedReviewCommits} from '../line-service/review-group.mjs';
-import {canonicalSelector} from '../line-service/review-targets.mjs';
+import {canonicalSelector,capturedRange} from '../line-service/review-targets.mjs';
+import {PRODUCER_RANGE_LIMIT,PRODUCER_COMMIT_LIMIT,producerRanges} from '../line-service/producer-ranges.mjs';
 import {fold as historicalFold} from './fixtures/state-pre-session-bind.mjs';
 import {canonical} from '../messages/schema.mjs';
 import {nativeCloseoutWait,closeoutWaitState} from '../lib/closeout-status.mjs';
@@ -439,8 +440,9 @@ test('permanent recovery archive guards block only their exact change and cannot
 });
 
 function sourceArtifact(f,artifact){
-  const text=`---\nrun: R-1\noutcome: done\nsummary: Actual committed source.\nartifacts:\n  - "${artifact}"\n---\n`,events=f.context().events,event=events.find(e=>e.type==='report.ingested'&&e.run==='R-1');
-  fs.writeFileSync(f.file,text);event.sha256=hash(text);event.report.artifacts=[artifact];fs.writeFileSync(path.join(f.org,'events.jsonl'),events.map(e=>JSON.stringify(e)+'\n').join(''));
+  const artifacts=Array.isArray(artifact)?artifact:[artifact];
+  const text=`---\nrun: R-1\noutcome: done\nsummary: Actual committed source.\nartifacts:\n${artifacts.map(a=>`  - "${a}"`).join('\n')}\n---\n`,events=f.context().events,event=events.find(e=>e.type==='report.ingested'&&e.run==='R-1');
+  fs.writeFileSync(f.file,text);event.sha256=hash(text);event.report.artifacts=artifacts;fs.writeFileSync(path.join(f.org,'events.jsonl'),events.map(e=>JSON.stringify(e)+'\n').join(''));
 }
 test('permanent recovery composes the actual source HEAD base lane artifact with its archived settle deliveryRange',t=>{
   const f=recoveryFixture(t),head=f.heads[0];sourceArtifact(f,`source: ${head}; base: ${f.base}; lane: line-eng-226-1`);
@@ -869,6 +871,77 @@ test('permanent group uses an explicit immutable whole range and keeps unrelated
   c=f.context();target=discoverChanges(c).changes[0].target;assert.deepEqual(target.scope.commits,f.heads);assert.deepEqual(target.source_group.owned_commits,[f.heads[1]]);
   index=canonicalReviewIndex(c);assert.equal(index.entries.find(e=>e.head===f.heads[0]).run,'R-99');assert.equal(reviewHealth({...c,index}).done_commits,1);
   assert.equal(reviewAttempt(c.item,{...c,target}),null,'an independently attributed verdict is not this producer attempt');
+});
+
+function separateLandings(t){
+  const f=fixture(t),owned=[...f.heads],ranges=[{base:f.base,head:f.heads[1]}],foreign=[];
+  for(const n of [3,4]){
+    let base;
+    if(n===3)base=independentProducer(f);
+    else{
+      fs.writeFileSync(path.join(f.cwd,'other-correction'),String(n));f.git(['add','.'],f.cwd);f.git(['commit','-qm','Other producer correction'],f.cwd);base=f.git(['rev-parse','HEAD'],f.cwd);
+      f.add([{type:'change.landed',project:f.identity,item:'ENG-2',run:'R-3',base:owned.at(-1),head:base}]);
+    }
+    foreign.push(base);f.git(['merge','--ff-only',base]);
+    fs.writeFileSync(path.join(f.workspace,`correction-${n}`),String(n));f.git(['add','.']);f.git(['commit','-qm',`Producer correction ${n}`]);const head=f.git(['rev-parse','HEAD']);
+    f.git(['merge','--ff-only',head],f.cwd);owned.push(head);ranges.push({base,head});
+  }
+  f.add(owned.map(head=>({type:'change.landed',project:f.identity,item:'ENG-1',run:'R-1',base:f.git(['rev-parse',`${head}^1`]),head})));
+  const artifacts=ranges.map(r=>`source: ${r.head}; base: ${r.base}`);sourceArtifact(f,artifacts);
+  return{...f,owned,ranges,foreign,artifacts};
+}
+
+test('whole-producer ranges queue one exact group across three separate landings without reviewing intervening producers',t=>{
+  const f=separateLandings(t),found=discoverChanges({...f.context(),runId:'R-1'});
+  assert.deepEqual(found.holds,[]);assert.equal(found.changes.length,1);const target=found.changes[0].target;
+  assert.equal(target.base,f.base);assert.equal(target.head,f.owned.at(-1));assert.equal(target.diff_kind,'producer-ranges/v1');
+  assert.deepEqual(target.scope.ranges.map(({base,head})=>({base,head})),f.ranges);
+  assert.deepEqual(target.scope.commits,f.owned);assert.deepEqual(capturedRange({repo:f.cwd,target}),f.owned);
+  assert.ok(f.foreign.every(h=>!capturedReviewCommits(target).includes(h)));
+  for(const r of target.scope.ranges)assert.equal(r.diff_sha256,hash(f.git(['diff','--no-ext-diff','--no-textconv',r.base,r.head],f.cwd)));
+  assert.equal(target.diff_sha256,hash(JSON.stringify(target.scope.ranges)));
+  const cwd=process.cwd();process.chdir(f.cwd);
+  try{
+    const env={...installedService(f),ORG_ACTOR:'line-service'},queued=queueReviewMutation({...f.context(),runId:'R-1',env});f.add(queued.add);
+    const context=f.context(),item=context.state.items.get(queued.result.review_item);
+    assert.deepEqual(validateQueuedReview({...context,item}),target);
+    assert.equal(queueReviewMutation({...f.context(),runId:'R-1',env}).add.length,0);
+    assert.equal([...context.state.items.values()].filter(q=>q.meta.review_source_run==='R-1').length,1);
+    const brief=reviewQueueBrief(item);assert.match(brief,/do not review their envelope diff/);
+    for(const r of f.ranges)assert.ok(brief.includes(`git diff --no-ext-diff --no-textconv ${r.base} ${r.head}`));
+    const health=reviewHealth({...context,index:canonicalReviewIndex(context)});assert.equal(health.queued_commits,f.owned.length);
+    assert.ok(f.foreign.every(head=>health.coverage_gaps.some(g=>g.head===head)));
+    for(const change of ['hash','range','owned','kind']){
+      const changed=structuredClone(target);
+      if(change==='hash')changed.scope.ranges[1].diff_sha256='0'.repeat(64);
+      if(change==='range')changed.scope.ranges[1].base=f.heads[1];
+      if(change==='owned')changed.source_group.owned_commits.push(f.foreign[0]);
+      if(change==='kind')delete changed.diff_kind;
+      assert.throws(()=>capturedRange({repo:f.cwd,target:changed}),/retained whole producer/);
+      assert.throws(()=>validateQueuedReview({...context,item:{...item,meta:{...item.meta,review_target:changed}}}),/immutable whole producer/);
+    }
+  }finally{process.chdir(cwd);}
+});
+
+test('whole-producer ranges retain typed bounded refusals and recover after corrected immutable evidence',t=>{
+  const f=separateLandings(t),cases=[
+    ['OMITTED',[f.artifacts[0],f.artifacts[2]]],
+    ['FOREIGN',[f.artifacts[0],`source: ${f.ranges[1].head}; base: ${f.heads[1]}`,f.artifacts[2]]],
+    ['OVERLAP',[f.artifacts[0],f.artifacts[0],f.artifacts[2]]],
+    ['INVALID',[f.artifacts[0],`source: ${f.ranges[1].head}; base: ${'f'.repeat(40)}`,f.artifacts[2]]],
+    ['EMPTY',[f.artifacts[0],`source: ${f.ranges[1].head}; base: ${f.ranges[1].head}`,f.artifacts[2]]],
+    ['LIMIT',Array(PRODUCER_RANGE_LIMIT+1).fill(f.artifacts[0])],
+  ];
+  for(const [code,artifacts]of cases){
+    sourceArtifact(f,artifacts);const found=discoverChanges({...f.context(),runId:'R-1'});
+    assert.equal(found.changes.length,0,code);assert.equal(found.holds[0].code,`PRODUCER_RANGE_${code}`,found.holds[0].reason);
+  }
+  sourceArtifact(f,f.artifacts);assert.equal(discoverChanges({...f.context(),runId:'R-1'}).changes.length,1);
+  const before=f.context().events;fs.appendFileSync(f.file,'changed bytes');
+  assert.match(discoverChanges({...f.context(),runId:'R-1'}).holds[0].reason,/immutable producer report bytes changed/);
+  assert.deepEqual(f.context().events,before,'refusals do not replace attempts or append review items');
+  const git=(repo,args)=>args[0]==='rev-list'?Array(PRODUCER_COMMIT_LIMIT+1).fill('a'.repeat(40)).join('\n'):args[1]==='--verify'?args.at(-1).split('^')[0]:'';
+  assert.throws(()=>producerRanges({git,repo:f.cwd,declared:f.ranges,dispatch:{base:f.base},head:f.owned.at(-1),claims:f.owned,index:{entries:[]},item:{id:'ENG-1'},run:{id:'R-1'}}),e=>e.code==='PRODUCER_RANGE_LIMIT');
 });
 
 test('permanent group rejects admission packet unresolved omitted and unlanded source instead of reviewing a convenient intermediate',t=>{

@@ -259,8 +259,16 @@ The line can then continue once for the same target, saving the old entry in
 history and the disposition in `queue_recovery`. If later landings require a
 different whole producer target, only the disposed original stops fencing that
 producer: fresh discovery must still derive and validate the complete group.
-ENG-1181 owns ENG-1150's independent whole-range discovery hold; this writer
-does not make a partial range acceptable. A failed or uncertain new queue
+Reports declaring several separate source/base tuples now capture one
+`brain.producer-ranges/v1` scope. Its ordered `scope.ranges` bind each exact
+commit list and diff SHA256; `scope.commits` and the owned commits contain only
+their union. Top-level base/head locate the group, and its `diff_sha256` hashes
+the JSON range manifest, **not** the intervening envelope diff. Review briefs
+name each separate diff explicitly. Discovery refuses overlapping, omitted,
+foreign/ambiguous, invalid or empty ranges with a visible `PRODUCER_RANGE_*`
+code; the bounded limits are 64 tuples and 4096 delivered commits. Saved
+single-range/partial captures remain immutable and are never silently widened.
+This reconciliation writer does not make a partial range acceptable. A failed or uncertain new queue
 command remains held under its own receipt. Existing review routes, cap1 and
 zero reviewer suites remain unchanged, including ENG-1141's Opus route.
 

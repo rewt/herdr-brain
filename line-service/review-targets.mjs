@@ -5,6 +5,7 @@ import path from 'node:path';
 import {createHash} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
 import {capturedReviewCommits,sameProducerQueue} from './review-group.mjs';
+import {capturedProducerRanges} from './producer-ranges.mjs';
 
 const hash=value=>createHash('sha256').update(value).digest('hex');
 const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
@@ -25,6 +26,7 @@ export const reviewCutoff=boundary=>({id:boundary.id,seq:boundary.seq,head:bound
 export function capturedRange({repo,target}){
   const owned=capturedReviewCommits(target);
   if(!target?.base||!target.head||!owned.length||target.scope?.unresolved?.length||target.scope?.deferred)throw Error('retained review scope is UNKNOWN');
+  if(target.scope?.ranges||target.diff_kind==='producer-ranges/v1')return capturedProducerRanges({git,repo,target});
   git(repo,['merge-base','--is-ancestor',target.base,target.head]);
   const range=git(repo,['rev-list','--reverse',`${target.base}..${target.head}`]).split('\n').filter(Boolean);
   if(!same(range,target.scope?.commits)||!owned.includes(target.head)||owned.some(h=>!range.includes(h))||hash(git(repo,['diff','--no-ext-diff','--no-textconv',target.base,target.head]))!==target.diff_sha256)throw Error('retained review range/diff is UNKNOWN or changed');

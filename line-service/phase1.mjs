@@ -20,6 +20,7 @@ import {acquireLock} from '../lanes/promotion-lock.mjs';
 import {loadDiscoveredRoutes} from '../lanes/routes.mjs';
 import {effectiveWorkerIdentity} from '../lib/worker-identity.mjs';
 import {producerGroupKey,queueProducerGroup,sameProducerQueue,capturedReviewCommits} from './review-group.mjs';
+import {producerRanges} from './producer-ranges.mjs';
 import {additionalTarget,supplementalTarget,canonicalTarget,canonicalSelector,validateAdditionalTarget} from './review-targets.mjs';
 import {reviewCorrectionEvents} from './review-findings.mjs';
 
@@ -268,11 +269,17 @@ export function discoverChanges({events,state,repo,org,identity,boundary,readGit
           const foreign=h=>events.some(e=>e.type==='change.landed'&&e.project===identity&&e.head===h&&(e.run!==run.id||e.item!==item.id));
           if(foreign(head))throw Error('claimed producer final target belongs to another recorded source owner');
           const order=git(repo,['rev-list','--reverse',`${dispatch.base}..${head}`]).split('\n').filter(Boolean),first=order.find(h=>claims.includes(h)&&!foreign(h));if(!first)throw Error('producer has no positively delivered non-admission change');
-          const declared=[...new Set(declaredSourceRanges(run.report.artifacts??[]).filter(r=>head.startsWith(r.head)).map(r=>git(repo,['rev-parse',`${r.base}^{commit}`])))];
-          if(declared.length>1)throw Error('whole producer source group has contradictory immutable bases');const base=declared[0]??git(repo,['rev-parse',`${first}^1`]);
-          git(repo,['merge-base','--is-ancestor',base,head]);const range=git(repo,['rev-list','--reverse',`${base}..${head}`]).split('\n').filter(Boolean),ownedCommits=range.filter(h=>eligible.has(h)&&h!==dispatch.base&&!foreign(h)&&(declared.length||claims.includes(h)));
-          if(claims.some(h=>eligible.has(h)&&h!==dispatch.base&&!foreign(h)&&!ownedCommits.includes(h)))throw Error('whole producer range omits delivered source; no partial review');const diff=git(repo,['diff','--no-ext-diff','--no-textconv',base,head]);if(!diff)throw Error('whole producer source has an empty delta; no code review target');
-          target={head,base,reportHash:run.report.sha256,evidence:reportFile,diff_sha256:hash(diff),dispatch:file,scope:{base,commits:range,claims:ownedCommits,unresolved:[],deferred:false},source_group:{key:group,run:run.id,report_sha256:run.report.sha256,owned_commits:ownedCommits}};
+          const declarations=declaredSourceRanges(run.report.artifacts??[]);
+          if(declarations.length>1){
+            const captured=producerRanges({git,repo,declared:declarations,dispatch,head,claims,index,item,run});
+            target={...captured,reportHash:run.report.sha256,evidence:reportFile,dispatch:file,source_group:{key:group,run:run.id,report_sha256:run.report.sha256,owned_commits:captured.scope.commits}};
+          }else{
+            const declared=[...new Set(declarations.filter(r=>head.startsWith(r.head)).map(r=>git(repo,['rev-parse',`${r.base}^{commit}`])))];
+            if(declared.length>1)throw Error('whole producer source group has contradictory immutable bases');const base=declared[0]??git(repo,['rev-parse',`${first}^1`]);
+            git(repo,['merge-base','--is-ancestor',base,head]);const range=git(repo,['rev-list','--reverse',`${base}..${head}`]).split('\n').filter(Boolean),ownedCommits=range.filter(h=>eligible.has(h)&&h!==dispatch.base&&!foreign(h)&&(declared.length||claims.includes(h)));
+            if(claims.some(h=>eligible.has(h)&&h!==dispatch.base&&!foreign(h)&&!ownedCommits.includes(h)))throw Error('whole producer range omits delivered source; no partial review');const diff=git(repo,['diff','--no-ext-diff','--no-textconv',base,head]);if(!diff)throw Error('whole producer source has an empty delta; no code review target');
+            target={head,base,reportHash:run.report.sha256,evidence:reportFile,diff_sha256:hash(diff),dispatch:file,scope:{base,commits:range,claims:ownedCommits,unresolved:[],deferred:false},source_group:{key:group,run:run.id,report_sha256:run.report.sha256,owned_commits:ownedCommits}};
+          }
         }
         if(!nativeEvidence){
           const provenance=deliveredSourceProof({project:{identity,canonical:repo},org,run,events,state,git});
@@ -288,7 +295,7 @@ export function discoverChanges({events,state,repo,org,identity,boundary,readGit
           const extra=supplementalTarget({events,state,repo,org,identity,index,item,run,queues:retained});
           if(extra)changes.push({item,run,target:extra,cutoff});
         }
-    }catch(e){holds.push({item:item.id,run:run.id,reason:e.message,...(e.source_provenance?{source_provenance:e.source_provenance}:{})});}
+    }catch(e){const code=e.code??(declaredSourceRanges(run.report?.artifacts??[]).length>1?'PRODUCER_RANGE_INVALID':null);holds.push({item:item.id,run:run.id,reason:e.message,...(code?{code}:{}),...(e.source_provenance?{source_provenance:e.source_provenance}:{})});}
     }finally{
       if(changes.length===changeStart){
         if(holds.length>holdStart)cached?.retain(holds.slice(holdStart).map(h=>h.reason).join('; '));

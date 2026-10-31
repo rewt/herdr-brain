@@ -220,7 +220,7 @@ function mutate(ctx, fn, authority, { deferCloseout = false } = {}) {
   // queue-review defer their immutable/native effects to the final commit hook.
   const planned = new Set(['add', 'block', 'unblock', 'note', 'amend-accept', 'ask', 'answer', 'set', 'close', 'reopen', 'start', 'worker', 'abandon', 'lesson', 'ingest', 'sync', 'queue-review', 'messages', 'nudge']);
   // Only event derivation may refresh on a race. Commit hooks never replay;
-  // nested configuration audits also revoke replay permission in the store.
+  // the store permits one refresh after a committed, idempotent config audit.
   // Message preparation includes its fresh native sender observation. It may
   // precede acquisition, but a record/file race must never replay that lookup.
   const replaySafe = process.argv[2] !== 'messages' &&

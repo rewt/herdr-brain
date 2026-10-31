@@ -94,15 +94,20 @@ test(`guarded shared closeout: ${scenario}`,t=>{
   }
   // A2's other duty vanished without a report. The same host remains alive;
   // its failed checkpoint, held owner and immutable registration must survive.
+  const vanishedCwd=path.join(f.scratch,'vanished'),vanishedNative={agent:'original-vanished-owner',pane:'old:p',workspace:'old',
+    terminal:'old-terminal',session:'old-session',cwd:vanishedCwd};
   f.append([{type:'item.added',id:'ENG-2',kind:'work',role:'engineer',title:'Vanished original worker'},
-    {type:'run.started',id:'R-2',item:'ENG-2',workspace:path.join(f.scratch,'vanished')},
+    {type:'run.started',id:'R-2',item:'ENG-2',workspace:vanishedCwd,meta:{agent:vanishedNative.agent,pane:vanishedNative.pane,
+      worker_workspace:vanishedNative.workspace,terminal_id:vanishedNative.terminal,agent_session_id:vanishedNative.session,
+      dispatch_project:f.common,dispatch_record:f.org}},
     {type:'run.claimed',run:'R-2',record:f.org,project:f.common,owner:f.ownership.owner},
     {type:'run.updated',id:'R-2',meta:{watcher_pid:901,watcher_identity:'shared-host-birth'}}]);
   const vanished=fold(events(f)).runs.get('R-2'),ownership={owner:vanished.owner,generation:vanished.owner_generation},
     retained={...f.files,vanishedDuty:path.join(f.org,'watch/shared/R-2.json'),vanishedStep:path.join(f.org,'watch/steps/R-2.json'),
       vanishedHeld:path.join(f.org,'watch/observer/held/R-2.json')};
   delete retained.held;
-  f.put(retained.vanishedDuty,{...f.duty,run:'R-2',ownership});
+  f.put(retained.vanishedDuty,{...f.duty,run:'R-2',ownership,native:vanishedNative,to:vanishedNative.agent,stuck_owner:vanishedNative.agent,
+    report:path.join(f.org,'runs/R-2/report.md'),argv:['R-2','--record-only']});
   f.put(retained.vanishedStep,{...f.step,run:'R-2',ownership,phase:'failed',error:'original worker vanished without a valid report'});
   f.put(retained.vanishedHeld,{run:'R-2',ownership,reason:'original watcher exit 1',stuck_owner:'original-vanished-owner'});
   const saved=new Map(Object.values(retained).map(file=>[file,fs.readFileSync(file)])),result=runCloseoutTurn(f.args),all=events(f),

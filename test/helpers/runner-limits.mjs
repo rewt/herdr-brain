@@ -27,19 +27,25 @@ if (signalReceipt && process.env.NODE_TEST_CONTEXT === 'child-v8') {
   // synchronously blocked file needs the coordinator's owned SIGKILL teardown;
   // an outer SIGINT/SIGTERM to that coordinator takes the same teardown path.
   for (const signal of ['SIGINT', 'SIGTERM']) {
-    process.prependOnceListener(signal, () => {
-      observing.delete(signal);
+    function observe() {
       clearTimeout(pending.get(signal)); pending.delete(signal);
       if (!recorded) {
         fs.writeFileSync(signalReceipt, JSON.stringify({ pid: process.pid, signal,
-          handlers: process.listeners(signal).map(listener => listener.name) }) + '\n', { flag: 'wx', mode: 0o600 });
+          handlers: process.listeners(signal).filter(listener => listener !== observe).map(listener => listener.name) }) + '\n', { flag: 'wx', mode: 0o600 });
         recorded = true;
       }
       process.exitCode ||= 1;
       // Observing a signal must not swallow its default native termination.
       // Existing harness or fixture handlers still run after this observer.
-      if (process.listenerCount(signal) === 0) process.kill(process.pid, signal);
-    });
+      if (process.listenerCount(signal) === 1) {
+        process.removeListener(signal, observe);
+        observing.delete(signal);
+        process.kill(process.pid, signal);
+      }
+    }
+    // A file may handle several signals and keep running. Clear every pending
+    // self-signal on actual delivery, not only the first observed callback.
+    process.prependListener(signal, observe);
   }
 }
 

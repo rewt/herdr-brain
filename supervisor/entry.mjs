@@ -49,7 +49,7 @@ export function inspectEntryLocks(project, report, { readProcess } = {}) {
   }
 }
 
-export function enterSupervisor({ cwd = process.cwd(), org, role, to = process.env.MONITOR_SUPERVISOR_AGENT || 'supervisor-herdr',
+export function enterSupervisor({ cwd = process.cwd(), org, role, readOnly = false, to = process.env.MONITOR_SUPERVISOR_AGENT || 'supervisor-herdr',
   command = spawnSync, readProcess, output = text => process.stdout.write(text) } = {}) {
   const report = text => output(sanitizeTerminal(text));
   const attempt = (name, task) => { try { return task(); } catch (e) { report(`Supervisor entry ${name}: ${e.message}; session may continue.\n`); } };
@@ -85,6 +85,7 @@ export function enterSupervisor({ cwd = process.cwd(), org, role, to = process.e
     project.org = doc.project.org;
     org = project.org;
     attempt('locks', () => inspectEntryLocks(project, report, { readProcess: readOwner }));
+    if (readOnly) { report('Supervisor entry observation only: no retirement, housekeeping or watcher catch-up.\n'); return; }
     // STOP/torn record permits the cold start and lock inspection, never recovery mutations.
     if (doc.project.stopped || doc.project.torn_tail) { report('Supervisor entry recovery paused: STOP or incomplete record event; inspect.\n'); return; }
     // One foreground catch-up per request revision; no schedule is started.

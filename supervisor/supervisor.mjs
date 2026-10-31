@@ -18,6 +18,7 @@ import { TEST_ESCALATION } from '../settle/test-evidence.mjs';
 import { resolveValidation } from '../lanes/validation.mjs';
 import { supervisorStatus, renderStatus } from './status.mjs';
 import { safePoint } from './safe-point.mjs';
+import { guardDutyCheckpoint } from './finite-duty.mjs';
 import { renderSafePoint } from '../lib/render.mjs';
 
 const local = (name) => fileURLToPath(new URL(name, import.meta.url));
@@ -85,7 +86,8 @@ export function main(argv = process.argv.slice(2)) {
   const { values: opt, positionals } = parseArgs({ usage: "Usage: node supervisor/supervisor.mjs brief|safe-point|status|entry|checkpoint|handle|promote [OPTIONS]", args: argv, allowPositionals: true, options: {
     controller: { type: 'string', default: BRAIN_CONTROLLER },
     repo: { type: 'string', default: process.cwd() }, org: { type: 'string' }, role: { type: 'string' },
-    json: { type: 'boolean' }, 'since-seq': { type: 'string' }, through: { type: 'string' },
+    json: { type: 'boolean' }, 'read-only': { type: 'boolean' }, 'since-seq': { type: 'string' }, through: { type: 'string' },
+    'finite-duty-start': { type: 'string' },
     workspace: { type: 'string' }, pane: { type: 'string' }, herdr: { type: 'string' },
     notice: { type: 'string' }, why: { type: 'string' }, to: { type: 'string', default: process.env.MONITOR_SUPERVISOR_AGENT || undefined }, brief: { type: 'string' },
     'review-route': { type: 'string' }, 'fix-route': { type: 'string' }, timeout: { type: 'string' },
@@ -95,6 +97,8 @@ export function main(argv = process.argv.slice(2)) {
     'required-tests': { type: 'string' }, 'settle-cli': { type: 'string' }, 'promote-cli': { type: 'string' },
   } });
   const [action = 'brief', requested] = positionals;
+  if (opt['read-only'] && action !== 'entry') throw Error('--read-only belongs to supervisor entry');
+  if (opt['finite-duty-start'] !== undefined && action !== 'checkpoint') throw Error('--finite-duty-start belongs to checkpoint');
   const ownerRun = requested ?? (opt.notice?.startsWith('[org-report] ') ? noticeRun(opt.notice) : null);
   let ownership;
   if (['handle', 'promote'].includes(action) && ownerRun) {
@@ -122,7 +126,7 @@ export function main(argv = process.argv.slice(2)) {
     const status = supervisorStatus({ cwd: opt.repo, org: opt.org });
     process.stdout.write(opt.json ? JSON.stringify(status) + '\n' : renderStatus(status)); return;
   }
-  if (action === 'entry') { enterSupervisor({ cwd: opt.repo, org: opt.org, role: opt.role, to: opt.to }); return; }
+  if (action === 'entry') { enterSupervisor({ cwd: opt.repo, org: opt.org, role: opt.role, to: opt.to, readOnly: opt['read-only'] }); return; }
   const doc = coldStart({ cwd: opt.repo, org: opt.org, workspace: opt.workspace, sinceSeq: opt['since-seq'] === undefined ? undefined : Number(opt['since-seq']) });
   const project = doc.project;
   const print = (value) => process.stdout.write(JSON.stringify(value) + '\n');
@@ -198,7 +202,10 @@ export function main(argv = process.argv.slice(2)) {
       const previous = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : null;
       if (previous && (previous.identity !== project.identity || previous.org !== project.org)) throw new Error('cursor identity changed');
       const cursor = { identity: project.identity, org: project.org, through: Math.max(through, previous?.through ?? 0) };
-      writeFileAtomic(file, JSON.stringify(cursor) + '\n'); print(cursor);
+      const write = () => { writeFileAtomic(file, JSON.stringify(cursor) + '\n'); print(cursor); };
+      if (opt['finite-duty-start'] !== undefined) {
+        guardDutyCheckpoint({ org: project.org, cwd: project.canonical, startSeq: Number(opt['finite-duty-start']), through }, write);
+      } else write();
     } finally { release(); }
     return;
   }

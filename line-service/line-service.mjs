@@ -244,13 +244,32 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       const current = () => { if (stale) { snapshot = observe(); stale = false; reviewCache = new Map(); } return snapshot; };
       let activeSubject,activeKey,parentCommand;
       const subjectLock=subject=>path.join(directory,'subjects',digest(subject)+'.lock');
+      const laterDispatchInput=(key,other)=>{
+        const match=/^dispatch:([A-Z]+-\d+):(.+)$/.exec(key),prior=/^dispatch:([A-Z]+-\d+):(.+)$/.exec(other);
+        if(!match||!prior||match[1]!==prior[1])return false;
+        const snapshot=current(),item=snapshot.state.items.get(match[1]);
+        if(!item||dispatchInput({...snapshot,item,org,identity:project.identity})!==match[2])return false;
+        const revision=input=>{
+          const source=input.split(':')[0],run=snapshot.state.runs.get(source);
+          if(source!==String(item.created.seq)&&run?.item!==item.id)return null;
+          const reopen=/:reopened-(\d+)(?=:|$)/.exec(input);
+          const event=reopen&&snapshot.events.find(e=>e.seq===Number(reopen[1])&&e.type==='item.reopened'&&e.id===item.id&&e.seq>(run?.started.seq??item.created.seq));
+          if(reopen&&!event)return null;
+          return Math.max(run?.report?.seq??run?.started.seq??item.created.seq,event?.seq??0);
+        };
+        const next=revision(match[2]),previous=revision(prior[2]);
+        return next!==null&&previous!==null&&next>previous;
+      };
       const withSubject=(key,operation)=>{
         const subject=effectSubject(key,current().state);
         if(activeSubject===subject)return operation();
         const pending=pendingSubjectCommand(directory,subject);
         if(pending){log({action:'subject-held',subject,key,original:pending.command,reason:'original command remains active or UNKNOWN',owner:pending.intent.stuck_owner});return;}
+        // A later reopen/report owns fresh work, not the old dispatch's unknown
+        // result. Pending commands above and the shared item lock still fence
+        // active effects; only an earlier dispatch journal row is bypassed.
         const unknown=Object.entries(effects.actions).find(([other,entry])=>other!==key&&entry.state==='started'&&
-          (entry.execution_subject??effectSubject(other,current().state))===subject);
+          (entry.execution_subject??effectSubject(other,current().state))===subject&&!laterDispatchInput(key,other));
         if(unknown){log({action:'subject-held',subject,key,original:unknown[0],reason:'original started action retained; no replacement'});return;}
         let unlock;try{unlock=noticeLock(subjectLock(subject),{onRecovery:recovery=>log({action:'subject-lock-recovery',subject,...recovery})});}
         catch(error){if(!error.message.startsWith('locked:'))throw error;log({action:'subject-held',subject,key,reason:error.message});return;}

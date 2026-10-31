@@ -17,6 +17,7 @@ import {haltObservation,completeHaltPass} from '../line-service/halt-repair.mjs'
 import {dispatchInput} from '../line-service/phase1.mjs';
 import {closeoutKey} from '../lib/closeout.mjs';
 import {closeoutWaitId} from '../lib/closeout-status.mjs';
+import {commandIntent,finishCommand,forgetActiveCommand} from '../lib/command-receipt.mjs';
 import {setup as closeoutFixture,events as closeoutEvents,evaluations as closeoutEvaluations} from './helpers/closeout-fixture.mjs';
 
 function fixture(t) {
@@ -321,7 +322,7 @@ test('reopened dispatch gets one fresh start and preserves creation-key UNKNOWN 
     fs.writeFileSync(file,JSON.stringify({identity:gitProject(f.repo).identity,org:f.org,actions:{[key]:original}}));
     service.pass();assert.equal(f.calls.length,0,'unchanged input retains the original attempt');
     for(let cycle=1;cycle<=2;cycle++){
-      f.record(['close',item,'--as','done']);f.record(['reopen',item]);
+      f.record(['close',item]);f.record(['reopen',item]);
       const reopened=loadEvents(f.org).events.findLast(e=>e.type==='item.reopened'&&e.id===item);
       f.service().pass();assert.equal(f.calls.length,cycle,'the first line pass starts the new input');
       f.record(['note',item,'Routine status does not create dispatch input']);
@@ -371,6 +372,22 @@ test('reported dispatch returning to ready gets a new input without reopening or
     f.service().pass();assert.equal(f.calls.length,1,'the same ready input gets only one start');
     assert.deepEqual(JSON.parse(fs.readFileSync(file)).actions[key],original);
     assert.ok(Object.keys(JSON.parse(fs.readFileSync(file)).actions).some(k=>k.startsWith(`dispatch:${item}:R-1:`)));
+  }
+});
+test('reopened dispatch keeps active command and unrelated UNKNOWN subject fences',t=>{
+  for(const held of ['active-command','other-effect']){
+    const f=fixture(t),item=f.add('Reopened fenced work'),service=f.service(),file=path.join(service.directory,'effects.json');
+    const key=`dispatch:${item}:${f.show(item).created.seq}:ordinary`,original={state:'started',at:'2026-10-27T00:00:00Z',error:'Original UNKNOWN'};
+    const actions={[key]:original,...(held==='other-effect'?{[`source-complete:${item}:unknown`]:{state:'started',execution_subject:item,error:'Other UNKNOWN effect'}}:{})};
+    fs.writeFileSync(file,JSON.stringify({identity:gitProject(f.repo).identity,org:f.org,actions}));
+    const pending=held==='active-command'?commandIntent(service.directory,{exe:'original-dispatch',args:[],cwd:f.repo,subject:item,key}):null;
+    f.record(['close',item]);f.record(['reopen',item]);
+    f.service().pass();assert.equal(f.calls.length,0,'a new reopen cannot bypass active/UNKNOWN command or other-effect ownership');
+    assert.deepEqual(JSON.parse(fs.readFileSync(file)).actions[key],original);
+    if(pending){
+      finishCommand(pending,{status:0,stdout:'original command completed'});forgetActiveCommand(pending);
+      f.service().pass();assert.equal(f.calls.length,1,'the new input can start after the original terminal command receipt');
+    }
   }
 });
 test('standing order changes the next native dispatch and skips held, reserved, dependent and unselected proposals',t=>{

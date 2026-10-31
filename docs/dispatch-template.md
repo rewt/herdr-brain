@@ -35,6 +35,19 @@ Current acceptance remains the scope; native identity, claims, STOP/HOLD,
 reserved effects and existing review/correction obligations retain their owners.
 The template grants no permission to change those boundaries.
 
+Lesson and related-context selectors use the title, rationale, original or
+authored requirements and notes. New creations retain source requirements in
+`meta.dispatch_source`, bound to the stored prompt's hash; amendments use their
+new text instead. Already-filed generated wrappers are recognized only by exact
+regeneration, without changing historical events. Generated worker-contract
+defaults do not supply retrieval selectors. A complete authored prompt remains
+authored text, including its literal source mentions.
+
+For complete prompts the execution contract's Outcome points to Measure and
+How we will know it works. Ordinary and correction line asks point to the
+included brief's Dispatch prompt rather than repeating it, while retaining the
+separate immutable correction packet. Saved asks and briefs are unchanged.
+
 ENG-1039 supplies original intent, authority limits and bounded pointers to
 related decisions/lessons; the template does not duplicate that retrieval.
 ENG-1035 supplies report/handoff guidance and cold-reader evidence; filling this

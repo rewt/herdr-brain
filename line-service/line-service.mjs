@@ -27,6 +27,7 @@ import {reviewQueueNoMutation} from './review-queue-outcome.mjs';
 import {completionAttempts,completionPlanningProof,reconcileReviewCompletion} from './review-completion.mjs';
 import { queueConsumer, isQueueReview, validateQueuedReview, reviewQueueBrief, reviewQueueRoute } from './review-queue.mjs';
 import { roleIs } from '../lib/roles.mjs';
+import {lineWorkAsk} from '../lib/dispatch-template.mjs';
 import { recordLineNotice,canonicalFailure } from './record-inbox.mjs';
 import { enqueueNamedDecision } from './decision-wake.mjs';
 import { canonical } from '../messages/schema.mjs';
@@ -809,7 +810,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
             const brief = path.join(directory, `${digest(key)}.ask.md`);
             const target = reviewTarget ? validateQueuedReview({ item: current, state: fresh.state, events: fresh.events, org, repo }) : null;
             const correction = correctionSource({ item: current, state: fresh.state, events: fresh.events, repo, org });
-            writeFileAtomic(brief, target ? reviewQueueBrief(current) : isDecision(current) ? decisionBrief(current) : `# ${current.title}\n\n${current.accept.join('\n')}\n\n${correction?.brief ?? ''}Work from the existing item fields/notes and accepted directions. The generated execution brief supplies role guidance and project routing.\n`, 0o600);
+            writeFileAtomic(brief, target ? reviewQueueBrief(current) : isDecision(current) ? decisionBrief(current) : lineWorkAsk(current, correction?.brief ?? ''), 0o600);
             return startDispatch([item.id, '--repo', repo, '--org', org, '--lane', `${target ? 'review' : 'line'}-${item.id.toLowerCase()}-${current.runs.length + 1}`, '--route', route, '--brief', brief, ...(target ? ['--base', target.head] : correction ? ['--base', correction.base] : []),'--detach']);
           },undefined,undefined,Boolean(retryAdmission),Boolean(retryAdmission),fresh=>{
             if(!admit({item:fresh.state.items.get(item.id),state:fresh.state},'launch-mutation',true))return false;

@@ -10,7 +10,8 @@ import { DEFAULT_CONFIG } from '../lib/store.mjs';
 import { renderBrief } from '../lib/render.mjs';
 import { createWorkerBrief } from '../lib/worker-brief.mjs';
 import { briefContext } from '../lib/brief-context.mjs';
-import { dispatchPrompt, isDispatchPrompt, intentFirstCreation } from '../lib/dispatch-template.mjs';
+import { dispatchPrompt, isDispatchPrompt, intentFirstCreation, contextAcceptance, lineWorkAsk } from '../lib/dispatch-template.mjs';
+import { lessonsForItem } from '../lib/lessons.mjs';
 import { proposalIntakeEvents } from '../lib/proposal-intake.mjs';
 import { reviewCorrectionEvents } from '../line-service/review-findings.mjs';
 
@@ -135,7 +136,74 @@ test('fresh line contracts deliver the complete prompt once without replacing gu
   const brief = renderBrief(state, run.id, { config: DEFAULT_CONFIG, cli: 'record' });
   assert.equal(brief.split(item.accept[0]).length, 2);
   assert.deepEqual(briefContext(state, item.id).paths, [], 'generic guideposts introduce no fake source selectors');
-  assert.equal(contract.outcome, item.title);
+  assert.match(contract.outcome, /See Dispatch prompt: Measure/);
+  assert.notEqual(contract.outcome, contract.purpose);
+  const ask = lineWorkAsk(item, 'Original immutable correction evidence.\n');
+  assert.equal((ask + brief).split(item.accept[0]).length, 2, 'ask plus brief deliver one full prompt');
+  assert.match(ask, /Original immutable correction evidence/);
+  assert.match(lineWorkAsk({ title: 'Legacy', accept: ['Original raw requirements.'] }), /Original raw requirements/);
   assert.match(brief, /PROJECT SUPERVISOR supervisor/);
   assert.match(brief, /labels and estimates grant no authority/);
 });
+
+test('generated ordinary, review and correction envelopes never select lessons or related paths; authored selectors still lead', t => {
+  const f = fixture(t);
+  const ordinary = f.ok(['add', 'Keep the bounded behavior', '--role', 'engineer', '--accept', 'Keep the native guard.']).trim();
+  const positive = f.ok(['add', 'Keep the explicit behavior', '--role', 'engineer', '--accept', 'Exercise acceptance/test.']).trim();
+  const lessons = [
+    { type: 'lesson.proposed', id: 'L-1', text: 'Path-only claim', scope: 'project', paths: ['acceptance'], modules: [], evidence: [{ kind: 'item', id: 'ENG-99' }] },
+    { type: 'lesson.proposed', id: 'L-2', text: 'Module-only claim', scope: 'project', paths: [], modules: ['Measure'], evidence: [{ kind: 'item', id: 'ENG-99' }] },
+    { type: 'lesson.proposed', id: 'L-3', text: 'Linked claim', scope: 'project', paths: ['elsewhere'], modules: [], evidence: [{ kind: 'item', id: positive }] },
+    ...['L-1', 'L-2', 'L-3'].map(id => ({ type: 'lesson.activated', id })),
+  ];
+  const reviewer = intentFirstCreation({ type: 'item.added', id: 'REV-1', title: 'Review bounded behavior', role: 'reviewer',
+    accept: ['Inspect the captured diff.'], meta: { review_key: 'ENG-99:captured', review_source_item: 'ENG-99', review_source_run: 'R-0',
+      review_target: { base: 'a'.repeat(40), head: 'b'.repeat(40), scope: { commits: ['b'.repeat(40)] } } } });
+  let events = stamp([...f.events(), ...lessons, reviewer, { type: 'run.started', id: 'R-10', item: reviewer.id }]);
+  let state = fold(events);
+  const correction = reviewCorrectionEvents({ events, state, run: state.runs.get('R-10'), review: state.items.get(reviewer.id), report: { proposals: [] },
+    findings: [{ severity: 'major', text: 'Keep the original refused effect.', correction_check: 'Assert the original refusal stays refused.' }], verdict: 'FAIL', sha256: 'immutable' });
+  const created = correction.add.find(e => e.type === 'item.added');
+  const legacy = { ...structuredClone(created), id: 'ENG-90' };
+  delete legacy.meta.dispatch_source;
+  events = stamp([...events, ...correction.add, legacy]); state = fold(events);
+  for (const [n, id] of [ordinary, reviewer.id, created.id, legacy.id].entries()) {
+    const item = state.items.get(id), runId = `R-${20 + n}`;
+    assert.ok(item.accept[0].includes('acceptance'), 'negative witness really contains generated selector text');
+    assert.deepEqual(lessonsForItem(state, id), []);
+    assert.equal(briefContext(state, id).paths.includes('correction/release'), false);
+    assert.deepEqual(briefContext(state, id).modules, []);
+    const contract = createWorkerBrief({ item, ask: '/record/ask.md', askText: lineWorkAsk(item), project: '/project', org: '/record', lane: 'topic',
+      route: 'engineer', harness: 'codex', reviewRoute: 'review', exception: { to: 'supervisor', source: 'project promote.to' } });
+    contract.workspace = '/project/lane';
+    const withRun = fold(stamp([...events, { type: 'run.started', id: runId, item: id, workspace: contract.workspace,
+      meta: { lane: contract.lane, route: contract.route, harness: contract.harness, worker_brief: JSON.stringify(contract) } }]));
+    const brief = renderBrief(withRun, runId, { config: DEFAULT_CONFIG, cli: 'record' });
+    assert.doesNotMatch(brief, /## Lessons|Path-only claim|Module-only claim|path:correction\/release/);
+    assert.equal((lineWorkAsk(item) + brief).split(item.accept[0]).length, 2);
+  }
+  assert.deepEqual(lessonsForItem(state, positive).map(l => l.id), ['L-1', 'L-3'], 'literal original path leads linked evidence');
+  assert.deepEqual(briefContext(state, positive).paths, ['acceptance/test']);
+  const positiveBrief = renderBrief(fold(stamp([...events, { type: 'run.started', id: 'R-30', item: positive }])), 'R-30', { config: DEFAULT_CONFIG, cli: 'record' });
+  assert.match(positiveBrief, /## Lessons[\s\S]*L-1 \[/);
+  assert.ok(positiveBrief.indexOf('L-1 [') < positiveBrief.indexOf('L-3 ['));
+});
+
+test('authored prompts, amendments, title, rationale and notes retain their literal context', t => {
+  const f = fixture(t), authored = dispatchPrompt({ title: 'Authored', role: 'engineer', accept: ['Keep the guard.'] })
+    .replace('Measure: Not recorded separately.', 'Measure: Inspect authored/source.mjs.');
+  const file = path.join(f.root, 'authored.md'); fs.writeFileSync(file, authored);
+  const id = f.ok(['add', 'Authored work', '--role', 'engineer', '--file', file]).trim();
+  let state = fold(f.events());
+  assert.deepEqual(contextAcceptance(state.items.get(id)), [authored]);
+  assert.ok(briefContext(state, id).paths.includes('authored/source.mjs'));
+  const raw = f.ok(['add', 'Amended work', '--role', 'engineer', '--accept', 'Old source old/module.mjs.']).trim();
+  f.ok(['amend-accept', raw, '--accept', 'New source new/module.mjs.', '--why', 'Replace the source']);
+  state = fold(f.events());
+  assert.deepEqual(contextAcceptance(state.items.get(raw)), ['New source new/module.mjs.']);
+  assert.deepEqual(briefContext(state, raw).paths, ['new/module.mjs']);
+  const item = { ...state.items.get(id), title: 'Edit title/module.mjs', created: { why: 'Reason reason/module.mjs' }, notes: [{ text: 'Ask note/module.mjs' }] };
+  state.items.set(id, item);
+  assert.deepEqual(briefContext(state, id).paths, ['title/module.mjs', 'reason/module.mjs', 'authored/source.mjs', 'note/module.mjs']);
+});
+

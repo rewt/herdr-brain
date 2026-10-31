@@ -647,18 +647,35 @@ test('phase1 settled-history scan uses two Git index reads for thousands of old 
     assert.equal(hash(bytes),run.report.sha256);assert.equal(readReport(bytes).report.run,run.id);
     assert.deepEqual(run.report.artifacts,[`source: ${heads[Number(run.id.slice(2))-1]}; base: ${dispatch.base}`]);
   }
-  const reads=[],readGit=(_repo,args)=>{reads.push(args);return f.git(...args);};
-  const found=discoverChanges({...c,readGit});
+  // Trace real subprocess starts, including module-level provenance Git calls
+  // that the injected readGit index seam cannot see. Exclude fixture setup.
+  const scan=(context,name)=>{
+    const trace=path.join(f.scratch,`${name}-git.jsonl`),previous=process.env.GIT_TRACE2_EVENT;
+    process.env.GIT_TRACE2_EVENT=trace;
+    try{
+      const found=discoverChanges(context),reads=fs.readFileSync(trace,'utf8').trim().split('\n').map(JSON.parse).filter(e=>e.event==='start').map(e=>e.argv);
+      t.diagnostic(`${name} total Git subprocesses: ${reads.length}; argv=${JSON.stringify(reads)}`);
+      return{found,reads};
+    }finally{if(previous===undefined)delete process.env.GIT_TRACE2_EVENT;else process.env.GIT_TRACE2_EVENT=previous;}
+  };
+  const argv=args=>['git','--no-optional-locks','-C',f.cwd,...args];
+  const indexReads=[['rev-parse','refs/heads/main'],['rev-list','--parents',`${heads.at(-1)}..${heads.at(-1)}`]].map(argv);
+  const {found,reads}=scan(c,'settled-history');
   assert.equal(found.changes.length,0);assert.equal(found.holds.length,0);assert.equal(found.unattributed.length,0);
-  assert.deepEqual(reads,[['rev-parse','refs/heads/main'],['rev-list','--parents',`${heads.at(-1)}..${heads.at(-1)}`]]);
+  assert.deepEqual(reads,indexReads,'settled history has exactly two total Git subprocesses');
   // The same old source cited by a genuinely new report stays UNKNOWN: history
   // does not supply a guarded delivery receipt to a later producer.
   transact(org,()=>({add:producer(count+1,heads.at(-1),heads.at(-2))}));
-  const diagnostic=discoverChanges({...context(),readGit});
+  const {found:diagnostic,reads:diagnosticReads}=scan(context(),'fresh-unproven');
   assert.equal(diagnostic.changes.length,0);assert.equal(diagnostic.holds.length,1);
   assert.equal(diagnostic.holds[0].run,`R-${count+1}`);assert.equal(diagnostic.holds[0].source_provenance.status,'unknown');
   assert.match(diagnostic.holds[0].source_provenance.ranges[0].reason,/lacks guarded or proven legacy dispatch\/run\/claim evidence/);
-  assert.equal(reads.length,4,'each scan retains exactly two batched index reads');
+  assert.deepEqual(diagnosticReads,[...indexReads,...[
+    ['rev-parse','--verify','--end-of-options',`${heads.at(-1)}^{commit}`],
+    ['rev-parse','--verify','--end-of-options',`${heads.at(-2)}^{commit}`],
+    ['merge-base','--is-ancestor',heads.at(-2),heads.at(-1)],
+    ['rev-list',`${heads.at(-2)}..${heads.at(-1)}`]
+  ].map(argv)],'fresh unproven claim has six total Git subprocesses: two index and four provenance');
 });
 
 test('phase1 intended boundary preserves old cutover and unknown adoption-time facts under stopped native guards',t=>{

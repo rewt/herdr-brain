@@ -154,10 +154,7 @@ test('a capped first file frees admission while a concurrent peer and every queu
     assert.equal(start.depth, suite.depth);
     assert.equal(finishes.length, 1, file);
     const failed = file === blocked || file === crash;
-    // file-timing observes the in-process exit hook. A self-signal can arrive
-    // after that hook reports zero; the native completion below must still
-    // fail with SIGTERM and retain the entire crash diagnostic.
-    if (file !== crash) assert.equal(finishes[0].exit_code, failed ? 1 : 0, file);
+    assert.equal(finishes[0].exit_code, failed ? 1 : 0, file);
     assert.equal(reference.exit_code, failed ? 1 : 0, file);
     if (!failed) assert.match(tap, /# pass 1\n# fail 0\n/);
     if (file === blocked) {
@@ -170,6 +167,22 @@ test('a capped first file frees admission while a concurrent peer and every queu
     }
     if (file === crash) {
       assert.equal(reference.failure.signal, 'SIGTERM');
+      const finish = finishes[0], native = reference.native_exit;
+      assert.equal(finish.reason, 'native-exit');
+      assert.equal(finish.observed_by, 'coordinator');
+      assert.equal(finish.signal, 'SIGTERM');
+      assert.equal(native.exit_code, null);
+      assert.equal(native.signal, 'SIGTERM');
+      assert.equal(native.pid, start.pid);
+      assert.equal(finish.file_pid, start.pid);
+      assert.deepEqual(finish.native_exit, native);
+      // Recovery measures the file until native exit, before output drains.
+      const elapsed = (Date.parse(native.at) - Date.parse(start.at)) / 1000;
+      assert.ok(Number.isFinite(elapsed) && elapsed >= 0, 'native exit must follow the file start');
+      assert.ok(Number.isFinite(finish.duration_s) && finish.duration_s >= 0);
+      assert.equal(finish.duration_s, elapsed);
+      assert.ok(Date.parse(finish.at) >= Date.parse(native.at), 'recovery must follow native exit');
+      t.diagnostic(JSON.stringify({ recovered_crash_timing: { start, finish, completion: reference } }));
       assert.equal(fs.readFileSync(reference.stderr_artifact, 'utf8'), diagnostic);
       assert.ok(result.stderr.includes(diagnostic), 'raw crash stderr must reach the log after the cap');
     }

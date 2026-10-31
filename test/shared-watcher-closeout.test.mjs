@@ -70,6 +70,41 @@ test('shared host separation requires the exact completed duty and original fina
   assert.equal(sharedWatcherDischarged(f.proof()),false,'redirected completion keeps the original');
 });
 
+for(const recordOnly of [true,false])
+test(`shared discharge compares canonical record paths (record-only: ${recordOnly})`,t=>{
+  const f=fixture(t,{recordOnly}),alias=f.org.startsWith('/private/var/')?f.org.slice('/private'.length):
+    `${path.dirname(f.org)}/./${path.basename(f.org)}`,
+    savedAlias=path.join(f.repo,'.org'),proof=()=>({...f.proof(),org:alias});
+  assert.notEqual(alias,f.org);
+  assert.equal(sharedWatcherDischarged(proof()),true,'aliased caller with canonical receipts');
+  if(recordOnly)assert.equal(fs.existsSync(f.receipt.inbox),false,'record-only proof has no inbox file');
+  f.put(f.files.duty,{...f.duty,org:savedAlias});
+  f.put(f.files.host,{...f.host,org:savedAlias});
+  f.put(f.files.receipt,{...f.receipt,inbox:path.join(savedAlias,'supervisor/inbox.log')});
+  const aliasedProof=()=>{const p=proof();p.run.meta.dispatch_record=savedAlias;return p;};
+  if(!recordOnly)f.inbox({...f.notice,project:{...f.notice.project,org:savedAlias},correlation:{...f.notice.correlation,record:savedAlias}});
+  assert.equal(sharedWatcherDischarged(aliasedProof()),true,'canonicalize saved paths too');
+  assert.equal(sharedWatcherDischarged({...aliasedProof(),org:f.org}),true,'canonical caller with aliased receipts');
+  const foreign=path.join(f.scratch,'foreign-record');fs.mkdirSync(foreign);
+  for(const key of ['duty','host','receipt']){
+    const file=f.files[key],saved=JSON.parse(fs.readFileSync(file));
+    f.put(file,{...saved,...(key==='receipt'?{inbox:path.join(foreign,'supervisor/inbox.log')}:{org:foreign})});
+    assert.equal(sharedWatcherDischarged(aliasedProof()),false,`${key} from a different record stays held`);
+    f.put(file,saved);assert.equal(sharedWatcherDischarged(aliasedProof()),true,'original path restores discharge');
+  }
+  const wrong=aliasedProof();wrong.run.meta.dispatch_record=foreign;
+  assert.equal(sharedWatcherDischarged(wrong),false,'foreign dispatch record stays held');
+  if(!recordOnly){
+    for(const notice of [{...f.notice,project:{...f.notice.project,org:foreign}},
+      {...f.notice,correlation:{...f.notice.correlation,record:foreign}}]){
+      f.inbox(notice);assert.equal(sharedWatcherDischarged(aliasedProof()),false,'foreign transport record stays held');
+    }
+    f.inbox();assert.equal(sharedWatcherDischarged(aliasedProof()),true);
+    fs.renameSync(f.receipt.inbox,f.receipt.inbox+'.saved');fs.symlinkSync(f.receipt.inbox+'.saved',f.receipt.inbox);
+    assert.equal(sharedWatcherDischarged(aliasedProof()),false,'canonical comparison does not bypass no-redirect inbox reads');
+  }
+});
+
 test('shared completion preserves uncertain refused and worker-addressed pending transport guards',t=>{
   const f=fixture(t,{recordOnly:false});assert.equal(sharedWatcherDischarged(f.proof()),true,'durable independent transport owns its pending notice');
   for(const tail of [[],[f.owned,{type:'sending',id:f.notice.id,occupant:'original'}],

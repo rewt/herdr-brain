@@ -312,6 +312,67 @@ test('priority READY dispatch uses existing admission and retains its one effect
   assert.equal(call.options.env.HERDR_PANE_ID, undefined); assert.equal(call.options.env.HERDR_ENV, undefined);
   assert.equal(call.options.env.MONITOR_SUPERVISOR_AGENT, 'supervisor-test');
 });
+test('reopened dispatch gets one fresh start and preserves creation-key UNKNOWN and held attempts',t=>{
+  for(const retained of ['started','held']){
+    const f=fixture(t),item=f.add('Reopened engineering'),service=f.service(),file=path.join(service.directory,'effects.json');
+    const key=`dispatch:${item}:${f.show(item).created.seq}:ordinary`;
+    const original={state:retained,at:'2026-10-27T00:00:00Z',error:'Original UNKNOWN outcome retained',
+      receipt:{status:null,stdout:'original receipt',stderr:'UNKNOWN'},original_outcome:{status:'unknown',error:'Original UNKNOWN outcome retained'}};
+    fs.writeFileSync(file,JSON.stringify({identity:gitProject(f.repo).identity,org:f.org,actions:{[key]:original}}));
+    service.pass();assert.equal(f.calls.length,0,'unchanged input retains the original attempt');
+    for(let cycle=1;cycle<=2;cycle++){
+      f.record(['close',item,'--as','done']);f.record(['reopen',item]);
+      const reopened=loadEvents(f.org).events.findLast(e=>e.type==='item.reopened'&&e.id===item);
+      f.service().pass();assert.equal(f.calls.length,cycle,'the first line pass starts the new input');
+      f.record(['note',item,'Routine status does not create dispatch input']);
+      f.service().pass();assert.equal(f.calls.length,cycle,'repeated passes and notes cannot double-dispatch');
+      const actions=JSON.parse(fs.readFileSync(file)).actions;
+      assert.deepEqual(actions[key],original,'the old UNKNOWN/held attempt remains byte-equivalent as data');
+      assert.equal(actions[`${key}:reopened-${reopened.seq}`].state,'complete');
+    }
+    assert.ok(f.calls.every(c=>c.args[0]===path.join(sourceRoot,'dispatch/dispatch.mjs')&&c.args[1]===item&&!c.args.includes('--retry')));
+  }
+});
+test('reported dispatch starts reopened work within one line pass and suppresses every open-run duplicate',t=>{
+  const f=fixture(t),item=f.add('Reported work'),service=f.service(),file=path.join(service.directory,'effects.json');
+  transact(f.org,()=>({add:[{type:'run.started',id:'R-1',item,meta:{}},
+    {type:'report.ingested',run:'R-1',sha256:'original-report',report:{outcome:'done',artifacts:[]}},
+    {type:'item.closed',id:item,as:'done'}]}));
+  const key=`dispatch:${item}:R-1:ordinary`,original={state:'held',at:'2026-10-27T00:00:00Z',error:'Original held dispatch',original_outcome:{status:'unknown'}};
+  fs.writeFileSync(file,JSON.stringify({identity:gitProject(f.repo).identity,org:f.org,actions:{[key]:original}}));
+  f.record(['reopen',item]);
+  const command=(exe,args,options)=>{
+    if(args[0]===path.join(sourceRoot,'dispatch/dispatch.mjs')){
+      assert.equal(args[1],item);assert.ok(args.includes('--detach'));assert.ok(!args.includes('--retry'));
+      transact(f.org,()=>({add:[{type:'run.started',id:'R-2',item,meta:{}}]}));
+    }
+    return f.command(exe,args,options);
+  };
+  f.service({command}).pass();assert.equal(f.calls.length,1,'reopen alone causes the line to start work in its next pass');
+  // Even a later explicit reopen cannot bypass an open run. A newer abandoned
+  // run must not hide the earlier open run from readiness, either.
+  transact(f.org,()=>({add:[{type:'item.reopened',id:item},{type:'run.started',id:'R-3',item,meta:{}},{type:'run.abandoned',id:'R-3'}]}));
+  f.service({command}).pass();f.service({command}).pass();assert.equal(f.calls.length,1);
+  const events=loadEvents(f.org).events,state=fold(events);
+  assert.equal(dispatchInput({events,state,item:state.items.get(item),org:f.org,identity:gitProject(f.repo).identity}),null);
+  assert.equal(state.runs.get('R-1').report.sha256,'original-report');
+  assert.deepEqual(JSON.parse(fs.readFileSync(file)).actions[key],original);
+});
+test('reported dispatch returning to ready gets a new input without reopening or replaying old attempts',t=>{
+  for(const outcome of ['failed','blocked']){
+    const f=fixture(t),item=f.add('Work returning to ready'),service=f.service(),file=path.join(service.directory,'effects.json');
+    const key=`dispatch:${item}:${f.show(item).created.seq}:ordinary`,original={state:'started',at:'2026-10-27T00:00:00Z',error:'Original UNKNOWN'};
+    fs.writeFileSync(file,JSON.stringify({identity:gitProject(f.repo).identity,org:f.org,actions:{[key]:original}}));
+    transact(f.org,()=>({add:[{type:'run.started',id:'R-1',item,meta:{}},
+      {type:'report.ingested',run:'R-1',sha256:'reported-run',report:{outcome,artifacts:[]}},
+      ...(outcome==='blocked'?[{type:'item.added',id:'HUM-1',role:'human',title:'Original blocker'},
+        {type:'link.added',blocker:'HUM-1',blocked:item},{type:'item.closed',id:'HUM-1',as:'done'}]:[])]}));
+    f.service().pass();assert.equal(f.calls.length,1,'the reported-run input is admitted in one pass');
+    f.service().pass();assert.equal(f.calls.length,1,'the same ready input gets only one start');
+    assert.deepEqual(JSON.parse(fs.readFileSync(file)).actions[key],original);
+    assert.ok(Object.keys(JSON.parse(fs.readFileSync(file)).actions).some(k=>k.startsWith(`dispatch:${item}:R-1:`)));
+  }
+});
 test('standing order changes the next native dispatch and skips held, reserved, dependent and unselected proposals',t=>{
   const f=fixture(t),a=f.add('Stable Brain',1),b=f.add('Rehearsal',9999),ready=f.add('Independent normal work',0);
   const goal=f.record(['add','Standing outcomes','--goal']).split(' ')[0];

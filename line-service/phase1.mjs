@@ -359,8 +359,12 @@ export function dispatchInput({events,state,item,org,identity}) {
     status=itemStatus({...state,items},item.id);
   }
   if(status!=='ready')return null;
+  // A reopen is a new work input, including before any run was recorded or
+  // after a retained dispatch on the same reported run. Keep older effect keys
+  // intact; ordinary passes and notes must not manufacture another attempt.
+  const reopened=events.findLast(e=>e.type==='item.reopened'&&e.id===item.id&&e.seq>(run?.started.seq??item.created.seq));
   const authorization=events.find(e=>e.type==='review.unstarted-authorized'&&e.review_item===item.id&&e.org===org&&e.project===identity);
-  const value=`${run?.id??item.created.seq}:${input}${authorization?`:unstarted-${authorization.seq}`:''}`,resolution=events.find(e=>e.type==='dispatch.not-started'&&e.item===item.id&&e.input===value);
+  const value=`${run?.id??item.created.seq}:${input}${reopened?`:reopened-${reopened.seq}`:''}${authorization?`:unstarted-${authorization.seq}`:''}`,resolution=events.find(e=>e.type==='dispatch.not-started'&&e.item===item.id&&e.input===value);
   if(!resolution)return finalizedDispatchInput({events,org,common:identity,item:item.id,input:value});
   if(!org||!identity||resolution.org!==org||resolution.project!==identity)throw Error('original dispatch resolution needs actual owning record/project context');
   return finalizedDispatchInput({events,org,common:identity,item:item.id,input:resolvedDispatchInput({events,org,common:identity,item:item.id,input:value})});

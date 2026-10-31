@@ -187,7 +187,7 @@ for (const state of ['failed', 'unknown']) test(`${state} tool result cannot be 
   f.native.agent_session.value = 'different-session';
   assert.throws(() => finishDuty({ ...f.options, successorSeq: next.seq }), /binding changed/);
   f.bindLaunch();
-  assert.throws(() => runDuty({ ...f.options, handoffSeq: next.seq }), /fresh native session|predecessor/);
+  assert.throws(() => runDuty({ ...f.options, handoffSeq: next.seq }), /retains canonical custody \(cap1\)/);
   assert.equal(f.events().filter(e => e.type === 'supervisor.duty.started').length, 1);
 });
 

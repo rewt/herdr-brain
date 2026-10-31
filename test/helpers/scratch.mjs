@@ -59,7 +59,8 @@ export function recoverScratch(journal, { joined, suite, lookup = lookupProcess,
     try {
       if (record.schema !== 'test-scratch/v1' || !path.isAbsolute(record.root) || !record.owner?.identity)
         throw Error('incomplete registration');
-      if (!joined || !Number.isSafeInteger(suite?.pid) || suite.pid <= 1 || record.owner.pgid !== suite.pid) reason = 'no joined owning group';
+      if (fs.realpathSync(record.root) !== record.root || !samePath(record, stamp(record.root))) reason = 'path identity changed';
+      else if (!joined || !Number.isSafeInteger(suite?.pid) || suite.pid <= 1 || record.owner.pgid !== suite.pid) reason = 'no joined owning group';
       else {
         if (!owners.has(record.owner.pid)) owners.set(record.owner.pid, observe(lookup, record.owner.pid));
         const observed = owners.get(record.owner.pid), current = observed?.value;
@@ -71,9 +72,6 @@ export function recoverScratch(journal, { joined, suite, lookup = lookupProcess,
           group ??= observe(groupProbe, suite.pid);
           if (!group?.ok) reason = 'group lookup unavailable';
           else if (group.absent !== true) reason = 'group still present or reused';
-          // realpath also detects substituted ancestors. Never follow a changed
-          // root or symlink into another fixture, even after native owner exit.
-          else if (fs.realpathSync(record.root) !== record.root || !samePath(record, stamp(record.root))) reason = 'path identity changed';
           else status = 'eligible';
         }
       }

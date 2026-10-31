@@ -5,17 +5,36 @@ export { lookupProcess, parseProcessLookup } from '../../lib/processes.mjs';
 const same = (entry, current) => current && entry.identity === current.identity && entry.command === current.command;
 const complete = (row) => row && Number.isInteger(row.pid) && row.pid > 0 && Number.isInteger(row.ppid) && Number.isInteger(row.pgid) && typeof row.state === 'string' && !!row.state && typeof row.identity === 'string' && !!row.identity && typeof row.command === 'string' && !!row.command;
 
+export function lookupGroupProcesses(entry, lookup = lookupProcess) {
+  // Foreign argv is neither readable in worker sandboxes nor needed to audit
+  // this suite. Enumerate kernel births/groups first, then read only members.
+  const kernel = lookup(undefined, { identityOnly: true });
+  if (!kernel?.ok || !(kernel.value instanceof Map) || ![...kernel.value].every(([pid, row]) => complete(row) && row.pid === pid))
+    return { ok: false, error: kernel?.error ?? 'incomplete kernel group inventory' };
+  const rows = new Map();
+  for (const row of kernel.value.values()) {
+    if (row.pgid !== entry.pid) continue;
+    const current = lookup(row.pid);
+    if (!current?.ok) return { ok: false, error: current?.error ?? 'group member lookup unavailable' };
+    if (current.value === null) continue;
+    if (!complete(current.value) || current.value.pid !== row.pid || current.value.identity !== row.identity || current.value.pgid !== entry.pid)
+      return { ok: false, error: `group member PID ${row.pid} changed during audit` };
+    rows.set(row.pid, current.value);
+  }
+  return { ok: true, value: rows };
+}
+
 export function createProcessTracker({
   readIdentity = (pid) => lookupProcess(pid),
-  readIdentities = () => lookupProcess(),
+  readIdentities = entry => entry ? lookupGroupProcesses(entry) : lookupProcess(),
   sendSignal = (pid, signal) => process.kill(pid, signal),
   report = (message) => console.error(`Fixture cleanup: ${message}`),
 } = {}) {
   const fail = (message) => { report(`${message}; no signal sent`); return { ok: false, error: message }; };
   const entryFor = (row, group = false) => ({ pid: row.pid, group, identity: row.identity, command: row.command });
-  const snapshot = () => {
+  const snapshot = entry => {
     let result;
-    try { result = readIdentities(); } catch (error) { return fail(`process snapshot failed: ${error.message}`); }
+    try { result = readIdentities(entry); } catch (error) { return fail(`process snapshot failed: ${error.message}`); }
     if (!result?.ok || !(result.value instanceof Map) || ![...result.value].every(([pid, row]) => complete(row) && pid === row.pid)) return fail(`process snapshot failed: ${result?.error ?? 'incomplete identities'}`);
     return result;
   };
@@ -96,7 +115,7 @@ export function createProcessTracker({
       })();
     },
     auditGroup(entry) {
-      const current = snapshot();
+      const current = snapshot(entry);
       if (!current.ok) return current;
       const leader = current.value.get(entry.pid);
       if (!same(entry, leader) || leader.pgid !== entry.pid) return fail('suite group leader identity changed or disappeared');

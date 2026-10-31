@@ -135,9 +135,10 @@ delete process.env.HERDR_TEST_SCRATCH_JOURNAL;process.argv=[process.execPath,${J
     assert.ok(match, result.stderr);
     const summary = JSON.parse(match[1]), recovery = JSON.parse(fs.readFileSync(summary.receipt, 'utf8'));
     for (const directory of [ready.scratch, ready.history]) {
-      assert.equal(fs.existsSync(directory), unknown, directory);
+      const retainedScratch = unknown && directory === ready.scratch;
+      assert.equal(fs.existsSync(directory), retainedScratch, directory);
       const row = recovery.results.find(row => row.root === directory);
-      if (unknown) {
+      if (retainedScratch) {
         assert.equal(row?.status, 'retained'); assert.equal(row.retention, 'unknown');
         assert.equal(row.reason, 'group lookup unavailable');
         // The test owns this deliberately retained fixture after its child exit.

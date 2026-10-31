@@ -1,6 +1,6 @@
 import test from './helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
-import { createProcessTracker, parseProcessLookup } from './helpers/processes.mjs';
+import { createProcessTracker, parseProcessLookup, lookupGroupProcesses } from './helpers/processes.mjs';
 import { createReceiptTracker } from './helpers/receipts.mjs';
 
 function row(pid, identity = 'first fixture', command = 'owned fixture', extra = {}) {
@@ -20,6 +20,42 @@ function harness() {
     report: (message) => reports.push(message),
   });
   return { rows, signals, reports, queries, hooks, tracker };
+}
+
+test('group inventory reads argv only for suite members after kernel birth selection', () => {
+  const leader = row(101), orphan = row(303, 'orphan', 'sleep 60', { ppid: 1, pgid: 101 });
+  const foreign = row(202, 'foreign', 'unreadable argv');
+  const calls = [];
+  const result = lookupGroupProcesses(leader, (pid, options) => {
+    calls.push([pid, options]);
+    if (pid === undefined) {
+      assert.equal(options.identityOnly, true);
+      return { ok: true, value: new Map([leader, orphan, foreign].map(row => [row.pid, { ...row, command: '[kernel]' }])) };
+    }
+    assert.notEqual(pid, foreign.pid, 'foreign argv must never be requested');
+    return { ok: true, value: pid === leader.pid ? leader : orphan };
+  });
+  assert.deepEqual(calls.map(([pid]) => pid), [undefined, leader.pid, orphan.pid]);
+  assert.deepEqual([...result.value.values()], [leader, orphan]);
+  const tracker = createProcessTracker({ readIdentities: entry => { assert.equal(entry, leader); return result; }, report: () => {} });
+  assert.deepEqual(tracker.auditGroup(leader).survivors, [orphan]);
+});
+
+for (const failure of ['kernel-denied', 'member-denied', 'birth-changed', 'group-changed', 'incomplete', 'member-exited']) {
+  test(`group inventory preserves failed or changed ownership evidence: ${failure}`, () => {
+    const leader = row(101);
+    const result = lookupGroupProcesses(leader, pid => {
+      if (pid === undefined) return failure === 'kernel-denied' ? { ok: false, error: 'kernel denied' }
+        : { ok: true, value: new Map([[leader.pid, leader]]) };
+      if (failure === 'member-denied') return { ok: false, error: 'member denied' };
+      if (failure === 'member-exited') return { ok: true, value: null };
+      return { ok: true, value: failure === 'incomplete' ? { pid } : { ...leader,
+        ...(failure === 'birth-changed' ? { identity: 'reused' } : { pgid: 202 }) } };
+    });
+    assert.equal(result.ok, failure === 'member-exited');
+    if (result.ok) assert.equal(result.value.size, 0);
+    else assert.match(result.error, /denied|changed during audit/);
+  });
 }
 
 test('exited guard drain waits for exact orphan identities without signalling or exempting survivors', async () => {

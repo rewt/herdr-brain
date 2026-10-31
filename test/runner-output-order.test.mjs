@@ -10,7 +10,7 @@ import { lookupProcess } from './helpers/processes.mjs';
 const runner = fileURLToPath(new URL('./helpers/run.mjs', import.meta.url));
 
 function fixture(t) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'runner-output-order-'));
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'runner-output-order-')));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const journal = path.join(root, 'timings.jsonl');
   const file = (name, source) => {

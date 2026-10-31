@@ -53,7 +53,7 @@ function fixture(t){
 test('one finite turn abandons an ended unbound gate-wait run and releases its original session and clean folder',t=>{
   const f=fixture(t),original=fs.readFileSync(f.eventFile),bytes=fs.readFileSync(f.journal),timing=fs.readFileSync(timingJournal(f.journal));
   const result=f.turn();assert.deepEqual(result.errors,[]);assert.equal(result.steps,1);
-  const all=events(f),state=fold(all),abandoned=state.runs.get('R-1').abandoned;
+  const all=events(f),state=fold(all),abandoned=all.find(e=>e.type==='run.abandoned'&&e.id==='R-1');
   assert.equal(abandoned.authorization.kind,'positive-unbound-ended-allocation');
   assert.equal(abandoned.authorization.proof.missing_session_binding,true);
   assert.deepEqual(abandoned.authorization.proof.process_end.event,f.end);
@@ -76,7 +76,7 @@ test('launch-time binding timeout before prompt delivery uses the same guarded a
 test('a fully absent ended worker releases its clean folder without inventing a native close',t=>{
   const f=fixture(t);f.state.agents=[];f.state.panes=[];f.state.tabs=[];f.save();
   const result=f.turn();assert.deepEqual(result.errors,[]);assert.equal(fs.existsSync(f.lane),false);
-  assert.equal(fold(events(f)).runs.get('R-1').abandoned.authorization.proof.status,'gone');
+  assert.equal(events(f).find(e=>e.type==='run.abandoned').authorization.proof.status,'gone');
   assert.deepEqual(f.read().actions.filter(a=>['agent','tab'].includes(a[0])),[]);
 });
 

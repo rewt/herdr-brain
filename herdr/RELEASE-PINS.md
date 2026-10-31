@@ -179,9 +179,14 @@ maintenance build is needed before a project can explicitly pin that lineage.
 Build and pin verify every runtime hash; each new launch checks the manifest
 schema, commit, mandatory entry files and acceptance evidence, without rehashing
 the runtime payload. New manifests add acceptance fields without changing schema
-or operation protocol; older `checkBundle` readers still accept them. Older
-installed routers do not acquire the new enforcement until the supervisor installs
-the new release's content-addressed router. Read-back should use the new tooling.
+or operation protocol. Readers from before routine-release support can accept
+the additive fields, but `checkBundle(..., {verifyFiles:true})` refuses routine
+bundles with `validation evidence`: they contain neither full execution nor
+coverage proof. This fails closed, including when an older pinned runtime calls
+`requireHomeRelease(null)` on routine `current`; use tooling with routine-release
+support to verify those bundles. Older installed routers do not acquire the new
+enforcement until the supervisor installs the new release's content-addressed
+router. Read-back should use the new tooling.
 No project state migration is introduced. A future incompatible record, queue,
 receipt or host protocol requires a bounded project migration and an explicit
 coordinated protocol exception; changing a pin alone cannot authorize one.

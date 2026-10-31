@@ -1386,6 +1386,13 @@ without `--force`, a successful branch `-d`, or current main ancestry do not
 retroactively establish supported closeout or a clean line-release witness.
 They never authorize replay, replacement or clearance of the original obligation.
 
+If the native executor skips a tab because its authority token changed between
+plan and apply, the bound closer joins one fresh guarded plan in that finite
+evaluation. This handles a concurrent item close without mistaking the surviving
+pane for a missing owner proof. Continued token churn stays a typed
+`pre-effect-change` for the existing finite owner; it does not proceed to Git
+removal. An original native refusal or unresolved intent stops this replan path.
+
 The exact historical pre-journal release-source override refusal can be admitted
 once when an accepted release no longer supplies that override. The original
 terminal receipt survives, and `line-service.dispatch-readmitted` binds the new

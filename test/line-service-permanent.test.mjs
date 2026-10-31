@@ -9,7 +9,7 @@ import {loadEvents,transact} from '../lib/store.mjs';
 import {fold} from '../lib/state.mjs';
 import {noticeLock} from '../supervisor/notice-lock.mjs';
 import {sourceRoot,serviceDirectory,createLineService} from '../line-service/line-service.mjs';
-import {recordReviewResults,recordReviewCompletion,reviewCompletionPlan} from '../line-service/phase1.mjs';
+import {recordReviewResults,recordReviewCompletion,reviewCompletionPlan,ensureReviewBoundary} from '../line-service/phase1.mjs';
 import {inspectReviewCompletion,reconcileReviewCompletion} from '../line-service/review-completion.mjs';
 import {commandIntent,finishCommand,forgetActiveCommand} from '../lib/command-receipt.mjs';
 import {chainFor,terminalReason} from '../lib/retire.mjs';
@@ -154,6 +154,10 @@ for(const kind of ['status','signal','stdout','native-refusal','message','intent
 
 for(const kind of ['pre-typed','FAIL','token'])test(`ordinary line retains an unqualified ${kind} original across passes without writer effects`,t=>{
   const f=failedCompletion(t,{verdict:kind==='FAIL'?'FAIL':'PASS'});
+  // Model an already installed line; first-install boundary creation has its
+  // own landing lock and is outside the measured completion passes.
+  const release=noticeLock(path.join(f.directory,'pass.lock'));
+  try{ensureReviewBoundary(f.args);}finally{release();}
   if(kind==='pre-typed'){delete f.entry.commands;delete f.entry.consumer;delete f.entry.execution_subject;f.save();}
   if(kind==='token')f.add([{type:'item.updated',id:'REV-1',fields:{title:'Changed review scope'}}]);
   const original=JSON.stringify(f.entry),command=fs.readFileSync(f.ref.receipt),mkdir=fs.mkdirSync;

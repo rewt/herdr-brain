@@ -840,7 +840,7 @@ export async function main(argv = process.argv.slice(2), {home}={}) {
       return{pid:child.pid};
     }finally{fs.closeSync(output);}
   };
-  const result = values['general-pass'] ? service.pass({reconcileCloseout:false}) : values['closeout-pass'] ? service.closeout({reconcileReports:false}) :
+  const result = values['general-pass'] ? service.pass({reconcileCloseout:false}) : values['closeout-pass'] ? closeoutOrHold(()=>service.closeout({reconcileReports:false}),service.log) :
     wakeLineService({service,launch:()=>launchFinite('--general-pass'),launchCloseout:()=>launchFinite('--closeout-pass')});
   process.stdout.write(JSON.stringify(result) + '\n');
 }

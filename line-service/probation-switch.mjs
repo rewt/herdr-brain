@@ -5,7 +5,7 @@ import {spawnSync,execFileSync} from 'node:child_process';
 import {lineContext} from './cutoff.mjs';
 import {runtimeRoot,runtimeHistory} from './runtime.mjs';
 import {probationRuntime,authorityOwner} from './probation.mjs';
-import {verifyDevelopmentRecovery,recoveryDigest as sha} from './development-recovery.mjs';
+import {verifyDevelopmentRecovery,developmentSourceMatches,recoveryDigest as sha} from './development-recovery.mjs';
 import {inspectService,replacementPlist} from './migrate-runtime.mjs';
 import {readPlainFile,plainDirectory,writeFileAtomic} from '../lib/files.mjs';
 import {loadEvents,transact} from '../lib/store.mjs';
@@ -73,7 +73,7 @@ export function probationSwitch({repo,org,id,trial,fromRoot,targetRoot,authority
         throw Error('probation initial entry differs from original development installation');
       last=cutover;
     }else last=runtimeHistory(events,{...c,installation:saved,cutover,root:saved.source}).last;
-    if(saved.source!==fromRoot)throw Error('probation switch current root differs from saved installation');
+    if(rows.length?saved.source!==fromRoot:!developmentSourceMatches(saved.source,fromRoot))throw Error('probation switch current root differs from saved installation');
     return{head:git(c.repo,['rev-parse','HEAD']),installation,plist,last_seq:last.seq,scope_sha256:runtime.probation.scope_sha256,
       recovery_sha256:sha(canonical(previous)),stop_sha256:sha(stop),service,previous,
       runtime:targetRoot===scope.candidate.release.root?scope.candidate.release:previous.release};

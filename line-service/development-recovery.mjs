@@ -10,6 +10,9 @@ import {installationPhaseProof,settledInstallation} from './runtime-phase.mjs';
 import {replacementPlist} from './migrate-runtime.mjs';
 
 export const recoveryDigest=bytes=>createHash('sha256').update(bytes).digest('hex');
+// Normalize only original development path identity, never archived bytes or
+// immutable installed-runtime tuples.
+export const developmentSourceMatches=(source,repo)=>typeof source==='string'&&path.isAbsolute(source)&&path.resolve(source)===repo;
 const same=(a,b)=>canonical(a)===canonical(b);
 export const recoveryNode=()=>({executable:process.execPath,version:process.version,platform:process.platform,arch:process.arch,
   sha256:recoveryDigest(fs.readFileSync(process.execPath))});
@@ -17,7 +20,7 @@ const json=v=>JSON.stringify(v)+'\n';
 
 export function prepareDevelopmentRecovery(c,{id,head,installation,plist,cutover,service,stop_sha256,command}){
   const saved=JSON.parse(installation),source=captureProductCheckout(c.repo,head);
-  if(source.root!==c.repo||source.common!==c.identity||saved.source!==c.repo||saved.runtime||saved.migration||saved.fresh_install||saved.probation_bootstrap||
+  if(source.root!==c.repo||source.common!==c.identity||!developmentSourceMatches(saved.source,c.repo)||saved.runtime||saved.migration||saved.fresh_install||saved.probation_bootstrap||
       !['installed','stopped','uncertain-or-refused'].includes(saved.phase)||saved.repo!==c.repo||saved.org!==c.org||saved.node!==process.execPath||saved.file!==path.join(c.directory,'service.plist')||
       saved.target!==`gui/${process.getuid()}/dev.herdr.line.${path.basename(c.directory)}`)
     throw Error('development recovery requires the actual original Brain development installation');
@@ -100,9 +103,10 @@ export function developmentHistory(events,{repo,org,identity,directory,installat
     ids.add(event.id);
     const bytes=readPlainFile(ref.file),a=JSON.parse(bytes),note=events.find(e=>e.seq===event.authority);
     const target=event.source===scope.candidate.release.root?scope.candidate.release:event.source===p.release.root?p.release:null;
-    if(!target||event.source===saved.source||recoveryDigest(bytes)!==ref.sha256||a.schema!=='brain-probation-switch/v1'||a.id!==event.id||
+    const previousSource=last===cutover&&developmentSourceMatches(saved.source,repo)?repo:saved.source;
+    if(!target||event.source===previousSource||recoveryDigest(bytes)!==ref.sha256||a.schema!=='brain-probation-switch/v1'||a.id!==event.id||
         a.trial!==trial.id||a.repo!==repo||a.org!==org||a.identity!==identity||a.previous_seq!==last.seq||a.source!==event.source||
-        a.previous_source!==saved.source||event.previous_source!==saved.source||a.recovery_sha256!==recoveryDigest(canonical(p))||
+        a.previous_source!==previousSource||event.previous_source!==previousSource||a.recovery_sha256!==recoveryDigest(canonical(p))||
         a.owner.native.name!==authority.owner.native.name||!same(event.native_caller,a.owner.native)||
         a.scope_sha256!==trial.scope_sha256||!same(a.runtime,target)||!same(event.runtime,target)||a.before.installation!==savedBytes||a.before.plist!==plist||
         note?.type!=='note.added'||note.decision!==true||note.by!==a.owner.native.name||note.text!==`Brain probation switch authorized: ${event.id} ${ref.sha256}`)

@@ -16,7 +16,7 @@ import {requireReadyAcceptance,selectRelease,requireHomeRelease} from '../lib/re
 import {fixture as dispatchFixture,promptCalls} from '../dispatch/test/dispatch-fixture.mjs';
 
 const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
-async function fixture(t,{development=false,phase='installed'}={}){
+async function fixture(t,{development=false,phase='installed',sourceSuffix=''}={}){
   let f;
   // The product's sealed payload is immutable; only private fixture teardown
   // makes its directories writable before configFixture removes its scratch.
@@ -35,7 +35,7 @@ async function fixture(t,{development=false,phase='installed'}={}){
   const commit=f.git('rev-parse','HEAD'),identity=gitProject(f.cwd).identity,directory=lineDirectory(org,identity);
   fs.mkdirSync(directory,{recursive:true});
   const file=path.join(directory,'service.plist'),installationFile=path.join(directory,'installation.json'),stop=path.join(directory,'STOP');
-  const installation={target:`gui/${process.getuid()}/dev.herdr.line.${path.basename(directory)}`,repo:f.cwd,org,source:f.cwd,node:process.execPath,file,phase,
+  const installation={target:`gui/${process.getuid()}/dev.herdr.line.${path.basename(directory)}`,repo:f.cwd,org,source:f.cwd+sourceSuffix,node:process.execPath,file,phase,
     ...(phase==='uncertain-or-refused'?{error:'Original refused bootstrap'}:{})};
   fs.writeFileSync(installationFile,JSON.stringify(installation)+'\n');
   fs.writeFileSync(file,launchPlist({label:`dev.herdr.line.${path.basename(directory)}`,repo:f.cwd,org,to:'fixture-supervisor',herdr:'/saved/bin/herdr',socket:'/saved/native.sock',directory,node:process.execPath,source:f.cwd}));
@@ -269,13 +269,32 @@ async function privatePass(f,root){
   assert.equal(r.status,0,r.stderr);assert.equal(JSON.parse(r.stdout).result,'pass-complete');
 }
 
-test('development recovery seals real executable provenance and starts candidate recovery and return under one original trial',async t=>{
-  const f=await fixture(t,{development:true,phase:'stopped'}),before=state(f),preview=f.control({dryRun:true}),p=preview.scope.previous;
+test('development recovery accepts a trailing-slash source and preserves original bytes through candidate recovery and return',async t=>{
+  const f=await fixture(t,{development:true,phase:'stopped',sourceSuffix:'/'}),before=state(f);
+  assert.equal(JSON.parse(before.installation).source,f.cwd+'/');
+  for(const source of [f.bundle,f.cwd+'-foreign',path.relative(process.cwd(),f.cwd)]){
+    fs.writeFileSync(f.installationFile,JSON.stringify({...JSON.parse(before.installation),source})+'\n');
+    assert.throws(()=>f.control({dryRun:true}),/actual original Brain development installation/);
+  }
+  fs.writeFileSync(f.installationFile,before.installation);
+  const preview=f.control({dryRun:true}),p=preview.scope.previous;
+  assert.match(preview.plan_sha256,/^[a-f0-9]{64}$/);assert.match(preview.required_decision,/^Brain probation authorized: /);
   assert.equal(p.kind,'development-recovery');assert.equal(p.source.common,f.identity);
   assert.equal(p.source.tree,f.git('rev-parse',`${p.release.commit}^{tree}`));
   assert.equal(p.original.installation,before.installation);assert.equal(p.original.plist,before.plist);
   assert.deepEqual(state(f),before);assert.equal(fs.existsSync(p.release.root),false);
   f.authorize();
+  assert.equal(fs.readFileSync(f.installationFile,'utf8'),before.installation);
+  assert.equal(fs.readFileSync(f.file,'utf8'),before.plist);
+  const original=JSON.parse(fs.readFileSync(path.join(f.directory,'probation/original-trial.json'))).scope.previous.original;
+  assert.equal(original.installation,before.installation);assert.equal(original.plist,before.plist);
+  // Equal path identity never excuses changing captured installation/plist bytes.
+  fs.writeFileSync(f.installationFile,JSON.stringify({...JSON.parse(before.installation),source:f.cwd})+'\n');
+  assert.throws(()=>switchPlan(f,'entry',f.cwd,f.next),/initial entry differs/);
+  fs.writeFileSync(f.installationFile,before.installation);
+  fs.appendFileSync(f.file,'\n');
+  assert.throws(()=>switchPlan(f,'entry',f.cwd,f.next),/initial entry differs/);
+  fs.writeFileSync(f.file,before.plist);
   const recovery=p.release.root;
   assert.equal(sha(fs.readFileSync(path.join(recovery,'.release-manifest.json'))),p.manifest_sha256);
   assert.equal(fs.statSync(recovery).mode&0o222,0);
@@ -290,6 +309,9 @@ test('development recovery seals real executable provenance and starts candidate
   assert.throws(()=>requireHomeRelease('runtime',null,f.installationHome),/ENOENT/);
   assert.throws(()=>selectRelease(f.cwd,f.installationHome,{pin:{release:'trial'}}),/READY/);
   const entry=switchApply(f,'entry',f.cwd,f.next);assert.equal(entry.runtime_started,false);
+  const entryArchive=JSON.parse(fs.readFileSync(path.join(f.directory,'probation-switches/entry.json')));
+  assert.equal(entryArchive.previous_source,f.cwd);
+  assert.equal(entryArchive.before.installation,before.installation);assert.equal(entryArchive.before.plist,before.plist);
   assert.equal(f.main(['restart','--repo',f.cwd,'--org',f.org],f.args).restarted,true);await privatePass(f,f.next);
   f.main(['stop','--repo',f.cwd,'--org',f.org],f.args);
   // The retained payload remains executable after canonical product changes.

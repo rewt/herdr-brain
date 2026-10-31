@@ -54,7 +54,7 @@ At inspected source `76d66f43693c15da61649f5459d0bc44fda3db9c`:
 | Judgment | `brain/distill.md` compares existing claims and requires two independent signals or one confirmed gate failure with a cause. It currently permits proposals only. | Distinguish proposer, one reviewer and finite apply duty; preserve this evidence bar and inspect actual review severity/source. |
 | Lifecycle | `bin/org.mjs` exposes proposal, activation, retirement and atomic supersession with actor/time/sequence; `lib/lessons.mjs` selects by literal scope/path/module. | Validate a reviewed decision packet and apply through the existing CLI, retaining the actual worker actor and per-decision receipts. No second lesson store or model in the core. |
 | Completion | The existing line starts selected work, records reports, queues one review and closes finished sessions/worktrees. | Bind review completion to one finite apply continuation using its original item, packet hash and attempt, rather than a supervisor callback or replacement launch. |
-| Cursor | `brain/bin/brain.mjs digest --ack PASS` verifies the current pending pass and prefix. The documented owner is the supervisor. | Acknowledge only the exact completed pass after every included candidate has a durable disposition; keep new signals for the next page. |
+| Cursor | `brain/bin/brain.mjs digest --ack PASS` verifies the current pending pass and prefix. `brain/README.md` and `docs/reference/lessons.md` document the supervisor as owner. | Acknowledge only the exact completed pass after every included candidate has a durable disposition; keep new signals for the next page. |
 | Consumption | `lib/render.mjs` injects active lessons into worker briefs. | Record intended target and an actual later application; a brief excerpt or activation alone proves neither changed policy nor usefulness. |
 
 LO1 should extend these seams, not replace the digest, dispatch or record. Its
@@ -229,7 +229,8 @@ The full ask is saved in the owning record's
 Opus review and any assigned correction. Extend existing selected dispatch,
 report/review continuation and digest seams; implement input/packet validation,
 per-decision receipts, interrupted-apply recovery and exact-pass ACK. Update the
-three supervisor-owned distillation procedure surfaces together. File the
+three supervisor-owned distillation procedure surfaces together:
+`brain/distill.md`, `brain/README.md`, and `docs/reference/lessons.md`. File the
 initial backlog/new-proposal pass and its observer with actual owners and next
 events, leaving selection with the recorded planner. Do not claim that filing
 or an offline fixture witnesses live application.

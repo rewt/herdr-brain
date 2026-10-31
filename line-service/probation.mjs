@@ -6,7 +6,7 @@ import {fileURLToPath} from 'node:url';
 import {createHash} from 'node:crypto';
 import {execFileSync,spawnSync} from 'node:child_process';
 import {gitProject} from '../lib/project.mjs';
-import {checkRelease,releaseHome,requireReadyAcceptance,projectPin,selectRelease} from '../lib/releases.mjs';
+import {checkRelease,releaseHome,requireReadyAcceptance,projectPin,selectRelease,projectEnvironment} from '../lib/releases.mjs';
 import {findOrgDir,loadEvents,transact} from '../lib/store.mjs';
 import {requireRecordCompatibility} from '../lib/record-compatibility.mjs';
 import {readPlainFile,plainDirectory} from '../lib/files.mjs';
@@ -23,7 +23,7 @@ const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
 const same=(a,b)=>canonical(a)===canonical(b);
 const git=(repo,args)=>execFileSync('git',['--no-optional-locks','-C',repo,...args],{env:Object.fromEntries(Object.entries(process.env).filter(([k])=>!k.startsWith('GIT_'))),encoding:'utf8',stdio:['ignore','pipe','pipe'],timeout:10000}).trim();
 function context(repo,org){
-  const p=gitProject(repo);
+  const p=gitProject(repo,{env:projectEnvironment()});
   if(p.checkout!==p.canonical)throw Error('probation requires canonical Brain project');
   const discovered=findOrgDir({cwd:p.canonical,env:{...process.env,ORG_DIR:''}});
   if(!discovered||fs.realpathSync(discovered)!==fs.realpathSync(org))throw Error('probation record differs from actual project');
@@ -127,7 +127,7 @@ export function probationControl({repo,org,id,fromRoot,targetRoot,authority,fini
       clean();const found=trials(events,c).filter(e=>e.id===id);
       if(found.length!==1)throw Error('original probation authority is missing/ambiguous');
       const a=archived(found[0],c);
-      let ownSource=false;try{ownSource=gitProject(toolRoot).identity===c.identity;}catch{}
+      let ownSource=false;try{const source=gitProject(toolRoot,{env:projectEnvironment()});ownSource=source.identity===c.identity&&source.checkout===toolRoot&&source.canonical===toolRoot;}catch{}
       if(!ownSource&&toolRoot!==a.scope.candidate.release.root)throw Error('probation withdrawal tool is outside its original Brain source/candidate');
       if(ended(events,c,id))return{add:[],result:{existing:true,id,admissions:false}};
       return{add:[{type:`line-service.probation-${finish}`,id,project:c.identity,repo:c.repo,org:c.org,authority_seq:found[0].seq,archive:found[0].archive,native_caller:owner.native}],result:{id,admissions:false,captured_work_preserved:true,runtime_started:false}};
@@ -135,8 +135,8 @@ export function probationControl({repo,org,id,fromRoot,targetRoot,authority,fini
   }
   // This comparison derives Brain's real common directory from the issuing
   // product source. A consumer label/config/environment cannot nominate it.
-  const source=gitProject(toolRoot);
-  if(source.checkout!==source.canonical||source.canonical!==c.repo||source.identity!==c.identity)throw Error('only canonical Brain development source can issue probation authority');
+  const source=gitProject(toolRoot,{env:projectEnvironment()});
+  if(source.checkout!==toolRoot||source.checkout!==source.canonical||source.canonical!==c.repo||source.identity!==c.identity)throw Error('only canonical Brain development source can issue probation authority');
   const snapshot=()=>{
     const head=clean();
     for(const name of ['STOP','HOLD'])if(fs.existsSync(path.join(c.repo,'.lane/supervisor',name)))throw Error('project STOP/HOLD prevents probation authorization');

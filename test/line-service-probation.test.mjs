@@ -115,7 +115,13 @@ test('probation authorization refuses wrong project/source, native session, STOP
   const foreign=configFixture(t,{custom:true});
   fs.writeFileSync(path.join(foreign.cwd,'.promote.json'),'{"to":"fixture-supervisor"}');foreign.git('add','.promote.json');foreign.git('commit','-qm','Foreign supervisor');
   const foreignAgent=foreign.observation.agents[0];
-  assert.throws(()=>f.control({repo:foreign.cwd,org:foreign.env.ORG_DIR,cwd:foreign.cwd,env:{...foreign.env,HERDR_ENV:'1',CODEX_THREAD_ID:foreignAgent.agent_session.value},call:()=>JSON.stringify({result:{agent:foreignAgent}})}),/only canonical Brain development/);
+  const foreignArgs={repo:foreign.cwd,org:foreign.env.ORG_DIR,cwd:foreign.cwd,env:{...foreign.env,HERDR_ENV:'1',CODEX_THREAD_ID:foreignAgent.agent_session.value},call:()=>JSON.stringify({result:{agent:foreignAgent}})};
+  assert.throws(()=>f.control(foreignArgs),/only canonical Brain development/);
+  const inherited={GIT_DIR:process.env.GIT_DIR,GIT_WORK_TREE:process.env.GIT_WORK_TREE};
+  try{
+    Object.assign(process.env,{GIT_DIR:path.join(foreign.cwd,'.git'),GIT_WORK_TREE:foreign.cwd});
+    assert.throws(()=>f.control(foreignArgs),/only canonical Brain development/,'inherited Git selectors cannot nominate a consumer as the issuing Brain source');
+  }finally{for(const [key,value]of Object.entries(inherited))if(value===undefined)delete process.env[key];else process.env[key]=value;}
   for(const name of ['STOP','HOLD']){
     const file=path.join(f.cwd,'.lane/supervisor',name);fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,'hold');
     assert.throws(()=>f.control({dryRun:true}),/STOP\/HOLD/);fs.unlinkSync(file);

@@ -52,6 +52,7 @@ import {reviewAdmissionHold} from '../lib/review-admission.mjs';
 import {ordinaryAdmissionHold} from '../lib/ordinary-admission.mjs';
 import {commandIntent,finishCommand,forgetActiveCommand,pendingSubjectCommand} from '../lib/command-receipt.mjs';
 import {refreshJournal,effectSubject} from './scheduling.mjs';
+import {appendPassJournal,withPassJournal,passJournalSize,readPassJournal} from './pass-journal.mjs';
 export { reviewAttempt } from './review.mjs';
 
 export const sourceRoot = fileURLToPath(new URL('../', import.meta.url));
@@ -64,13 +65,9 @@ function noticeBoundary(key,entry,boundary){
   entry.boundary=boundary;
   return entry;
 }
-function replayNoticeAudit(file,effects){
-  const stat=fs.lstatSync(file,{throwIfNoEntry:false});if(!stat)return[];
-  if(!stat.isFile()||fs.realpathSync(file)!==file)throw Error('notice audit is redirected');
-  const offset=effects.notice_audit_offset??stat.size;if(!Number.isSafeInteger(offset)||offset<0||offset>stat.size)throw Error('notice audit checkpoint is inconsistent');
-  const bytes=Buffer.alloc(stat.size-offset),fd=fs.openSync(file,fs.constants.O_RDONLY|fs.constants.O_NOFOLLOW);try{let n=0;while(n<bytes.length){const got=fs.readSync(fd,bytes,n,bytes.length-n,offset+n);if(!got)throw Error('notice audit changed during read');n+=got;}}finally{fs.closeSync(fd);}
-  const text=bytes.toString('utf8');if(text&&!text.endsWith('\n'))throw Error('notice audit tail is incomplete; preserve it');
-  const restored=new Set();for(const line of text.split('\n').filter(Boolean)){const row=JSON.parse(line);
+export function replayNoticeAudit(file,effects){
+  return withPassJournal(file,view=>{
+  const restored=new Set();for(const row of view.rows(effects.notice_audit_offset??view.size)){
     if(row.action==='review-health'&&row.health){if(row.health.project!==effects.identity||row.health.org!==effects.org)throw Error('diagnostic health project binding changed');effects.review_health=row.health;}
     if(row.action==='engineering-idle'&&row.progress){
       const p=row.progress;if(p.project!==effects.identity||p.org!==effects.org||!Number.isSafeInteger(p.count)||p.count<0||typeof p.pass!=='string'||!p.signature)throw Error('halt progress audit binding changed');
@@ -83,6 +80,7 @@ function replayNoticeAudit(file,effects){
     if(!prior||entry.count>prior.count){effects.record_notices[key]={...entry,state:prior?.state==='recorded'?'recorded':'diagnostic-only',...(prior?.record?{record:prior.record}:{}),...(prior?.review_count_recorded!==undefined?{review_count_recorded:prior.review_count_recorded}:{})};restored.add(key);}
   }
   return [...restored];
+  });
 }
 export const serviceDirectory = (org, identity) => path.join(org, 'line-service', digest(identity).slice(0, 20));
 export function reserved(item) {
@@ -134,11 +132,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
   if (typeof to !== 'string' || !/^[a-z][a-z0-9_-]{0,31}$/.test(to)) throw Error('name the actual project supervisor or brain-chat recipient with --to');
   const directory = serviceDirectory(org, project.identity), journal = path.join(directory, 'effects.json');
   fs.mkdirSync(directory, { recursive: true });
-  const log = row => {
-    const fd = fs.openSync(path.join(directory, 'passes.jsonl'), 'a', 0o600);
-    try { fs.writeFileSync(fd, JSON.stringify({ at: now(),pid:process.pid, ...row }) + '\n'); fs.fsyncSync(fd); }
-    finally { fs.closeSync(fd); }
-  };
+  const log = row => appendPassJournal(path.join(directory,'passes.jsonl'),{at:now(),pid:process.pid,...row});
   const childEnv = { ...env, ORG_DIR: org, ORG_ACTOR: 'line-service', HERDR_BRAIN_ROOT: sourceRoot };
   // Only development dispatches use this override. An accepted release keeps
   // its immutable entry point and normal project-pin selection, even if the
@@ -229,7 +223,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       // Older unbound rows remain visible and unchanged; they grant no effect.
       timings.review_error_unbound=0;
       for(const [key,e]of Object.entries(effects.record_notices??{}))if(e.review){try{noticeBoundary(key,e);}catch{timings.review_error_unbound++;}}
-      const save = () => {if(!release)throw Error('journal mutation requires the scheduling lock');effects.notice_audit_offset=fs.statSync(audit,{throwIfNoEntry:false})?.size??0;writeFileAtomic(journal, JSON.stringify(effects, null, 2) + '\n', 0o600);timings.effects_journal_writes++;noticesDirty=false;};
+      const save = () => {if(!release)throw Error('journal mutation requires the scheduling lock');effects.notice_audit_offset=passJournalSize(audit);writeFileAtomic(journal, JSON.stringify(effects, null, 2) + '\n', 0o600);timings.effects_journal_writes++;noticesDirty=false;};
       checkpointNotices=()=>{if(noticesDirty)save();};
       if(effects.pass_number!==undefined&&(!Number.isSafeInteger(effects.pass_number)||effects.pass_number<0))throw Error('service pass counter is inconsistent');
       effects.pass_number=(effects.pass_number??0)+1;save();
@@ -829,9 +823,7 @@ export async function main(argv = process.argv.slice(2), {home}={}) {
   if(values.digest){
     if(!values.org)throw Error('--digest needs --org RECORD');
     const repo=values.repo??process.cwd(),identity=gitProject(repo).identity,audit=path.join(serviceDirectory(fs.realpathSync(values.org),identity),'passes.jsonl');
-    const stat=fs.lstatSync(audit,{throwIfNoEntry:false});if(stat&&(!stat.isFile()||fs.realpathSync(audit)!==audit))throw Error('line diagnostics are redirected');
-    const raw=stat?fs.readFileSync(audit,'utf8'):'';if(raw&&!raw.endsWith('\n'))throw Error('incomplete line diagnostic tail; preserve it');
-    const diagnostics=raw.split('\n').filter(Boolean).map(JSON.parse);
+    const diagnostics=readPassJournal(audit);
     process.stdout.write(JSON.stringify(morningDigest({events:loadEvents(values.org).events,diagnostics,since:values.since}),null,2)+'\n');return;
   }
   if (!values.once || !values.repo) throw Error('use --once --repo CANONICAL; launchd owns the schedule');

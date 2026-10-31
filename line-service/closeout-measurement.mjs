@@ -14,6 +14,7 @@ import {lookupProcess} from '../lib/processes.mjs';
 import {plainDirectory,readPlainFile,writeFileAtomic} from '../lib/files.mjs';
 import {retirementLock} from '../lib/retire-lock.mjs';
 import {bundleRelease} from '../lib/releases.mjs';
+import {appendPassJournal} from './pass-journal.mjs';
 import {compactMeasurement} from './closeout-measurement-audit.mjs';
 export {readCloseoutMeasurement} from './closeout-measurement-audit.mjs';
 
@@ -287,7 +288,7 @@ export function recordCloseoutTurn({project,org,env=process.env,now=()=>Date.now
     const frame=compactMeasurement(directory,doc);
     append(audit,frame);
     writeFileAtomic(file,JSON.stringify(frame)+'\n',0o600);
-    append(path.join(directory,'passes.jsonl'),{at:doc.observed_at,action:'closeout-measurement',measurement:{file,cutoff:doc.cutoff,source:doc.source,green:doc.green,counts:doc.aggregate,failures:doc.failures,oldest:doc.cohort.filter(r=>r.failures.length).sort((a,b)=>(b.age_ms??0)-(a.age_ms??0)).slice(0,10).map(r=>({run:r.run,source:r.source,age_ms:r.age_ms,failures:r.failures,condition:r.condition}))}});
+    appendPassJournal(path.join(directory,'passes.jsonl'),{at:doc.observed_at,action:'closeout-measurement',measurement:{file,cutoff:doc.cutoff,source:doc.source,green:doc.green,counts:doc.aggregate,failures:doc.failures,oldest:doc.cohort.filter(r=>r.failures.length).sort((a,b)=>(b.age_ms??0)-(a.age_ms??0)).slice(0,10).map(r=>({run:r.run,source:r.source,age_ms:r.age_ms,failures:r.failures,condition:r.condition}))}});
     const fd=fs.openSync(directory,'r');try{fs.fsyncSync(fd);}finally{fs.closeSync(fd);}
     return{file,cutoff:doc.cutoff,green:doc.green,counts:doc.aggregate,failures:doc.failures};
   }finally{release();}

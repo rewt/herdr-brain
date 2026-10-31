@@ -42,6 +42,7 @@ const git = (args, cwd = repo) => checked('git', ['-C', cwd, ...args]);
 const record = args => checked(process.execPath, [path.join(bundle, 'bin/org.mjs'), ...args]);
 const { initOrg, loadRecord, transact } = await module('lib/store.mjs');
 let { createLineService, serviceDirectory } = await module('line-service/line-service.mjs');
+const {readPassJournal} = await module('line-service/pass-journal.mjs');
 const { gitProject } = await module('lib/project.mjs');
 const { ownerAlive } = await module('lib/process-owner.mjs');
 const project = gitProject(repo);
@@ -91,7 +92,8 @@ const command = (exe, args, options) => run(exe, args[0]?.endsWith('/dispatch/di
 const service = maxStarts => createLineService({ repo, org, to: 'scratch-supervisor', runtimeHome: home,
   env: { ...env, HERDR_BRAIN_ROOT: config.development }, maxStarts, haltAfter: 100, command });
 service(1).pass();
-const audit = () => fs.readFileSync(path.join(directory, 'passes.jsonl'), 'utf8');
+const auditRows = () => readPassJournal(path.join(directory,'passes.jsonl'));
+const audit = () => {let tail='';for(const row of auditRows())tail=(tail+JSON.stringify(row)+'\n').slice(-65536);return tail;};
 if (mode === 'broken') {
   assert.match(audit(), /HERDR_BRAIN_ROOT|source root|source override|EPERM|EACCES/);
   assert.equal(state().items.get(item).runs.length, 0);
@@ -173,7 +175,7 @@ for(const [name,digest] of Object.entries(jobsBefore))assert.equal(jobsForward[n
 assert.equal(ownerAlive(producer.watcher),true);
 const selected=checked(process.execPath,[path.join(config.successor,'herdr/releases.mjs'),'exec',home,'bin/org.mjs','show',item,'--json']);
 assert.deepEqual(JSON.parse(selected).accept,['Current acceptance survives both installed roots']);
-assert.ok(audit().split('\n').filter(Boolean).map(JSON.parse).some(event=>event.action==='pass-start'&&path.resolve(event.source)===config.successor&&event.source_head===commit));
+assert.ok((()=>{for(const event of auditRows())if(event.action==='pass-start'&&path.resolve(event.source)===config.successor&&event.source_head===commit)return true;return false;})());
 assert.ok(fs.readFileSync(path.join(evidence,'executables.jsonl'),'utf8').split('\n').filter(Boolean).map(JSON.parse)
   .some(entry=>entry.entry===path.join(config.successor,'bin/org.mjs')&&entry.node===process.execPath));
 stage('forward-and-main-movement',{forwardPlan,forwardReceipt,main:git(['rev-parse','HEAD']),jobs:jobsForward,watcher:producer.watcher,newChild:forwardJob,producerFolderPresent:fs.existsSync(lane),

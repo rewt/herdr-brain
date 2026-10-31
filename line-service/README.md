@@ -1277,3 +1277,44 @@ diff-review totals. Existing immutable captures/receipts are retained without
 historical reattribution. Source completion holds external/unknown claimed ranges;
 planning reports need no synthetic source receipt. Release coverage remains the
 release coordinator's responsibility.
+
+### Bounded pass journal
+
+`pass-journal.mjs` is the shared append/read boundary for `passes.jsonl`. Before
+an append, a live file of at least 16 MiB rotates; its normal bound is 16 MiB plus
+one appended row. The first rollover defers while an older finite scheduling or
+closeout owner still holds a pre-upgrade lock, so its physical checkpoint cannot
+be changed underneath it. Owners drain normally; no service restart is needed.
+
+Rotation renames the exact bytes into `passes.jsonl.segments/`, compresses them
+as independently indexed gzip members (at most 1 MiB uncompressed each), then
+publishes a fsynced `index.json` with dated filenames, contiguous logical byte
+ranges, member offsets and SHA-256 digests. Gzip tools can decode the concatenated
+members; `readPassJournal(file)` streams them followed by the live file without
+building a whole-journal string. The digest uses this reader. B4's
+`bin/measure-lifecycle.mjs` reads the separate record event stream and its counts
+are unaffected by pass rotation. Closeout measurement's pass rows use the same
+append lock; its own measurement audit/object retention is separate.
+
+`effects.json.notice_audit_offset` always addresses the logical concatenation of
+all archived bytes and live bytes. Existing offsets retain their exact meaning,
+including notice counts, review health and completed engineering-idle progress.
+Snapshots and append/rotation share a recoverable lock. An incomplete row, bad
+range, redirected file or corrupt gzip member fails while preserving source.
+
+A durable pending intent precedes rename. Until the compressed segment and index
+are durable, readers select the original live inode or renamed raw segment plus
+new live bytes exactly once. A crashed writer resumes that same intent; it never
+starts a replacement rotation. Indexed raw bytes are removed only after durable
+compressed publication; recovery verifies the compressed hash before completing
+an interrupted raw retirement. Repeating a completed rotation with a small live
+file is a no-op. Old compression temporaries from a crash remain recoverable and
+are outside this journal's retention policy. No archived history expires here.
+
+Focused checks for this seam: `test/pass-journal.test.mjs`,
+`test/line-service-producer.test.mjs`, `test/line-service.test.mjs`,
+`test/closeout-measurement.test.mjs`, `test/halt-repair.test.mjs` and
+`test/consumer-lifecycle.test.mjs`, in runner groups of at most four. Set
+`HERDR_PASS_JOURNAL_WITNESS` to an owned evidence directory with a real journal
+copy, `effects.json` and `copy.json` (bytes, rows, SHA-256) to exercise and retain
+the large-copy rotation receipt. Never point the witness at the live service.

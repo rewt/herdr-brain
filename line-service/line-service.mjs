@@ -692,6 +692,13 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
           const dispatched = effect(continuation?`dispatch-preflight:${continuation.token}:${continuation.key}`:dispatchKey, fresh => {
             const current = fresh.state.items.get(item.id);
             if (!current || !queueSelected(current,fresh.state,readOrdinaryAdmission(repo,childEnv)) || obsoleteDecision(current,fresh) || itemLaunchHold(fresh.state,item.id,fresh.events) || dispatchInput({...fresh,item:current,org,identity:project.identity}) !== input || reserved(current) || (!continuation&&(reviewTarget ? reviewQueueRoute(config, current, fresh.state) : routeFor(current, config)) !== route)) throw Error('dispatch readiness or route changed');
+            const startDispatch = args => {
+              // A lost reply can still mean a live session. Spend this pass's
+              // allowance before issuing the command, regardless of its reply.
+              starts++;
+              log({action:'admission-attempted',...admission,start:starts});
+              return JSON.parse(cli('dispatch/dispatch.mjs',args));
+            };
             if(briefRecovery){
               if(sourceRecovery){
                 const proof=initialSourceRootRefusal({entry:effects.actions[key],events:fresh.events,item:item.id,outcome:originalDispatchOutcome({repo,org,common:project.identity,item:item.id,brief:path.join(directory,`${digest(key)}.ask.md`),events:fresh.events}),release:bundleRelease(),env:childEnv});
@@ -707,22 +714,22 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
               const checked=preflightContinuation({journal:continuation.journal,repo,org,common:project.identity,root:fs.realpathSync(sourceRoot),events:fresh.events});
               if(!checked||checked.request_sha256!==continuation.request_sha256||checked.capability!==continuation.capability)throw Error('original preflight progress/source changed before continuation');
               if(reviewTarget)validateQueuedReview({item:current,state:fresh.state,events:fresh.events,org,repo,allowJournal:continuation.journal});
-              return JSON.parse(cli('dispatch/dispatch.mjs',['--retry',continuation.journal,'--repo',repo,'--org',org,'--continue-preflight']));
+              return startDispatch(['--retry',continuation.journal,'--repo',repo,'--org',org,'--continue-preflight']);
             }
             const brief = path.join(directory, `${digest(key)}.ask.md`);
             const target = reviewTarget ? validateQueuedReview({ item: current, state: fresh.state, events: fresh.events, org, repo }) : null;
             const correction = correctionSource({ item: current, state: fresh.state, events: fresh.events, repo, org });
             writeFileAtomic(brief, target ? reviewQueueBrief(current) : isDecision(current) ? decisionBrief(current) : `# ${current.title}\n\n${current.accept.join('\n')}\n\n${correction?.brief ?? ''}Work from the existing item fields/notes and accepted directions. The generated execution brief supplies role guidance and project routing.\n`, 0o600);
-            return JSON.parse(cli('dispatch/dispatch.mjs', [item.id, '--repo', repo, '--org', org, '--lane', `${target ? 'review' : 'line'}-${item.id.toLowerCase()}-${current.runs.length + 1}`, '--route', route, '--brief', brief, ...(target ? ['--base', target.head] : correction ? ['--base', correction.base] : []),'--detach']));
+            return startDispatch([item.id, '--repo', repo, '--org', org, '--lane', `${target ? 'review' : 'line'}-${item.id.toLowerCase()}-${current.runs.length + 1}`, '--route', route, '--brief', brief, ...(target ? ['--base', target.head] : correction ? ['--base', correction.base] : []),'--detach']);
           },undefined,undefined,Boolean(retryAdmission),Boolean(retryAdmission),fresh=>{
             if(!admit({item:fresh.state.items.get(item.id),state:fresh.state},'launch-mutation',true))return false;
             if(queueSelection(fresh.state)===selection)return true;
             log({action:'queue-selection-changed',item:item.id,stage:'after-capacity'});
             return false;
           },admission);
-          // Each original detached journal reserves admission before returning.
+          // Acknowledgement timing is separate from the attempted-start budget.
           // The next candidate gets a fresh native count; no launch is replayed.
-          if (dispatched?.state === 'complete'){starts++;log({action:'admission-started',item:item.id,input,observed_at:eligibleAt,decision_at:admission.decision_at,
+          if (dispatched?.state === 'complete'){log({action:'admission-started',item:item.id,input,observed_at:eligibleAt,decision_at:admission.decision_at,
             decision_to_ack_ms:performance.now()-decidedAt,eligible_to_ack_ms:performance.now()-decisionStarted,
             command_receipts:dispatched.commands??[],event_to_wake_ms:null});}
         } catch (e) {

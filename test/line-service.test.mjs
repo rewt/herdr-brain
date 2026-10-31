@@ -54,7 +54,7 @@ function fixture(t) {
   };
   const service = (overrides = {}) => createLineService({ repo, org, to: 'supervisor-test', env, command,
     haltAfter:100,capacity: () => ({ count: 0, cap: 2 }), recordNotice: data => { notes.push({ to:'supervisor-test',text:data.reason,options:data }); return { id:data.id,state:'record-only' }; }, ...overrides });
-  return { repo, org, env, record, git, add, show, calls, refreshes, notes, service, setFailure: value => { fail = value; } };
+  return { repo, org, env, record, git, add, show, calls, refreshes, notes, command, service, setFailure: value => { fail = value; } };
 }
 
 test('REV-63 session retirement advances to physical cleanup',t=>{
@@ -497,6 +497,41 @@ test('a real command refusal is recorded once and never re-executed on restart',
   const evidence = JSON.parse(fs.readFileSync(path.join(s.directory, 'effects.json'))); const action = Object.values(evidence.actions)[0];
   assert.equal(action.state, 'held'); assert.equal(action.receipt.status, 1); assert.match(action.error, /native permission/);
   assert.ok(f.notes.length <= 2);
+});
+for(const reply of ['lost','invalid','throw','detached','dispatched'])test(`a one-start pass charges a ${reply} dispatch reply and admits independent work only on a later pass`,t=>{
+  const f=fixture(t),first=f.add('Original dispatch',20),next=f.add('Independent work',10),last=f.add('Later work');
+  const command=(exe,args,options)=>{
+    const result=f.command(exe,args,options);
+    if(args[0]!==path.join(sourceRoot,'dispatch/dispatch.mjs')||args[1]!==first)return result;
+    if(reply==='lost')return{status:1,stdout:'',stderr:'native prompt reply lost; outcome uncertain'};
+    if(reply==='invalid')return{status:0,stdout:'incomplete reply {',stderr:''};
+    if(reply==='throw')throw Error('original command reply missing; outcome UNKNOWN');
+    return{status:0,stdout:JSON.stringify({result:reply,item:first}),stderr:''};
+  };
+  const service=()=>f.service({maxStarts:1,command}),s=service(),journal=path.join(s.directory,'effects.json');
+  const actions=()=>JSON.parse(fs.readFileSync(journal)).actions;
+  const rows=()=>fs.readFileSync(path.join(s.directory,'passes.jsonl'),'utf8').trim().split('\n').map(JSON.parse);
+  s.pass();assert.deepEqual(f.calls.map(c=>c.args[1]),[first],'one uncertain attempt exhausts this pass too');
+  const key=Object.keys(actions()).find(k=>k.startsWith(`dispatch:${first}:`)),original=actions()[key];
+  const held=['lost','invalid','throw'].includes(reply);
+  assert.equal(original.state,held?'held':'complete');
+  assert.equal(rows().findLast(r=>r.action==='pass-complete').starts,1);
+  assert.deepEqual(rows().filter(r=>r.action==='admission-attempted').map(r=>r.item),[first]);
+  assert.equal(rows().filter(r=>r.action==='admission-started').length,held?0:1);
+  service().pass();assert.deepEqual(f.calls.map(c=>c.args[1]),[first,next],'a fresh allowance does not replay the original');
+  const {original_outcome,...retained}=actions()[key];assert.deepEqual(retained,original,'original effect and receipts remain intact');
+  service().pass();assert.deepEqual(f.calls.map(c=>c.args[1]),[first,next,last]);
+  assert.deepEqual(rows().filter(r=>r.action==='pass-complete').map(r=>r.starts),[1,1,1]);
+  t.diagnostic(JSON.stringify({reply,items:[first,next,last],attempts:rows().filter(r=>r.action==='admission-attempted'),original_state:original.state}));
+});
+for(const maxStarts of [0,2,undefined])test(`failed dispatches obey the ${maxStarts??'configured default'} start allowance`,t=>{
+  const f=fixture(t),items=[f.add('First',30),f.add('Second',20),f.add('Third',10)];
+  f.setFailure('native reply lost; outcome uncertain');
+  const s=f.service({maxStarts});s.pass();
+  const limit=maxStarts??2;
+  assert.deepEqual(f.calls.map(c=>c.args[1]),items.slice(0,limit));
+  const rows=fs.readFileSync(path.join(s.directory,'passes.jsonl'),'utf8').trim().split('\n').map(JSON.parse);
+  assert.equal(rows.findLast(r=>r.action==='pass-complete').starts,limit);
 });
 test('unknown native capacity holds dispatch without spending an effect', t => {
   const f = fixture(t); f.add('Ready'); const s = f.service({ capacity: () => { throw Object.assign(Error('actual cap reached'), { code: 'DISPATCH_SESSION_CAP' }); } });

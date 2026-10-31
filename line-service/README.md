@@ -155,6 +155,15 @@ action on the same subject. On return the pass reacquires the scheduling lock
 and reloads the journal in place before writing its result. Other passes' receipts
 are inherited. Productive command time does not consume the scheduling allowance.
 
+A pass's start budget counts dispatch commands when they are issued, including
+failed or uncertain replies and guarded preflight continuations. A lost reply
+may already have started a session, so it cannot free a start for another
+candidate in that pass. `admission-attempted` and `pass-complete.starts` count
+these attempts; `admission-started` records successful acknowledgements. Retained
+effects and eligibility or capacity deferrals before a dispatch command spend no
+start. A later pass gets its own allowance while retaining the original attempt;
+native capacity checks and the separate halt-diagnosis allowance still apply.
+
 Two lifetime owner locks, `general-0.lock` and `general-1.lock`, bound retained
 general passes before loading the record. One slow foreground owner still permits
 an independent admission pass, while repeated wakes cannot accumulate full-record

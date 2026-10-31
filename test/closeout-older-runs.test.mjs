@@ -6,6 +6,25 @@ import {createHash} from 'node:crypto';
 import {setup,events,selectCurrentCleanup} from './helpers/closeout-fixture.mjs';
 import {currentCloseoutEntries,directCloseoutObservation} from '../lib/closeout.mjs';
 import {refreshCloseouts} from '../lib/closeout-consumer.mjs';
+
+test('finite refresh counts early identity keeps against its target budget and advances to later original subjects',t=>{
+  const f=setup(t,{direct:true,bound:true,merged:true});selectCurrentCleanup(f);f.report();
+  for(let n=2;n<=7;n++)f.append([{type:'item.added',id:`ENG-${n}`,role:'engineer',title:'Original missing identity'},
+    {type:'run.started',id:`R-${n}`,item:`ENG-${n}`,workspace:f.lane+`-missing-${n}`,meta:{lane:`missing-${n}`,dispatch_project:f.common}},
+    {type:'report.ingested',run:`R-${n}`,sha256:`original-${n}`,report:{outcome:'done'}},
+    {type:'closeout.effect',identity:f.common,key:`original-${n}`,run:`R-${n}`,effect:`original-intent-${n}`,
+      source:{seq:1,type:'report.ingested'},outcome:{action:'agent-exit-requested',pane:`original-${n}`}}]);
+  const original=events(f),calls=f.herdrCalls(),seen=[];
+  for(let turn=0;turn<3;turn++){
+    const before=events(f),result=refreshCloseouts({cwd:f.repo,org:f.org,env:f.env,retirementOptions:f.options,maxTargets:2});
+    assert.equal(result.selected,2);assert.equal(result.kept.length,2);assert.deepEqual(result.created,[]);
+    assert.equal(events(f).slice(before.length).filter(e=>e.type==='closeout.kept').length,2,'retention observations cannot escape the target bound');
+    seen.push(...result.kept.map(row=>row.run));
+  }
+  assert.equal(new Set(seen).size,6,'unobserved original subjects precede already recorded keeps');
+  assert.deepEqual(events(f).slice(0,original.length),original);assert.deepEqual(f.herdrCalls(),calls);
+  assert.deepEqual(f.read().actions,[],'missing identity and original UNKNOWNs grant no replacement native effect');
+});
 import {disposeStoppedAllocations} from '../lib/closeout-allocations.mjs';
 import {fold} from '../lib/state.mjs';
 import {gitProject} from '../lib/project.mjs';

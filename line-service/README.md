@@ -1254,6 +1254,10 @@ captures, original attempt checks and all fresh launch guards. General discovery
 still accounts for every producer and unattributed commit. Unrelated producer
 files no longer prolong the shared session-admission lock before deferred record
 start; a saved in-flight dispatcher retains its original loaded implementation.
+Original-binding refresh counts early identity/ownership keeps in its existing
+target budget too. A historical retention census cannot append continuously for
+the whole deadline merely because no executable binding was created. Original
+keeps and UNKNOWNs remain unchanged, and unobserved subjects retain fair priority.
 
 Each `closeout.evaluated` now carries independent `resources.session`, `.folder`
 and `.branch` dispositions. Only exact `closeout.effect` receipts establish

@@ -172,6 +172,7 @@ export async function runCanary(c) {
   // Exhaust the original finite allowance. The production turn may neither
   // register a wait nor issue another command; subsequent ordinary scheduling
   // still dispatches B and the original A review, without an item start/nudge.
+  await until(()=>!fs.existsSync(path.join(directory,'closeout-turn.lock')),'original closeout turn completed before the expired-budget control');
   const {runCloseoutTurn}=await module('line-service/closeout-turn.mjs');
   const waits=events().filter(e=>e.type==='closeout.waiting');let ticks=0;
   const deadline=runCloseoutTurn({project,org,env,guard:()=>{},budgetMs:0,clock:()=>ticks++,measure:()=>{},

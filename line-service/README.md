@@ -1479,7 +1479,10 @@ contents (including linked skills and runtime output) are not read by these
 evaluations and are not inventoried. Relevant Git inventories larger than 4096
 paths, linked Git directories or unreadable inputs are evaluated fresh. The bound
 declines caching; it never truncates a fingerprint. Source revision is part of
-each signature, so interleaved revisions cannot reset the entire shared cache.
+each v2 signature, so interleaved v2 writers cannot reset the entire shared cache.
+During the v1-to-v2 transition, a still-running v1 pass can replace the v2 envelope
+and discard its hints. This limitation lasts until the original v1 owners drain
+normally; lost hints cause fresh evaluations, and v2 passes rebuild them.
 Common source/policy changes conservatively invalidate dependent observations.
 Ancestor revisions track their own event subjects: mentioning a goal in another
 run's saved report or closeout diagnostic does not change the goal's subtree.

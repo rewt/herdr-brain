@@ -469,7 +469,12 @@ read-only wait accepts only the original committed launch/session identity and
 claim for the actual native worker. New requests use `workerSessionWaitProtocol: 2`:
 dispatch observes and commits an explicit `run.session_bound` through the same
 saved continuity/window/proposal path even if the immutable launch receipt
-already contains a session ID. The wait requires that event before readiness;
+already contains a session ID. Fresh requests also save `launchSessionBindProtocol: 1`:
+when that session is available at launch, dispatch commits it while the original
+worker is idle, before sending its prompt. A failed or unknown bind leaves the
+prompt unsent and preserves the original proposal/refusal. Delayed sessions still
+use the saved post-delivery window; resumes and saved requests keep their original
+path. The wait requires that event before readiness;
 the launch receipt alone is insufficient. Saved protocol-one requests retain
 their original receipt-only readiness and do not acquire a new observation.
 A proposal or journal `bound` flag is not

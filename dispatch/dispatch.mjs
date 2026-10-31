@@ -23,7 +23,7 @@ import {probationRuntime} from '../line-service/probation.mjs';
 import { hookReviewDialog, codexProfile } from './hook-review.mjs';
 import { effectiveWorkerIdentity, workerReceipt, sharesWorker } from '../lib/worker-identity.mjs';
 import { lookupProcess } from '../lib/processes.mjs';
-import { nativeProcess, observeSessionBinding, prepareSessionObservation } from './session-bind.mjs';
+import { nativeProcess, observeSessionBinding, prepareSessionObservation, requiresLaunchSessionBinding } from './session-bind.mjs';
 import { acquireSessionCapLock, checkSessionCap, dispatchPool } from './session-cap.mjs';
 import { checkSourceAdmission, matchesDispatchStart } from './unlanded-cap.mjs';
 import { quote } from '../lib/shell.mjs';
@@ -535,7 +535,7 @@ async function main() {
     const probation=actual.commit?probationRuntime(repo,{root:actual.root,home:runtimeHome})?.probation:undefined;
     if(actual.commit&&!probation)requireReadyAcceptance(checkRelease(runtimeHome,actual.id),runtimeHome);
     job = { token, repo, org, common, predecessor, release: bundleRelease(), sourceSelection: sourceSelection ?? null,...(probation?{probation}:{}),
-      invocation: invocation(), watchMode:opt['watch-mode']??'process', workerSessionWaitProtocol: 2,
+      invocation: invocation(), watchMode:opt['watch-mode']??'process', workerSessionWaitProtocol: 2, launchSessionBindProtocol: 1,
       operatorRecordCommand: [process.execPath, local('../bin/org.mjs')],
       operatorRecordRoot: bundleRelease().root,
       operatorPlainText: true,
@@ -883,6 +883,19 @@ async function main() {
       checkReviewContinuationNative();
       checkStop({boundary:'prompt'});
       prepareSessionBinding(run);
+      if (requiresLaunchSessionBinding(job)) {
+        // A launch-time session can be observed while the worker is still idle.
+        // Waiting until after prompting can lose its native foreground window.
+        // Keep stage prompt until the original fact is committed: unknown writer
+        // replies retain the proposal and must never permit delivery.
+        save();
+        await bindSession();
+        if (job.sessionBinding?.status !== 'bound')
+          throw new Error(`original launch session binding is ${job.sessionBinding?.status ?? 'missing'}; prompt not sent: ${job.sessionBinding?.reason ?? 'binding not committed'}`);
+        liveWorker(job.worker);
+        checkReviewContinuationNative();
+        checkStop({boundary:'prompt'});
+      }
       job.stage = 'prompting'; save();
       herdr(['agent', 'prompt', job.worker.agentName, prompt]);
       job.stage = 'complete'; save();

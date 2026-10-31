@@ -3,6 +3,11 @@ import { ownerIdentity } from '../lib/process-owner.mjs';
 import path from 'node:path';
 import { outcomeFailure } from '../lib/uncertain-outcome.mjs';
 
+// Opt in only fresh requests. Saved deliveries and resumed conversations retain
+// their original observation/recovery path.
+export const requiresLaunchSessionBinding = job => job.launchSessionBindProtocol === 1 &&
+  job.workerSessionWaitProtocol === 2 && !job.resumeDeliveryProtocol && !job.reuse && Boolean(job.worker?.agentSessionId);
+
 // Protocol 2 gives launch-time sessions the same explicit fact as late sessions.
 // Saved requests keep their original receipt-only behavior and observation window.
 export function prepareSessionObservation({ job, run, receipt, now = Date.now }) {

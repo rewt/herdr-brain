@@ -8,6 +8,7 @@ import { bindCloseoutSources, publishCloseoutEvents } from '../lib/closeout.mjs'
 import { validResumeDelivery } from './resume-delivery.mjs';
 import { protectRecordMutation } from '../lib/record-guard.mjs';
 import { assertOwner, readOwnedRun } from '../lib/run-owner-guard.mjs';
+import { requiresLaunchSessionBinding } from './session-bind.mjs';
 const fields = ['type', 'run', 'dispatch', 'receipt', 'process', 'prompted_at', 'deadline', 'observed_at', 'session'];
 
 // Dispatch and line replay consume only the original saved proposal. This command
@@ -25,7 +26,8 @@ export function sessionBindCommand(argv) {
     if (binding?.record_refusal) throw new UserError('original session bind refusal is final');
     if (!run || job.org !== org || job.common !== gitProject(job.repo).identity ||
         fs.realpathSync(job.repo) !== job.repo || fs.realpathSync(job.workspace) !== run.workspace ||
-        path.dirname(journal) !== path.join(org, 'dispatch') || job.stage !== 'complete' ||
+        path.dirname(journal) !== path.join(org, 'dispatch') ||
+        !(job.stage === 'complete' || job.stage === 'prompt' && requiresLaunchSessionBinding(job) && proposed?.session === job.worker.agentSessionId) ||
         !['observing', 'bound', 'unbound'].includes(binding?.status) ||
         !proposed || Object.keys(proposed).some(k => !fields.includes(k)) || proposed.type !== 'run.session_bound' ||
         proposed.dispatch?.journal !== journal || proposed.dispatch.attempt !== job.token ||

@@ -124,6 +124,34 @@ test('protocol-two launch sessions with missing continuity stop without a bindin
   assert.equal(f.events.some(e => e.type === 'run.session_bound'), false);
 });
 
+test('pre-prompt writer accepts only the opted-in original launch session and retains all binding fences', async t => {
+  const f = fixture(t, { launchSession: true }), state = f.options().state, run = state.runs.get('R-1');
+  delete f.job.sessionBinding;
+  Object.assign(f.job, { stage: 'prompt', launchSessionBindProtocol: 1, launchProcess: { pid: 123, identity: 'native birth' } });
+  prepareSessionObservation({ job: f.job, run, receipt: () => workerReceipt(run, state) });
+  await observeSessionBinding({ job: { ...f.job, journal: f.journal }, save: f.write,
+    observe: () => ({ process: f.job.launchProcess, session: 'session' }), record: () => ({ outcome: 'bound' }) });
+  const original = structuredClone(f.job), eventFile = path.join(f.org, 'events.jsonl');
+  const record = () => execFileSync(process.execPath, [path.resolve('bin/org.mjs'), 'session-bind', '--journal', f.journal],
+    { cwd: f.cwd, env: { ...process.env, ORG_DIR: f.org, ORG_ACTOR: 'fixture' }, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  for (const patch of [
+    j => { delete j.launchSessionBindProtocol; },
+    j => { j.workerSessionWaitProtocol = 1; },
+    j => { j.resumeDeliveryProtocol = 1; },
+    j => { j.reuse = 'R-0'; },
+    j => { j.worker.agentSessionId = 'replacement'; },
+    j => { j.sessionBinding.proposed.process = null; },
+  ]) {
+    for (const key of Object.keys(f.job)) delete f.job[key];
+    Object.assign(f.job, structuredClone(original)); patch(f.job); f.write();
+    const before = fs.readFileSync(eventFile);
+    assert.throws(record); assert.deepEqual(fs.readFileSync(eventFile), before);
+  }
+  for (const key of Object.keys(f.job)) delete f.job[key];
+  Object.assign(f.job, original); f.write();
+  assert.equal(JSON.parse(record()).recorded, true); assert.equal(f.read().status, 'ready');
+});
+
 test('native replacements, changed claim/source, duplicate identity and inactive runs stop before task work', t => {
   const f = fixture(t); f.bind();
   const original = f.options();

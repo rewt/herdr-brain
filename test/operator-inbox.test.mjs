@@ -185,7 +185,7 @@ test('the existing native final-read guard holds instead of sending to a changed
   const f = fixture(t), e = f.append({ kind: 'question', question: 'HUM-1' }).result;
   await f.push(e);
   fs.writeFileSync(path.join(f.root, 'mode'), 'changed-final');
-  assert.equal((await f.drain()).delivered, false); assert.deepEqual(f.sent(), []);
+  assert.equal((await f.drain({ waitSeconds: 3 })).delivered, false); assert.deepEqual(f.sent(), []);
   assert.match(fs.readFileSync(f.inbox, 'utf8'), /no input attempted/);
   assert.throws(() => enqueueSupervisor('operator-pane', readInbox(f.inbox)[0].message,
     { inbox: f.inbox, id: pushId(f.org, 'HUM-1'), mirror: () => {} }), /different content or target/);
@@ -194,8 +194,8 @@ test('the existing native final-read guard holds instead of sending to a changed
 test('ambiguous native delivery is never replayed; explicit existing recovery retains the once-only receipt', async t => {
   const f = fixture(t), e = f.append({ kind: 'question', question: 'HUM-1' }).result;
   await f.push(e); fs.writeFileSync(path.join(f.root, 'mode'), 'lost-ack');
-  assert.equal((await f.drain()).delivered, false); assert.equal(f.sent().length, 1);
-  assert.equal((await f.push(e)).state, 'uncertain'); await f.drain(); assert.equal(f.sent().length, 1);
+  assert.equal((await f.drain({ waitSeconds: 3 })).delivered, false); assert.equal(f.sent().length, 1);
+  assert.equal((await f.push(e)).state, 'uncertain'); await f.drain({ waitSeconds: 3 }); assert.equal(f.sent().length, 1);
   assert.equal(operatorDigest(loadEvents(f.org).events, f.org).messages[0].push, 'uncertain');
   resolveNotice(f.inbox, pushId(f.org, 'HUM-1'), true);
   assert.equal((await f.push(e)).state, 'sent'); assert.equal(f.sent().length, 1);
@@ -206,7 +206,7 @@ test('native pre-input refusal and owner failure preserve their actual pending s
   const receipt = await f.push(e, { resume: async () => { throw Error('kill EPERM'); } });
   assert.equal(receipt.state, 'pending'); assert.equal(receipt.error, 'kill EPERM');
   fs.writeFileSync(path.join(f.root, 'mode'), 'refused');
-  assert.equal((await f.drain()).delivered, false); assert.deepEqual(f.sent(), []);
+  assert.equal((await f.drain({ waitSeconds: 3 })).delivered, false); assert.deepEqual(f.sent(), []);
   assert.equal(readInbox(f.inbox)[0].state, 'pending'); assert.match(readInbox(f.inbox)[0].error, /agent_blocked/);
 });
 

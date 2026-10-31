@@ -11,7 +11,7 @@ import { bindCloseoutSources, publishCloseoutEvents, readCloseoutEntries, readyL
 import { retirementLock } from '../lib/retire-lock.mjs';
 import { finishCleanup, retryCleanup, drain as drainPromotions, queueFor } from '../promote/promote.mjs';
 import { closeoutWaitId, closeoutWaitState } from '../lib/closeout-status.mjs';
-import { currentCloseoutEntries } from '../lib/closeout.mjs';
+import { currentCloseoutEntries, closeoutEvaluation } from '../lib/closeout.mjs';
 import { cli, closer, events, waitForChange, setup, evaluations, effects, assertRemoved, child } from './helpers/closeout-fixture.mjs';
 
 test('default landing and named requests, full-source opt-in, opt-out and canonical ownership', t => {
@@ -71,6 +71,27 @@ test(`automatic report stays opt-in; default landing/named policy (${config === 
     assert.deepEqual(f.herdrCalls(), []);
     assert.equal(fs.existsSync(f.lane), true);
   }
+});
+
+test('a later direct report source wakes after an earlier source with the same key completed', async t => {
+  const f = setup(t, { occupied: false, direct: true });
+  const [first] = f.report(), [oldEntry] = currentCloseoutEntries(f.common, f.org, events(f));
+  f.append([{ type: 'closeout.evaluated', identity: f.common, key: oldEntry.key, run: oldEntry.run,
+    item: oldEntry.item, source: oldEntry.source, revision: first.seq, completed: true }]);
+  publishCloseoutEvents({ cwd: f.repo, org: f.org, added: [first], env: f.env });
+  const log = path.join(f.common, 'closeout/worker.log');
+  assert.equal(fs.existsSync(log), false, 'replaying the completed source does not wake a consumer');
+  const [second] = f.report(), [entry] = currentCloseoutEntries(f.common, f.org, events(f));
+  assert.equal(entry.key, oldEntry.key);
+  assert.notDeepEqual(entry.source, oldEntry.source);
+  assert.equal(closeoutEvaluation(entry, events(f)), undefined, 'the later source is pending');
+  publishCloseoutEvents({ cwd: f.repo, org: f.org, added: [second], env: f.env });
+  await waitForChange([f.eventFile], () => closeoutEvaluation(entry, events(f)) &&
+    !fs.existsSync(path.join(f.common, 'closeout/consumer.lock')));
+  assert.equal(fs.existsSync(log), true, 'the later source wakes the finite consumer without another drain');
+  assert.deepEqual(closeoutEvaluation(entry, events(f)).source, entry.source);
+  assert.equal(closeoutEvaluation(oldEntry, events(f)).completed, true, 'the original receipt survives');
+  assert.deepEqual(readCloseoutEntries(f.common), [], 'direct reports create no queue files');
 });
 
 for (const type of ['report.ingested', 'review.verdict', 'item.closed', 'promotion.reconciled', 'lane.ready', 'lane.recovery-requested'])

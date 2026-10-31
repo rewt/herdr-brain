@@ -20,6 +20,7 @@ import { obsoleteOutcomeDecision } from '../line-service/outcome-decision.mjs';
 import { unresolvedCloseoutEffect } from '../lib/closeout.mjs';
 import { events, setup, evaluations, effects, retainNativeOutcome } from './helpers/closeout-fixture.mjs';
 import {sessionBindFact} from './helpers/session-bind.mjs';
+import {retirementDeadline, RETIREMENT_DEADLINE_MESSAGE} from '../lib/retire-lock.mjs';
 
 // Spend the target's allowance after the ownership locks are held. An already
 // expired allowance is rejected at lock entry, before any target is evaluated.
@@ -62,6 +63,27 @@ test('phase1 deadline-deferred closeout retries its original unattempted target 
   assert.deepEqual(fs.readFileSync(f.eventFile),deferredBytes,'unchanged restart adds no wait');
   const next=f.drain({keys:[entry.key],retrySafe:true});assert.equal(next.evaluated[0]?.completed,true,JSON.stringify(next));
   assert.equal(f.read().actions.filter(a=>a[0]==='agent'&&a[1]==='prompt').length,1);assert.equal(fs.existsSync(f.lane),false);
+});
+
+test('a saved pre-effect deadline uses the shared reason for one named retry without replaying native intent',t=>{
+  const f=setup(t,{merged:true});f.report();
+  const [source]=f.append([{type:'item.closed',id:'ENG-1',as:'done',completed_run:'R-1'}]);
+  const entry=readCloseoutEntries(f.common).find(e=>e.key===source.closeout_targets.find(t=>t.signal==='landed').key);
+  const error=retirementDeadline();assert.equal(error.code,'RETIREMENT_DEADLINE');assert.equal(error.message,RETIREMENT_DEADLINE_MESSAGE);
+  const [prior]=f.append([{type:'closeout.evaluated',identity:f.common,key:entry.key,run:entry.run,item:entry.item,
+    source:entry.source,revision:closeoutRevision(entry,events(f)),completed:false,reason:error.message}]);
+  assert.equal(safeCloseoutRetry(prior,{entry,events:events(f)}),true);
+  const unresolved=[...events(f),{type:'closeout.effect',key:entry.key,identity:f.common,source:entry.source,
+    outcome:{action:'agent-exit-requested',pane:'w:p'}}];
+  assert.equal(safeCloseoutRetry(prior,{entry,events:unresolved}),false,'the deadline never authorizes native replay');
+  assert.deepEqual(f.drain({keys:[entry.key]}).evaluated,[],'an unchanged saved deadline needs an explicit retry');
+  assert.deepEqual(f.read().actions,[]);
+  const result=f.drain({keys:[entry.key],retrySafe:true});
+  assert.equal(result.evaluated[0]?.completed,true,JSON.stringify(result));
+  assert.equal(f.read().actions.filter(a=>a[0]==='agent'&&a[1]==='prompt').length,1);
+  assert.equal(fs.existsSync(f.lane),false);
+  assert.ok(events(f).some(e=>e.seq===prior.seq&&e.reason===RETIREMENT_DEADLINE_MESSAGE),'original deadline evidence survives');
+  assert.deepEqual(f.drain({keys:[entry.key],retrySafe:true}).evaluated,[],'completion cannot spend another retry');
 });
 
 test('future telemetry diagnostics cannot override a durable native refusal or manufacture completion',t=>{

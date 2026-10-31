@@ -453,7 +453,12 @@ expiry, without observing again or renewing the deadline. Recorded refusals
 remain final for explicit retry too.
 `sessionBinding.commit_attempts` preserves the original attempt and any error
 code, exit status, signal and CLI output available to dispatch. Unknown record
-outcomes may retry the same fact; a refusal stops. Successful commits save a
+outcomes may retry the same fact. Only a typed writer fact refusal or a native/
+permission fence stops replay; the generic `record: ` stderr prefix is not a
+refusal. Lock timeouts, transaction conflicts and incomplete tails stay unknown.
+Fact refusals return a `dispatch-session-binding/v1` JSON reply with outcome
+`refused` and code `SESSION_BIND_REFUSED`, retaining the usual CLI error exit.
+Successful commits save a
 `dispatch-session-binding/v1` receipt in `commit_receipt`, naming the original
 run/journal/attempt/session and the `run.session_bound` event sequence.
 `recorded: false` identifies exact readback of a lost reply. The pass log records

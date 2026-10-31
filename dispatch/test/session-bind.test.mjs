@@ -9,7 +9,7 @@ import { fold } from '../../lib/state.mjs';
 import { fold as oldFold } from '../../test/fixtures/state-v0.mjs';
 import { effectiveWorkerIdentity } from '../../lib/worker-identity.mjs';
 import { sessionBindFact } from '../../test/helpers/session-bind.mjs';
-import { observeSessionBinding, nativeProcess } from '../session-bind.mjs';
+import { observeSessionBinding, nativeProcess, sessionBindRefused } from '../session-bind.mjs';
 import { supervisorStatus } from '../../supervisor/status.mjs';
 import { fixture as retirementFixture } from '../../test/helpers/retire-fixture.mjs';
 import { planRetirement } from '../../lib/retire.mjs';
@@ -64,6 +64,7 @@ test('record bind is separate and immutable, folds once, and exact retries survi
   const changed = { ...f.proposed, session: 'other' };
   f.job.sessionBinding.proposed = changed; f.save();
   const refusal = f.bind(); assert.equal(refusal.status, 1); assert.match(refusal.stderr, /different or conflicting/);
+  assert.equal(sessionBindRefused(refusal), true);
   assert.deepEqual(f.events(), events);
 });
 
@@ -79,6 +80,7 @@ for (const race of ['newer-name', 'newer-pane', 'newer-session']) test(`transact
   }
   const bytes = f.events(), result = f.bind();
   assert.equal(result.status, 1); assert.match(result.stderr, /open, unreported|newer run/);
+  assert.equal(sessionBindRefused(result), true);
   assert.deepEqual(f.events(), bytes);
 });
 
@@ -99,6 +101,7 @@ test('binding refuses changed receipts, foreign dispatch anchors, renewed deadli
   for (const mutate of mutations) {
     Object.assign(f.job, structuredClone(original)); mutate(f.job); f.save();
     const result = f.bind(); assert.equal(result.status, 1, JSON.stringify(f.job));
+    assert.equal(sessionBindRefused(result), true);
     assert.deepEqual(f.events(), events);
   }
   Object.assign(f.job, structuredClone(original)); f.save();
@@ -253,6 +256,18 @@ test('record-only retries preserve failure evidence and proposals, while refusal
   assert.deepEqual(b.proposed, proposal); assert.equal(f.reads(), reads);
   f.options.record = () => assert.fail('a refusal must not replay');
   await observeSessionBinding(f.options); assert.equal(b.commit_attempts.length, 2);
+});
+
+test('only typed completed writer failures classify as record refusals', () => {
+  const stdout = JSON.stringify({ schema: 'dispatch-session-binding/v1', outcome: 'refused', code: 'SESSION_BIND_REFUSED' });
+  assert.equal(sessionBindRefused({ status: 1, stdout }), true);
+  for (const receipt of [
+    { status: 1, stderr: 'record: conflicting session\n' },
+    { status: 1, stderr: 'record: record preparation conflict\n' },
+    { status: 1, stderr: 'record: incomplete record tail\n' },
+    { status: 0, stdout }, { status: null, stdout }, { status: 1, signal: 'SIGTERM', stdout },
+    { status: 1, error: 'EPIPE', stdout }, { status: 1, stdout: '{}' },
+  ]) assert.equal(sessionBindRefused(receipt), false);
 });
 
 test('resume transaction requires qualified transcript evidence even with an observed native ID', t => {

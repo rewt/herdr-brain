@@ -3,6 +3,17 @@ import { ownerIdentity } from '../lib/process-owner.mjs';
 import path from 'node:path';
 import { outcomeFailure } from '../lib/uncertain-outcome.mjs';
 
+// Stderr's record: prefix also covers transient storage errors. Only the
+// writer's explicit fact-refusal receipt establishes a final record refusal.
+export function sessionBindRefused(receipt) {
+  if (!receipt || receipt.error || receipt.signal || !Number.isInteger(receipt.status) || receipt.status === 0) return false;
+  try {
+    const reply = JSON.parse(receipt.stdout);
+    return reply.schema === 'dispatch-session-binding/v1' && reply.outcome === 'refused' &&
+      reply.code === 'SESSION_BIND_REFUSED';
+  } catch { return false; }
+}
+
 // Opt in only fresh requests. Saved deliveries and resumed conversations retain
 // their original observation/recovery path.
 export const requiresLaunchSessionBinding = job => job.launchSessionBindProtocol === 1 &&
@@ -47,8 +58,7 @@ export function commitSessionBinding({ job, save, record, now = Date.now }) {
     b.commit_receipt = attempt.receipt;
   } catch (error) {
     const r = error.receipt;
-    const refused = error.recordRefusal || outcomeFailure(error).kind === 'fence' || r && !r.error && !r.signal && Number.isInteger(r.status) && r.status !== 0 &&
-      (r.stderr ?? '').trim().split('\n').at(-1).startsWith('record: ');
+    const refused = error.recordRefusal || outcomeFailure(error).kind === 'fence' || sessionBindRefused(r);
     attempt.error = { message: error.message, ...(error.code ? { code: error.code } : {}), ...(r ? { receipt: r } : {}) };
     if (refused) {
       attempt.outcome = 'refused'; b.status = 'unbound'; b.record_refusal = true; b.reason = error.message;

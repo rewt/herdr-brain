@@ -96,6 +96,27 @@ test('unknown record outcomes preserve attempt diagnostics and replay only the s
   assert.deepEqual(f.read().sessionBinding.proposed, f.proposed);
 });
 
+for (const receipt of [
+  { status: 1, signal: null, stderr: 'record: the record is locked (/x/lock); owner death is not confirmed; retain it for inspection\n' },
+  { status: 1, stderr: 'record: record changed repeatedly before commit; no commit callback was run\n' },
+  { status: 1, stderr: 'record: record preparation conflict\n' },
+  { status: 1, stderr: 'record: incomplete record tail\n' },
+]) test(`busy writer stays replayable: ${receipt.stderr.trim()}`, t => {
+  const f = fixture(t);
+  const unknown = f.replay({ record: () => { throw Object.assign(Error(receipt.stderr), { receipt }); } });
+  const pending = f.read().sessionBinding;
+  assert.equal(unknown.outcome, 'unknown'); assert.equal(pending.status, 'observing');
+  assert.equal(pending.record_refusal, undefined);
+  assert.deepEqual(pending.proposed, f.proposed);
+  assert.deepEqual(pending.commit_attempts[0].error.receipt, receipt);
+  assert.equal(loadRecord(f.org).events.filter(e => e.type === 'run.session_bound').length, 0);
+  assert.equal(f.replay().outcome, 'bound');
+  assert.deepEqual(f.read().sessionBinding.proposed, f.proposed);
+  assert.equal(f.read().sessionBinding.commit_attempts.length, 2);
+  assert.equal(f.replay({ record: () => assert.fail('bound proposal replayed') }), undefined);
+  assert.equal(loadRecord(f.org).events.filter(e => e.type === 'run.session_bound').length, 1);
+});
+
 test('record refusals are final and original lock, claim, source and STOP guards precede every replay', t => {
   const f = fixture(t), before = fs.readFileSync(f.journal);
   const lock = lockRequest(f.journal);
@@ -109,11 +130,25 @@ test('record refusals are final and original lock, claim, source and STOP guards
   }
   f.write(f.original);
   const result = f.replay({ record: () => { throw Object.assign(Error('record: conflicting session'),
-    { receipt: { status: 3, signal: null, stderr: 'record: conflicting session\n' } }); } });
+    { receipt: { status: 3, signal: null, stderr: 'record: conflicting session\n',
+      stdout: JSON.stringify({ schema: 'dispatch-session-binding/v1', outcome: 'refused', code: 'SESSION_BIND_REFUSED' }) } }); } });
   assert.equal(result.outcome, 'refused'); assert.equal(f.read().sessionBinding.status, 'unbound');
   assert.equal(f.replay({ record: () => assert.fail('refusal replayed') }), undefined);
   assert.equal(f.command(['session-bind', '--journal', f.journal]).status, 1);
   assert.deepEqual(f.read().sessionBinding.proposed, f.proposed);
+});
+
+test('real writer fact refusal is typed and final for replay', t => {
+  const f = fixture(t);
+  f.bind(f.journal);
+  const job = f.read(); job.sessionBinding.proposed.session = 'conflicting-session'; f.write(job);
+  const result = f.replay();
+  assert.equal(result.outcome, 'refused');
+  assert.match(result.error.receipt.stderr, /different or conflicting session bind/);
+  assert.equal(JSON.parse(result.error.receipt.stdout).code, 'SESSION_BIND_REFUSED');
+  assert.equal(f.read().sessionBinding.record_refusal, true);
+  assert.equal(f.replay({ record: () => assert.fail('refusal replayed') }), undefined);
+  assert.equal(loadRecord(f.org).events.filter(e => e.type === 'run.session_bound').length, 1);
 });
 
 test('permission refusals and journal changes never become retryable record writes', t => {

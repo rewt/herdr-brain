@@ -23,7 +23,7 @@ import {probationRuntime} from '../line-service/probation.mjs';
 import { hookReviewDialog, codexProfile } from './hook-review.mjs';
 import { effectiveWorkerIdentity, workerReceipt, sharesWorker } from '../lib/worker-identity.mjs';
 import { lookupProcess } from '../lib/processes.mjs';
-import { nativeProcess, observeSessionBinding, prepareSessionObservation, requiresLaunchSessionBinding } from './session-bind.mjs';
+import { nativeProcess, observeSessionBinding, prepareSessionObservation, requiresLaunchSessionBinding, sessionBindRefused } from './session-bind.mjs';
 import { acquireSessionCapLock, checkSessionCap, dispatchPool } from './session-cap.mjs';
 import { checkSourceAdmission, matchesDispatchStart } from './unlanded-cap.mjs';
 import { quote } from '../lib/shell.mjs';
@@ -130,7 +130,8 @@ function command(argv, args, cwd = job?.repo ?? path.resolve(opt.repo), mutation
     if (mutation && (result.signal || result.error && !['ENOENT','ENOTDIR','EACCES','EPERM'].includes(result.error.code))) {
       error.code = 'DISPATCH_OUTCOME_UNKNOWN';
     }
-    error.recordRefusal = !result.error && !result.signal && Number.isInteger(result.status) && result.status !== 0 &&
+    error.recordRefusal = argv === recordCLI && args[0] === 'session-bind' ? sessionBindRefused(result) :
+      !result.error && !result.signal && Number.isInteger(result.status) && result.status !== 0 &&
       result.stderr.trim().split('\n').at(-1).startsWith('record: ');
     if(argv===laneCLI&&!result.error&&!result.signal)try{
       const receipt=JSON.parse(result.stdout);

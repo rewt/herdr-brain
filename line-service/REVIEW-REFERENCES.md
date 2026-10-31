@@ -236,6 +236,25 @@ original entry, full terminal command and target, then appends
 executes `queue-review`. An identical request is idempotent. Consumers revalidate
 the archive, decision, owner generation and original command bytes.
 
+A command-quiescence refusal names both the active intent and the terminal
+receipt it could not validate (`LINE_COMMAND_OUTCOME_UNKNOWN`), retaining the
+underlying error as its cause. A basename-only ENOENT does not distinguish the
+intent from its result. Keep the original command and its
+saved owner, even if that owner names a retired recipient. Do not retarget it or
+clear a reference to make reconciliation pass. Once the original helper has
+published its bound terminal result, the existing guard accepts that proof under
+the pass lock. If cleanup overtakes the directory listing, reconciliation uses
+the original journal reference's exact hash and paths to validate the retained
+terminal result. If completion overtakes a missing-result read and the active
+marker has since gone, the guard makes one fresh terminal proof read. Neither
+case accepts absence without a bound result. Terminal failure proves quiescence,
+not command success. After
+normal active-marker cleanup, `readCommandResult` validates the retained intent
+against the saved SHA256 and paths in the original reference; a missing marker
+alone is never a successful result. The effects journal intentionally retains
+that reference and the immutable terminal receipt. No extra disposition, journal
+edit or replay is needed for a proven completed command (ENG-1190/R-1581).
+
 The line can then continue once for the same target, saving the old entry in
 history and the disposition in `queue_recovery`. If later landings require a
 different whole producer target, only the disposed original stops fencing that

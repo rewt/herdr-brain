@@ -458,6 +458,33 @@ for(const index of [0,1])for(const next of ['queued','unknown','contention'])tes
   assert.ok(f.calls.every(a=>a[0]==='agent'&&a[1]==='get'),'no native effects');
 });
 
+test('queue reconciliation retains an unrelated original command until its terminal receipt permits maintenance',t=>{
+  const f=planningFixture(t),key='dispatch:ENG-99:original',ref=commandIntent(f.directory,{exe:process.execPath,
+    args:[path.join(f.repo,'dispatch/dispatch.mjs'),'ENG-99'],cwd:f.repo,project:f.identity,org:f.org,
+    subject:'ENG-99',key,consumer:'line-service',stuck_owner:'brain-chat'});
+  const journal=JSON.parse(fs.readFileSync(f.file));journal.actions[key]={state:'started',subject:key,commands:[ref]};
+  fs.writeFileSync(f.file,JSON.stringify(journal));const before=f.captured(),pending=fs.readFileSync(f.file),intent=fs.readFileSync(ref.file);
+  assert.throws(()=>reconcileReviewQueue(f.reconcileArgs()),error=>error.code==='LINE_COMMAND_OUTCOME_UNKNOWN'&&error.command.receipt===ref.receipt);
+  assert.deepEqual(f.captured(),before);assert.deepEqual(fs.readFileSync(f.file),pending);assert.deepEqual(fs.readFileSync(ref.file),intent);
+  // Only the original command owner completes and cleans its marker. Its
+  // journal reference and saved recipient are intentionally retained.
+  finishCommand(ref,{status:0,stdout:'original dispatch result'});const terminal=fs.readFileSync(ref.receipt);
+  journal.actions[key].state='complete';fs.writeFileSync(f.file,JSON.stringify(journal));const completed=fs.readFileSync(f.file);
+  const open=fs.openSync;let cleaned=false;
+  t.mock.method(fs,'openSync',function(file,...args){
+    if(!cleaned&&file===path.basename(ref.file)&&process.cwd()===path.dirname(ref.file)){
+      cleaned=true;forgetActiveCommand(ref);throw Object.assign(Error('original marker cleaned after listing'),{code:'ENOENT'});
+    }
+    return Reflect.apply(open,fs,[file,...args]);
+  });
+  assert.equal(reconcileReviewQueue(f.reconcileArgs()).existing,false);
+  assert.equal(cleaned,true);
+  assert.equal(reconcileReviewQueue(f.reconcileArgs()).existing,true);
+  assert.deepEqual(fs.readFileSync(f.file),completed);assert.deepEqual(fs.readFileSync(ref.receipt),terminal);
+  assert.equal(fs.existsSync(ref.file),false);assert.deepEqual(JSON.parse(fs.readFileSync(f.file)).actions[f.key],f.entry);
+  assert.equal(f.context().events.filter(e=>e.type==='line-service.review-queue-reconciled').length,1);
+});
+
 test('terminal planning writer refuses mismatched original inputs and unaudited status-1 results',t=>{
   const f=planningFixture(t),before=f.captured(),originalBytes=fs.readFileSync(f.file);
   for(const mutate of [x=>x.attempt='other',x=>x.target.head=f.base,x=>x.original_sha256='0'.repeat(64),x=>x.command_sha256='0'.repeat(64),x=>x.run='R-99']){

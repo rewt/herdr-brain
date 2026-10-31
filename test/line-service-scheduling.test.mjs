@@ -9,7 +9,7 @@ import {createHash} from 'node:crypto';
 import {initOrg,transact} from '../lib/store.mjs';
 import {gitProject} from '../lib/project.mjs';
 import {serviceDirectory,sourceRoot} from '../line-service/line-service.mjs';
-import {commandIntent,finishCommand,assertCommandQuiescence,readCommandResult} from '../lib/command-receipt.mjs';
+import {commandIntent,finishCommand,forgetActiveCommand,assertCommandQuiescence,readCommandResult} from '../lib/command-receipt.mjs';
 import {withRuntimeLocks} from '../line-service/runtime-locks.mjs';
 import {serviceRecordBinding} from '../line-service/record-inbox.mjs';
 import {noticeLock} from '../supervisor/notice-lock.mjs';
@@ -162,6 +162,54 @@ test('maintenance refuses redirected or inconsistent terminal evidence and retai
   finishCommand(ref,{status:0,stdout:'original'});assertCommandQuiescence(f.directory);
   const receipt=JSON.parse(fs.readFileSync(ref.receipt));receipt.intent_sha256='0'.repeat(64);fs.writeFileSync(ref.receipt,JSON.stringify(receipt));
   assert.throws(()=>assertCommandQuiescence(f.directory),/binding changed/);assert.ok(fs.existsSync(ref.file));
+});
+
+test('missing completion is UNKNOWN; a cleaned active marker requires its bound retained terminal result',t=>{
+  const f=fixture(t),ref=commandIntent(f.directory,{exe:'fixture',args:[],cwd:f.repo,subject:'ENG-1',stuck_owner:'brain-chat'});
+  const intent=fs.readFileSync(ref.file);
+  assert.throws(()=>assertCommandQuiescence(f.directory),error=>{
+    assert.equal(error.code,'LINE_COMMAND_OUTCOME_UNKNOWN');assert.equal(error.cause.code,'ENOENT');
+    assert.ok(error.message.includes(`cannot validate terminal receipt ${ref.receipt}`));
+    assert.deepEqual(error.command,ref);assert.equal(error.stuck_owner,'brain-chat');return true;
+  });
+  assert.deepEqual(fs.readFileSync(ref.file),intent,'missing receipt never clears the original intent');
+  // A terminal failure is also quiescent, but is never converted into success.
+  finishCommand(ref,{status:1,stderr:'original failure'});const terminal=fs.readFileSync(ref.receipt);
+  assertCommandQuiescence(f.directory);forgetActiveCommand(ref);
+  assert.equal(fs.existsSync(ref.file),false);assert.equal(readCommandResult(ref).result.status,1);
+  assert.deepEqual(fs.readFileSync(ref.receipt),terminal);
+  const changed=JSON.parse(terminal);changed.intent.subject='ENG-2';fs.writeFileSync(ref.receipt,JSON.stringify(changed));
+  assert.throws(()=>readCommandResult(ref),/retained command intent binding changed/);
+  fs.unlinkSync(ref.receipt);assert.throws(()=>readCommandResult(ref),{code:'ENOENT'},'absence of both files is no terminal proof');
+});
+
+for(const phase of ['intent','receipt'])test(`quiescence proves the original terminal result when cleanup overtakes its ${phase} read`,t=>{
+  const f=fixture(t),ref=commandIntent(f.directory,{exe:'fixture',args:[],cwd:f.repo,stuck_owner:'brain-chat'}),open=fs.openSync;
+  let completed=false;
+  t.mock.method(fs,'openSync',function(file,...args){
+    if(!completed&&file===path.basename(ref.file)&&process.cwd()===path.dirname(phase==='intent'?ref.file:ref.receipt)){
+      completed=true;finishCommand(ref,{status:0,stdout:'original result'});forgetActiveCommand(ref);
+      throw Object.assign(Error('original read observed ENOENT before completion'),{code:'ENOENT'});
+    }
+    return Reflect.apply(open,fs,[file,...args]);
+  });
+  assertCommandQuiescence(f.directory,{commands:[ref]});assert.equal(completed,true);
+  assert.equal(fs.existsSync(ref.file),false);assert.equal(readCommandResult(ref).result.stdout,'original result');
+});
+
+for(const proof of ['missing-reference','wrong-hash','missing-result'])test(`cleaned marker cannot prove quiescence with ${proof}`,t=>{
+  const f=fixture(t),ref=commandIntent(f.directory,{exe:'fixture',args:[],cwd:f.repo}),open=fs.openSync;let cleaned=false;
+  t.mock.method(fs,'openSync',function(file,...args){
+    if(!cleaned&&file===path.basename(ref.file)&&process.cwd()===path.dirname(ref.file)){
+      cleaned=true;finishCommand(ref,{status:0});forgetActiveCommand(ref);
+      if(proof==='missing-result')fs.unlinkSync(ref.receipt);
+      throw Object.assign(Error('marker cleaned after listing'),{code:'ENOENT'});
+    }
+    return Reflect.apply(open,fs,[file,...args]);
+  });
+  const commands=proof==='missing-reference'?[]:[{...ref,...(proof==='wrong-hash'?{sha256:'0'.repeat(64)}:{})}];
+  assert.throws(()=>assertCommandQuiescence(f.directory,{commands}),{code:'LINE_COMMAND_OUTCOME_UNKNOWN'});
+  assert.equal(cleaned,true);
 });
 
 test('an UNKNOWN command on a subject fences a changed action key while an independent subject still starts',async t=>{

@@ -53,7 +53,9 @@ export function reconcileReviewQueue({repo,org,runId,resolution,decisionSeq,id,r
   let releasePass,releasePromotion;
   try{
     releasePass=noticeLock(path.join(c.directory,'pass.lock'),{recover:false});
-    assertCommandQuiescence(c.directory);
+    const originalJournal=readServiceJournal(file);
+    if(originalJournal?.identity!==c.identity||originalJournal.org!==c.org)throw Error('queue journal project/record differs');
+    assertCommandQuiescence(c.directory,{commands:Object.values(originalJournal.actions).flatMap(e=>e.commands??[])});
     releasePromotion=acquireLock(path.join(c.identity,'lane-promote.lock'));
     const guard=()=>{
       if(!same(tuple(bind()),tuple(native)))throw Error('native supervisor identity changed');

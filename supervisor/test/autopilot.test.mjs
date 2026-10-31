@@ -576,7 +576,7 @@ test(`${fault} exception remains pending without input or recipient retirement`,
   if (fault !== 'missing-record-typed-input')
     assert.match(entry.error, fault === 'torn-record' ? /incomplete tail/ : /not valid JSON/);
 });
-test('a busy chat drain cannot prevent a routine policy action', async t => {
+test('a held drain defers routine policy; a busy recipient does not block it', async t => {
   const f = setup(t, [pass, { phase: 'acknowledged' }]);
   const settings = { org: f.org, cwd: f.repo, herdr: noticeTransport(f), owner: true,
     waitSeconds: 2, confirmSeconds: 0, pollSeconds: 0.01,

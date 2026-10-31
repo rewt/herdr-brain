@@ -75,7 +75,7 @@ map. Missing proof is INCOMPLETE. Keep the raw evidence, not just this input.
 | Field | Exact content |
 | --- | --- |
 | `project` | Actual canonical Brain Git common directory. |
-| `window` | Explicit UTC `from`, `cutoff`, opening `start_seq`, closing `through_seq`. Snapshot includes earlier events needed for joins. Freeze all input bytes at that cutoff. |
+| `window` | Explicit UTC `from`, `cutoff`, opening `start_seq`, closing `through_seq`. Snapshot includes earlier events needed for joins. Every input event at or before `cutoff` must have `seq <= through_seq`; every project start in `[from, cutoff]` must have `seq > start_seq`. Violations keep the assessment INCOMPLETE and name the excluded event/start. Freeze all input bytes at that cutoff. |
 | `candidate` | A2 tuple: `root`, full `commit`, `tree`, `manifestSha256`, `inventorySha256`, `node: {executable, version}`, `protocol`, `configHome`. Use original bundle, never fixture manifest. |
 | `evidence` | Map ID → `{path, sha256}`. Include original manifests, frozen validation, inventory, dispatch journals, runtime/archive snapshots, raw native/Git/record observations and checks. |
 | `scripted` | `{packetEvidence: ID}` for original `brain.installed-canary/v1` JSON. Cases S0–S8 and shared-observer, original review and zero suites are mandatory. Original failures cannot be cleared by separate successful corrections. |
@@ -135,7 +135,9 @@ and distribution definitions, adds maximums and a session/input projection,
 and retains each unknown. Documented load contamination makes timing misses
 INCOMPLETE; rescue/product/safety failures remain FAIL. A zero-work window cannot
 pass. Re-evaluation with identical frozen inputs/fences is deterministic and has
-no clock-derived fields. Later event appends beyond the fence do not change it.
+no clock-derived fields. Later event appends beyond both the sequence fence and
+time cutoff do not change it. Backdated appends beyond `through_seq` raise
+`fence-cutoff`; excluded in-window starts at or below `start_seq` raise `fence-start`.
 
 ## Disposition and later failure
 

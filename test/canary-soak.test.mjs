@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {evaluateSoak, digest} from '../measurement/canary-soak.mjs';
+import {canonical} from '../messages/schema.mjs';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -30,9 +31,33 @@ test('scripted PASS cannot mask a later failed unit outside ten fast successes',
   f.trial.window.through_seq += 2;
   const r = evaluate(f); assert.equal(r.status, 'FAIL'); assert.equal(r.counts.all_started, 14); assert.ok(has(r, 'failed-unit'));
 });
+test('closing sequence fence cannot hide in-window failed starts or other cutoff evidence', () => {
+  for (const time of [5000, 5400, -1]) {
+    const f = fixture(), seq = f.trial.window.through_seq;
+    f.events.push({seq: seq + 1, at: at(time), type: 'note.added', id: 'unrelated'});
+    const r = evaluate(f);
+    assert.equal(r.status, 'INCOMPLETE'); assert.equal(r.offerEligible, false); assert.ok(has(r, 'fence-cutoff'));
+  }
+  const f = fixture(), seq = f.trial.window.through_seq;
+  f.events.push({seq: seq + 1, at: at(5000), type: 'run.started', id: 'R-late', item: 'ENG-late', meta: {dispatch_project: project}},
+    {seq: seq + 2, at: at(5001), type: 'report.ingested', run: 'R-late', report: {outcome: 'failed'}});
+  const r = evaluate(f);
+  assert.equal(r.status, 'INCOMPLETE'); assert.equal(r.offerEligible, false); assert.ok(has(r, 'fence-cutoff'));
+  assert.ok(r.issues.some(i => i.code === 'fence-cutoff' && i.run === 'R-late'));
+});
+test('opening sequence fence names every excluded in-window project start', () => {
+  for (const time of [0, 120, 5400]) {
+    const f = fixture(), start = f.events.find(e => e.type === 'run.started' && e.id === 'R-1');
+    start.at = at(time); f.trial.window.start_seq = start.seq;
+    const r = evaluate(f);
+    assert.notEqual(r.status, 'PASS'); assert.equal(r.offerEligible, false); assert.ok(has(r, 'fence-start'));
+    assert.ok(r.issues.some(i => i.code === 'fence-start' && i.run === 'R-1' && i.reason.includes(String(start.seq))));
+  }
+});
 test('a late pending candidate run stays in the denominator and withholds the offer', () => {
   const f = fixture(); f.events.push({seq: ++f.trial.window.through_seq, at: at(5000), type: 'run.started', id: 'R-late', item: 'ENG-late', meta: {dispatch_project: project}});
   const r = evaluate(f); assert.equal(r.status, 'INCOMPLETE'); assert.equal(r.counts.all_started, 14); assert.equal(r.offerEligible, false);
+  assert.ok(has(r, 'completion'));
 });
 test('zero work and insufficient genuine demand never pass a ninety-minute window', () => {
   for (const n of [0, 9]) {
@@ -43,9 +68,9 @@ test('zero work and insufficient genuine demand never pass a ninety-minute windo
   }
 });
 test('missing report timestamps and physical/native observations stay unknown', () => {
-  for (const mutate of [f => delete f.events.find(e => e.type === 'report.available').observed_at,
-    f => delete f.trial.runs[0].physical, f => delete f.events.find(e => e.type === 'run.session_bound').session]) {
-    const f = fixture(); mutate(f); assert.equal(evaluate(f).status, 'INCOMPLETE');
+  for (const [code, mutate] of [['timing-unknown', f => delete f.events.find(e => e.type === 'report.available').observed_at],
+    ['physical-evidence', f => delete f.trial.runs[0].physical], ['physical-binding', f => delete f.events.find(e => e.type === 'run.session_bound').session]]) {
+    const f = fixture(); mutate(f); const r = evaluate(f); assert.equal(r.status, 'INCOMPLETE'); assert.ok(has(r, code), code);
   }
 });
 test('a different controller, worker, watcher, claim or scripted tuple fails', () => {
@@ -59,17 +84,39 @@ test('a different controller, worker, watcher, claim or scripted tuple fails', (
 });
 test('rescues and safety violations fail even when every unit completed', () => {
   for (const field of ['rescues', 'safety']) { const f = fixture(); f.trial[field][field === 'rescues' ? 'actions' : 'violations'].push({reason: 'manual intervention'}); assert.equal(evaluate(f).status, 'FAIL'); }
-  const f = fixture(); f.trial.rescues.complete = false; assert.equal(evaluate(f).status, 'INCOMPLETE');
+  const f = fixture(); f.trial.rescues.complete = false; const r = evaluate(f);
+  assert.equal(r.status, 'INCOMPLETE'); assert.ok(has(r, 'rescue-coverage'));
 });
 test('original failed canary remains failed despite separate correction evidence', () => {
   const f = fixture(); f.trial.scripted.status = 'FAIL'; f.trial.scripted.failures = [{case: 'S4', separateCorrection: 'fixed elsewhere'}];
   assert.equal(evaluate(f).status, 'FAIL');
 });
 test('missing or mismatched probation authority and installed rollback prevent an offer', () => {
-  for (const mutate of [f => delete f.trial.probation, f => f.trial.recovery.root = '/development',
-    f => f.events[0].by = 'borrowed-identity', f => f.trial.probation.archive.before.plist = '',
-    f => f.trial.probation.archive.scope.candidate.release.root = '/other']) {
-    const f = fixture(); mutate(f); assert.notEqual(evaluate(f).status, 'PASS');
+  for (const [code, mutate] of [['authority', f => delete f.trial.probation], ['rollback-root', f => f.trial.recovery.root = '/development'],
+    ['authority', f => f.events[0].by = 'borrowed-identity'], ['rollback-root', f => f.trial.probation.archive.before.plist = ''],
+    ['probation-drift', f => f.trial.probation.archive.scope.candidate.release.root = '/other']]) {
+    const f = fixture(); mutate(f); const r = evaluate(f); assert.notEqual(r.status, 'PASS'); assert.ok(has(r, code), code);
+  }
+});
+test('probation authority requires a candidate even when its archive and decision agree', () => {
+  const f = fixture();
+  delete f.trial.probation.archive.scope.candidate;
+  delete f.events[1].scope.candidate;
+  f.events[0].text = `Brain probation authorized: ${digest(canonical(f.events[1].scope))}`;
+  const r = evaluate(f);
+  assert.equal(r.status, 'INCOMPLETE'); assert.equal(r.offerEligible, false); assert.ok(has(r, 'authority'));
+});
+test('review and reviewer roles classify reviews without a REV item prefix', () => {
+  for (const role of ['review', 'reviewer']) {
+    const f = fixture(), original = 'REV-11', renamed = 'CHECK-11';
+    for (const e of f.events) {
+      if (e.type === 'item.added' && e.id === original) { e.id = renamed; e.role = role; }
+      if (e.type === 'item.closed' && e.id === original) e.id = renamed;
+      if (e.item === original) e.item = renamed;
+    }
+    const r = evaluate(f);
+    assert.equal(r.status, 'PASS', JSON.stringify(r.issues)); assert.equal(r.counts.reviews, 3);
+    assert.equal(r.runs.find(r => r.run === 'R-11').kind, 'review');
   }
 });
 test('duplicate report ingestion and shared notices fail', () => {
@@ -79,13 +126,14 @@ test('duplicate report ingestion and shared notices fail', () => {
 });
 test('shared observation must cover memory, latency and dedupe for every run', () => {
   for (const key of ['perRunWatcherRssBytes', 'hostRssBytes', 'noticeLatencyMs', 'deliveredNotices']) {
-    const f = fixture(); delete f.trial.runs[12].shared[key]; assert.equal(evaluate(f).status, 'INCOMPLETE');
+    const f = fixture(); delete f.trial.runs[12].shared[key]; const r = evaluate(f);
+    assert.equal(r.status, 'INCOMPLETE'); assert.ok(has(r, 'shared-observer'), key);
   }
 });
 test('missing review retirement, cap/suite mismatch and corrections keep offer pending', () => {
-  for (const mutate of [f => f.trial.runs[10].review.suites = 1, f => f.trial.runs[0].review.run = 'R-missing',
-    f => f.trial.corrections.pending.push('major'), f => f.trial.runs[0].turns.folder = 'later-turn']) {
-    const f = fixture(); mutate(f); assert.equal(evaluate(f).status, 'INCOMPLETE');
+  for (const [code, mutate] of [['review-verdict', f => f.trial.runs[10].review.suites = 1], ['pending-review', f => f.trial.runs[0].review.run = 'R-missing'],
+    ['corrections', f => f.trial.corrections.pending.push('major')], ['finite-turn', f => f.trial.runs[0].turns.folder = 'later-turn']]) {
+    const f = fixture(); mutate(f); const r = evaluate(f); assert.equal(r.status, 'INCOMPLETE'); assert.ok(has(r, code), code);
   }
 });
 test('two successive capacity turnovers and three source units are independently required', () => {
@@ -97,17 +145,19 @@ test('load-contaminated misses are incomplete; ordinary threshold failures fail'
   for (const contaminated of [false, true]) {
     const f = fixture(); f.trial.host.contaminated = contaminated;
     f.events.find(e => e.type === 'report.available').observed_at = at(-100);
-    assert.equal(evaluate(f).status, contaminated ? 'INCOMPLETE' : 'FAIL');
+    const r = evaluate(f);
+    assert.equal(r.status, contaminated ? 'INCOMPLETE' : 'FAIL'); assert.ok(has(r, contaminated ? 'load-threshold' : 'latency'));
   }
 });
 test('unverified evidence, short duration and forged physical identities cannot pass', () => {
-  for (const mutate of [f => f.verifiedEvidence = [], f => f.trial.window.cutoff = at(5000), f => f.trial.runs[0].physical.before.folder = '/foreign']) {
-    const f = fixture(); mutate(f); assert.equal(evaluate(f).status, 'INCOMPLETE');
+  for (const [code, mutate] of [['run-evidence', f => f.verifiedEvidence = []], ['duration', f => f.trial.window.cutoff = at(5000)], ['physical-binding', f => f.trial.runs[0].physical.before.folder = '/foreign']]) {
+    const f = fixture(); mutate(f); const r = evaluate(f); assert.equal(r.status, 'INCOMPLETE'); assert.ok(has(r, code), code);
   }
 });
 test('unknown start time is accounted for rather than omitted', () => {
   const f = fixture(); delete f.events.find(e => e.type === 'run.started').at;
   const r = evaluate(f); assert.equal(r.counts.all_started, 13); assert.equal(r.status, 'INCOMPLETE');
+  assert.ok(has(r, 'start-time'));
 });
 test('canary results do not substitute for exact-candidate landing tests', () => {
   const f = fixture(); delete f.trial.landing; const r = evaluate(f);

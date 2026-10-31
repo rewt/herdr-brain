@@ -27,6 +27,14 @@ export function evaluateSoak({events, trial, verifiedEvidence = []}) {
   const proof = obj => Array.isArray(obj?.evidence) && obj.evidence.length > 0 && obj.evidence.every(id => verified.has(id));
   const need = (obj, code, run) => { if (!proof(obj)) missing(code, 'verified saved evidence required', run); };
   const inTime = at => timestamp(at) !== null && timestamp(at) >= timestamp(w.from) && timestamp(at) <= timestamp(w.cutoff);
+  // Inspect the full input before trusting either sequence fence. A frozen
+  // sequence cannot silently exclude evidence that belongs to its time window.
+  for (const e of events) {
+    if (e.seq > w.through_seq && timestamp(e.at) !== null && timestamp(e.at) <= timestamp(w.cutoff))
+      missing('fence-cutoff', `event ${e.seq} (${e.type}) at or before cutoff is beyond through_seq`, e.run ?? e.id);
+    if (e.type === 'run.started' && e.meta?.dispatch_project === trial.project && e.seq <= w.start_seq && inTime(e.at))
+      missing('fence-start', `in-window start ${e.seq} is excluded by start_seq`, e.id);
+  }
   if (!c || !commit(c.commit) || !commit(c.tree) || !sha(c.manifestSha256) || !sha(c.inventorySha256) ||
       !c.root?.startsWith('/') || c.node?.version !== 'v20.19.4' || !c.node?.executable?.startsWith('/') || !c.protocol || !c.configHome)
     missing('candidate', 'complete exact installed candidate tuple required');
@@ -57,7 +65,7 @@ export function evaluateSoak({events, trial, verifiedEvidence = []}) {
   const note = selected.find(e => e.seq === a?.authority);
   if (!auth || !equal(auth.scope, scope) || !equal(auth.owner, a?.owner) || auth.authority !== a?.authority ||
       !p.evidence?.some(id => trial.evidence?.[id]?.sha256 === auth.archive?.sha256) ||
-      a?.schema !== 'brain-probation/v1' || a.project !== trial.project || scope?.brain_common !== trial.project ||
+      a?.schema !== 'brain-probation/v1' || a.project !== trial.project || scope?.brain_common !== trial.project || !scope?.candidate ||
       a?.owner?.native?.name !== 'supervisor-herdr' || note?.type !== 'note.added' || note.decision !== true ||
       note.by !== a?.owner?.native?.name || note.text !== `Brain probation authorized: ${digest(canonical(scope ?? {}))}` ||
       auth.seq > w.start_seq || timestamp(auth.at) === null || timestamp(auth.at) > timestamp(w.from))
@@ -113,7 +121,7 @@ export function evaluateSoak({events, trial, verifiedEvidence = []}) {
     const history = selected.filter(e => (e.run ?? e.id) === id);
     const claim = history.find(e => e.type === 'run.claimed');
     const item = selected.find(e => e.type === 'item.added' && e.id === start.item);
-    const kind = item?.role === 'review' || start.item?.startsWith('REV-') ? 'review' : 'ordinary';
+    const kind = ['review', 'reviewer'].includes(item?.role) || start.item?.startsWith('REV-') ? 'review' : 'ordinary';
     if (timestamp(start.at) === null) missing('start-time', 'start timestamp unknown', id);
     need(o, 'run-evidence', id);
     if (!b || !o || o.startedSeq !== start.seq || o.claimGeneration !== claim?.seq) missing('run-binding', 'exact start/claim observation required', id);

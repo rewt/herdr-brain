@@ -1251,6 +1251,16 @@ adoption obligations.
 
 ## Finite report and closeout turns
 
+Project `.lane/supervisor/HOLD` permits finished report intake and the guarded
+release of original reported sessions and clean worktrees in a finite closeout
+turn. Each effect still checks every bound run's report, source/claim/native
+identity, preservation and Git guards. Unreported cleanup remains held. Service
+STOP, project STOP and `HOLD-WORKER-TAB-CLOSE` retain their closeout fences;
+dirty work and original refused/uncertain effects retain their binding and owner.
+Starts, source completion, landings and promotions remain held, including the
+unchanged `PROMOTION_HELD` result. This exception neither clears the HOLD nor
+changes an installed runtime or service owner.
+
 Finite selection alternates current report allocations and legacy continuations,
 with fair attempt order inside each group and a rotating first group across
 turns. A checkpointed admission failure cannot bury a finished report behind

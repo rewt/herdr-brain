@@ -75,7 +75,7 @@ test('empty report recovery retains original native attempts, refusals and chang
     if (kind === 'head') f.git(['commit', '--allow-empty', '-m', 'changed source'], f.lane);
     if (kind === 'working') { f.state.agents[0].agent_status = 'working'; f.save(); }
     if (kind === 'session') { f.state.agents[0].agent_session.value = 'replacement'; f.save(); }
-    if (kind === 'HOLD') fs.mkdirSync(path.join(f.repo, '.lane/supervisor/HOLD'), { recursive: true });
+    if (kind === 'HOLD') fs.mkdirSync(path.join(f.repo, '.lane/supervisor/HOLD-WORKER-TAB-CLOSE'), { recursive: true });
     const before = fs.readFileSync(f.eventFile);
     const refresh = () => refreshCloseouts({ cwd: f.repo, org: f.org, env: f.env, retirementOptions: f.options });
     if (kind === 'HOLD') assert.throws(refresh, /STOP\/HOLD/);

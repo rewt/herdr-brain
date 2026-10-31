@@ -175,7 +175,7 @@ test('new or conflicting UNKNOWN evidence cannot select the legacy observation',
 for(const kind of ['dirty','STOP','HOLD','head','claim','native-refusal'])test(`legacy settlement preserves the ${kind} guard`,t=>{
   const f=fixture(t);
   if(kind==='dirty')fs.writeFileSync(path.join(f.lane,'unsaved'),'keep me');
-  if(kind==='STOP'||kind==='HOLD')fs.mkdirSync(path.join(f.repo,'.lane/supervisor',kind),{recursive:true});
+  if(kind==='STOP'||kind==='HOLD')fs.mkdirSync(path.join(f.repo,'.lane/supervisor',kind==='HOLD'?'HOLD-WORKER-TAB-CLOSE':kind),{recursive:true});
   if(kind==='head')f.git(['commit','--allow-empty','-m','changed allocation'],f.lane);
   if(kind==='claim')f.append([{type:'run.claimed',run:'R-1',owner:{controller:'brain',legacy:false}}]);
   if(kind==='native-refusal'){

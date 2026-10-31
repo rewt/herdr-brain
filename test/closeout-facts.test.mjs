@@ -170,7 +170,7 @@ test('structured native refusal and historical ambiguity stay held without new r
 for(const change of ['session','STOP','HOLD','generation','preservation','missing-session'])test(`typed closeout keeps ${change} at its actual boundary`,t=>{
   const f=setup(t,{direct:true,bound:true});f.report();
   if(change==='session'){f.state.agents[0].agent_session.value='replacement';f.save();}
-  if(change==='STOP'||change==='HOLD')fs.mkdirSync(path.join(f.repo,'.lane/supervisor',change),{recursive:true});
+  if(change==='STOP'||change==='HOLD')fs.mkdirSync(path.join(f.repo,'.lane/supervisor',change==='HOLD'?'HOLD-WORKER-TAB-CLOSE':change),{recursive:true});
   if(change==='generation')f.git(['reflog','expire','--expire=all','refs/heads/lane/topic']);
   if(change==='missing-session'){
     const original=events(f);original.find(e=>e.type==='report.ingested').closeout_targets[0].panes=[];

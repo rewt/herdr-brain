@@ -76,7 +76,7 @@ for(const kind of ['agent','moved-session','child','zombie','foreground','shell-
   if(kind==='reference')fs.writeFileSync(path.join(f.org,'references/live.json'),JSON.stringify({schema:'herdr-reference/v1',
     kind:'owner',state:'running',owner:'owner',job:'job',item:'ENG-1',cwd:f.lane,
     created_at:new Date().toISOString(),expires_at:new Date(Date.now()+600000).toISOString()}));
-  if(['STOP','HOLD'].includes(kind))fs.mkdirSync(path.join(f.repo,'.lane/supervisor',kind),{recursive:true});
+  if(['STOP','HOLD'].includes(kind))fs.mkdirSync(path.join(f.repo,'.lane/supervisor',kind==='HOLD'?'HOLD-WORKER-TAB-CLOSE':kind),{recursive:true});
   if(kind==='claim')f.append([{type:'run.claimed',run:'R-1',owner:{controller:'brain',legacy:false}}]);
   if(kind==='head')f.git(['commit','--allow-empty','-m','changed'],f.lane);
   f.save();

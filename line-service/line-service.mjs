@@ -160,13 +160,14 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
   const sourceGit = (cwd, args) => execFileSync('git', ['--no-optional-locks', '-C', cwd, ...args], {
     env: childEnv, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 32 * 1024 * 1024,timeout:10000,
   }).trim();
-  const observe = () => {
+  const observe = ({ closeout = false } = {}) => {
     const started = performance.now();
     if (timings) timings.snapshots++;
     const live = identify(repo);
     if (live.identity !== project.identity || live.canonical !== repo) throw Error('project identity changed');
     if(bundleRelease().commit)acceptedRuntime(repo,{verifyFiles:false,home:runtimeHome});
-    if (fs.existsSync(path.join(directory, 'STOP')) || fs.existsSync(path.join(repo, '.lane/supervisor/STOP')) || fs.existsSync(path.join(repo, '.lane/supervisor/HOLD'))) throw Error('STOP/HOLD prevents line-service effects');
+    if (fs.existsSync(path.join(directory, 'STOP')) || fs.existsSync(path.join(repo, '.lane/supervisor/STOP')) ||
+        !closeout && fs.existsSync(path.join(repo, '.lane/supervisor/HOLD'))) throw Error('STOP/HOLD prevents line-service effects');
     const loaded = loadRecord(org);
     if (loaded.tornTail) throw Error('incomplete record tail');
     const result = { events: loaded.events, tornTail: loaded.tornTail, state: loaded.state };
@@ -182,8 +183,11 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
     if (reported && !run.report) throw Error('report not ingested');
     return { ...snapshot, run, item };
   };
-  const intake=()=>runReportIntake({project,org,cli,guard:observe,maxSteps:maxStepsPerStage,clock:workClock});
-  const closeout=(options={})=>runCloseoutTurn({project,org,env:childEnv,cli,guard:observe,maxSteps:maxStepsPerStage,budgetMs:CLOSEOUT_TURN_BUDGET_MS,clock:workClock,...options,
+  // A proving HOLD stops new work, not finished report intake/resource release.
+  // The closer still admits only reported allocations under HOLD at each effect.
+  const observeCloseout=()=>observe({closeout:true});
+  const intake=()=>runReportIntake({project,org,cli,guard:observeCloseout,maxSteps:maxStepsPerStage,clock:workClock});
+  const closeout=(options={})=>runCloseoutTurn({project,org,env:childEnv,cli,guard:observeCloseout,maxSteps:maxStepsPerStage,budgetMs:CLOSEOUT_TURN_BUDGET_MS,clock:workClock,...options,
     ...(closeoutMeasure?{measure:closeoutMeasure}:{})});
   const acquirePass=(options={})=>noticeLock(path.join(directory,'pass.lock'),{...options,onRecovery:recovery=>{
     observe();

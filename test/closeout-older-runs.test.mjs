@@ -83,7 +83,7 @@ for(const kind of ['lane','pane','claim','worker','UNKNOWN','refusal','HOLD'])te
     producer:'native-closeout/v2',outcome:{action:'agent-exit-requested',pane:'w:p'}}]);
   if(kind==='refusal')f.append([{type:'closeout.evaluated',identity:f.common,key:f.entry.key,source:f.entry.source,run:'R-1',
     completed:false,reason:'EPERM native refusal',failure:{kind:'fence'}}]);
-  if(kind==='HOLD')fs.mkdirSync(path.join(f.repo,'.lane/supervisor/HOLD'),{recursive:true});
+  if(kind==='HOLD')fs.mkdirSync(path.join(f.repo,'.lane/supervisor/HOLD-WORKER-TAB-CLOSE'),{recursive:true});
   const before=fs.readFileSync(f.eventFile),calls=f.herdrCalls();
   f.drain({keys:[f.entry.key],retrySafe:true});
   assert.ok(fs.existsSync(f.lane));assert.deepEqual(f.read().actions,[]);

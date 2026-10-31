@@ -21,7 +21,7 @@ import {events,setup,selectCurrentCleanup} from './helpers/closeout-fixture.mjs'
 
 function fixture(t){
   const f=setup(t,{direct:true,bound:true,merged:true}),binding=selectCurrentCleanup(f),project=gitProject(f.repo);
-  const guard=()=>{for(const file of [path.join(binding.directory,'STOP'),...['STOP','HOLD'].map(n=>path.join(f.repo,'.lane/supervisor',n))])if(fs.existsSync(file))throw Error('STOP/HOLD');};
+  const guard=()=>{for(const file of [path.join(binding.directory,'STOP'),...['STOP','HOLD-WORKER-TAB-CLOSE'].map(n=>path.join(f.repo,'.lane/supervisor',n))])if(fs.existsSync(file))throw Error('STOP/HOLD');};
   const args={project,org:f.org,env:f.env,guard,measure:()=>{},maxSteps:1,cli:(file,argv)=>{
     assert.equal(fs.existsSync(path.join(f.org,'lock')),false,'no native command under a report transaction');
     if(argv[0]==='refresh')return '{"created":[]}';
@@ -373,7 +373,7 @@ for(const change of ['closed','claim','successor-report'])test(`bounded ingest r
 for(const change of ['STOP','HOLD','claim','current','head','session','start','dispatch','report'])test(`finite turn retains a ${change} boundary change without a native effect`,t=>{
   const f=fixture(t);f.report();
   if(change==='STOP')fs.writeFileSync(path.join(f.directory,'STOP'),'stop');
-  if(change==='HOLD')fs.mkdirSync(path.join(f.repo,'.lane/supervisor/HOLD'),{recursive:true});
+  if(change==='HOLD')fs.mkdirSync(path.join(f.repo,'.lane/supervisor/HOLD-WORKER-TAB-CLOSE'),{recursive:true});
   if(change==='head')f.git(['commit','--allow-empty','-m','replacement generation'],f.lane);
   if(change==='session'){f.state.agents[0].agent_session.value='foreign';f.save();}
   if(change==='current')f.append([{type:'run.started',id:'R-2',item:'ENG-1',workspace:f.lane}]);

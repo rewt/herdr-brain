@@ -23,8 +23,10 @@ export function closeoutTurnMain(argv=process.argv.slice(2)){
   const guard=()=>{
     if(project.checkout!==project.canonical||gitProject(project.canonical).identity!==project.identity||!lineServiceOwnsCleanup(project,org))throw Error('line closeout owner/source changed');
     serviceSource(project.canonical);
-    for(const file of [path.join(closeoutServiceDirectory(org,project.identity),'STOP'),...['STOP','HOLD'].map(n=>path.join(project.canonical,'.lane/supervisor',n))])
-      if(fs.existsSync(file))throw Error('STOP/HOLD prevents line closeout');
+    // Project HOLD permits reported allocation release; the executor checks
+    // that scope and the explicit retirement hold at every native/Git effect.
+    for(const file of [path.join(closeoutServiceDirectory(org,project.identity),'STOP'),path.join(project.canonical,'.lane/supervisor/STOP')])
+      if(fs.existsSync(file))throw Error('STOP prevents line closeout');
   };
   const cli=(file,args)=>{
     const r=foregroundCommand(process.execPath,[path.join(root,file),...args],{cwd:project.canonical,env,encoding:'utf8',maxBuffer:32*1024*1024,timeout:0});

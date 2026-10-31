@@ -19,7 +19,7 @@ const historical = [
 const quote = value => `'${value.replaceAll("'", "'\\''")}'`;
 
 for (const [mode, revision] of [...historical, ['current', 'HEAD'], ['canary', null]]) {
-  test(`installed-only ${mode} consumer ${mode === 'canary' ? 'exercises the frozen candidate S0-S8 and shared observation' : mode === 'current' ? 'completes the original review and retains uncertain input' : 'witnesses ENG-1020 dispatch'}`,
+  test(`installed-only ${mode} consumer ${mode === 'canary' ? `exercises the frozen candidate ${process.env.INSTALLED_CYCLE_SHARED_ONLY==='1'?'shared observation':'S0-S8 and shared observation'}` : mode === 'current' ? 'completes the original review and retains uncertain input' : 'witnesses ENG-1020 dispatch'}`,
     { skip: mode === 'canary' && !process.env.INSTALLED_CYCLE_BUNDLE }, t => {
     assert.equal(process.platform, 'darwin', 'this installed-consumer boundary requires macOS sandbox-exec');
     assert.equal(process.version, 'v20.19.4', 'use the project-pinned runtime');
@@ -140,7 +140,8 @@ for (const [mode, revision] of [...historical, ['current', 'HEAD'], ['canary', n
     run('git', ['-C', repo, 'add', '.']); run('git', ['-C', repo, 'commit', '-qm', 'Independent scratch project']);
     fs.writeFileSync(path.join(root, 'native.json'), JSON.stringify({ repo, workspaces: {}, next: 0 }));
     const forbidden = [path.join(source, 'package.json'), path.join(savedHome, 'development/rewt/.org/config.json')];
-    const config = { root, repo, org, home, bundle, successor, commit, mode, development, forbidden, candidate };
+    const config = { root, repo, org, home, bundle, successor, commit, mode, development, forbidden, candidate,
+      sharedOnly:mode==='canary'&&process.env.INSTALLED_CYCLE_SHARED_ONLY==='1' };
     fs.writeFileSync(path.join(root, 'config.json'), JSON.stringify(config, null, 2));
     // Deny the entire real home except the pinned interpreter. Descendants
     // inherit the boundary; no host test preload or live socket is accessible.

@@ -96,11 +96,12 @@ if(mode==='current'||mode==='canary') {
 const state = () => loadRecord(org).state;
 const item = record(['add', 'Complete the installed scratch cycle', '--role', 'engineer']).match(/ENG-\d+/)[0];
 let successorItem;
-if(mode==='canary') {
+if(mode==='canary'&&!config.sharedOnly) {
   successorItem=record(['add','Complete the ordinary successor','--role','engineer']).match(/ENG-\d+/)[0];
   record(['block',successorItem,'--by',item]);
 }
-const journals = () => fs.readdirSync(path.join(org, 'dispatch')).filter(n => n.endsWith('.json') && !n.endsWith('.routes.json'))
+if(config.sharedOnly)record(['set',item,'meta.queue_selected=false']);
+const journals = () => (fs.existsSync(path.join(org,'dispatch'))?fs.readdirSync(path.join(org, 'dispatch')):[]).filter(n => n.endsWith('.json') && !n.endsWith('.routes.json'))
   .map(n => ({ file: path.join(org, 'dispatch', n), ...JSON.parse(fs.readFileSync(path.join(org, 'dispatch', n))) }));
 // Join dispatch in the original call so each stage is observed before moving
 // on. All other product commands execute unchanged; native/model IO is scripted.
@@ -109,7 +110,7 @@ const command = (exe, args, options) => run(exe, args[0]?.endsWith('/dispatch/di
     ...(fs.existsSync(path.join(root,'shared-watch'))?['--watch-mode','shared']:[])] : args, options);
 const service = maxStarts => createLineService({ repo, org, to: 'scratch-supervisor', runtimeHome: home,
   env: { ...env, HERDR_BRAIN_ROOT: config.development }, maxStarts, haltAfter: 100, command });
-if(mode==='canary') {
+if(mode==='canary'&&!config.sharedOnly) {
   for(const file of [path.join(directory,'STOP'),path.join(repo,'.lane/supervisor/STOP'),path.join(repo,'.lane/supervisor/HOLD')]) {
     fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,'Fixture-owned selection hold\n');
     assert.match(service(1).pass().held,/STOP\/HOLD/);
@@ -117,7 +118,7 @@ if(mode==='canary') {
   }
   stage('S4-selection',{guards:['service STOP','project STOP','project HOLD'],runs:0});
 }
-service(1).pass();
+service(config.sharedOnly?0:1).pass();
 const auditRows = () => readPassJournal(path.join(directory,'passes.jsonl'));
 const audit = () => {let tail='';for(const row of auditRows())tail=(tail+JSON.stringify(row)+'\n').slice(-65536);return tail;};
 if (mode === 'broken') {
@@ -127,10 +128,12 @@ if (mode === 'broken') {
   process.exit(0);
 }
 const producer = journals().find(j => j.item === item);
-assert.ok(producer, audit()); assert.equal(producer.stage, 'complete', JSON.stringify(producer));
-assert.equal(producer.release.root, bundle); assert.equal(producer.release.commit, commit);
-assert.equal(producer.sourceSelection, null);
-stage('dispatch', { item, run: producer.run, attempt: producer.token, bundle, workspace: producer.worker.cwd, journal: producer.file });
+if(!config.sharedOnly) {
+  assert.ok(producer, audit()); assert.equal(producer.stage, 'complete', JSON.stringify(producer));
+  assert.equal(producer.release.root, bundle); assert.equal(producer.release.commit, commit);
+  assert.equal(producer.sourceSelection, null);
+  stage('dispatch', { item, run: producer.run, attempt: producer.token, bundle, workspace: producer.worker.cwd, journal: producer.file });
+}
 const until = async (predicate, label) => {
   const deadline = Date.now() + 120_000;
   while (!predicate()) { assert.ok(Date.now() < deadline, label + '\n' + audit()); await new Promise(resolve => setTimeout(resolve, 100)); }

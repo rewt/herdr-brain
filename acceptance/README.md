@@ -184,3 +184,11 @@ the report is ingested once and physical cleanup is verified. A vanished duty's
 original failure remains held, never replaced. Consumer concurrency remains two.
 This extends mechanics evidence only; genuine native execution, probation,
 the real-work soak, activation and adoption remain with their recorded owners.
+
+For an affected shared-observer correction after retaining the original
+lifecycle packet, add `INSTALLED_CYCLE_SHARED_ONLY=1` to that focused command.
+It returns `brain.installed-shared-control/v1`, explicitly marking the whole
+canary UNRUN; it cannot turn a failed original candidate into a canary PASS.
+Before dropping each hint, the control waits for a durable waiting step and an
+idle observer. It then requires the actual safety-repair row, and retains the
+vanished consumer's durable failed step and original held registration.

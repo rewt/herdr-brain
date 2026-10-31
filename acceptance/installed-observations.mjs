@@ -1,5 +1,6 @@
 // Native resource inputs for the offline world. Never run a host-wide lsof or
-// process inventory; kernel birth lookups for the scenario's owned PIDs stay real.
+// process inventory. Scripted native workers have private process births;
+// kernel birth lookups for real harness children stay real.
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -57,7 +58,14 @@ childProcess.spawnSync = function (file, args = [], options = {}) {
   }
   if (String(file).includes('/lib/native/process-source-')) {
     if (!args.some(a => /^[1-9]\d*$/.test(a))) throw Error('unscoped host process inventory forbidden in installed fixture');
-    fs.appendFileSync(path.join(root, 'evidence/native-observations.jsonl'), JSON.stringify({ file, args, caller: process.pid }) + '\n');
+    const pid = Number(args.at(-1)), scripted = pid > 1_000_000_000;
+    fs.appendFileSync(path.join(root, 'evidence/native-observations.jsonl'), JSON.stringify({ file, args, caller: process.pid, scripted }) + '\n');
+    if (scripted) {
+      const native = JSON.parse(fs.readFileSync(path.join(root, 'native.json')));
+      const row = Object.values(native.workspaces).flatMap(w => [w.shellProcess, ...(w.agent ? [w.agentProcess] : [])])
+        .find(p => p?.pid === pid);
+      return { status: row ? 0 : 1, signal: null, stdout: row ? JSON.stringify(row) + '\n' : '', stderr: '' };
+    }
   }
   return original.call(this, file, args, options);
 };

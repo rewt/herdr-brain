@@ -115,6 +115,14 @@ fixture binding creates no launchd job, and its synthetic READY input certifies
 no release coverage. These results prove mechanics, never independent model
 judgment, live adoption or final-release readiness. Failed scratch is retained.
 
+Scripted shells and workers have distinct private PIDs above one billion and
+stable numeric birth identities. Only that namespace is simulated by the native
+process-source observation seam; real controller/watcher birth reads still use
+the installed kernel helper. Worker exit removes its process row. The canary
+checks the committed launch binding at the first prompt and verifies that PID
+reuse, absence and malformed births fail continuity before restoring the original
+fixture process. The installed pre-prompt binding rule is unchanged.
+
 The current case also migrates through the existing stopped-service path, then
 advances to a second immutable fixture root while the first producer and watcher
 are live. It moves project main and lets the successor line start its next

@@ -56,6 +56,33 @@ export async function runCanary(c) {
     return;
   }
 
+  // The unchanged installed writer must commit the original launch binding
+  // before the first input. Exercise death/reuse and recovery at the declared
+  // process-source seam without replaying dispatch or sending another prompt.
+  const launch = producer.launchProcess, binding = events().find(e => e.type === 'run.session_bound' && e.run === producer.run);
+  assert.equal(producer.sessionBinding.status, 'bound');
+  assert.deepEqual(binding.process, launch);assert.equal(binding.session, producer.worker.agentSessionId);
+  const input = fs.readFileSync(path.join(root, 'evidence/native-input.jsonl'), 'utf8').trim().split('\n').map(JSON.parse)
+    .filter(e => e.agent === producer.worker.agentName);
+  assert.equal(input.length, 1);assert.equal(input[0].binding.seq, binding.seq);
+  assert.equal(input[0].process.pid, launch.pid);assert.equal(input[0].process.identity, launch.identity);
+  const {lookupProcess} = await module('lib/processes.mjs');
+  const originalProcess = native().workspaces[producer.worker.workspaceId].agentProcess;
+  assert.equal(ownerAlive(launch), true);
+  try {
+    changeNative(n => n.workspaces[producer.worker.workspaceId].agentProcess.identity = '0:1');
+    assert.equal(ownerAlive(launch), false, 'a reused PID is not the original launch');
+    changeNative(n => delete n.workspaces[producer.worker.workspaceId].agentProcess);
+    assert.equal(ownerAlive(launch), false, 'an absent process is not continuity');
+    changeNative(n => n.workspaces[producer.worker.workspaceId].agentProcess = {...originalProcess, identity:'malformed'});
+    assert.equal(lookupProcess(launch.pid, {identityOnly:true}).ok, false, 'invalid births must not become evidence');
+  } finally {
+    changeNative(n => n.workspaces[producer.worker.workspaceId].agentProcess = originalProcess);
+  }
+  assert.equal(ownerAlive(launch), true);
+  stage('launch-process-control', {launch,bindingSeq:binding.seq,input:input[0],pidReuseRefused:true,
+    absentProcessRefused:true,malformedIdentityRefused:true,originalRestored:true,prompts:prompts(producer).length});
+
   // Complete ordinary A without injecting faults into its original watcher.
   // STOP intentionally ends a per-run watcher, so promotion boundary controls
   // use their own later allocation rather than destroying S1/S7's observation.

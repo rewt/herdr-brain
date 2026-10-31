@@ -9,6 +9,9 @@ import { lookupProcess } from '../../lib/processes.mjs';
 export const SCRATCH_JOURNAL = 'HERDR_TEST_SCRATCH_JOURNAL';
 export const evidenceDirectory = prefix => fs.realpathSync(nativeMkdtemp(prefix));
 const nativeMkdtemp = fs.mkdtempSync;
+// appendFileSync delegates to fs.writeFileSync, which fault-injection fixtures
+// replace. Keep the evidence writer independent of those product write hooks.
+const nativeOpen = fs.openSync, nativeWrite = fs.writeSync, nativeClose = fs.closeSync;
 let installed = false, owner;
 const stamp = directory => {
   const stat = fs.lstatSync(directory, { bigint: true });
@@ -22,13 +25,20 @@ export function installScratchTracking() {
   fs.mkdtempSync = function (...args) {
     const directory = nativeMkdtemp.apply(this, args);
     if (!owner) {
-      const result = lookupProcess(process.pid);
-      if (!result.ok || !result.value) throw Error(`scratch owner lookup failed: ${result.error}`);
-      owner = result.value;
+      // A denied product process source must still reach the product's own
+      // refusal path. Unknown scratch ownership is retained, never removed.
+      try {
+        const result = lookupProcess(process.pid);
+        if (result.ok && result.value) owner = result.value;
+      } catch { /* A throwing injected source is unknown too. */ }
     }
     const root = fs.realpathSync(directory);
-    fs.appendFileSync(process.env[SCRATCH_JOURNAL], JSON.stringify({ schema: 'test-scratch/v1',
-      id: randomUUID(), root, ...stamp(root), owner }) + '\n', { mode: 0o600 });
+    const bytes = Buffer.from(JSON.stringify({ schema: 'test-scratch/v1',
+      id: randomUUID(), root, ...stamp(root), owner: owner ?? null }) + '\n');
+    const fd = nativeOpen(process.env[SCRATCH_JOURNAL], 'a', 0o600);
+    try {
+      if (nativeWrite(fd, bytes) !== bytes.length) throw Error('incomplete scratch registration write');
+    } finally { nativeClose(fd); }
     return directory;
   };
   syncBuiltinESMExports();
@@ -83,7 +93,15 @@ function checkpoint(row, journal) {
 }
 
 export function recoverScratch(journal, { joined, suite, lookup = lookupProcess, groupProbe = probeGroup } = {}) {
-  const records = fs.readFileSync(journal, 'utf8').trim().split('\n').filter(Boolean).map(line => JSON.parse(line));
+  const errors = [];
+  const records = fs.readFileSync(journal, 'utf8').split('\n').flatMap((line, index) => {
+    if (!line.trim()) return [];
+    try { return [JSON.parse(line)]; }
+    catch (error) {
+      errors.push({ line: index + 1, error: error.message });
+      return [{ journal_line: index + 1 }];
+    }
+  });
   // A missing group is an absence proof, never authority to signal a historical
   // PGID. Targeted birth lookups also protect owners that left the original
   // group. Neither proof needs a system-wide process inventory (or ps).
@@ -97,7 +115,10 @@ export function recoverScratch(journal, { joined, suite, lookup = lookupProcess,
   for (const record of records) {
     let status = 'retained', reason, retention = 'unknown';
     try {
-      if (record.schema !== 'test-scratch/v1' || !path.isAbsolute(record.root) || !record.owner?.identity)
+      // A malformed line may name a nested retained root we cannot recover.
+      // Without that overlap proof no recursive removal is safe in this pass.
+      if (errors.length) throw Error('malformed scratch journal; retain all registrations');
+      if (record?.schema !== 'test-scratch/v1' || typeof record.root !== 'string' || !path.isAbsolute(record.root) || !record.owner?.identity)
         throw Error('incomplete registration');
       if (fs.realpathSync(record.root) !== record.root || !samePath(record, stamp(record.root))) reason = 'path identity changed';
       else if (!joined || !Number.isSafeInteger(suite?.pid) || suite.pid <= 1 || record.owner.pgid !== suite.pid) reason = 'no joined owning group';
@@ -123,7 +144,7 @@ export function recoverScratch(journal, { joined, suite, lookup = lookupProcess,
   }
   // Classify every registration before removing ancestors. An escaped live
   // owner or an unknown nested root must survive another owner's recursive rm.
-  const protectedRoots = results.filter(row => row.status === 'retained' && path.isAbsolute(row.root ?? '')).map(row => row.root);
+  const protectedRoots = results.filter(row => row.status === 'retained' && typeof row.root === 'string' && path.isAbsolute(row.root)).map(row => row.root);
   const overlapsRetained = file => protectedRoots.some(root => root === file || root.startsWith(file + path.sep) || file.startsWith(root + path.sep));
   // Preserve every eligible registration before deleting any nested tree.
   // Otherwise an ancestor's later checkpoint could already be missing evidence.
@@ -156,6 +177,7 @@ export function recoverScratch(journal, { joined, suite, lookup = lookupProcess,
     row.status = 'retained'; row.retention = 'unknown'; protectedRoots.push(row.root);
   }
   return { schema: 'test-scratch-recovery/v1', suite, joined: Boolean(joined), created: records.length,
+    ...(errors.length ? { journal_errors: errors } : {}),
     removed: results.filter(row => row.status === 'removed').length,
     absent: results.filter(row => row.status === 'absent').length,
     retained: results.filter(row => row.status === 'retained').length,

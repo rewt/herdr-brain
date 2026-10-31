@@ -66,6 +66,7 @@ function physicalInputs(files,workspaces,identity){
     stat(dir,true);
     for(const name of ['commondir','gitdir','config','config.worktree','shallow','info/grafts','objects/info/alternates'])stat(path.join(dir,name));
     const commonFile=read(path.join(dir,'commondir')),common=commonFile===null?dir:path.resolve(dir,commonFile.trim());
+    if(commonFile!==null&&fs.realpathSync(common)!==fs.realpathSync(identity))throw Error('foreign Git common directory requires fresh evaluation');
     if(fs.existsSync(path.join(common,'refs'))&&fs.lstatSync(path.join(common,'refs')).isSymbolicLink())throw Error('linked Git refs require fresh evaluation');
     // Resolve only this checkout's HEAD. Packing refs or advancing main or a
     // different worker branch must not change an unchanged producer's input.

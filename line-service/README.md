@@ -1504,7 +1504,8 @@ files, and workspace/Git identity metadata. Fingerprinting uses filesystem reads
 including absence, rather than invoking Git in deleted workspaces. Checkout
 contents (including linked skills and runtime output) are not read by these
 evaluations and are not inventoried. Inventories larger than 4096 paths, linked
-Git refs, reftable or unreadable inputs are evaluated fresh. The bound declines
+Git refs, foreign linked common directories, abbreviated source claims, reftable
+or unreadable inputs are evaluated fresh. The bound declines
 caching; it never truncates a fingerprint. Each v3 signature resolves the worker's
 own loose/packed HEAD and Git configuration/replacement inputs, excluding shared
 index and ordinary ref timestamps. Canonical main's revision is not an input.

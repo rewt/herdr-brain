@@ -173,6 +173,16 @@ test('unrelated main landings and ref packing preserve negatives; an own branch 
   assert.equal(f.calls.length,0,'negative observations grant no start authority');
 });
 
+test('a foreign linked Git common directory remains uncacheable instead of hiding uninventoried configuration',t=>{
+  const f=fixture(t),lane=path.join(f.root,'foreign-worker'),common=path.join(f.root,'foreign.git'),dir=path.join(common,'worktrees/worker');
+  fs.mkdirSync(lane);fs.mkdirSync(dir,{recursive:true});fs.writeFileSync(path.join(lane,'.git'),`gitdir: ${dir}\n`);
+  fs.writeFileSync(path.join(dir,'commondir'),'../..\n');fs.writeFileSync(path.join(dir,'HEAD'),'ref: refs/heads/worker\n');
+  f.append([work('ENG-1'),{type:'run.started',id:'R-1',item:'ENG-1',workspace:lane}]);
+  const document={},counts={},cache=negativeEvaluationCache({store:()=>document,identity:f.identity,repo:f.repo,org:f.org,counts}),
+    probe=()=>cache.probe('source',{snapshot:loadRecord(f.org),item:'ENG-1',run:'R-1',policy:{}});
+  probe().retain('foreign source retained');assert.equal(probe().skip,false);assert.equal(counts.source_uncacheable,2);
+});
+
 test('canonical source projection changes for own membership and competing attribution, not another landing',t=>{
   const base='a'.repeat(40),own='b'.repeat(40),other='c'.repeat(40),later='d'.repeat(40);
   const row=(head,item,run)=>({head,item,run,attribution:'report-claim'}),run={id:'R-1',report:{artifacts:[`source: ${own}; base: ${base}`]}},item={id:'ENG-1'};

@@ -77,7 +77,7 @@ for (const mode of ['legacy', 'history', 'lost-reply', 'refused']) test(mode ===
     const binds = f.state().sessionBindings.get(job.run);
     assert.equal(binds.length, 1);
     assert.equal(after.sessionBinding.commit_receipt.event_seq, binds[0].seq);
-    assert.equal(after.sessionBinding.commit_receipt.recorded, true);
+    assert.equal(after.sessionBinding.commit_receipt.recorded, mode !== 'lost-reply');
   }
   assert.equal(effectiveWorkerIdentity(f.state().runs.get(job.run), f.state()).identity_conflict, false);
 });

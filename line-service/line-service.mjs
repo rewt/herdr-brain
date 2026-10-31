@@ -54,6 +54,7 @@ import {commandIntent,finishCommand,forgetActiveCommand,pendingSubjectCommand} f
 import {refreshJournal,effectSubject} from './scheduling.mjs';
 import {appendPassJournal,withPassJournal,passJournalSize,readPassJournal} from './pass-journal.mjs';
 import {negativeEvaluationCache} from './evaluation-cache.mjs';
+import {observeGeneralOwners} from './general-owner-alarm.mjs';
 export { reviewAttempt } from './review.mjs';
 
 export const sourceRoot = fileURLToPath(new URL('../', import.meta.url));
@@ -197,8 +198,13 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         observe();log({action:'general-owner-recovery',...recovery});
       }});
     }catch(error){if(!error.message.startsWith('locked:'))throw error;}
-    if(!releaseGeneral){log({action:'general-owner-held',reason:'two finite general passes already own the scheduling allowance'});return{already_running:true};}
-    try{return generalPass(options);}finally{releaseGeneral();}
+    try{
+      let alarm;
+      try{alarm=observeGeneralOwners({directory,identity:project.identity,org,blocked:!releaseGeneral,at:now()});}
+      catch(error){log({action:'general-owner-alarm-held',reason:error.message});}
+      if(!releaseGeneral){log({action:'general-owner-held',reason:'two finite general passes already own the scheduling allowance',owners:alarm?.owners});return{already_running:true};}
+      return generalPass(options);
+    }finally{releaseGeneral?.();}
   }
   function generalPass({reconcileCloseout=true}={}) {
     const closeoutStarted=workClock();

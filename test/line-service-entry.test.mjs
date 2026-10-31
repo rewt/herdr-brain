@@ -1,0 +1,58 @@
+import test from './helpers/bounded-test.mjs';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import {spawnSync} from 'node:child_process';
+import {copyProduct} from '../lib/product-files.mjs';
+import {initOrg,transact} from '../lib/store.mjs';
+import {gitProject} from '../lib/project.mjs';
+import {serviceDirectory,sourceRoot} from '../line-service/line-service.mjs';
+import {noticeLock} from '../supervisor/notice-lock.mjs';
+import {fixtureFleet} from './helpers/offline-herdr.mjs';
+
+test('finite entry spawns both real children and returns under closeout contention without cross-role work',async t=>{
+  const root=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'line-entry-'))),repo=path.join(root,'project'),org=path.join(repo,'.org');
+  fixtureFleet(t,root);
+  t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+  fs.writeFileSync(path.join(root,'.identity-root'),'fixture\n');
+  copyProduct(sourceRoot,repo);
+  const herdr=path.join(root,'herdr');
+  fs.writeFileSync(herdr,`#!${process.execPath}\nconsole.log(JSON.stringify({result:{agents:[],workspaces:[],tabs:[],panes:[]}}));\n`,{mode:0o755});
+  const env={...process.env,ORG_DIR:org,GIT_CONFIG_GLOBAL:'/dev/null',GIT_CONFIG_NOSYSTEM:'1',HERDR_BRAIN_ROOT:repo};
+  for(const key of Object.keys(env))if(/^(HERDR_(ENV|PANE_ID|TAB_ID|WORKSPACE_ID)|CODEX_(SESSION_ID|THREAD_ID)|LANE_CONFIG)$/.test(key))delete env[key];
+  const git=(...args)=>{const r=spawnSync('git',args,{cwd:repo,env,encoding:'utf8'});assert.equal(r.status,0,r.stderr);return r.stdout.trim();};
+  git('init','-qb','main');git('config','user.name','Entry fixture');git('config','user.email','fixture@example.invalid');
+  fs.writeFileSync(path.join(repo,'.gitignore'),'.org/\n.lane/\n');
+  fs.writeFileSync(path.join(repo,'.lane.json'),JSON.stringify({routes:{engineer:{kind:'codex'}},dispatch:{max_sessions:2}}));
+  git('add','.');git('commit','-qm','Committed product fixture');initOrg(org);
+  const project=gitProject(repo),directory=serviceDirectory(org,project.identity);
+  const boundary={id:'entry',repo,org,project:project.identity,source:repo,main:'main',canonical_head:git('rev-parse','HEAD')};
+  transact(org,()=>({add:['line-service.cutover','line-service.phase0'].map(type=>({type,...boundary}))}));
+  fs.mkdirSync(directory,{recursive:true});
+  fs.writeFileSync(path.join(directory,'installation.json'),JSON.stringify({at:'2026-10-30T00:00:00Z',repo,org,source:repo,node:process.execPath,file:path.join(directory,'service.plist'),target:`gui/${process.getuid()}/dev.herdr.line.${path.basename(directory)}`}));
+  const entry=flag=>{
+    const r=spawnSync(process.execPath,[path.join(repo,'line-service/line-service.mjs'),'--once','--repo',repo,'--org',org,'--to','supervisor-test','--herdr',herdr,...(flag?[flag]:[])],{cwd:repo,env,encoding:'utf8'});
+    assert.equal(r.status,0,r.stderr||r.stdout);return JSON.parse(r.stdout);
+  };
+  const lock=path.join(directory,'closeout-turn.lock'),release=noticeLock(lock),owner=fs.readFileSync(path.join(lock,'owner.json'));
+  t.after(release);
+  const parent=entry();
+  assert.equal(parent.result,'line-wake-complete');assert.equal(parent.intake.ingested,0);
+  assert.ok(Number.isInteger(parent.closeout.pid));assert.ok(Number.isInteger(parent.general.pid));assert.notEqual(parent.closeout.pid,parent.general.pid);
+  assert.deepEqual(fs.readFileSync(path.join(lock,'owner.json')),owner,'parent exited with the original closeout owner still held');
+  const output=path.join(directory,'launchd.log');
+  const childRows=()=>fs.existsSync(output)?fs.readFileSync(output,'utf8').trim().split('\n').filter(Boolean).map(line=>{try{return JSON.parse(line);}catch{return{error:line};}}):[];
+  const deadline=Date.now()+30000;
+  while(childRows().length<2){assert.ok(Date.now()<deadline,'real finite children did not finish');await new Promise(resolve=>setTimeout(resolve,20));}
+  assert.deepEqual(childRows().map(row=>row.result??(row.already_running?'owned':row)).sort(),['owned','pass-complete']);
+  const intake=path.join(directory,'report-intake.json'),poison='{child must not run intake';fs.writeFileSync(intake,poison);
+  assert.equal(entry('--closeout-pass').already_running,true,'actual closeout entry skips intake before finding its held owner');
+  fs.writeFileSync(path.join(directory,'closeout-turn.json'),'{general must not run closeout');
+  assert.equal(entry('--general-pass').result,'pass-complete');
+  assert.equal(fs.readFileSync(intake,'utf8'),poison);
+  const rows=fs.readFileSync(path.join(directory,'passes.jsonl'),'utf8').trim().split('\n').map(JSON.parse);
+  assert.equal(rows.some(row=>row.action==='closeout-held'),false,'general entry never called the poisoned closeout/intake path');
+  assert.deepEqual(fs.readFileSync(path.join(lock,'owner.json')),owner);
+  t.diagnostic(JSON.stringify({parent,children:childRows(),general_passes:rows.filter(row=>row.action==='pass-complete').length,owner_preserved:true}));
+});

@@ -170,6 +170,14 @@ an independent admission pass, while repeated wakes cannot accumulate full-recor
 scans and retained snapshots without limit. The existing `pass.lock` continues to
 serialize scans and journal writes. Live or unknown owners keep their slots;
 only the existing receipted dead-owner recovery can reclaim one.
+Three consecutive deferred general passes, or an owner age of thirty minutes,
+emit a grouped `closeout-supervisor-alarm` with boundary `general-owner-held`
+in the existing service `closeout.log`. Both original slot owners, their lock
+hashes and observed ages are retained in `general-owner-alarm.json`; unchanged
+contention emits no duplicate alarm. The next admitted pass records a clear.
+This diagnostic uses its own short owner lock before record loading, so it
+remains available when both general slots or the closeout owner are occupied.
+It grants no authority to end a command, recover a live/unknown owner or retry.
 
 Report intake precedes closeout-owner acquisition and uses its own finite
 `report-intake.lock` and fair cursor in `report-intake.json`. Each scheduled wake

@@ -322,8 +322,9 @@ for (const legacy of ['first', 'second', 'both']) test(`uncorrelated legacy ${le
   assert.equal(Boolean(readInbox(f.inbox)[legacy === 'second' ? 3 : 0].correlation), false);
   f.write('modes', {});
   // A capped drain is allowed to retain the final alias. Require its actual
-  // completion with a load-adjusted allowance before asserting the whole FIFO,
-  // while a second process competes for the same native-input lock.
+  // completion with a load-adjusted allowance before asserting the whole FIFO.
+  // Both consumers must observe completion with exactly one alias delivery;
+  // their drains are not guaranteed to overlap or contend for the input lock.
   const options = { ...f.options, id: 'alias', waitSeconds: loadTimeout(10_000) / 1000 };
   const code = `import {drainInbox} from ${JSON.stringify(new URL('../prompt-supervisor.mjs', import.meta.url).href)};console.log(JSON.stringify(await drainInbox(process.argv[1],JSON.parse(process.argv[2]))));`;
   const contender = spawnChild(t, process.execPath, ['--input-type=module', '-e', code, f.inbox, JSON.stringify(options)]);

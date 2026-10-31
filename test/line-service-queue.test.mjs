@@ -19,7 +19,7 @@ import { checkSessionCap } from '../dispatch/session-cap.mjs';
 import { fixture as dispatchFixture, promptCalls } from '../dispatch/test/dispatch-fixture.mjs';
 
 const root = fs.realpathSync(sourceRoot), entry = path.join(root, 'bin/org.mjs');
-function fixture(t, { outcome = 'blocked', beforeReport = () => [], producerHarness = 'claude', sourceMeta = {}, guarded = false } = {}) {
+function fixture(t, { outcome = 'blocked', beforeReport = () => [], producerHarness = 'claude', sourceMeta = {}, guarded = false, reported = true } = {}) {
   const f = configFixture(t, { custom: true }), org = f.env.ORG_DIR, identity = gitProject(f.cwd).identity;
   const git = (args, cwd = f.cwd) => { const r = spawnSync('git', ['-C', cwd, ...args], { env: f.env, encoding: 'utf8' }); assert.equal(r.status, 0, r.stderr); return r.stdout.trim(); };
   fs.writeFileSync(path.join(f.cwd, 'code.mjs'), 'export const value=0;\n'); git(['add', 'code.mjs']); git(['commit', '-qm', 'Base']);
@@ -40,14 +40,14 @@ function fixture(t, { outcome = 'blocked', beforeReport = () => [], producerHarn
       ...(guarded ? {dispatch_project:identity, dispatch_record:org, agent:native.name, pane:native.pane_id, worker_workspace:native.workspace_id, terminal_id:native.terminal_id, agent_session_id:native.agent_session.value} : {}) } },
     { type: 'run.claimed', run: 'R-1', record: org, project: identity, owner: { controller: 'brain', legacy: false, release: { id: 'source', commit: null, root, identity: gitProject(root).identity } } },
     ...beforeReport({head,base}),
-    ...(!guarded ? [reportEvent] : []),
+    ...(!guarded && reported ? [reportEvent] : []),
   ] }));
   if (guarded) {
     // Completion requires the original native delivery receipt, beyond Git containment.
     const receipt = recordOwnLanding({canonical:f.cwd, workspace, base, head, landedAt:new Date().toISOString(),
       env:{...f.env, HERDR_ENV:'1', CODEX_THREAD_ID:native.agent_session.value}, call:()=>JSON.stringify({result:{agent:native}})});
     assert.equal(receipt.changes.length,1);
-    transact(org,()=>({add:[reportEvent]}));
+    if (reported) transact(org,()=>({add:[reportEvent]}));
   }
   const env = { ...f.env, ORG_ACTOR: 'line-service', HERDR_BRAIN_ROOT: root };
   for (const key of ['HERDR_ENV', 'HERDR_PANE_ID', 'HERDR_WORKSPACE_ID', 'CODEX_THREAD_ID']) delete env[key];
@@ -58,7 +58,7 @@ function fixture(t, { outcome = 'blocked', beforeReport = () => [], producerHarn
 }
 
 test('CLI deferred queue-review native refusal publishes no evidence or item and fresh authorization recovers once', t => {
-  const f = fixture(t, { guarded: true }), bin = path.join(f.scratch, 'native-bin');
+  const f = fixture(t, { guarded: true, reported: false }), bin = path.join(f.scratch, 'native-bin');
   fs.mkdirSync(bin);
   const calls = path.join(f.scratch, 'producer-calls.jsonl'), allow = path.join(f.scratch, 'allow');
   const native = { ...f.observation.agents[0], cwd: f.cwd };
@@ -99,6 +99,9 @@ console.log(JSON.stringify({result: {agent: ${JSON.stringify(native)}}}));
   assert.equal(queued.existing, false);
   assert.equal([...c.state.items.values()].filter(i => i.role === 'reviewer').length, 1);
   assert.equal(validateQueuedReview({ ...c, item: c.state.items.get(queued.review_item) }).head, f.head);
+  const target = c.state.items.get(queued.review_item).meta.review_target;
+  assert.equal(target.evidence_kind, 'native-landings/v1');
+  assert.equal(createHash('sha256').update(fs.readFileSync(target.evidence)).digest('hex'), target.reportHash);
   assert.notDeepEqual(inventory(), preserved, 'successful authorization publishes immutable evidence');
   const replay = f.run(['queue-review', 'R-1', '--head', f.head, '--base', f.base], extra);
   assert.equal(replay.status, 0, replay.stderr);

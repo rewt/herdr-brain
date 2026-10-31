@@ -265,13 +265,23 @@ test('promotion retries only its exact deferred lock target; empty drains never 
   await drainPromotions(queue);
   assert.equal(events(f).length, before, 'empty promotion drain does not retry historical entries');
   const added = retryPromotionCloseout({ cwd: f.repo, org: f.org, jobs, start: false });
-  assert.equal(added[0].type,'closeout.lifecycle-released');assert.deepEqual(added[0].jobs,jobs.map(({id,org,run,topic,tip})=>({id,run,topic,tip})));
+  assert.deepEqual(added.map(e=>e.type),['closeout.lifecycle-released','closeout.producer-status'],
+    'one callback records one lifecycle release and its newly linked completion');
+  assert.deepEqual(added[0].jobs,jobs.map(({id,org,run,topic,tip})=>({id,run,topic,tip})));
   const statuses=()=>events(f).filter(e=>e.type==='closeout.producer-status');
   assert.deepEqual(statuses().map(e=>e.key),[entries.find(e=>e.run==='R-1').key],'only the exact owning callback resolves its wait');
   for(const entry of entries.filter(e=>!['R-1','R-3'].includes(e.run))){
     const wait=events(f).find(e=>e.type==='closeout.waiting'&&e.key===entry.key);assert.notEqual(closeoutWaitState(wait,events(f)),'complete',entry.run);
   }
-  const completedStatuses=statuses();retryPromotionCloseout({ cwd: f.repo, org: f.org, jobs, start: false });
+  const completedStatuses=statuses(),beforeRepeat=events(f);
+  // A release is a fresh callback fact: later waits require a sequence newer
+  // than their revision, even when the job payload matches an earlier release.
+  const repeated=retryPromotionCloseout({ cwd: f.repo, org: f.org, jobs, start: false });
+  assert.equal(repeated.length,1,'an identical callback intentionally adds exactly one lifecycle release');
+  assert.equal(repeated[0].type,'closeout.lifecycle-released');
+  assert.deepEqual(repeated[0].jobs,added[0].jobs);
+  assert.ok(repeated[0].seq>beforeRepeat.at(-1).seq,'the repeat is a fresh release fact');
+  assert.deepEqual(events(f).slice(beforeRepeat.length),repeated,'no other record churn accompanies the repeat');
   assert.deepEqual(statuses(),completedStatuses,'repeated callback facts cannot duplicate linked completion');
   assert.equal(readCloseoutEntries(f.common).some(e => e.run === 'R-3'), false, 'completed request file is pruned after its durable receipt');
   const completed = entries.find(e => e.run === 'R-3'), source = events(f).find(e => e.seq === completed.source.seq);

@@ -1,5 +1,124 @@
 # Supervisor
 
+## Finite canonical duties
+
+`finite-duty.mjs` is a foreground adapter over the existing record handoff,
+canonical native enrollment/session controller and guarded tools. It does not
+launch or rename a worker, grant a supervisor role, alter permissions, start
+services, clear holds, retarget callbacks or close a session. The build does not
+activate a finite supervisor or retire a standing one.
+
+Only the actual configured project supervisor (`promote.to`) at its canonical
+Git checkout can run a duty. Fresh native detail, pane/terminal, sole occupant,
+exact server/standard-slot enrollment **and an acknowledged supervisor launch or
+restored incarnation from the existing controller** must agree. A KEEP receipt,
+display name, cwd, environment role or handoff author alone is insufficient.
+Missing launch/permission evidence stays a concrete boundary for the native
+session owner; this command cannot manufacture it. Use the existing separately
+authorized session controller to obtain a real binding. Do not call the offline
+receipt writers to enroll a live session.
+
+Before authorization, use observation-only entry:
+
+```sh
+node supervisor/supervisor.mjs entry --repo CANONICAL --org RECORD --role supervisor --read-only
+node supervisor/finite-duty.mjs inspect --org RECORD --handoff-seq SEQUENCE
+```
+
+`entry --read-only` prints the cold start and lock diagnostics, then returns
+before retirement, housekeeping and watcher catch-up. Legacy entry is unchanged.
+A finite session's recorded First steps must use this form; ordinary supervisor
+entry is not an authorization mechanism.
+
+The original supervisor records the exact duty in one fenced
+`brain-supervisor-duty` JSON block inside the existing immutable supervisor-slot
+handoff. Keep the normal handoff sections and original intent/evidence references.
+Use `record handoffs write --workspace NATIVE_WORKSPACE --slot supervisor --file
+DRAFT` to save it; select the returned **event sequence**, never a draft pathname.
+All fields below are required. Replace illustrative values with observed facts:
+
+```json
+{
+  "schema": "supervisor-duty/v1",
+  "id": "unique-duty-id",
+  "item": "ENG-1",
+  "run": "R-1",
+  "intent": "Original recorded purpose, exact duty and evidence references",
+  "project": {"canonical": "/project", "common": "/project/.git", "org": "/project/.org", "head": "FULL_COMMITTED_PROJECT_SHA"},
+  "source_head": "FULL_COMMITTED_TOOL_SOURCE_SHA",
+  "claim": {"owner": {"controller": "brain", "legacy": false, "release": {"id": "source", "commit": null, "root": "/tool-source", "identity": "/tool-source/.git"}}, "generation": 123},
+  "duty": {"kind": "checkpoint", "through": 100},
+  "lifetime": {"not_before": "2026-10-31T14:00:00Z", "expires": "2026-10-31T15:00:00Z"},
+  "predecessor": null,
+  "successor": {"owner": "actual-canonical-supervisor", "next_event": "Fresh authorized native session reads the next duty"},
+  "recovery": {"owner": "accepted recovery owner", "planning_channel": "brain-planning-chat", "next_event": "Agreed independent handoff check-in"},
+  "obligations": []
+}
+```
+
+The closed duty catalog supports an exact `checkpoint` and an existing guarded
+launch resolution: `{"kind":"resolve-launch","journal":"/record/dispatch/TOKEN.json",
+"id":"original-resolution-id","decision_seq":123}`. The latter still requires
+all original launch-resolution authority and evidence; the finite contract
+waives none of it. No arbitrary command/native arguments are accepted. Release,
+runtime migration, probation, exceptional review recovery, installation and
+reserved effects are not added to this catalog by inference. Their existing
+owners/tools remain responsible; any additional binding or permission mechanism
+requires separate authorization before activation. This source-backed adapter
+currently requires clean Git checkouts for both project and tool source; installed
+runtime qualification and live custody/termination remain separate proof.
+
+```sh
+node supervisor/finite-duty.mjs run --org RECORD --handoff-seq SEQUENCE
+# After success, record the next immutable duty, retaining actual receipt refs:
+node supervisor/finite-duty.mjs finish --org RECORD --handoff-seq SEQUENCE --successor-seq NEXT_SEQUENCE
+```
+
+`run` verifies lifetime, exact project/source heads, current claim, record/line/
+supervisor STOP, HOLD, ancestor holds and reserved questions. It appends one
+`supervisor.duty.started` event with real native binding, command and Node version
+before the existing tool runs. Its result event retains actual exit, output,
+signal/error and original start sequence. A failed/UNKNOWN/crashed attempt keeps
+custody, blocks another duty (cap1) and never replays or rebinds. No report, token
+count or success summary implies completion or native cleanup. Original tools
+retain their own mutation-time native/claim/source/CAS guards.
+
+The next handoff must carry `predecessor: {"start_seq": START_EVENT,
+"result_seq": RESULT_EVENT}` and preserve original remaining obligations. Each
+obligation is `{id, owner, attempt, receipt, next_event}`, all nonempty strings.
+An obligation still owned by this supervisor holds execution/handback; it must
+complete under its original owner or receive a separately supported authorized
+handoff. The adapter never edits saved jobs or watchers. Pending, sent-but-not-
+handled, UNKNOWN or refused original inbox notices also hold. Delivery is not
+handling, and this adapter supplies no acknowledgement shortcut.
+
+`finish` requires the successful actual receipt, unchanged original native/claim/
+source binding, verified successor bytes and a fresh existing `safe-point`
+observation. It records a completion receipt; it performs no lifecycle effect.
+The existing authorized session controller still owns termination at that safe
+boundary and must obtain fresh lifecycle checks and actual close/exit receipts.
+The next duty requires a different native session and its own acknowledged real
+controller binding. Fixture handovers do not prove a live session terminated.
+
+If the line cannot dispatch, the accepted recovery owner can independently pull:
+
+```sh
+node supervisor/finite-duty.mjs recovery --org RECORD --handoff-seq SEQUENCE
+```
+
+This read-only plan verifies the latest immutable handoff and actual canonical
+project/head, names `promote.to`, exposes original attempts/remaining owners and
+STOP/HOLD/dirty observations, and points to the existing authorized session
+controller. It needs neither a running first supervisor nor line dispatch/native
+input. The operator's existing planning channel identifies and starts/restores
+the **actual canonical supervisor**, with fresh enrollment, occupancy, source,
+claim, authority and hold checks. Missing permission or a live occupant stays
+pending. Restore through observation-only entry before any authorized duty; do
+not run entry catch-up blindly. The plan executes nothing and always records
+`recovery/manual-assistance`, never a zero-nudge success. Live restoration,
+absence/adoption and standing-session retirement require their own authorized
+owners and evidence.
+
 ## Weekly project cycle time
 
 The supervisor runs this foreground report when publishing the weekly project

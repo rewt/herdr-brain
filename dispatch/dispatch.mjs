@@ -310,7 +310,12 @@ async function bindSession() {
       binding.status === 'unbound' && (!opt.retry || !binding.proposed)) return;
   // Only explicit retry reopens an unbound saved proposal. Automatic replay
   // still selects observing proposals, and a recorded refusal stays final.
-  if (binding.status === 'unbound') { binding.status = 'observing'; save(); }
+  if (binding.status === 'unbound') {
+    const at = new Date().toISOString();
+    (binding.commit_attempts ??= []).push({ started_at: at, finished_at: at, outcome: 'reopened',
+      reopened_from: { status: binding.status, ...(binding.reason === undefined ? {} : { reason: binding.reason }) } });
+    binding.status = 'observing'; save();
+  }
   // An exact saved proposal may be retried after the deadline. Observation may not.
   observationDeadline = binding.proposed ? undefined : Date.parse(binding.deadline);
   try {

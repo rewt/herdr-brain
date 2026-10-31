@@ -23,9 +23,10 @@ function onlyCompletion(f, before, journal) {
   const added = after.subarray(before.length).toString().trim().split('\n').filter(Boolean).map(JSON.parse);
   assert.deepEqual(added.map(e => [e.type, e.journal, e.stage, e.run, e.exit_code]), [['dispatch.completed', journal, 'open', null, 1]]);
 }
-for (const refused of [false, true]) test(refused
+for (const mode of ['legacy', 'history', 'lost-reply', 'refused']) test(mode === 'refused'
   ? 'explicit dispatch retry keeps a saved proposal record refusal final without native observation or prompt'
-  : 'timely saved unbound proposal retries through dispatch without a new native observation or prompt', t => {
+  : `timely saved unbound proposal retries through dispatch without a new native observation or prompt (${mode})`, t => {
+  const refused = mode === 'refused';
   const f = fixture(t, { lateSession: 'delayed' }), first = f.start(); assert.equal(first.status, 0, first.stderr);
   const file = f.jobs()[0], job = JSON.parse(fs.readFileSync(file)), b = job.sessionBinding;
   const eventFile = path.join(f.org, 'events.jsonl');
@@ -35,12 +36,26 @@ for (const refused of [false, true]) test(refused
   b.prompted_at = b.proposed.prompted_at = new Date(at).toISOString();
   b.deadline = b.proposed.deadline = new Date(at + 60000).toISOString();
   b.proposed.observed_at = new Date(at + 30000).toISOString();
-  if (refused) { b.record_refusal = true; b.reason = 'original record refusal'; }
+  b.reason = 'record: original legacy refusal';
+  if (mode === 'legacy' || mode === 'lost-reply') delete b.commit_attempts;
+  if (refused) b.record_refusal = true;
   fs.writeFileSync(file, JSON.stringify(job));
   const reads = () => fs.readFileSync(path.join(f.root, 'calls'), 'utf8').trim().split('\n').map(JSON.parse)
     .filter(c => c.a[0] === 'pane' && c.a[1] === 'process-info').length;
+  if (mode === 'lost-reply') f.fail('bind-lost-reply');
   const before = reads(), retry = f.dispatch(['--retry', job.run]); assert.equal(retry.status, 0, retry.stderr);
-  const after = JSON.parse(fs.readFileSync(file));
+  let after = JSON.parse(fs.readFileSync(file));
+  const history = b.commit_attempts ?? [];
+  if (mode === 'lost-reply') {
+    assert.equal(after.sessionBinding.status, 'observing');
+    assert.equal(after.sessionBinding.commit_attempts.at(-1).outcome, 'unknown');
+    assert.deepEqual(after.sessionBinding.commit_attempts[0].reopened_from, { status: b.status, reason: b.reason });
+    const attempts = after.sessionBinding.commit_attempts;
+    f.fail('');
+    const recovered = f.dispatch(['--retry', job.run]); assert.equal(recovered.status, 0, recovered.stderr);
+    after = JSON.parse(fs.readFileSync(file));
+    assert.deepEqual(after.sessionBinding.commit_attempts.slice(0, -1), attempts);
+  }
   assert.equal(after.sessionBinding.status, refused ? 'unbound' : 'bound');
   assert.equal(reads(), before); assert.equal(promptCalls(f).length, 1);
   assert.deepEqual(after.sessionBinding.proposed, b.proposed); assert.equal(after.sessionBinding.deadline, b.deadline);
@@ -49,8 +64,15 @@ for (const refused of [false, true]) test(refused
     assert.deepEqual(after.sessionBinding, b);
     assert.equal(f.state().sessionBindings.get(job.run), undefined);
   } else {
-    assert.deepEqual(after.sessionBinding.commit_attempts.slice(0, -1), b.commit_attempts);
-    assert.equal(after.sessionBinding.commit_attempts.length, b.commit_attempts.length + 1);
+    const attempts = after.sessionBinding.commit_attempts, reopened = attempts[history.length];
+    assert.deepEqual(attempts.slice(0, history.length), history);
+    assert.equal(attempts.length, history.length + (mode === 'lost-reply' ? 3 : 2));
+    assert.equal(reopened.outcome, 'reopened');
+    assert.deepEqual(reopened.reopened_from, { status: b.status, reason: b.reason });
+    assert.ok(Number.isFinite(Date.parse(reopened.started_at)));
+    assert.equal(reopened.finished_at, reopened.started_at);
+    assert.equal(attempts.at(-1).outcome, 'bound');
+    assert.equal(after.sessionBinding.reason, undefined);
     const binds = f.state().sessionBindings.get(job.run);
     assert.equal(binds.length, 1);
     assert.equal(after.sessionBinding.commit_receipt.event_seq, binds[0].seq);

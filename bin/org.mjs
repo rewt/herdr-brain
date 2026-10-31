@@ -51,6 +51,9 @@ Setup
 
 Work
   record obligations [--json] [--project COMMON_DIR]  exact pending facts and consumer outcomes (read-only)
+  record nudge --id ID --run R-n --project COMMON_DIR --actor NAME --occurred-at ISO_TIME
+          --stage STAGE --action TEXT --reason TEXT --evidence REF
+                                          journal one manual lifecycle intervention (idempotent)
   record messages send --id ID --summary TEXT [--kind KIND --run R-n --item ID --question HUM-n]
   record messages send --file ENVELOPE    store an existing session.message.v1 envelope
   record messages digest [--limit 5 --after SEQ --json]  pull a short operator digest
@@ -215,7 +218,7 @@ function mutate(ctx, fn, authority, { deferCloseout = false } = {}) {
   }
   // Event derivation and read-only guards precede the append lock. Intake and
   // queue-review defer their immutable/native effects to the final commit hook.
-  const planned = new Set(['add', 'block', 'unblock', 'note', 'amend-accept', 'ask', 'answer', 'set', 'close', 'reopen', 'start', 'worker', 'abandon', 'lesson', 'ingest', 'sync', 'queue-review', 'messages']);
+  const planned = new Set(['add', 'block', 'unblock', 'note', 'amend-accept', 'ask', 'answer', 'set', 'close', 'reopen', 'start', 'worker', 'abandon', 'lesson', 'ingest', 'sync', 'queue-review', 'messages', 'nudge']);
   // Only event derivation may refresh on a race. Commit hooks never replay;
   // nested configuration audits also revoke replay permission in the store.
   // Message preparation includes its fresh native sender observation. It may
@@ -1176,6 +1179,7 @@ const COMMANDS = {
   template: argv => { args(argv, {}, { max: 0, usage: 'record template' }); out(DISPATCH_TEMPLATE); return 0; },
   lookup: argv => import('../lib/lookup.mjs').then(module => module.lookupCommand(argv, { out })),
   messages: async argv => (await import('../messages/record-command.mjs')).messagesCommand(argv, { openOrg, mutate, out }),
+  nudge: async argv => (await import('../measurement/nudge-command.mjs')).nudgeCommand(argv, { openOrg, mutate, out }),
   lesson, lessons,
   'complete-batch': argv => completeBatchCommand(argv, { openOrg, mutate, out }),
   releases: argv => releasesCommand(argv, { openOrg, out }),

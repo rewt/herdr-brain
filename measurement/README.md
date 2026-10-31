@@ -53,10 +53,42 @@ folder observations appear separately with their original time and coverage;
 they never prove a retirement action or timestamp. No live native reads occur.
 Copy the decoded frame into your evidence if the service's latest file can move.
 
-Only explicit `closeout.manual-assistance` events count as recorded hand nudges.
+Explicit `closeout.manual-assistance` and `lifecycle.manual-nudge` events count as recorded hand nudges.
 Historical records do not journal all prompts or rescues, so the total is unknown
 even when the explicit count is zero. Free-text notes cannot establish a complete
-count. This tool measures evidence; it does not repair that instrumentation gap.
+count. The supported journal below makes prospective interventions measurable;
+it cannot establish that every intervention was recorded.
+
+The owner performing a manual lifecycle prompt, rescue or recovery is responsible
+for journaling it promptly in the owning project:
+
+```sh
+ORG_ACTOR=your-worker node bin/org.mjs nudge --id R-123:report:prompt-1 \
+  --run R-123 --project /project/repository/.git --actor assisting-owner \
+  --occurred-at 2026-10-31T08:00:00Z --stage report \
+  --action 'Prompted the worker to finish its report' \
+  --reason 'The report had stalled' --evidence /own/evidence/prompt.txt
+```
+
+Use one stable ID per actual intervention, and reuse the exact arguments for a
+retry. The locked append writes once; a changed payload or intervention actor under
+the same ID is refused. A new intervention needs a new ID. Record it promptly,
+including failed interventions and their later recovery as separate actions.
+Do not journal the same action again if an existing manual-assistance event
+already records it. The command records what happened; it executes no prompt or
+recovery and grants no native authority. `--actor` attributes the actual assisting
+owner; the store's `by` separately preserves the recorder. Neither grants native
+authority, and a retry retains the original recorder.
+Stage, action, reason and evidence are required descriptive text; they are not
+inferred from notes. Run binding, real Git identity and record ownership must
+match; unscoped/foreign runs and times before run start or after recording fail.
+
+The projection's `hand_nudges.journal` retains each journal event's stable ID,
+project, run, actor, occurrence time, recording receipt, stage, action, reason and
+evidence. Journal events use occurrence time inside the window and must also have
+been recorded by the cutoff/sequence fence. Legacy events retain recording-time
+semantics. `recorded` combines the two explicit sources; `total` remains null.
+This changes neither the canary rescue policy nor any consumer's runtime or hooks.
 
 Save the input event snapshot and census with your evidence. Output records a
 hash of selected events, census inventory hash, cutoff and sequence fence. Repeat
@@ -65,6 +97,6 @@ same inputs/cutoff/fence produce identical bytes. Malformed JSON and out-of-orde
 sequences fail closed; events with missing timestamps inside the fence remain
 available for joins and are listed diagnostically. No current clock is consulted.
 
-Focused checks: `node test/helpers/run.mjs test/consumer-lifecycle.test.mjs` through
+Focused checks: `node test/helpers/run.mjs test/lifecycle-nudge.test.mjs test/consumer-lifecycle.test.mjs` through
 the owning clean committed lane's `lane check --cmd`. Full release suites and
 live acceptance belong to the release owner.

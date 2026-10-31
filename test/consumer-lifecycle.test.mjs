@@ -114,3 +114,19 @@ test('distribution uses conventional median and nearest rank p90; empty is unkno
   assert.throws(() => measure([], {from: '2026-10-30'}), /timezone/);
   assert.throws(() => measure(fixture().reverse()), /sequence/);
 });
+
+test('journal projection uses occurrence time, project/run scope and captured sequence without claiming completeness', () => {
+  const events = fixture();
+  const nudge = {seq: 9, at: at(40), type: 'lifecycle.manual-nudge', nudge_id: 'n1', run: 'R-1', item: 'ENG-1', project,
+    actor: 'owner', by: 'owner', occurred_at: at(25), stage: 'report', action: 'Prompted', reason: 'Stalled', evidence: 'saved:prompt'};
+  events.push(nudge, {...nudge, seq: 10, nudge_id: 'n2', project: '/other/.git'},
+    {...nudge, seq: 11, nudge_id: 'n3', run: 'R-99'},
+    {...nudge, seq: 12, nudge_id: 'n4', occurred_at: at(5)},
+    {...nudge, seq: 13, nudge_id: 'n5', occurred_at: at(55)});
+  const result = measure(events, {from: at(20), cutoff: at(50)});
+  assert.equal(result.hand_nudges.recorded, 1); assert.equal(result.hand_nudges.total, null);
+  assert.deepEqual(result.hand_nudges.journal.map(e => e.id), ['n1']);
+  assert.equal(result.hand_nudges.journal[0].occurred_at, at(25));
+  assert.equal(measure(events, {cutoff: at(30), throughSeq: 8}).hand_nudges.recorded, 0, 'not recorded by cutoff');
+  assert.equal(measure(events, {throughSeq: 8}).hand_nudges.recorded, 0, 'later append excluded by fence');
+});

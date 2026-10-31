@@ -120,7 +120,8 @@ export function measureLifecycle({events, project, from, cutoff, throughSeq, lin
       evaluation: ref(last)});
   }
   const reportRows = rows.filter(r => r.report_in_window), startRows = rows.filter(r => r.start_in_window);
-  const manual = scoped.filter(e => e.type === 'closeout.manual-assistance' && inWindow(e, startTime, endTime));
+  const manual = scoped.filter(e => e.type === 'closeout.manual-assistance' && inWindow(e, startTime, endTime) ||
+    e.type === 'lifecycle.manual-nudge' && e.project === project && inWindow({at: e.occurred_at}, startTime, endTime));
   const lifecycle = Object.fromEntries(['session', 'tab', 'folder'].map(name => [name, {retired: 0, pending: 0, unknown: 0, ...count(reportRows, r => r.resources[name].state)}]));
   const pending = reportRows.flatMap(r => Object.entries(r.resources).filter(([, resource]) => resource.state !== 'retired').map(([resource, state]) =>
     ({run: r.run, item: r.item, resource, ...state})));
@@ -136,6 +137,8 @@ export function measureLifecycle({events, project, from, cutoff, throughSeq, lin
       reports_ingested: scoped.filter(e => e.type === 'report.ingested' && inWindow(e, startTime, endTime)).length,
       report_cohort: reportRows.length, lifecycle},
     latency: Object.fromEntries(['report_to_ingest', 'report_to_closed', 'report_to_folder_removed'].map(k => [k, distribution(reportRows.map(r => r.latency[k].ms))])),
-    hand_nudges: {recorded: manual.length, total: null, coverage: 'unknown: only explicit closeout.manual-assistance events are counted; free-text notes and native prompts are not a complete nudge journal', receipts: manual.map(ref)},
+    hand_nudges: {recorded: manual.length, total: null, coverage: 'unknown: only explicit closeout.manual-assistance and lifecycle.manual-nudge events are counted; free-text notes and native prompts are not a complete nudge journal', receipts: manual.map(ref),
+      journal: manual.filter(e => e.type === 'lifecycle.manual-nudge').map(e => ({...ref(e), id: e.nudge_id, run: e.run, item: e.item,
+        project: e.project, actor: e.actor, recorded_by: e.by, occurred_at: e.occurred_at, stage: e.stage, action: e.action, reason: e.reason, evidence: e.evidence}))},
     pending_by_owner_reason: [...groups.values()], pending, runs: rows};
 }

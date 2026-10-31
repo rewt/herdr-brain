@@ -162,7 +162,7 @@ export function evaluateSoak({events, trial, verifiedEvidence = []}) {
     if (kind === 'ordinary' && (o?.source || review?.required !== false)) {
       need(review, 'original-review-evidence', id);
       if (!review?.run || review.original !== true || review.cap !== 1 || review.suites !== 0) missing('original-review', 'one original cap1 review with zero suites required', id);
-    } else {
+    } else if (kind === 'review') {
       need(review, 'review-evidence', id);
       if (review?.cap !== 1 || review?.suites !== 0 || review?.original !== true || !['PASS', 'pass'].includes(ingests[0]?.report?.extra?.verdict))
         missing('review-verdict', 'original cap1/zero-suite passing review or specific checked corrections required', id);

@@ -5,7 +5,10 @@ import path from 'node:path';
 import {legacyNeverSentProof,recoverNeverStartedCloseouts} from '../lib/closeout-unsent.mjs';
 import {closeoutNextStage} from '../lib/closeout-status.mjs';
 import {readCloseoutEntries,unresolvedCloseoutEffect,CLOSEOUT_EXIT_PENDING} from '../lib/closeout.mjs';
-import {events,setup,effects,retainNativeOutcome} from './helpers/closeout-fixture.mjs';
+import {events,setup,effects,retainNativeOutcome,selectCurrentCleanup} from './helpers/closeout-fixture.mjs';
+import {refreshCloseouts} from '../lib/closeout-consumer.mjs';
+import {settleVacantCloseouts} from '../lib/closeout-vacancy.mjs';
+import {fold} from '../lib/state.mjs';
 import {hold} from './helpers/retire-fixture.mjs';
 import {gitProject} from '../lib/project.mjs';
 import {recordSourceConflict} from '../lib/record-observation.mjs';
@@ -210,4 +213,102 @@ for(const code of ['EPERM','CLOSEOUT_CODE_CHANGED','RECORD_OBSERVATION_CONFLICT'
     guards++;throw refusal;
   }}),error=>error===refusal);
   assert.equal(guards,1);assert.deepEqual(events(f),original);assert.deepEqual(f.read().actions,[]);
+});
+
+test('never-sent stage distinguishes refusal tokens from unrelated words',()=>{
+  const entry={common:'/project/.git',key:'key',source:{type:'item.closed',seq:1},panes:[]};
+  const rows=[{type:'closeout.effect',identity:entry.common,key:entry.key,source:entry.source,seq:2,effect:'intent',outcome:{action:'agent-exit-requested'}},
+    {type:'closeout.command-not-started',identity:entry.common,key:entry.key,source:entry.source,seq:4,intent:'intent',native_started:false}];
+  for(const reason of ['threshold','placeholder','stopped','desktop','unstoppable'])
+    assert.equal(closeoutNextStage(entry,{seq:3,reason},rows)?.stage,'never-sent',reason);
+  for(const reason of ['STOP/HOLD prevents queued retirement effect','retirement held: HOLD','EPERM native refusal','EACCES','native refusal'])
+    assert.equal(closeoutNextStage(entry,{seq:3,reason},rows),undefined,reason);
+  assert.equal(closeoutNextStage(entry,{seq:3,reason:'threshold',failure:{kind:'fence'}},rows),undefined);
+});
+
+function writeHistoricalLogs(f,s,{emptyMessage=false}={}){
+  for(const [name,file]of [['main','logs/refs/heads/main'],['head','logs/HEAD']]){
+    const rows=s.history[name].rows;
+    const empty=emptyMessage?`${producer} ${producer} Fixture <fixture@example.invalid> ${rows[0].second-1} +0000\n`:'';
+    fs.writeFileSync(path.join(f.common,file),empty+rows.map(row=>
+      `${row.old} ${row.head} Fixture <fixture@example.invalid> ${row.second} +0000\t${row.message}\n`).join(''));
+  }
+}
+
+for(const kind of ['same-second','unparseable','pruned'])test(`never-sent negative observation skips unchanged logs and recovers after repair (${kind})`,t=>{
+  const f=setup(t,{merged:true}),s=stale(f),original=events(f),good=structuredClone(s.history);
+  if(kind==='same-second')for(const log of Object.values(s.history))log.rows[0].second=Math.floor(Date.parse(s.intent.at)/1000);
+  writeHistoricalLogs(f,s);
+  if(kind==='unparseable')fs.writeFileSync(path.join(f.common,'logs/HEAD'),'unparseable\n');
+  if(kind==='pruned')fs.unlinkSync(path.join(f.common,'logs/HEAD'));
+  const read=fs.readFileSync;let logReads=0;
+  fs.readFileSync=function(file,...args){
+    if(['logs/HEAD','logs/refs/heads/main'].some(name=>file===path.join(f.common,name)))logReads++;
+    return read.call(this,file,...args);
+  };
+  const recover=guard=>recoverNeverStartedCloseouts({...s,history:undefined,org:f.org,entries:[s.entry],guard});
+  try{
+    assert.deepEqual(recover(()=>assert.fail('unproven history never enters source planning')),[]);
+    const first=logReads;assert.ok(first>0);
+    for(let n=0;n<3;n++)assert.deepEqual(recover(()=>assert.fail('negative memo grants no source authority')),[]);
+    assert.equal(logReads,first,'unchanged negative survives separate recovery calls without log reads');
+    const directory=path.join(f.common,'closeout/never-sent-unproven');
+    const saved=JSON.parse(read.call(fs,path.join(directory,fs.readdirSync(directory)[0]),'utf8'));
+    assert.equal(saved.intent,s.intent.effect);assert.match(saved.qualification,/Unproven/);
+    assert.deepEqual(events(f),original);assert.deepEqual(f.read().actions,[]);
+    s.history=good;writeHistoricalLogs(f,s,{emptyMessage:true});
+    assert.equal(recover(()=>{}).filter(e=>e.type==='closeout.command-not-started').length,1,
+      'changed logs invalidate the negative; a valid empty-message row does not poison proof');
+    assert.ok(logReads>first+2,'positive proof rereads logs in fresh record preparation');
+    assert.deepEqual(events(f).slice(0,original.length),original);
+    assert.deepEqual(f.read().actions,[]);
+  }finally{fs.readFileSync=read;}
+});
+
+for(const obstruction of [null,'UNKNOWN','refusal','moved-session','STOP'])test(`never-sent missing-folder original pane uses guarded native-only recovery (${obstruction??'success'})`,t=>{
+  const f=setup(t,{merged:true,bound:true}),s=stale(f);
+  recoverNeverStartedCloseouts({...s,org:f.org,entries:[s.entry],guard:()=>{}});
+  f.git(['worktree','remove',f.lane]);
+  const held=f.drain({keys:[s.entry.key],retrySafe:true});
+  assert.match(held.evaluated[0].reason,/never-sent allocation absence unproven/);
+  selectCurrentCleanup(f);
+  if(obstruction==='UNKNOWN')f.append([{type:'closeout.effect',identity:f.common,key:s.entry.key,source:s.entry.source,
+    effect:'later-unknown',producer:'native-closeout/v2',outcome:{action:'agent-exit-requested',pane:'w:p'}}]);
+  if(obstruction==='refusal')f.append([{type:'closeout.evaluated',identity:f.common,key:s.entry.key,source:s.entry.source,
+    completed:false,reason:'original native refusal',failure:{kind:'fence',code:'EPERM'}}]);
+  if(obstruction==='moved-session'){f.state.agents[0].pane_id='elsewhere';f.save();}
+  if(obstruction==='STOP'){fs.mkdirSync(path.join(f.repo,'.lane/supervisor'),{recursive:true});fs.writeFileSync(path.join(f.repo,'.lane/supervisor/STOP'),'stop');}
+  const before=events(f),refresh=()=>refreshCloseouts({cwd:f.repo,org:f.org,env:f.env,retirementOptions:f.options});
+  if(obstruction==='STOP')assert.throws(refresh,/STOP\/HOLD/);
+  else{
+    const result=refresh();
+    if(!obstruction){
+      assert.equal(result.created.length,1,JSON.stringify(result));
+      f.drain({keys:result.created,retrySafe:true});
+      assert.equal(f.read().actions.filter(a=>a[0]==='tab'&&a[1]==='close').length,1);
+      assert.deepEqual(refresh().settled,['R-1']);
+      const calls=f.herdrCalls();assert.deepEqual(refresh().settled,[]);assert.deepEqual(f.herdrCalls(),calls);
+    }else assert.deepEqual(result.created,[],JSON.stringify(result));
+  }
+  if(obstruction)assert.deepEqual(f.read().actions,[]);
+  assert.deepEqual(events(f).slice(0,before.length),before);
+  assert.equal(fs.existsSync(f.lane),false);assert.equal(f.git(['rev-parse','lane/topic']),f.head);
+  assert.equal(effects(f).some(e=>['git-removal-started','worktree-removed','branch-removed','lane-removed'].includes(e.action)),false);
+});
+
+for(const kind of ['replacement','terminal-unknown','moved-original','no-proof'])test(`never-sent vacancy distinguishes reused pane labels (${kind})`,t=>{
+  const f=setup(t,{merged:true,bound:true}),s=stale(f);
+  if(kind!=='no-proof')recoverNeverStartedCloseouts({...s,org:f.org,entries:[s.entry],guard:()=>{}});
+  f.git(['worktree','remove',f.lane]);
+  f.state.workspaces=[];f.state.tabs=[];
+  f.state.panes=[{pane_id:'w:p',terminal_id:kind==='terminal-unknown'?undefined:'replacement',workspace_id:'other',tab_id:'other:t',cwd:'/other'}];
+  f.state.agents=kind==='moved-original'?[{...f.state.agents[0],pane_id:'elsewhere'}]:[];f.save();
+  const before=events(f),project=gitProject(f.repo),adapter=f.retirement(f.options);
+  const result=settleVacantCloseouts({project,org:f.org,events:before,state:fold(before),guard:()=>{},
+    observe:()=>({...adapter.observe(undefined,{globalPanes:true}),mainRef:'main'})});
+  const settled=result.filter(e=>e.type==='closeout.vacancy-settled');
+  assert.equal(settled.length,kind==='replacement'?1:0,JSON.stringify(result));
+  if(settled.length){assert.equal(settled[0].native_completion,false);assert.equal(settled[0].resources.folder.preservation,'UNKNOWN');}
+  assert.deepEqual(events(f).slice(0,before.length),before);assert.deepEqual(f.read().actions,[]);
+  assert.equal(f.git(['rev-parse','lane/topic']),f.head);
 });

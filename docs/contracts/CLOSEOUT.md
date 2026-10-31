@@ -146,6 +146,21 @@ uncertain actual invocation or unchanged keep is not reopened by the old proof.
 Neither this bridge nor its source landing runs live housekeeping or changes
 an installed release, watcher, service or pin.
 
+Unprovable legacy histories have advisory negative observations under
+`GIT_COMMON_DIR/closeout/never-sent-unproven/`. Exact proof inputs and both
+reflogs' resolved identities and versions invalidate these observations. They
+skip only repeated failed inspection, never authorize an effect; positive proof
+still rereads both logs in each fresh record preparation. Empty reflog messages
+are valid rows and do not invalidate unrelated historical evidence.
+
+The existing original-allocation refresh can bind native-only cleanup after a
+legacy never-sent missing-folder keep. It retains source, claim, native identity,
+STOP/HOLD and refusal guards and grants no Git removal or preservation proof.
+Current vacancy may distinguish a reused pane label with a positively different
+terminal only for an allocation with separate positive legacy no-start evidence.
+Unknown terminal data, an original terminal/session elsewhere, or an unresolved
+later invocation still keeps the original allocation.
+
 # Event-driven lane closeout
 
 **Option B implementation (ENG-536), 2026-10-22.** Implements the accepted

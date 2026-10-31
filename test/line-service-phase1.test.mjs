@@ -420,6 +420,53 @@ test('review admission rereads changed policy after capacity before launch witho
   assert.ok(effects.review_admission.held.some(h=>h.stage==='launch-mutation'));
 });
 
+test('review admission invalid policy holds selection while result intake and readbacks continue, then recovers',t=>{
+  const f=fixture(t),mutation=admissionQueue(f),q=f.context().state.items.get(mutation.result.review_item);
+  const text='---\nrun: R-2\noutcome: done\nsummary: Independent review complete.\nproposals: []\n---\n\nVerdict: PASS\n\nNo findings.\n',parsed=readReport(text);
+  fs.writeFileSync(path.join(f.org,'reports/R-2.md'),text);
+  f.add([{type:'run.started',id:'R-2',item:q.id,workspace:f.cwd},
+    {type:'run.claimed',run:'R-2',record:f.org,project:f.identity,owner:f.context().run.owner},
+    {type:'report.ingested',run:'R-2',file:'reports/R-2.md',sha256:hash(text),report:parsed.report},
+    {type:'item.closed',id:'ENG-1',as:'done'},{type:'item.added',id:'ENG-99',role:'engineer',title:'Ready ordinary work'}]);
+  independentProducer(f);
+  const file=path.join(f.cwd,'.lane.json'),valid=fs.readFileSync(file),policy=JSON.parse(valid);
+  assert.equal(policy.review_admission,undefined,'default-off project');
+  fs.writeFileSync(file,JSON.stringify({...policy,routes:{broken:3}}));
+  const s=admissionService(f);
+  assert.equal(s.pass().result,'pass-complete');
+  assert.ok(f.context().events.some(e=>e.type==='change.reviewed'&&e.review_run==='R-2'),'immutable result intake still records its verdict');
+  let effects=JSON.parse(fs.readFileSync(path.join(f.directory,'effects.json')));
+  assert.ok(effects.review_progress,'recovery readback still runs');
+  assert.equal(effects.review_admission.policy_hold.code,'REVIEW_ADMISSION_POLICY_INVALID');
+  assert.ok(effects.review_admission.held.some(h=>h.stage==='queue'),'pending source remains visibly held');
+  assert.equal(s.calls.some(a=>a[1]==='queue-review'||a[0].endsWith('/dispatch/dispatch.mjs')),false);
+  assert.ok(diagnostics(f).some(r=>r.action==='pass-complete'),'outcome/closeout tail completes');
+  fs.writeFileSync(file,valid);
+  assert.equal(s.pass().result,'pass-complete');
+  effects=JSON.parse(fs.readFileSync(path.join(f.directory,'effects.json')));
+  assert.equal(effects.review_admission.policy_hold,undefined,'hold lasts only the invalid pass');
+  assert.ok(s.calls.some(a=>a[1]==='queue-review'),'new review queueing resumes');
+  assert.ok(s.calls.some(a=>a[0].endsWith('/dispatch/dispatch.mjs')&&a[1]==='ENG-99'),'ordinary launch resumes');
+});
+
+for(const stage of ['capacity','dispatch'])test(`review admission policy becoming invalid at ${stage} preserves the pass tail and original attempts`,t=>{
+  const f=fixture(t);f.add([{type:'item.closed',id:'ENG-1',as:'done'},{type:'item.added',id:'ENG-99',role:'engineer',title:'Ready ordinary work'}]);
+  admissionPolicy(f,{hold_ordinary:false}); // Hold new reviews; allow the ordinary candidate.
+  const file=path.join(f.cwd,'.lane.json'),valid=fs.readFileSync(file),invalidate=()=>fs.writeFileSync(file,JSON.stringify({...JSON.parse(valid),routes:{broken:3}}));
+  const calls=[],s=admissionService(f,{capacity:()=>{if(stage==='capacity')invalidate();return{count:0,cap:4};},command:(_exe,args)=>{
+    calls.push(args);if(stage==='dispatch'&&args[0].endsWith('/dispatch/dispatch.mjs'))invalidate();return{status:0,stdout:'{}',stderr:''};
+  }});
+  assert.equal(s.pass().result,'pass-complete');
+  const effects=JSON.parse(fs.readFileSync(path.join(f.directory,'effects.json'))),attempts=Object.entries(effects.actions).filter(([key])=>key.startsWith('dispatch:ENG-99:'));
+  assert.equal(effects.review_admission.policy_hold.code,'REVIEW_ADMISSION_POLICY_INVALID');
+  assert.ok(effects.review_admission.held.some(h=>h.stage===(stage==='capacity'?'launch-mutation':'pass-end')));
+  assert.equal(calls.filter(a=>a[0].endsWith('/dispatch/dispatch.mjs')).length,stage==='capacity'?0:1);
+  assert.equal(attempts.length,stage==='capacity'?0:1,'pre-intent refusal creates no attempt; prior dispatch is retained');
+  if(attempts.length){assert.equal(attempts[0][1].state,'complete');assert.equal(attempts[0][1].history,undefined);}
+  assert.ok(diagnostics(f).some(r=>r.action==='pass-complete'));
+  assert.equal([...f.context().state.items.values()].some(i=>i.meta.halt_repair),false,'invalid policy cannot manufacture an idle repair');
+});
+
 function assertFiniteRefresh(f,args){
   assert.deepEqual(args.slice(0,6),[path.join(sourceRoot,'supervisor/closeout.mjs'),'refresh','--repo',f.cwd,'--org',f.org]);
   assert.equal(args.length,8);assert.equal(args[6],'--deadline');

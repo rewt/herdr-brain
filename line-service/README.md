@@ -58,6 +58,12 @@ holds without queueing or dispatching anything. An allowed row still needs every
 existing readiness, source, STOP/HOLD, cap and native check. No record event or
 fold change is required; old folds continue to read the record unchanged.
 
+An unreadable or invalid effective lane policy records
+`REVIEW_ADMISSION_POLICY_INVALID` and holds new queueing, recovery launches,
+ordinary dispatch and idle repair for that pass. Existing result intake and
+independent readbacks continue through the normal guards and pass tail. The
+next pass rereads repaired policy; a failed read never means default-off.
+
 ## Selected-only ordinary admission
 
 `ordinary_admission` is a separate project lane policy, default

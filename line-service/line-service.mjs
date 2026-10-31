@@ -362,14 +362,30 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       const sourceRevision=bundleRelease().commit??sourceGit(sourceRoot,['rev-parse','HEAD']);
       log({ action: 'pass-start', pid: process.pid, identity: project.identity, source: sourceRoot,source_head:sourceRevision });
       try { snapshot = current(); } catch (e) { log({ action: 'pass-held', reason: e.message }); return { held: e.message, directory }; }
-      const admissionPolicy=readReviewAdmission(repo,childEnv);
-      const ordinaryPolicy=readOrdinaryAdmission(repo,childEnv);
-      const {config}=loadDiscoveredRoutes({cwd:repo,env:childEnv});
+      // Invalid effective policy holds selection for this pass, not independent
+      // result intake/readbacks. Never interpret a failed read as default-off.
+      let policyHold,config;
+      effects.review_admission={schema:'review-admission-pass/v1',policy:null,held:[]};
+      const holdPolicy=(error,stage)=>{
+        policyHold={code:'REVIEW_ADMISSION_POLICY_INVALID',reason:error.message};
+        effects.review_admission.policy_hold=policyHold;
+        effects.review_admission.held.push({stage,...policyHold});noticesDirty=true;
+        log({action:'review-admission-held',stage,...policyHold});
+        note('review-admission-policy',error.message,{code:policyHold.code});
+        return null;
+      };
+      const readAdmission=(stage)=>{
+        if(policyHold)return null;
+        try{return{review:readReviewAdmission(repo,childEnv),ordinary:readOrdinaryAdmission(repo,childEnv)};}
+        catch(error){return holdPolicy(error,stage);}
+      };
+      const admission=readAdmission('pass-start'),admissionPolicy=admission?.review,ordinaryPolicy=admission?.ordinary;
+      if(admission)try{({config}=loadDiscoveredRoutes({cwd:repo,env:childEnv}));}catch(error){holdPolicy(error,'pass-start');}
       const evaluationCounts={admission_evaluated:0,admission_skipped:0,source_evaluated:0,source_skipped:0};
       const evaluationCache=negativeEvaluationCache({store:()=>effects,identity:project.identity,org,repo,revision:sourceRevision,
         counts:evaluationCounts,dirty:()=>{noticesDirty=true;}});
       const evaluationPolicy={admissionPolicy,ordinaryPolicy,config,supervisor:childEnv.MONITOR_SUPERVISOR_AGENT??null};
-      effects.review_admission={schema:'review-admission-pass/v1',policy:admissionPolicy,held:[]};
+      effects.review_admission.policy=admissionPolicy??null;
       effects.ordinary_admission={schema:'ordinary-admission-pass/v1',policy:ordinaryPolicy,held:[]};save();
       const ordinaryHold=(item,state,stage,policy=ordinaryPolicy)=>{
         const hold=ordinaryAdmissionHold(policy,{item,state});
@@ -377,14 +393,15 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         return hold;
       };
       // Retain every excluded open ordinary row, even beyond the start/cap limit.
-      for(const item of snapshot.state.items.values())if(ordinaryPolicy.selected_only&&!item.closed&&item.kind!=='goal'){
+      for(const item of snapshot.state.items.values())if(ordinaryPolicy?.selected_only&&!item.closed&&item.kind!=='goal'){
         const selection=evaluationCache.probe('selection',{snapshot,item:item.id,policy:evaluationPolicy});
         if(selection.skip){effects.ordinary_admission.held.push({stage:'selection',item:item.id,...selection.reason,cached:true});noticesDirty=true;continue;}
         const held=ordinaryHold(item,snapshot.state,'selection');if(held)selection.retain(held);
       }
       const admit=(subject,stage,fresh=false)=>{
-        const hold=reviewAdmissionHold(fresh?readReviewAdmission(repo,childEnv):admissionPolicy,reviewAdmissionSubject(subject));
-        if(!hold)return reviewAdmissionSubject(subject).kind!=='ordinary'||!ordinaryHold(subject.item,subject.state??snapshot.state,stage,fresh?readOrdinaryAdmission(repo,childEnv):ordinaryPolicy);
+        const policies=fresh?readAdmission(stage):admission;
+        const hold=policyHold??reviewAdmissionHold(policies.review,reviewAdmissionSubject(subject));
+        if(!hold)return reviewAdmissionSubject(subject).kind!=='ordinary'||!ordinaryHold(subject.item,subject.state??snapshot.state,stage,policies.ordinary);
         const row={stage,item:subject.item?.id,run:subject.run?.id,head:subject.target?.head??subject.item?.meta.review_target?.head,...reviewAdmissionSubject(subject),...hold};
         effects.review_admission.held.push(row);noticesDirty=true;log({action:'review-admission-held',...row});return false;
       };
@@ -780,13 +797,13 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       }};
       const ordered=orderQueue(snapshot.state,[...snapshot.state.items.values()].filter(item=>!item.closed&&item.kind!=='goal'),standing);
       log({action:'queue-order',policy:standing,candidates:ordered.map(item=>({item:item.id,class:queueClass(snapshot.state,item,standing)}))});
-      admitItems(ordered);
+      if(config&&!policyHold)admitItems(ordered);
       // Detached acknowledgements and review activity are not engineering
       // progress. This is the end of a completed pass, under the same lock.
-      const latestAdmission=readReviewAdmission(repo,childEnv);
-      if(!latestAdmission.enabled||!latestAdmission.hold_ordinary)try {
+      const latestAdmission=readAdmission('pass-end');
+      if(config&&latestAdmission&&(!latestAdmission.review.enabled||!latestAdmission.review.hold_ordinary))try {
         snapshot=observe();
-        const haltConfig={...config,ordinary_admission:readOrdinaryAdmission(repo,childEnv)};
+        const haltConfig={...config,ordinary_admission:latestAdmission.ordinary};
         const observation=haltObservation({...snapshot,org,identity:project.identity,config:haltConfig,actions:effects.actions,occupancy:latestOccupancy});
         {
           if(observation.ready.length)try{latestOccupancy=countCapacity('build');}catch(e){latestOccupancy=e.sessions??{unknown:e.message};log({action:'halt-capacity-held',code:e.code,reason:e.message});}

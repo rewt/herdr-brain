@@ -294,8 +294,12 @@ report bytes, independent blockers, reserved/ancestor holds, STOP/HOLD, command
 uncertainty and clean source/head CAS. It preserves the original journal entry
 and terminal receipt byte for byte, archives them immutably, and atomically
 appends `line-service.review-completion-reconciled` and review-item closure.
-Identical readback is idempotent; changed or UNKNOWN originals remain held with
-their owner in the existing pass audit. Even a changed completion token cannot
+Identical readback is idempotent. Each pass screens originals with the read-only
+planning proof before creating a reconciliation command or taking the landing
+lock. Unqualified originals remain held; an unchanged original and reason emit
+one cumulative diagnostic in the existing pass audit, retained across service
+instances. The screen is re-evaluated on each snapshot, so a previous hold cannot
+authorize or suppress a newly qualifying reconciliation. Even a changed completion token cannot
 mint a replacement for a retained original. The existing source-bound closer
 owns session/folder release; historical successful closer receipts are reused,
 never replaced by another physical cleanup or a fabricated success.

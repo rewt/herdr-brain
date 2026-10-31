@@ -91,8 +91,8 @@ for(const change of ['report','STOP','claim'])test(`short review preparation ref
   finally{fs.mkdirSync=mkdir;release();}
 });
 
-function failedCompletion(t,{attempt='73313d79-0733-4adf-93b9-3cde935541d0'}={}){
-  const f=fixture(t,{verdict:'PASS'}),release=noticeLock(path.join(f.directory,'pass.lock'));
+function failedCompletion(t,{attempt='73313d79-0733-4adf-93b9-3cde935541d0',verdict='PASS'}={}){
+  const f=fixture(t,{verdict}),release=noticeLock(path.join(f.directory,'pass.lock'));
   try{recordReviewResults(f.args);}finally{release();}
   const plan=reviewCompletionPlan({...f.context(),runId:'R-1'}),key=`review-complete:R-1:${plan.token}`,at=new Date().toISOString();
   const ref=commandIntent(f.directory,{exe:'line-operation',args:['review-complete',key],cwd:f.cwd,project:f.identity,org:f.org,subject:'REV-1',key,consumer:'line-service'});
@@ -152,10 +152,42 @@ for(const kind of ['status','signal','stdout','native-refusal','message','intent
   }finally{release();}
 });
 
+for(const kind of ['pre-typed','FAIL','token'])test(`ordinary line retains an unqualified ${kind} original across passes without writer effects`,t=>{
+  const f=failedCompletion(t,{verdict:kind==='FAIL'?'FAIL':'PASS'});
+  if(kind==='pre-typed'){delete f.entry.commands;delete f.entry.consumer;delete f.entry.execution_subject;f.save();}
+  if(kind==='token')f.add([{type:'item.updated',id:'REV-1',fields:{title:'Changed review scope'}}]);
+  const original=JSON.stringify(f.entry),command=fs.readFileSync(f.ref.receipt),mkdir=fs.mkdirSync;
+  const lock=path.join(f.identity,'lane-promote.lock');let landingLocks=0;
+  fs.mkdirSync=function(file,...args){if(file===lock)landingLocks++;return mkdir.call(this,file,...args);};
+  try{
+    for(let pass=0;pass<2;pass++){
+      // A fresh service instance also proves the diagnostic survives a reload.
+      const service=createLineService({repo:f.cwd,org:f.org,to:'fixture-supervisor',env:f.env,maxStarts:0,maxStepsPerStage:0,
+        command:()=>({status:1,stderr:'No external command selected by this fixture'})});
+      service.pass({reconcileCloseout:false});
+      const journal=JSON.parse(fs.readFileSync(f.file));
+      assert.equal(JSON.stringify(journal.actions[f.key]),original);
+      assert.equal(Object.keys(journal.actions).filter(k=>k.startsWith('review-complete:R-1:')).length,1);
+      assert.deepEqual(fs.readFileSync(f.ref.receipt),command);
+      const commands=fs.readdirSync(path.join(f.directory,'command-receipts')).map(name=>JSON.parse(fs.readFileSync(path.join(f.directory,'command-receipts',name))));
+      assert.equal(commands.some(c=>c.intent.exe==='line-operation'&&c.intent.args[0]==='review-completion-reconcile'),false);
+      assert.equal(fs.readdirSync(path.join(f.directory,'active-commands')).length,0);
+      assert.equal(landingLocks,0);
+      const rows=fs.readFileSync(path.join(f.directory,'passes.jsonl'),'utf8').trim().split('\n').map(JSON.parse);
+      assert.equal(rows.filter(r=>r.action==='review-completion-held'&&r.run==='R-1').length,1);
+      const notes=rows.filter(r=>r.action==='hold'&&r.boundary==='review-complete:R-1');
+      assert.equal(notes.length,1);assert.equal(notes[0].notice_record.entry.count,1);
+      assert.equal(f.context().state.items.get('REV-1').closed,null);
+      assert.equal(f.context().events.some(e=>e.type==='line-service.review-completion-reconciled'),false);
+    }
+  }finally{fs.mkdirSync=mkdir;}
+});
+
 test('ordinary line consumes the original completion without invoking its command or minting another attempt',t=>{
   const f=failedCompletion(t),calls=[];
   const service=createLineService({repo:f.cwd,org:f.org,to:'fixture-supervisor',env:f.env,maxStarts:0,maxStepsPerStage:0,
     command:(_exe,args)=>{calls.push(args);return{status:1,stderr:'No external command selected by this fixture'};}});
+  service.pass({reconcileCloseout:false});
   service.pass({reconcileCloseout:false});
   const c=f.context();assert.equal(c.state.items.get('REV-1').closed?.as,'done');
   const journal=JSON.parse(fs.readFileSync(f.file));assert.deepEqual(journal.actions[f.key],f.entry);

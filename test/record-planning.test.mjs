@@ -97,12 +97,14 @@ process.exit(result.status??1);
     });
     let commits = 0;
     const plan = () => {
-      assert.equal(gitProject(f.root, { env }).identity, path.join(f.root, '.git'));
+      // This matrix deliberately depends on main HEAD as well as identity.
+      // Ordinary identity discovery no longer captures unrelated worktree tips.
+      assert.equal(gitProject(f.root, { env,includeHead:true }).identity, path.join(f.root, '.git'));
       if (mode === 'changed') f.git(['update-ref', 'refs/heads/main', changed]);
       return { add: [{ type: 'future.git-checked' }], commit: validate => { commits++; validate(); } };
     };
     if (mode === 'guard') {
-      const guard = prepareRecordGuard(f.dir, () => gitProject(f.root, { env }));
+      const guard = prepareRecordGuard(f.dir, () => gitProject(f.root, { env,includeHead:true }));
       guard.run(() => { assert.equal(fs.existsSync(f.lock), true); guard.validate(); commits++; });
     } else if (['exit-128', 'changed', 'late-change'].includes(mode)) {
       assert.throws(() => planTransaction(f.dir, plan), error => {

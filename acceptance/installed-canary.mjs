@@ -11,6 +11,7 @@ export async function runCanary(c) {
   const {config,write,stage,module,env,run,checked,git,record,state,journals,service,audit,project,directory,
     producer,item,successorItem,base,until,idle,report,controls,controlOptions,ownerAlive}=c;
   const {root,repo,org,home,bundle,commit}=config;
+  const failures=[];
   const {loadRecord,transact}=await module('lib/store.mjs');
   const events=()=>loadRecord(org).events;
   const nativeFile=path.join(root,'native.json');
@@ -47,23 +48,15 @@ export async function runCanary(c) {
     write(job.run+'-completion.json',result);return result;
   };
 
-  // S4 between dispatch and promotion: preserve the original attempt, head,
-  // watcher and folder while each independent project guard is present.
+  // Complete ordinary A without injecting faults into its original watcher.
+  // STOP intentionally ends a per-run watcher, so promotion boundary controls
+  // use their own later allocation rather than destroying S1/S7's observation.
   const lane=producer.worker.cwd;
   fs.writeFileSync(path.join(lane,'answer.txt'),'Installed consumer change\n');
   git(['add','answer.txt'],lane);git(['commit','-qm','Scripted installed canary change'],lane);
   const head=git(['rev-parse','HEAD'],lane);
-  const selectionGuards=[];
-  for(const name of ['STOP','HOLD']) {
-    const file=path.join(repo,'.lane/supervisor',name);fs.writeFileSync(file,'Fixture-owned between-stage hold\n');
-    const result=run(process.execPath,[path.join(bundle,'lanes/lane.mjs'),'promote',producer.lane,'--expected-head-from-worktree'],{cwd:lane,env:workerEnv(producer)});
-    assert.notEqual(result.status,0);assert.match(result.stderr+result.stdout,/STOP|HOLD|stopped|hold/i);
-    assert.equal(git(['rev-parse','main']),base);assert.ok(fs.existsSync(lane));
-    assert.match(service(0).pass().held,/STOP\/HOLD/);
-    selectionGuards.push({name,status:result.status,stdout:result.stdout,stderr:result.stderr});fs.unlinkSync(file);
-  }
   promote(producer);assert.equal(git(['rev-parse','main']),head);
-  stage('S4-boundary',{originalAttempt:producer.token,head,guards:selectionGuards,resumedOriginal:true});
+  stage('land',{base,head,originalAttempt:producer.token});
 
   // S7: exactly the existing immutable-root maintenance seam, while the
   // producer and its original callback remain captured and live.
@@ -165,6 +158,27 @@ export async function runCanary(c) {
       await complete(job,[],'verdict: PASS\n');
   }
   await drainReviews();
+  // S4 between-stage controls have their own attempt. Preserve even an actual
+  // prohibited FF as FAIL, then observe independent cleanup without replay.
+  const guardItem=record(['add','Guarded installed promotion control','--role','engineer']).match(/ENG-\d+/)[0];service(1).pass();
+  const guardJob=journals().find(j=>j.item===guardItem);assert.ok(guardJob,audit());
+  const guardBase=git(['rev-parse','main']);
+  fs.writeFileSync(path.join(guardJob.worker.cwd,'guard.txt'),'Guarded control\n');git(['add','guard.txt'],guardJob.worker.cwd);
+  git(['commit','-qm','Guarded control'],guardJob.worker.cwd);const guardHead=git(['rev-parse','HEAD'],guardJob.worker.cwd),selectionGuards=[];
+  for(const name of ['STOP','HOLD']) {
+    const file=path.join(repo,'.lane/supervisor',name);fs.writeFileSync(file,'Fixture-owned between-stage hold\n');
+    const result=run(process.execPath,[path.join(bundle,'lanes/lane.mjs'),'promote',guardJob.lane,'--expected-head-from-worktree'],{cwd:guardJob.worker.cwd,env:workerEnv(guardJob)});
+    if(result.status===0){assert.equal(git(['rev-parse','main']),guardHead);failures.push({case:'S4',guard:name,reason:'Project guard permitted worker promotion',result});}
+    else{assert.match(result.stderr+result.stdout,/STOP|HOLD|stopped|hold/i);assert.equal(git(['rev-parse','main']),guardBase);}
+    assert.ok(fs.existsSync(guardJob.worker.cwd));assert.match(service(0).pass().held,/STOP\/HOLD/);
+    selectionGuards.push({name,status:result.status,stdout:result.stdout,stderr:result.stderr});fs.unlinkSync(file);
+  }
+  if(git(['rev-parse','main'])!==guardHead)promote(guardJob);
+  report(guardJob,[`source: ${guardHead}; base: ${guardBase}`]);service(0).pass();
+  await until(()=>finished(guardJob)&&!fs.existsSync(guardJob.worker.cwd),'guard allocation original report cleanup');
+  stage('S4-boundary',{status:failures.length?'FAIL':'PASS',failures,originalAttempt:guardJob.token,head:guardHead,guards:selectionGuards,
+    stoppedWatcherRetained:true,rearmed:false,reportIntake:'normal line reconciliation',resumedOriginal:failures.length===0});
+  await drainReviews();
 
   // S8 equivalent installed same-release policy control: use the supported
   // record selection policy, not a rebuild. The demo's real owner remains live
@@ -172,8 +186,16 @@ export async function runCanary(c) {
   const policyItem=record(['add','Same-release selected configuration control','--role','engineer']).match(/ENG-\d+/)[0];
   record(['set',policyItem,'meta.queue_selected=false']);service(1).pass();
   assert.equal(state().items.get(policyItem).runs.length,0);
+  const oldRun=JSON.stringify(state().runs.get(producer.run));
+  const policyBefore=JSON.parse(record(['config','--json']));
+  const digest=createHash('sha256').update(fs.readFileSync(path.join(repo,'.lane.json'))).digest('hex');
+  record(['config','set','routes.engineer.effort','high','--expect',digest,'--who-asked','Installed canary equivalent same-release operations control']);
+  const policyAfter=JSON.parse(record(['config','--json']));
+  git(['add','.lane.json']);git(['commit','-qm','Audited scratch project operations change']);
   record(['set',policyItem,'meta.queue_selected=true']);service(2).pass();
   const policyJob=journals().find(j=>j.item===policyItem);assert.ok(policyJob,audit());assert.equal(policyJob.release.commit,commit);
+  assert.equal(state().runs.get(policyJob.run).meta.effort,'high');
+  assert.equal(JSON.stringify(state().runs.get(producer.run)),oldRun);
   // This clean unlanded branch is retained by the real closer. An unsaved file
   // on a different allocation is tested below, never removed by fixture fiat.
   fs.writeFileSync(path.join(policyJob.worker.cwd,'unlanded.txt'),'Keep unlanded work\n');
@@ -183,9 +205,11 @@ export async function runCanary(c) {
   await until(()=>!fs.existsSync(policyJob.worker.cwd),'safe unlanded folder closeout');
   assert.equal(git(['rev-parse','refs/heads/lane/'+policyJob.lane]),unlanded);
   assert.equal(state().items.get(reserved.id).runs.length,0);
-  stage('S8',{selection:'equivalent supported record queue_selected policy',reason:'ENG-1041 live demonstration remains with its owner',
+  stage('S8',{selection:'equivalent supported audited project route configuration and record selection',reason:'ENG-1041 live demonstration remains with its owner',
     item:policyItem,run:policyJob.run,commit,root:policyJob.release.root,unselectedRuns:0,selectedPrompts:prompts(policyJob).length,
-    reservedRuns:0,unlandedBranchRetained:unlanded,effectivePolicy:state().items.get(policyItem).meta});
+    reservedRuns:0,unlandedBranchRetained:unlanded,effectivePolicy:state().items.get(policyItem).meta,policyBefore,policyAfter,
+    audit:events().filter(e=>e.type==='config.changed'),nextRunEffort:'high',oldRunUnchanged:true});
+  await drainReviews();
 
   // Script native refusal and lost replies on separate original attempts. Two
   // subsequent normal turns must not retry or replace either original input.
@@ -248,7 +272,7 @@ export async function runCanary(c) {
   const {productFiles,payloadEntry}=await module('lib/product-files.mjs');
   assert.deepEqual(Object.fromEntries(productFiles(bundle).sort().map(f=>[f,payloadEntry(bundle,f)])),config.candidate.files);
   write('outcome.json',{schema:'brain.installed-canary/v1',ready:false,fixtureOnly:true,scriptedMechanics:true,
-    candidate:config.candidate,cases:['S0','S1','S2','S3','S4','S5','S6','S7','S8','shared-observer'],status:'PASS',
+    candidate:config.candidate,cases:['S0','S1','S2','S3','S4','S5','S6','S7','S8','shared-observer'],status:failures.length?'FAIL':'PASS',failures,
     originalReview:review.id,reviewerSuites:0,base,head,ordinarySuccessor:b.run,limits:['No real model/native/account execution','No real probation/soak/adoption','Synthetic acceptance never qualifies real runtime'],
     packet:{stages:'stages.json',tuple:'original-candidate.json',equivalence:'candidate-equivalence.json',commands:'commands.jsonl',native:'../native-calls.jsonl',record:'../project/.org/events.jsonl'}});
   // Stop only owned fixture observers/watchers after preserving their original
@@ -258,6 +282,7 @@ export async function runCanary(c) {
   await until(()=>!fs.existsSync(path.join(directory,'closeout-turn.lock')),'finite closeout teardown');
   for(const [file,bytes]of originals)assert.deepEqual(fs.readFileSync(file),bytes);
   stage('fixture-teardown',{originalJournalsUnchanged:true,watchersStopped:true,retainedWorkArchived:true});
+  assert.deepEqual(failures,[],'Canary failures remain failed after independent observations');
 
   async function sharedCase(){
     // Real observer entry, real 30 s safety reconciliation and real original

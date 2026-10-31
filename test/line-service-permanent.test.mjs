@@ -60,12 +60,13 @@ test('permanent flow completion retains missing verdict held reopened foreign-ow
   }
 });
 
-for(const change of ['unrelated','hold','claim','STOP','report'])test(`completion preparation ${change==='unrelated'?'refreshes an unrelated append once':`retains a late ${change} refusal`}`,t=>{
+for(const change of ['unrelated','hold','claim','claim-generation','STOP','report'])test(`completion preparation ${change==='unrelated'?'refreshes an unrelated append once':`retains a late ${change} refusal`}`,t=>{
   const f=fixture(t),release=noticeLock(path.join(f.directory,'pass.lock')),mkdir=fs.mkdirSync;let injected=false;
   recordReviewResults(f.args);
   fs.mkdirSync=function(file,...args){const out=mkdir.call(this,file,...args);if(file===path.join(f.org,'lock')&&!injected){
     injected=true;
-    const event=change==='hold'?{type:'item.updated',id:'REV-1',fields:{meta:{hold:true}}}:change==='claim'?{type:'run.claimed',run:'R-1',record:f.org,project:f.identity,owner:{...f.context().state.runs.get('R-1').owner,controller:'foreign'}}:{type:'note.added',id:'ENG-99',text:'Unrelated work continues'};
+    const owner=f.context().state.runs.get('R-1').owner;
+    const event=change==='hold'?{type:'item.updated',id:'REV-1',fields:{meta:{hold:true}}}:change.startsWith('claim')?{type:'run.claimed',run:'R-1',record:f.org,project:f.identity,owner:change==='claim'?{...owner,controller:'foreign'}:owner}:{type:'note.added',id:'ENG-99',text:'Unrelated work continues'};
     fs.appendFileSync(path.join(f.org,'events.jsonl'),JSON.stringify({seq:f.context().events.at(-1).seq+1,...event})+'\n');
     if(change==='STOP')fs.writeFileSync(path.join(f.directory,'STOP'),'stop');
     if(change==='report')fs.appendFileSync(path.join(f.org,'reports/R-1.md'),'changed');

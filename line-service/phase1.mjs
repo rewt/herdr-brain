@@ -44,9 +44,12 @@ export function reviewCompletionPlan({events,state,runId}){
 export function recordReviewCompletion({repo,org,runId,env=process.env}){
   const guard=()=>{const b=serviceRecordBinding({repo,org,env});for(const f of [path.join(b.directory,'STOP'),path.join(repo,'.lane/supervisor/STOP'),path.join(repo,'.lane/supervisor/HOLD')])if(fs.existsSync(f))throw Error('STOP/HOLD prevents review completion');return b;};
   guard();
+  let ownership;
   const result=planTransaction(org,(events,state)=>{
     guard();const p=reviewCompletionPlan({events,state,runId});if(p.closed)return{add:[]};
-    const owned=readOwnedRun(org,runId,events);requireController(owned,'brain');assertOwner(owned,{owner:p.run.owner,generation:p.run.owner_generation});
+    const owned=readOwnedRun(org,runId,events);requireController(owned,'brain');
+    ownership??={owner:p.run.owner,generation:p.run.owner_generation};
+    assertOwner(owned,ownership); // Fresh preparation cannot adopt a new claim.
     const file=path.resolve(org,p.run.report.file??'');if(!file.startsWith(org+path.sep)||hash(fs.readFileSync(file))!==p.run.report.sha256)throw Error('immutable review completion bytes changed');
     const mutation=protectRecordMutation({org,state,events,command:'line-service completed review',mutation:{add:[{type:'item.closed',id:p.item.id,as:'done',completed_run:runId,review_verdict:p.fact.seq,note:`Independent ${p.fact.verdict} judgment recorded for ${p.fact.review_key}; linked corrections remain owned and open. Preserve callbacks, HOLD, archives and guarded physical retirement.`}]}});
     return bindCloseoutSources({cwd:repo,org,events,env,mutation});

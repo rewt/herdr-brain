@@ -17,6 +17,8 @@ import {withRuntimeLocks} from './runtime-locks.mjs';
 import {noticeLock} from '../supervisor/notice-lock.mjs';
 import {fold} from '../lib/state.mjs';
 import {itemLaunchHold} from '../lib/item-launch-hold.mjs';
+import {prepareDevelopmentRecovery,sealDevelopmentRecovery,verifyDevelopmentRecovery} from './development-recovery.mjs';
+import {legacyRecipientHistory,recipientChanges} from './recipient-history.mjs';
 
 const toolRoot=fs.realpathSync(fileURLToPath(new URL('../',import.meta.url)));
 const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
@@ -54,7 +56,7 @@ function archived(event,c){
   if(!Number.isSafeInteger(decision))throw Error('probation recorded authority is missing');
   return a;
 }
-function authorityOwner(note,events){
+export function authorityOwner(note,events){
   const state=fold(events),run=state.runs.get(note.id),item=state.items.get(run?.item??note.id);
   if(!item||run?.abandoned)throw Error('probation authority owning item/run is unavailable');
   const hold=itemLaunchHold(state,item.id,events);
@@ -70,7 +72,8 @@ export function probationRuntime(repo,{root,home=releaseHome(),events,allowEnded
   if(!events&&!fs.existsSync(path.join(c.directory,'probation')))return null;
   const loaded=events?{events}:loadEvents(c.org);
   if(loaded.tornTail)throw Error('incomplete record prevents probation admission');
-  const found=trials(loaded.events,c).filter(e=>e.scope?.candidate?.release?.root===root);
+  const found=trials(loaded.events,c).filter(e=>e.scope?.candidate?.release?.root===root||
+    e.scope?.previous?.kind==='development-recovery'&&e.scope.previous.release.root===root);
   if(!found.length)return null;
   if(found.length!==1)throw Error('probation candidate authority is ambiguous; no replacement trial');
   const event=found[0],a=archived(event,c),note=loaded.events.find(e=>e.seq===a.authority);
@@ -89,18 +92,20 @@ export function probationRuntime(repo,{root,home=releaseHome(),events,allowEnded
     throw Error('probation authority withdrawn/completed; no new admissions');
   }
   if(!allowEnded)authorityOwner(note,loaded.events);
-  if(event.repo!==c.repo||a.scope.candidate.common!==c.identity||!same(tuple(root,home),a.scope.candidate))throw Error('probation candidate/project tuple drifted');
-  requireRecordCompatibility(root,loaded.events);
   const previous=a.scope.previous;
-  if(!allowEnded){
+  const candidateRoot=a.scope.candidate.release.root,candidateHome=path.dirname(path.dirname(candidateRoot));
+  if(event.repo!==c.repo||a.scope.candidate.common!==c.identity||!same(tuple(candidateRoot,candidateHome),a.scope.candidate))throw Error('probation candidate/project tuple drifted');
+  requireRecordCompatibility(root,loaded.events);
+  if(previous.kind==='development-recovery')verifyDevelopmentRecovery(c,previous,loaded.events);
+  else if(!allowEnded){
     const old=checkRelease(home,previous.release.id,{verifyFiles:true});requireReadyAcceptance(old,home);
     if(!same(old,previous.release)||sha(readPlainFile(path.join(old.root,'.release-manifest.json')))!==previous.manifest_sha256)throw Error('probation previous runtime changed');
     requireRecordCompatibility(old.root,loaded.events);
   }
-  return{...a.scope.candidate.release,probation:{id:event.id,seq:event.seq,archive:event.archive,scope_sha256:sha(canonical(a.scope)),previous:a.scope.previous}};
+  return{...(root===candidateRoot?a.scope.candidate.release:previous.release),probation:{id:event.id,seq:event.seq,archive:event.archive,scope_sha256:sha(canonical(a.scope)),previous}};
 }
 
-export function probationControl({repo,org,id,fromRoot,targetRoot,authority,finish,dryRun=false,expectedPlan,cwd=process.cwd(),env=process.env,call,command=spawnSync,home=releaseHome()}={}){
+export function probationControl({repo,org,id,fromRoot,targetRoot,authority,finish,developmentRecovery=false,dryRun=false,expectedPlan,cwd=process.cwd(),env=process.env,call,command=spawnSync,home=releaseHome(),fault=()=>{}}={}){
   if(process.platform!=='darwin'||process.version!=='v20.19.4')throw Error('probation requires macOS and pinned Node 20.19.4');
   if(!/^[-a-zA-Z0-9_]{1,80}$/.test(id??''))throw Error('probation needs a stable --id');
   const c=context(repo,org);
@@ -119,7 +124,7 @@ export function probationControl({repo,org,id,fromRoot,targetRoot,authority,fini
     return git(c.repo,['rev-parse','HEAD']);
   };
   if(finish){
-    if(!['withdrawn','completed'].includes(finish)||dryRun||expectedPlan||fromRoot||targetRoot||authority)throw Error('withdraw/complete takes only the original trial id');
+    if(!['withdrawn','completed'].includes(finish)||dryRun||expectedPlan||fromRoot||targetRoot||authority||developmentRecovery)throw Error('withdraw/complete takes only the original trial id');
     // Revocation may contain a running line even during STOP/HOLD. It performs
     // no native input, stop, cancellation, restart or installation mutation.
     const unlock=noticeLock(path.join(c.directory,'control.lock'),{recover:false});
@@ -144,14 +149,29 @@ export function probationControl({repo,org,id,fromRoot,targetRoot,authority,fini
     const target=`gui/${process.getuid()}/dev.herdr.line.${path.basename(c.directory)}`;
     const service=command('/bin/launchctl',['print',target],{cwd:c.repo,encoding:'utf8'});
     if(service.error||service.status===0||!/could not find service/i.test(service.stderr??''))throw Error('probation requires positively stopped service; native refusal retained');
-    const candidate=tuple(targetRoot,home),previous=checkRelease(home,path.basename(fromRoot),{verifyFiles:true});requireReadyAcceptance(previous,home);
-    if(previous.root!==fromRoot||targetRoot===fromRoot||candidate.common!==c.identity||git(c.repo,['rev-parse',`${candidate.release.commit}^{tree}`])!==candidate.tree)
+    const candidate=tuple(targetRoot,home);
+    if(targetRoot===fromRoot||candidate.common!==c.identity||git(c.repo,['rev-parse',`${candidate.release.commit}^{tree}`])!==candidate.tree)
       throw Error('probation requires Brain candidate and exact retained previous accepted root');
     git(c.repo,['merge-base','--is-ancestor',candidate.release.commit,head]);
     const installation=readPlainFile(path.join(c.directory,'installation.json')),plist=readPlainFile(path.join(c.directory,'service.plist')),saved=JSON.parse(installation);
-    if(saved.source!==fromRoot||!same(saved.runtime,previous)||!(saved.migration||saved.fresh_install))throw Error('probation requires prior installed accepted runtime; development migration is separate');
+    let previous;
+    if(developmentRecovery){
+      if(fromRoot!==c.repo)throw Error('development recovery predecessor must be actual canonical Brain source');
+      const loaded=loadEvents(c.org);if(loaded.tornTail)throw Error('incomplete record prevents development recovery');
+      const cutovers=loaded.events.filter(e=>e.type==='line-service.cutover'&&e.project===c.identity&&e.org===c.org);
+      if(cutovers.length!==1||cutovers[0].main!==git(c.repo,['symbolic-ref','--short','HEAD'])||
+          loaded.events.some(e=>['line-service.runtime-migrated','line-service.runtime-upgraded','line-service.probation-switched'].includes(e.type)&&e.project===c.identity&&e.org===c.org))
+        throw Error('development recovery requires original initial cutover/history');
+      git(c.repo,['merge-base','--is-ancestor',cutovers[0].canonical_head,head]);
+      legacyRecipientHistory(recipientChanges(loaded.events,c),{installation:saved,plist,cutover:cutovers[0]});
+      previous=prepareDevelopmentRecovery(c,{id,head,installation,plist,cutover:cutovers[0],service:{loaded:false,native:service.stderr.trim()},stop_sha256:sha(stop),command});
+    }else{
+      const release=checkRelease(home,path.basename(fromRoot),{verifyFiles:true});requireReadyAcceptance(release,home);
+      if(release.root!==fromRoot||saved.source!==fromRoot||!same(saved.runtime,release)||!(saved.migration||saved.fresh_install))throw Error('probation requires prior installed accepted runtime; development migration is separate');
+      previous={release,manifest_sha256:sha(readPlainFile(path.join(release.root,'.release-manifest.json')))};
+    }
     return{head,stop_sha256:sha(stop),installation,plist,scope:{schema:'brain-probation-scope/v1',brain_common:c.identity,repo:c.repo,org:c.org,candidate,
-      previous:{release:previous,manifest_sha256:sha(readPlainFile(path.join(previous.root,'.release-manifest.json')))},
+      previous,
       end:'explicit-withdrawal-or-completion',stable_ready:false}};
   };
   const initial=snapshot(),loaded=loadEvents(c.org);if(loaded.tornTail)throw Error('incomplete record prevents probation authority');
@@ -165,6 +185,7 @@ export function probationControl({repo,org,id,fromRoot,targetRoot,authority,fini
       const expected=trials(events,c).map(e=>e.id+'.json').sort();
       if(!same(fs.readdirSync(directory).sort(),expected))throw Error('existing/UNKNOWN probation authority retained; no replay or replacement');
     }
+    if(developmentRecovery&&fs.existsSync(path.dirname(initial.scope.previous.release.root)))throw Error('existing/UNKNOWN development recovery retained; no replacement');
     requireRecordCompatibility(targetRoot,events);requireRecordCompatibility(fromRoot,events);
   };
   inspect(loaded.events);
@@ -183,6 +204,8 @@ export function probationControl({repo,org,id,fromRoot,targetRoot,authority,fini
         canonical_head:initial.head,stop_sha256:initial.stop_sha256,before:{installation:initial.installation,plist:initial.plist}};
       const bytes=JSON.stringify(archive)+'\n';plainDirectory(path.dirname(archiveFile));
       const fd=fs.openSync(archiveFile,'wx',0o444);try{fs.writeFileSync(fd,bytes);fs.fsyncSync(fd);}finally{fs.closeSync(fd);}
+      fault('intent');
+      if(developmentRecovery){sealDevelopmentRecovery(c,initial.scope.previous);fault('recovery');}
       const ref={file:archiveFile,sha256:sha(bytes)};
       return{add:[{type:'line-service.probation-authorized',id,project:c.identity,repo:c.repo,org:c.org,scope:initial.scope,owner,authority:note.seq,archive:ref}],
         result:{id,authorized:true,archive:ref,candidate:initial.scope.candidate,runtime_started:false,stable_ready:false}};

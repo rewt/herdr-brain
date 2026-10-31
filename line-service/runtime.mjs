@@ -13,6 +13,7 @@ import {freshInstallation} from './install-history.mjs';
 import {findOrgDir,loadEvents} from '../lib/store.mjs';
 import {requireRecordCompatibility} from '../lib/record-compatibility.mjs';
 import {probationRuntime} from './probation.mjs';
+import {developmentHistory} from './development-recovery.mjs';
 
 export const runtimeRoot=fs.realpathSync(fileURLToPath(new URL('../',import.meta.url)));
 export const digest=bytes=>createHash('sha256').update(bytes).digest('hex');
@@ -43,6 +44,11 @@ export function serviceSource(repo,options={}) {
 // Resolve the immutable migration followed by completed release handoffs. The
 // original boundary and migration stay intact, including across a rollback.
 export function runtimeHistory(events,{repo,org,identity,directory,installation,cutover,root=runtimeRoot}) {
+  if(installation.probation_bootstrap){
+    const admitted=probationRuntime(repo,{root:installation.source,events,allowEnded:true});
+    if(admitted?.probation.id!==installation.probation_bootstrap.trial)throw Error('development recovery trial binding differs');
+    return developmentHistory(events,{repo,org,identity,directory,installation,cutover,root,trial:admitted.probation});
+  }
   const changes=recipientChanges(events,{repo,org,identity,directory});
   const rows=events.filter(e=>e.type==='line-service.runtime-migrated'&&e.project===identity&&e.org===org);
   let saved,plist,last,previous,historyStart;

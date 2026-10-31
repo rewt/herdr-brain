@@ -16,8 +16,16 @@ import {requireReadyAcceptance,selectRelease,requireHomeRelease} from '../lib/re
 import {fixture as dispatchFixture,promptCalls} from '../dispatch/test/dispatch-fixture.mjs';
 
 const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
-async function fixture(t){
-  const f=configFixture(t,{custom:true}),org=f.env.ORG_DIR;
+async function fixture(t,{development=false,phase='installed'}={}){
+  let f;
+  // The product's sealed payload is immutable; only private fixture teardown
+  // makes its directories writable before configFixture removes its scratch.
+  const teardown={after:fn=>t.after(()=>{
+    if(f&&development){const folder=path.join(f.env.ORG_DIR,'line-service');
+      const writable=dir=>{if(!fs.existsSync(dir))return;fs.chmodSync(dir,0o755);for(const e of fs.readdirSync(dir,{withFileTypes:true}))if(e.isDirectory())writable(path.join(dir,e.name));};writable(folder);}
+    fn();
+  })};
+  f=configFixture(development?teardown:t,{custom:true});const org=f.env.ORG_DIR;
   // A private canonical Brain source, record, fleet and native observations.
   // Every release/READY/native receipt here is synthetic offline fixture data.
   copyProduct(path.resolve(import.meta.dirname,'..'),f.cwd);
@@ -27,7 +35,8 @@ async function fixture(t){
   const commit=f.git('rev-parse','HEAD'),identity=gitProject(f.cwd).identity,directory=lineDirectory(org,identity);
   fs.mkdirSync(directory,{recursive:true});
   const file=path.join(directory,'service.plist'),installationFile=path.join(directory,'installation.json'),stop=path.join(directory,'STOP');
-  const installation={target:`gui/${process.getuid()}/dev.herdr.line.${path.basename(directory)}`,repo:f.cwd,org,source:f.cwd,node:process.execPath,file,phase:'installed'};
+  const installation={target:`gui/${process.getuid()}/dev.herdr.line.${path.basename(directory)}`,repo:f.cwd,org,source:f.cwd,node:process.execPath,file,phase,
+    ...(phase==='uncertain-or-refused'?{error:'Original refused bootstrap'}:{})};
   fs.writeFileSync(installationFile,JSON.stringify(installation)+'\n');
   fs.writeFileSync(file,launchPlist({label:`dev.herdr.line.${path.basename(directory)}`,repo:f.cwd,org,to:'fixture-supervisor',herdr:'/saved/bin/herdr',socket:'/saved/native.sock',directory,node:process.execPath,source:f.cwd}));
   fs.writeFileSync(stop,'Original service STOP\n');
@@ -50,8 +59,8 @@ async function fixture(t){
   };
   const module=(root,file)=>import(pathToFileURL(path.join(root,file)).href),args={repo:f.cwd,org,cwd:f.cwd,env,call,command,home:f.installationHome};
   const {migrateRuntime}=await module(f.bundle,'line-service/migrate-runtime.mjs');
-  const migration={...args,id:'fixture-migration'},plan=migrateRuntime({...migration,dryRun:true});
-  migrateRuntime({...migration,expectedPlan:plan.archive.sha256});
+  if(!development){const migration={...args,id:'fixture-migration'},plan=migrateRuntime({...migration,dryRun:true});
+    migrateRuntime({...migration,expectedPlan:plan.archive.sha256});}
   const previous={installation:fs.readFileSync(installationFile,'utf8'),plist:fs.readFileSync(file,'utf8')};
   const next=f.release('trial',{commit});fs.unlinkSync(path.join(next,'.release-acceptance.json'));
   const frozenFile=path.join(next,'.release-validation.json');
@@ -63,7 +72,7 @@ async function fixture(t){
     inventorySha256:'0'.repeat(64),runtimeSha256:sha(JSON.stringify(Object.fromEntries(runtime.map(file=>[file,payloadEntry(next,file)])))),routine:{fullCoverage:'UNRUN'}}}));
   const manifest=spawnSync(process.execPath,[path.resolve('herdr/releases.mjs'),'manifest',next],{env,encoding:'utf8'});assert.equal(manifest.status,0,manifest.stderr);
   const {probationControl}=await module(f.cwd,'line-service/probation.mjs');
-  const control=extra=>probationControl({...args,id:'original-trial',fromRoot:f.bundle,targetRoot:next,...extra});
+  const control=extra=>probationControl({...args,id:'original-trial',fromRoot:development?f.cwd:f.bundle,targetRoot:next,developmentRecovery:development,...extra});
   const authorize=()=>{
     const preview=control({dryRun:true});
     const note=transact(org,()=>({add:[{type:'note.added',id:'G-1',decision:true,text:preview.required_decision}]}),{actor:agent.name}).added[0];
@@ -242,4 +251,144 @@ test('completed probation leaves separately qualified ordinary pin admission ava
   assert.equal(selectRelease(f.cwd,f.installationHome).root,f.next);
   assert.deepEqual(fs.readFileSync(path.join(f.next,'.release-manifest.json')),manifest);
   assert.equal(loadEvents(f.org).events.filter(e=>e.type==='line-service.probation-authorized').length,1);
+});
+
+function switchArgs(f,id,from,to){return['probation-switch','--repo',f.cwd,'--org',f.org,'--trial','original-trial','--id',id,'--from-root',from,'--target-root',to];}
+function switchPlan(f,id,from,to){return f.main([...switchArgs(f,id,from,to),'--dry-run'],f.args);}
+function decide(f,text){return transact(f.org,()=>({add:[{type:'note.added',id:'G-1',decision:true,text}]}),{actor:f.agent.name}).added[0].seq;}
+function switchApply(f,id,from,to){
+  const plan=switchPlan(f,id,from,to),authority=decide(f,plan.required_decision);
+  return f.main([...switchArgs(f,id,from,to),'--expected-plan',plan.plan_sha256,'--authority',String(authority)],f.args);
+}
+async function privatePass(f,root){
+  const script=`import {createLineService} from ${JSON.stringify(pathToFileURL(path.join(root,'line-service/line-service.mjs')).href)};
+    const service=createLineService({repo:${JSON.stringify(f.cwd)},org:${JSON.stringify(f.org)},to:'fixture-supervisor',haltAfter:100,
+      command:()=>({status:0,stdout:'{"created":[]}'}),capacity:()=>({count:0,cap:2})});
+    console.log(JSON.stringify(service.pass()));`;
+  const r=spawnSync(process.execPath,['--input-type=module','-e',script],{cwd:f.cwd,env:f.env,encoding:'utf8'});
+  assert.equal(r.status,0,r.stderr);assert.equal(JSON.parse(r.stdout).result,'pass-complete');
+}
+
+test('development recovery seals real executable provenance and starts candidate recovery and return under one original trial',async t=>{
+  const f=await fixture(t,{development:true,phase:'stopped'}),before=state(f),preview=f.control({dryRun:true}),p=preview.scope.previous;
+  assert.equal(p.kind,'development-recovery');assert.equal(p.source.common,f.identity);
+  assert.equal(p.source.tree,f.git('rev-parse',`${p.release.commit}^{tree}`));
+  assert.equal(p.original.installation,before.installation);assert.equal(p.original.plist,before.plist);
+  assert.deepEqual(state(f),before);assert.equal(fs.existsSync(p.release.root),false);
+  f.authorize();
+  const recovery=p.release.root;
+  assert.equal(sha(fs.readFileSync(path.join(recovery,'.release-manifest.json'))),p.manifest_sha256);
+  assert.equal(fs.statSync(recovery).mode&0o222,0);
+  for(const [file,e]of Object.entries(p.source.files)){
+    assert.deepEqual(payloadEntry(recovery,file),e);
+    assert.equal(fs.statSync(path.join(recovery,file)).mode&0o222,0);
+  }
+  const blobs=new Map(f.git('ls-tree','-r',p.release.commit).split('\n').map(row=>{const [entry,file]=row.split('\t');return[file,entry.split(' ')[2]];}));
+  const files=Object.keys(p.source.files);
+  for(let start=0;start<files.length;start+=128){const batch=files.slice(start,start+128);
+    assert.deepEqual(f.git('hash-object','--no-filters','--',...batch.map(file=>path.join(recovery,file))).split('\n'),batch.map(file=>blobs.get(file)));}
+  assert.throws(()=>requireHomeRelease('runtime',null,f.installationHome),/ENOENT/);
+  assert.throws(()=>selectRelease(f.cwd,f.installationHome,{pin:{release:'trial'}}),/READY/);
+  const entry=switchApply(f,'entry',f.cwd,f.next);assert.equal(entry.runtime_started,false);
+  assert.equal(f.main(['restart','--repo',f.cwd,'--org',f.org],f.args).restarted,true);await privatePass(f,f.next);
+  f.main(['stop','--repo',f.cwd,'--org',f.org],f.args);
+  // The retained payload remains executable after canonical product changes.
+  fs.appendFileSync(path.join(f.cwd,'bin/org.mjs'),'\n// Subsequent canonical source\n');f.git('add','bin/org.mjs');f.git('commit','-qm','Move canonical development source');
+  const rollback=switchApply(f,'recovery',f.next,recovery);assert.equal(rollback.runtime.root,recovery);
+  assert.equal(fs.readFileSync(f.file,'utf8'),p.derived.plist);
+  const {main:recoveryMain}=await f.module(recovery,'line-service/launchd.mjs');
+  assert.equal(recoveryMain(['restart','--repo',f.cwd,'--org',f.org],f.args).restarted,true);await privatePass(f,recovery);
+  recoveryMain(['stop','--repo',f.cwd,'--org',f.org],f.args);
+  // Exercise the actual sealed package's switch reader/parser for the return.
+  const main=f.main;f.main=recoveryMain;
+  const returned=switchApply(f,'return',recovery,f.next);f.main=main;
+  assert.equal(returned.trial,'original-trial');
+  assert.equal(f.main(['restart','--repo',f.cwd,'--org',f.org],f.args).restarted,true);await privatePass(f,f.next);
+  const events=loadEvents(f.org).events;
+  assert.equal(events.filter(e=>e.type==='line-service.probation-authorized').length,1);
+  assert.deepEqual(events.filter(e=>e.type==='line-service.probation-switched').map(e=>e.id),['entry','recovery','return']);
+  assert.equal(events.filter(e=>e.type==='line-service.cutover').length,1);
+  assert.equal(fs.readFileSync(f.retained,'utf8'),f.jobs);
+  assert.equal(JSON.parse(fs.readFileSync(f.installationFile)).phase,'installed');
+  assert.equal(JSON.parse(fs.readFileSync(path.join(recovery,'.release-manifest.json'))).acceptance.ready,false);
+});
+
+test('development recovery refuses foreign issuance changed plan native owner STOP damaged mutable redirected and incompatible recovery',async t=>{
+  const f=await fixture(t,{development:true}),before=state(f),plan=f.control({dryRun:true});
+  const {probationControl}=await f.module(f.next,'line-service/probation.mjs');
+  assert.throws(()=>probationControl({...f.args,id:'foreign-tool',fromRoot:f.cwd,targetRoot:f.next,developmentRecovery:true,dryRun:true}),/not a git repository|canonical checkout/);
+  assert.throws(()=>f.control({env:{...f.args.env,CODEX_THREAD_ID:'stale'}}),/native caller/);
+  assert.throws(()=>f.control({fromRoot:f.bundle,dryRun:true}),/actual canonical Brain/);
+  assert.throws(()=>f.control({expectedPlan:'0'.repeat(64),authority:1}),/plan changed/);
+  assert.deepEqual(state(f),before);
+  f.authorize();const recovery=plan.scope.previous.release.root;
+  let p=switchPlan(f,'entry',f.cwd,f.next);const authority=decide(f,p.required_decision),argv=switchArgs(f,'entry',f.cwd,f.next);
+  assert.throws(()=>f.main([...argv,'--expected-plan','0'.repeat(64),'--authority',String(authority)],f.args),/plan changed/);
+  for(const name of ['STOP','HOLD']){
+    const file=path.join(f.cwd,'.lane/supervisor',name);fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,'held');
+    assert.throws(()=>switchPlan(f,'entry',f.cwd,f.next),/STOP\/HOLD/);fs.unlinkSync(file);
+  }
+  f.setLoaded(true);assert.throws(()=>switchPlan(f,'entry',f.cwd,f.next),/positively stopped/);f.setLoaded(false);
+  fs.chmodSync(recovery,0o755);assert.throws(()=>switchPlan(f,'entry',f.cwd,f.next),/writable/);fs.chmodSync(recovery,0o555);
+  const payload=path.join(recovery,'bin/org.mjs'),bytes=fs.readFileSync(payload);
+  fs.chmodSync(payload,0o644);fs.appendFileSync(payload,'\n// damaged');fs.chmodSync(payload,0o444);
+  assert.throws(()=>switchPlan(f,'entry',f.cwd,f.next),/payload mismatch/);
+  fs.chmodSync(payload,0o644);fs.writeFileSync(payload,bytes);fs.chmodSync(payload,plan.scope.previous.source.files['bin/org.mjs'].mode==='100755'?0o555:0o444);
+  fs.renameSync(recovery,recovery+'.saved');fs.symlinkSync(recovery+'.saved',recovery);
+  assert.throws(()=>switchPlan(f,'entry',f.cwd,f.next),/identity\/node changed/);fs.unlinkSync(recovery);fs.renameSync(recovery+'.saved',recovery);
+  assert.equal(switchPlan(f,'entry',f.cwd,f.next).plan_sha256,p.plan_sha256);
+  transact(f.org,()=>({add:[{type:'item.future',id:'ENG-1'}]}));
+  assert.throws(()=>switchPlan(f,'entry',f.cwd,f.next),/record-incompatible/);
+  assert.equal(fs.existsSync(path.join(f.directory,'probation-switches')),false);
+  assert.equal(fs.readFileSync(f.retained,'utf8'),f.jobs);
+});
+
+test('development recovery preserves original refused installation and UNKNOWN authorization and switch attempts at every boundary',async t=>{
+  const f=await fixture(t,{development:true,phase:'uncertain-or-refused'}),preview=f.control({dryRun:true});
+  assert.match(preview.scope.previous.original.installation,/Original refused bootstrap/);
+  assert.equal(JSON.parse(preview.scope.previous.derived.installation).phase,'installed');
+  const authority=decide(f,preview.required_decision);
+  assert.throws(()=>f.control({expectedPlan:preview.plan_sha256,authority,fault:stage=>{if(stage==='recovery')throw Error('lost seal reply');}}),/lost seal reply/);
+  const original=fs.readFileSync(path.join(f.directory,'probation/original-trial.json'));
+  for(const id of ['original-trial','replacement'])assert.throws(()=>f.control({id,dryRun:true}),/existing\/UNKNOWN/);
+  assert.deepEqual(fs.readFileSync(path.join(f.directory,'probation/original-trial.json')),original);
+  for(const stage of ['intent','plist','installation'])await t.test(stage,async st=>{
+    const g=await fixture(st,{development:true});g.authorize();
+    const p=switchPlan(g,'entry',g.cwd,g.next),seq=decide(g,p.required_decision);
+    const {probationSwitch}=await g.module(g.next,'line-service/probation-switch.mjs');
+    const args={...g.args,id:'entry',trial:'original-trial',fromRoot:g.cwd,targetRoot:g.next,expectedPlan:p.plan_sha256,authority:seq};
+    assert.throws(()=>probationSwitch({...args,fault:phase=>{if(phase===stage)throw Error('lost switch reply');}}),/lost switch reply/);
+    const intent=path.join(g.directory,'probation-switches/entry.json'),bytes=fs.readFileSync(intent);
+    for(const id of ['entry','replacement'])assert.throws(()=>probationSwitch({...args,id,dryRun:true}),/UNKNOWN probation switch/);
+    const current=JSON.parse(fs.readFileSync(g.installationFile)).source;
+    const {main}=await g.module(current,'line-service/launchd.mjs');
+    assert.throws(()=>main(['restart','--repo',g.cwd,'--org',g.org],g.args),/UNKNOWN probation switch/);
+    assert.deepEqual(fs.readFileSync(intent),bytes);assert.equal(fs.readFileSync(g.retained,'utf8'),g.jobs);
+    assert.equal(g.calls.some(c=>c.args[0]==='bootstrap'),false);
+  });
+});
+
+test('development recovery child launch captures sealed provenance and withdrawal preserves captured callbacks while closing new admission',async t=>{
+  const f=await fixture(t,{development:true}),preview=f.control({dryRun:true});f.authorize();
+  const recovery=preview.scope.previous.release.root;
+  switchApply(f,'entry',f.cwd,f.next);switchApply(f,'recovery',f.next,recovery);fs.unlinkSync(f.stop);
+  const d=dispatchFixture(t,{project:f}),topic=`line-${d.item.toLowerCase()}-1`,laneCLI=path.join(d.root,'bin/lane');
+  fs.writeFileSync(laneCLI,fs.readFileSync(laneCLI,'utf8').replace('lane/topic',`lane/${topic}`));
+  const {createLineService}=await f.module(recovery,'line-service/line-service.mjs');let launches=0;
+  const service=createLineService({repo:f.cwd,org:f.org,to:f.agent.name,runtimeHome:f.installationHome,env:{...d.env,HERDR_BRAIN_ROOT:f.cwd},maxStarts:1,haltAfter:100,capacity:()=>({count:0,cap:4}),
+    recordNotice:()=>({state:'record-only'}),command:(exe,args,options)=>{
+      if(!args[0].endsWith('/dispatch/dispatch.mjs'))return{status:0,stdout:'{"created":[]}'};
+      launches++;assert.equal(args[0],path.join(recovery,'dispatch/dispatch.mjs'));assert.equal(options.env.HERDR_BRAIN_ROOT,undefined);
+      return spawnSync(exe,[...args.filter(a=>a!=='--detach'),'--lane-cli',laneCLI,'--watch-cli',path.join(d.root,'bin/watch')],options);
+    }});
+  assert.equal(service.pass().result,'pass-complete');assert.equal(launches,1);
+  const {file,job}=d.jobs().map(file=>({file,job:JSON.parse(fs.readFileSync(file))})).find(x=>x.job.item===d.item);
+  assert.equal(job.stage,'complete');assert.equal(job.release.root,recovery);assert.equal(job.probation.id,'original-trial');
+  assert.equal(d.show(job.run).owner.release.root,recovery);assert.equal(promptCalls(d).length,1);
+  f.withdraw();
+  const {checkDispatchEligibility}=await f.module(recovery,'dispatch/launch-guard.mjs');
+  assert.throws(()=>checkDispatchEligibility(job,file,{boundary:'launch'}),/withdrawn/);checkDispatchEligibility(job,file,{boundary:'prompt'});
+  const {selectedReviewConsumer}=await f.module(recovery,'line-service/review.mjs');assert.equal(selectedReviewConsumer({repo:f.cwd,run:d.show(job.run)}).recordRoot,recovery);
+  assert.throws(()=>switchPlan(f,'return',recovery,f.next),/withdrawn/);
+  assert.equal(fs.readFileSync(f.retained,'utf8'),f.jobs);
 });

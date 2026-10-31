@@ -16,6 +16,7 @@ import {migratedCutover} from './runtime.mjs';
 import {recipientChanges,legacyRecipientHistory} from './recipient-history.mjs';
 import {readPlainFile} from '../lib/files.mjs';
 import {assertCommandQuiescence} from '../lib/command-receipt.mjs';
+import {developmentSwitchRows} from './development-recovery.mjs';
 
 export const developmentRoot=fs.realpathSync(fileURLToPath(new URL('../',import.meta.url)));
 const hash=v=>createHash('sha256').update(v).digest('hex');
@@ -36,7 +37,7 @@ export function lineContext(repo,org) {
 export function installedContext(repo,org) {
   const c=lineContext(repo,org),file=path.join(c.directory,'installation.json'),installation=regularJSON(file);
   if(!installation||installation.repo!==c.repo||installation.org!==c.org||fs.realpathSync(installation.source)!==developmentRoot||installation.file!==path.join(c.directory,'service.plist')||installation.node!==process.execPath||installation.target!==`gui/${process.getuid()}/dev.herdr.line.${path.basename(c.directory)}`)throw Error('service installation binding is UNKNOWN');
-  if(installation.migration||installation.fresh_install)serviceCutoff(loadEvents(c.org).events,{repo:c.repo,org:c.org,identity:c.identity});
+  if(installation.migration||installation.fresh_install||installation.probation_bootstrap)serviceCutoff(loadEvents(c.org).events,{repo:c.repo,org:c.org,identity:c.identity});
   return {...c,installation,installationFile:file};
 }
 const reject=message=>{throw Object.assign(Error(message),{code:'REVIEW_CUTOFF'});};
@@ -46,8 +47,9 @@ export function serviceCutoff(events,{repo,org,identity}) {
   const e=found[0];
   if(e.repo!==repo||!Number.isSafeInteger(e.seq)||e.seq<1||!e.id||!/^[a-f0-9]{40}(?:[a-f0-9]{24})?$/.test(e.canonical_head??'')||!e.main)reject('service cutover binding is UNKNOWN');
   const directory=lineDirectory(org,identity),installation=regularJSON(path.join(directory,'installation.json'));
+  developmentSwitchRows(events,{directory,identity,org});
   const changes=recipientChanges(events,{repo,org,identity,directory});
-  if(e.mode==='accepted-release-install'||e.source!==developmentRoot||installation?.migration||events.some(row=>row.type==='line-service.runtime-upgraded'&&row.project===identity&&row.org===org)){
+  if(e.mode==='accepted-release-install'||e.source!==developmentRoot||installation?.migration||installation?.probation_bootstrap||events.some(row=>['line-service.runtime-upgraded','line-service.probation-switched'].includes(row.type)&&row.project===identity&&row.org===org)){
     if(!installation||installation.source!==developmentRoot||installation.repo!==repo||installation.org!==org)reject('service cutover binding is UNKNOWN');
     migratedCutover(events,{repo,org,identity,directory,installation,cutover:e});
   }else if(changes.length){

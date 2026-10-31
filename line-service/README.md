@@ -631,6 +631,11 @@ authorize a real project upgrade or count as live acceptance.
 
 ### Brain-only probation for one routine candidate
 
+Brain's first development predecessor has a separate typed extension in
+[Initial Brain A3 recovery](DEVELOPMENT-RECOVERY.md), including executable sealing
+and the exact stopped entry/recovery/return commands. The installed-root path
+below keeps its existing READY predecessor requirements.
+
 `probation-authorize` adds a narrow exception to installed line admission. It
 does not change a pin, home policy, bundle, READY acceptance, global activation
 or launchd job. Only the recorded project supervisor, freshly bound to its

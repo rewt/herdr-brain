@@ -18,20 +18,28 @@ import {acquireLock} from '../lanes/promotion-lock.mjs';
 import {retargetService,liveRecipient} from './retarget.mjs';
 import {installRelease} from './install.mjs';
 import {bundleRelease} from '../lib/releases.mjs';
+import {probationControl} from './probation.mjs';
 
 import {launchPlist} from './plist.mjs';
 export {launchPlist} from './plist.mjs';
 
 export function main(argv = process.argv.slice(2), { command = spawnSync,call:nativeCall,home,cwd=process.cwd(),env=process.env } = {}) {
   const { positionals, values: v } = parseArgs({ args: argv, allowPositionals: true,
-    usage: 'launchd.mjs install|migrate|upgrade|retarget|restart|status|stop|revert --repo CANONICAL [--org RECORD --id HANDOFF --from-root CURRENT --target-root TARGET --rollback --dry-run --expected-plan SHA256 --to SUPERVISOR --herdr ABS_PATH --socket ABS_PATH --interval 30 --commit SHA]', options: {
+    usage: 'launchd.mjs install|migrate|upgrade|probation-authorize|probation-withdraw|probation-complete|retarget|restart|status|stop|revert --repo CANONICAL [--org RECORD --id HANDOFF --authority NOTE_SEQ --from-root CURRENT --target-root TARGET --rollback --dry-run --expected-plan SHA256 --to SUPERVISOR --herdr ABS_PATH --socket ABS_PATH --interval 30 --commit SHA]', options: {
       repo: { type: 'string' }, org: { type: 'string' }, to: { type: 'string' }, herdr: { type: 'string' }, socket: { type: 'string' },
       interval: { type: 'string' }, commit: { type: 'string', multiple: true },
       id:{type:'string'},'dry-run':{type:'boolean'},
       'expected-plan':{type:'string'},
+      authority:{type:'string'},
       'from-root':{type:'string'},'target-root':{type:'string'},rollback:{type:'boolean'},
     } });
   const action = positionals[0];
+  if(['probation-authorize','probation-withdraw','probation-complete'].includes(action)){
+    if(positionals.length!==1||!v.repo||v.to||v.herdr||v.socket||v.interval||v.commit||v.rollback)throw Error('probation preserves installation, transport, pins and native services');
+    return probationControl({repo:v.repo,org:v.org??findOrgDir({cwd:v.repo,env:{...env,ORG_DIR:''}}),id:v.id,fromRoot:v['from-root'],targetRoot:v['target-root'],authority:v.authority,
+      finish:action==='probation-authorize'?undefined:action==='probation-withdraw'?'withdrawn':'completed',dryRun:v['dry-run'],expectedPlan:v['expected-plan'],command,call:nativeCall,home,cwd,env});
+  }
+  if(v.authority)throw Error('--authority applies only to probation-authorize');
   if (positionals.length !== 1 || !['install','migrate','upgrade','retarget', 'restart', 'status', 'stop', 'revert'].includes(action) || !v.repo) throw Error('name install|migrate|upgrade|retarget|restart|status|stop|revert and --repo CANONICAL');
   if(!['install','migrate','upgrade'].includes(action)&&(v.id||v['expected-plan']))throw Error('--id/--expected-plan apply only to install/migrate/upgrade');
   if(!['install','migrate','upgrade','retarget'].includes(action)&&v['dry-run'])throw Error('--dry-run applies only to install/migrate/upgrade/retarget');

@@ -612,6 +612,100 @@ which predates upgrade support. Qualification and live acceptance remain the
 release coordinator's obligation; fixture bootstrap/pass controls do not
 authorize a real project upgrade or count as live acceptance.
 
+### Brain-only probation for one routine candidate
+
+`probation-authorize` adds a narrow exception to installed line admission. It
+does not change a pin, home policy, bundle, READY acceptance, global activation
+or launchd job. Only the recorded project supervisor, freshly bound to its
+canonical native pane/session, can issue it **from canonical Brain product
+source in that same real Git common directory**. A consumer project cannot
+nominate itself through a label, environment override or configuration.
+
+The service must already have a compatible, accepted **installed** previous
+runtime, retained under its exact release home. A development-source installation
+does not qualify: first establish that recovery root through the existing
+separately authorized migration. This deliberately refuses a direct development
+to probation shortcut. Brain's development installation observed by ENG-1136
+therefore still needs that supervisor-owned prerequisite before a real trial.
+
+At a separately authorized safe boundary the canonical supervisor uses the
+existing `stop` operation, retains its service STOP, and previews one named
+candidate with pinned Node 20.19.4:
+
+```sh
+"$NODE" "$BRAIN_SOURCE/line-service/launchd.mjs" probation-authorize --repo "$BRAIN_SOURCE" --org "$BRAIN_RECORD" --id "$TRIAL_ID" --from-root "$PREVIOUS_ROOT" --target-root "$CANDIDATE_ROOT" --dry-run
+```
+
+The preview returns `scope`, `scope_sha256`, `required_decision` and
+`plan_sha256`. Inspect the exact tuple and recovery installation/plist. Under the
+supervisor's separate operational authority, record `required_decision` verbatim
+as a decision note on the owning trial item/run using the normal record command
+(`org note ID TEXT --decision`). This is explicit trial authority, not a human
+answer, stable qualification or consumer consent. Use that note's sequence and
+the unchanged preview plan to apply:
+
+```sh
+"$NODE" "$BRAIN_SOURCE/line-service/launchd.mjs" probation-authorize --repo "$BRAIN_SOURCE" --org "$BRAIN_RECORD" --id "$TRIAL_ID" --from-root "$PREVIOUS_ROOT" --target-root "$CANDIDATE_ROOT" --authority "$DECISION_NOTE_SEQ" --expected-plan "$PLAN_SHA256"
+```
+
+Authority seals Brain's common directory/record, candidate commit/tree, exact
+immutable root, full manifest and frozen validation digests, and Node
+executable/version/platform/architecture. The candidate must be a frozen routine
+bundle descended into Brain main, with compatible record readers. The previous
+accepted root and its manifest are sealed too. Authorization archives original
+installation/plist bytes in `probation/ID.json` and appends a matching event. One
+active trial is permitted. An existing or UNKNOWN intent, reused ID or reused
+candidate is retained, never replaced or renamed into another trial.
+
+Then use the existing `upgrade` dry-run/apply commands above, with those exact
+previous/candidate roots and a separate stable upgrade ID. Execute the upgrade
+tool from the candidate root. Its existing native, clean-main/source CAS, record,
+STOP/HOLD, pass/control/promotion locks and archived installation/plist checks
+remain in force. It leaves the service stopped; the supervisor separately uses
+the existing candidate `restart`. The ordinary project pin stays on its accepted
+runtime. Ordinary consumer pin/home-policy admission still requires READY and
+refuses this same routine bundle.
+
+The candidate controller and newly admitted dispatches read the exact authority
+and immutable payload. Dispatch journals retain its authority/archive/tuple;
+workers, watchers and reviews retain the existing captured release and claim
+protocols, independent of later source-main/current changes. The existing native
+launch fence rechecks authority before a new worker starts; the prompt of an
+already captured native worker may continue after withdrawal. No saved request,
+watcher, shared-observer registration, pending/held/refused/UNKNOWN attempt or
+review callback is rewritten or selected again.
+
+The named trial is bounded by explicit withdrawal or completion, not a timer
+that expires uncertain work. Either command closes admission and performs no
+native input, cancellation, installation edit or restart:
+
+```sh
+"$NODE" "$CANDIDATE_ROOT/line-service/launchd.mjs" probation-withdraw --repo "$BRAIN_SOURCE" --org "$BRAIN_RECORD" --id "$TRIAL_ID"
+# Or probation-complete, only after the coordinator accounts for the trial.
+```
+
+Revocation is allowed during project STOP/HOLD to contain admissions. It retains
+captured workers and original callbacks. Stop the controller through its normal
+owner, then use the existing `upgrade --rollback` preview/apply flow above from
+the candidate tool, reversing the roots and retaining a new stable rollback ID.
+Withdrawal does not require the candidate to remain healthy; rollback still
+requires the original candidate identity, exact archived previous root/manifest,
+compatible current record and all existing effect guards. It restores the exact
+prior installation/plist, retaining original migration/cutover, jobs and watcher
+roots. Restart the previous runtime separately. Missing recovery, native refusal
+or an incomplete/UNKNOWN intent holds with its original evidence; do not replay,
+replace an attempt, switch executor/identity or clear STOP to force progress.
+
+The A4/coordinator packet must retain the authority and upgrade/rollback archives,
+manifest/validation hashes, actual controller and child provenance, host/native
+Herdr version, original callbacks and all-run accounting. Producer offline
+controls are not the actual installed trial, real-work soak, stable READY or
+consumer activation authority. Live entry, withdrawal and rollback belong only
+to the canonical supervisor under separate recorded operational authority.
+
+Focused probation controls are `test/line-service-probation.test.mjs`; affected
+existing runtime, launch and review controls remain separate file groups.
+
 Focused upgrade selection: the runtime migration/upgrade controls in
 `test/line-service-runtime.test.mjs`, `producer cutoff` in
 `test/line-service-producer.test.mjs`, and `launchd uses` in

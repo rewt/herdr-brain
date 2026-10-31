@@ -12,12 +12,15 @@ import {installationPhaseProof,settledInstallation} from './runtime-phase.mjs';
 import {freshInstallation} from './install-history.mjs';
 import {findOrgDir,loadEvents} from '../lib/store.mjs';
 import {requireRecordCompatibility} from '../lib/record-compatibility.mjs';
+import {probationRuntime} from './probation.mjs';
 
 export const runtimeRoot=fs.realpathSync(fileURLToPath(new URL('../',import.meta.url)));
 export const digest=bytes=>createHash('sha256').update(bytes).digest('hex');
 
 export function acceptedRuntime(repo,{root=runtimeRoot,home=releaseHome(),verifyFiles=true}={}) {
   root=fs.realpathSync(root);
+  const trial=probationRuntime(repo,{root,home});
+  if(trial)return trial;
   const pin=projectPin(repo);
   if(!pin?.release)throw Error('line runtime requires an explicit accepted project pin');
   const selected=selectRelease(repo,home,{pin});

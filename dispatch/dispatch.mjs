@@ -18,7 +18,8 @@ import { waitForProvingHold, RESERVATION_WAIT_EXPIRED_CODE } from '../test-slot/
 import { admissionDeadline } from '../lib/deadline.mjs';
 import { readTiming, timedMemoryWait, timingMetadata, readAdmissionTiming, admissionTimingMetadata } from '../lib/run-timing.mjs';
 import { gitProject } from '../lib/project.mjs';
-import { bundleRelease, forwardRelease, continueRelease, operationFile } from '../lib/releases.mjs';
+import { bundleRelease, forwardRelease, continueRelease, operationFile, checkRelease, requireReadyAcceptance } from '../lib/releases.mjs';
+import {probationRuntime} from '../line-service/probation.mjs';
 import { hookReviewDialog, codexProfile } from './hook-review.mjs';
 import { effectiveWorkerIdentity, workerReceipt, sharesWorker } from '../lib/worker-identity.mjs';
 import { lookupProcess } from '../lib/processes.mjs';
@@ -551,7 +552,10 @@ async function main() {
     const directory = path.join(org, 'dispatch');
     fs.mkdirSync(directory, { recursive: true });
     journal = path.join(directory, `${token}.json`);
-    job = { token, repo, org, common, predecessor, release: bundleRelease(), sourceSelection: sourceSelection ?? null,
+    const actual=bundleRelease(),runtimeHome=path.dirname(path.dirname(actual.root));
+    const probation=actual.commit?probationRuntime(repo,{root:actual.root,home:runtimeHome})?.probation:undefined;
+    if(actual.commit&&!probation)requireReadyAcceptance(checkRelease(runtimeHome,actual.id),runtimeHome);
+    job = { token, repo, org, common, predecessor, release: bundleRelease(), sourceSelection: sourceSelection ?? null,...(probation?{probation}:{}),
       invocation: invocation(), watchMode:opt['watch-mode']??'process',
       operatorRecordCommand: [process.execPath, local('../bin/org.mjs')],
       operatorRecordRoot: bundleRelease().root,

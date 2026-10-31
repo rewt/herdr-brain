@@ -15,13 +15,16 @@ import {withRuntimeLocks} from './runtime-locks.mjs';
 import {loadDiscoveredRoutes} from '../lanes/routes.mjs';
 import {installationPhaseProof,settledInstallation} from './runtime-phase.mjs';
 import {requireRecordCompatibility} from '../lib/record-compatibility.mjs';
+import {probationRuntime} from './probation.mjs';
 
 const git=(repo,args)=>execFileSync('git',['--no-optional-locks','-C',repo,...args],{encoding:'utf8',stdio:['ignore','pipe','pipe'],timeout:10000}).trim();
 const same=(a,b)=>canonical(a)===canonical(b);
 const json=v=>JSON.stringify(v)+'\n';
 
-function releaseRoot(root,home){
+function releaseRoot(root,home,repo,{allowEnded=false}={}){
   if(!path.isAbsolute(root??'')||path.resolve(root)!==root||fs.realpathSync(root)!==root)throw Error('name an exact immutable accepted release root');
+  const trial=probationRuntime(repo,{root,home,allowEnded});
+  if(trial)return trial;
   const release=checkRelease(home,path.basename(root),{verifyFiles:true});
   if(release.root!==root)throw Error('release root differs from the installation home');
   requireReadyAcceptance(release,home);return release;
@@ -49,7 +52,12 @@ export function upgradeRuntime({repo,org,id,fromRoot,targetRoot,rollback=false,d
     const stopBytes=readPlainFile(stop);if(!stopBytes)throw Error('upgrade requires this service own STOP');
     const main=loadDiscoveredRoutes({cwd:c.repo,env}).config.main??'main';
     if(git(c.repo,['symbolic-ref','--short','HEAD'])!==main||git(c.repo,['status','--porcelain=v1','--untracked-files=all']))throw Error('upgrade requires clean canonical main');
-    const previous=releaseRoot(fromRoot,home),runtime=releaseRoot(targetRoot,home);
+    const previous=releaseRoot(fromRoot,home,c.repo,{allowEnded:rollback}),runtime=releaseRoot(targetRoot,home,c.repo);
+    if(rollback&&previous.probation){
+      const prior=previous.probation.previous;
+      if(!same(runtime,prior.release)||digest(readPlainFile(path.join(targetRoot,'.release-manifest.json')))!==prior.manifest_sha256)
+        throw Error('probation rollback target differs from its archived previous runtime');
+    }
     acceptedRuntime(c.repo,{root:targetRoot,home});
     const service=inspectService(target,c.repo,command);
     if(service.loaded)throw Error('service remains loaded; retain STOP and finish its supported stop');

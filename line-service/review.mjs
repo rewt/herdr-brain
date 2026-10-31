@@ -6,7 +6,8 @@ import { execFileSync } from 'node:child_process';
 import { reviewScope } from '../settle/review-range.mjs';
 import { gitProject } from '../lib/project.mjs';
 import { fileURLToPath } from 'node:url';
-import { projectPin, selectRelease } from '../lib/releases.mjs';
+import { projectPin, selectRelease, bundleRelease } from '../lib/releases.mjs';
+import {probationRuntime} from './probation.mjs';
 import { roleIs } from '../lib/roles.mjs';
 import {reviewResolution,archivedReviewFile,reviewDigest} from './review-resolutions.mjs';
 import {producerGroupKey,queueProducerGroup,sameProducerQueue,capturedReviewCommits,sameCapturedTarget} from './review-group.mjs';
@@ -275,6 +276,7 @@ export function reviewAttempt(item, { org, identity, events, state, repo, effect
 // Prove the actual owner-bound helper and any forwarded record consumer have
 // this implementation. A source pathname/selector is not a capability proof.
 export function selectedReviewConsumer({ run, repo, resolve = () => {
+  if(bundleRelease(codeRoot).commit&&probationRuntime(repo,{root:codeRoot,home:path.dirname(path.dirname(codeRoot)),allowEnded:true}))return codeRoot;
   const pin = projectPin(repo);
   return pin?.home_binding || (pin?.release && gitProject(codeRoot).identity !== pin.project.identity) ? selectRelease(repo).root : codeRoot;
 } }) {

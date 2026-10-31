@@ -14,6 +14,7 @@ import {correctionSource} from '../lib/report-closeout.mjs';
 import {effectiveWorkerIdentity} from '../lib/worker-identity.mjs';
 import {resumeSource} from './resume-source.mjs';
 import {matchesDispatchStart} from './unlanded-cap.mjs';
+import {probationRuntime} from '../line-service/probation.mjs';
 
 export const launchDigest = bytes => createHash('sha256').update(bytes).digest('hex');
 const changed = (reason, input) => {
@@ -36,6 +37,13 @@ export function checkDispatchEligibility(job, journal, {boundary='launch'}={}) {
     release:job.release,observed_seq:events.at(-1)?.seq??0};
   const refuse=(reason,subject=job.item)=>changed(reason,{...input,subject});
   if(tornTail)refuse('incomplete record input');
+  if(job.probation){
+    // A captured native worker keeps its runtime after withdrawal. New native
+    // admissions still require live authority at the existing launch fence.
+    const runtime=probationRuntime(job.repo,{root:job.release.root,home:path.dirname(path.dirname(job.release.root)),events,
+      allowEnded:boundary==='prompt'&&Boolean(job.worker)});
+    if(JSON.stringify(runtime?.probation)!==JSON.stringify(job.probation))refuse('probation authority/candidate changed');
+  }
   if(events.some(e=>e.journal===journal&&(e.type==='dispatch.allocation-finalized'||e.type==='closeout.allocation-effect')))
     refuse('original stopped allocation has entered final disposition; retain its original request');
   const item=state.items.get(job.item),hold=itemLaunchHold(state,job.item,events);

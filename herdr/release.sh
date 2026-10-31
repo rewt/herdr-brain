@@ -2,6 +2,7 @@
 # Immutable local releases. The project supervisor ships them (see supervisor/PROTOCOL.md).
 # Usage: release.sh build TAG [--landing-checks | --live] [--coverage FILE] [--live-coverage FILE]
 #        release.sh ship TAG [--landing-checks] | activate TAG | rollback | status
+#        release.sh offer TAG EVIDENCE.json  # recorded canary + landing tests + corrected Majors
 #        release.sh pin TAG [PROJECT] | unpin [PROJECT] | pin-status [PROJECT] [--json]
 #        release.sh attest TAG SUMMARY.json | exec ENTRY [ARGS...]
 # ship = build (full gate or explicit routine mode) + activate + check the installed launchers; it rolls
@@ -58,7 +59,7 @@ build() {
   # command, so they cannot set this themselves. This bounds admission, never test execution.
   export MONITOR_TEST_SLOT_WAIT_SECONDS=${MONITOR_TEST_SLOT_WAIT_SECONDS:-${BCH_CLOAK_TEST_SLOT_WAIT_SECONDS:-3600}}
   if [ "$mode" = routine ]; then
-    say "routine update: using landing checks; full coverage UNRUN; live acceptance UNRUN; not eligible for stable adoption"
+    say "routine update: using landing checks; full coverage UNRUN; live acceptance UNRUN; consumer offer required for stable adoption"
   elif [ -n "$coverage" ]; then
     # Full coverage was completed across retained native attempts and specific
     # corrections. Verify that distinct evidence; do not replay a whole command
@@ -219,6 +220,7 @@ case "${1:-}" in
     ship "$2" "$mode" ;;
   rollback) [ $# -eq 1 ] || die "usage: release.sh rollback"; rollback ;;
   status) [ $# -eq 1 ] || die "usage: release.sh status"; status ;;
+  offer) [ $# -eq 3 ] || die "usage: release.sh offer TAG EVIDENCE.json"; valid_tag "$2"; [ -n "$REPO" ] || REPO=$(git -C "$(dirname "$0")" rev-parse --show-toplevel); node "$TOOLS" offer "$HOME_DIR" "$2" "$3" "$REPO" ;;
   pin) [ $# -ge 2 ] && [ $# -le 3 ] || die "usage: release.sh pin TAG [PROJECT]"; node "$TOOLS" pin "$HOME_DIR" "${3:-$PWD}" "$2" ;;
   unpin) [ $# -le 2 ] || die "usage: release.sh unpin [PROJECT]"; node "$TOOLS" unpin "$HOME_DIR" "${2:-$PWD}" ;;
   attest) [ $# -eq 3 ] || die "usage: release.sh attest TAG SUMMARY.json"; valid_tag "$2"; node "$TOOLS" attest "$HOME_DIR" "$2" "$3" ;;
@@ -232,5 +234,5 @@ case "${1:-}" in
     done
     node "$TOOLS" pin-status "$HOME_DIR" "$project" ${json:+"$json"} ;;
   exec) [ $# -ge 2 ] || die "usage: release.sh exec ENTRY [ARGS...]"; shift; node "$TOOLS" run "$@" ;;
-  *) die "usage: release.sh build TAG [--landing-checks | --live] | activate TAG | ship TAG [--landing-checks] | rollback | status | pin TAG [PROJECT] | unpin [PROJECT] | attest TAG SUMMARY.json | pin-status [PROJECT] [--json] | exec ENTRY [ARGS...]" ;;
+  *) die "usage: release.sh build TAG [--landing-checks | --live] | activate TAG | ship TAG [--landing-checks] | rollback | status | offer TAG EVIDENCE.json | pin TAG [PROJECT] | unpin [PROJECT] | attest TAG SUMMARY.json | pin-status [PROJECT] [--json] | exec ENTRY [ARGS...]" ;;
 esac

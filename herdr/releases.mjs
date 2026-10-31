@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { publishConsumerOffer } from '../lib/consumer-offer.mjs';
 import { cliHelp } from '../lib/cli-help.mjs';
 import { productFiles, createProductCheckout, captureProductCheckout, verifyProductCheckoutIsolation, verifyProductPayload, payloadEntry, payloadDigest, releaseMetadata } from '../lib/product-files.mjs';
 import { readPlainFile } from '../lib/files.mjs';
@@ -90,7 +91,13 @@ try {
     fs.writeFileSync(path.join(home, '.release-manifest.json'), JSON.stringify({ schema: 'herdr-release/v1', protocol: 1, ...capability, commit, files, modes, acceptance,
       ...(release ? { release } : {}) }, null, 2) + '\n');
     const bundle = checkBundle(home, { verifyFiles: true });
-    if (target && !releaseAcceptance(bundle).ready) throw Error('acceptance-invalid: manifest does not retain its READY summary');
+    if (target) acceptanceRecord(readPlainFile(path.join(bundle.root, '.release-acceptance.json')), commit);
+  } else if (action === 'offer') {
+    if (rest.length !== 2) throw Error('usage: offer HOME TAG EVIDENCE CANONICAL');
+    const release = checkRelease(home, target, { verifyFiles: true });
+    const project = releaseProject(rest[1]), validation = path.join(release.root, '.release-validation.json');
+    if (fs.existsSync(validation) && JSON.parse(readPlainFile(validation)).common !== project.identity) throw Error('consumer offer source project mismatch');
+    console.log(`release: consumer offer retained at ${publishConsumerOffer({ release, home: fs.realpathSync(home), file: rest[0], canonical: project.canonical })}; each consumer project decides activation`);
   } else if (action === 'install') {
     // Content-address the small router: activation never rewrites an admitted
     // launcher's code, including when rolling current back to a legacy bundle.

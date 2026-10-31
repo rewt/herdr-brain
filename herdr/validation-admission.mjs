@@ -122,7 +122,7 @@ export function freezeReleaseValidation(cwd, tag, destination, env = process.env
     }
   }
   const frozen = { schema: 'release-validation-admission/v1', common: project.identity, canonical: project.canonical, source, sha256: contentDigest(bytes), declaration,
-    payloadCommit: ref, inputBase64: Buffer.from(bytes).toString('base64'), ...(mode === 'routine' ? { releaseMode: mode } : {}) };
+    consumerOfferRequired: true, payloadCommit: ref, inputBase64: Buffer.from(bytes).toString('base64'), ...(mode === 'routine' ? { releaseMode: mode } : {}) };
   durableWrite(destination, frozen);
   return frozen;
 }

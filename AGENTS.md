@@ -94,10 +94,13 @@ Status derives from events, budgets are advisory, older folds ignore new events.
 Do not restart services/watchers or edit saved runtimes/pins. Only the canonical
 supervisor starts housekeeping or releases. Routine runtime updates use landing
 checks, with full coverage and per-candidate live acceptance explicitly UNRUN;
-they may activate with the existing rollback and pin separation. Full coverage
-runs once before a stable release that a consumer project adopts, reusing valid evidence and
-rerunning only failed, affected or unrun controls. Actual live acceptance of that
-stable candidate and corrected Majors precede stable adoption. Publishing, secrets,
+they may activate with the existing rollback and pin separation. A stable offer
+for any consumer project requires a recorded pass of the exact candidate's
+installed canary and real-work soak, landing-test evidence and corrected Majors.
+Full-suite runs are non-blocking background information, including failures or
+absence; preserve actual results and fix real findings forward. Each consumer
+project decides its own activation through the existing outward/native checks.
+Publishing, secrets,
 funds and adoption retain their actual outward/native checks.
 Use [decision routing](supervisor/DECISION-ROUTING.md) for judgment boundaries.
 Automatic main-health reverts start only after Phase 2 is implemented; until then

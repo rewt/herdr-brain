@@ -1,49 +1,66 @@
-# Routine runtime updates and stable adoption
+# Routine runtime updates and consumer offers
 
-The 30 October 2026 operator direction on ENG-1126 adopts the release model first proven on BCH and recorded
-in `.org/evidence/STABLE-RELEASE-20261027/adopt-bch-release-model.md`: nothing
-gates main, producers run only new or affected checks once, one asynchronous
-capped review follows, and findings fix forward. Full final coverage belongs to
-the stable release coordinator. Native source/claim/CAS/STOP/HOLD and actual
-outward authority remain enforced at their effects.
+The operator's HUM-43 answer on 30 October 2026 supersedes ENG-1126's stable
+full-coverage prerequisite: **canary pass plus landing tests replaces the full
+suite for consumer offers; the full suite is non-blocking background information**.
+This applies to every consumer project on a pinned Brain release. Corrected
+Majors still precede an offer. The consumer project decides whether and when to
+activate; an offer grants no release, publishing, pin or native execution authority.
 
-The supported routine path is `herdr/release.sh build TAG --landing-checks`, or
-`ship TAG --landing-checks` for activation with installed-launcher checks and
-automatic rollback. Only the supervisor uses it. It records full coverage UNRUN
-and non-READY acceptance, preserving immutable snapshots and pin separation.
-It does not execute or certify landing checks again. The producer's report and
-existing validation receipts remain the evidence of their actual selected scope.
+Nothing gates main. Producers run only new or affected checks once, self-land
+owned source and hand off one asynchronous capped diff/evidence review. Findings
+fix forward. Native identity/claim/source/CAS/STOP/HOLD checks remain at effects.
 
-Live acceptance follows the same rule: it is UNRUN for each routine internal
-update, required for the exact stable candidate that a consumer project adopts. Repeating it on
-each internal update would retain a per-candidate gate after the offline gate
-was removed. The routine safety net is affected landing tests, fix forward,
-immutable bundles and rollback. Stable adoption retains one full coverage
-obligation, valid evidence reuse, actual live acceptance and corrected Majors.
+The canonical supervisor uses `herdr/release.sh build TAG --landing-checks` or
+`ship TAG --landing-checks` for routine runtime updates. These retain immutable
+snapshots, installed-launcher checks, rollback and pin separation. They record
+full coverage and live acceptance UNRUN. They neither replay nor certify the
+producer's landing tests. Routine updates have no new readiness gate.
 
-`build TAG --live` preserves the stable preparation path. Existing
-`release-full-coverage/v1` and live continuation verifiers retain their source,
-runtime, inventory and native evidence requirements. Only failed, affected or
-unrun controls are repeated; UNRUN never means PASS. Routine bundles cannot be
-pinned or attested into stable readiness. Existing READY home-policy admission
-remains enforced, including for adopted projects following `current`.
+## Stable consumer-offer handoff
+
+Build the exact candidate in routine mode, run the installed canary (A2 / ENG-1135),
+bounded Brain probation (A3 / ENG-1136) and real-work soak (A4 / ENG-1137) through
+their owners, then use:
+
+```sh
+bash herdr/release.sh offer TAG /absolute/path/to/offer-evidence.json
+```
+
+The command verifies an already sealed candidate and writes one immutable offer
+under `RELEASE_HOME/offers/TAG.json`. It never builds, executes tests, activates,
+changes a pin, sends a message or starts a background full suite. It refuses
+missing canary PASS, missing or red landing evidence, unaccounted/unresolved
+Majors, stale source/manifest bindings, altered evidence and absent recorded
+coordinator disposition. Existing/unknown offers are inspected, never replaced.
+The offer makes that exact bundle eligible for existing READY pin/home admission;
+it does not fabricate the historical live-harness acceptance summary. Existing
+bundles predating this rule retain their legacy acceptance contract. Newly built
+bundles require this offer even if an optional full/live preparation was green.
+
+The coordinator assembles `consumer-release-offer/v1` evidence as described in
+[the release tooling reference](../herdr/README.md#consumer-offer-evidence).
+The recorded disposition binds the complete packet, including the A2/A3/A4
+results, full source range/producer selection and the complete applicable Major
+inventory. Semantic coverage remains the coordinator's responsibility: a hash
+or a green check filename alone does not establish that coverage. A canary FAIL,
+INCOMPLETE or missing actual soak is not PASS. Reuse valid producer receipts;
+reconcile ancestor checks and changes explicitly instead of replaying green runs.
+
+The full-suite field defaults to UNRUN. FAIL, UNKNOWN, PASS and UNRUN are all
+informational and never veto an otherwise qualified offer. Retain original
+failures and assign real defects; an applicable uncorrected Major blocks through
+the Major obligation, not through the broad suite's exit status. Historical
+full-coverage certificates and `build --live` remain diagnostic/preparation tools,
+not consumer-offer prerequisites. They run only when separately selected by their
+owner; this rule starts no background jobs or extra runs.
 
 ## Fit with the release-suite plan
 
-This changes the application of `.org/evidence/RELEASE-SUITE-PLAN-20261030.md`
-(ENG-1125/R-1517); it does not rewrite its historical observations or select its
-five implementation slices. In particular, its statement that actual live
-acceptance runs for every candidate is superseded for routine updates.
-
-| Slice | Application under this model | Next owner after selection |
-| --- | --- | --- |
-| 1: affected-test selection | Main routine safety net. Complete inventory, known transitive edges and dynamic consumers remain needed; unknown/deferred scope stays owed. No readiness gate on landing. | Engineering selector owner, coordinated by supervisor-herdr |
-| 2: coverage continuation | Used for the single stable final coverage obligation, especially red-run correction; no per-routine-candidate coverage certificate. Keep the existing verifier and release-owner reconciliation. | Engineering coverage owner; stable coordinator retains disposition |
-| 3: repeated fixture setup | Still useful for affected landing tests and the less frequent stable pass. Measure real fixture savings; its eight files do not alone establish the proposed timing target. | Engineering fixture owner |
-| 4: scratch lifetime and waits | Still required across focused and stable runs. Preserve attempt ownership, native failure/UNKNOWN evidence and recovery; no global reaper or service restart. | Engineering fixture-lifetime owner |
-| 5: observations and timing target | Record routine build/activation separately from cold stable coverage, continuation and live spans. Use already-required stable runs for the three-sample target; do not schedule full runs for each routine update or to fill a table. | Engineering timing owner and stable release coordinator |
-
-The plan's ≤30-minute cold offline, ≤15-minute small continuation and ≤40-minute
-end-to-end goals remain provisional stable-release targets, not routine-update
-admission requirements or execution deadlines. No selector, cache, fixture,
-cleanup, scheduler or timing implementation from those slices is included here.
+This supersedes the stable full-coverage obligation in the historical
+`.org/evidence/RELEASE-SUITE-PLAN-20261030.md` and ENG-1127's original proposal.
+Affected-test selection, fixture efficiency, scratch ownership and observable
+readiness remain useful. Full-coverage continuation and timing work describe
+optional background diagnostics, not consumer admission. Existing groups, limits,
+failed-attempt preservation and UNRUN truth still apply. No canary construction,
+consumer pin change, service restart or release is included in this policy change.

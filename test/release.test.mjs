@@ -55,6 +55,96 @@ else if(a[1]==='unlink'){if(process.env.FIXTURE_UNLINK_FAIL)process.exit(9);fs.w
   const checkout = tag => path.join(home, 'builds', tag, 'checkout');
   return { root, repo, home, bin, plist, env, run, ok, release, checkout, gateLog, calls, git, write };
 }
+// The packet is a coordinator fixture; no real canary or release is qualified.
+function offerFixture(f, tag = 't1') {
+  const sha = bytes => createHash('sha256').update(bytes).digest('hex');
+  const commit = f.git('rev-parse', tag).trim(), org = path.join(f.repo, '.org');
+  const env = { ...f.env, ORG_DIR: org, ORG_ACTOR: 'fixture-coordinator' };
+  const record = (...args) => execFileSync(process.execPath, [path.resolve('bin/org.mjs'), ...args], { cwd: f.repo, env, encoding: 'utf8' });
+  if (!fs.existsSync(org)) record('init', org);
+  const item = record('add', 'Consumer offer fixture').trim();
+  const receipt = path.join(f.root, `${tag}-landing.json`), canary = path.join(f.root, `${tag}-canary.json`);
+  fs.writeFileSync(receipt, JSON.stringify({ schema: 'lane-validation/v1', executed: true, exit_code: 0, head: commit,
+    node_version: 'v20.19.4', command: 'fixture focused checks', started_at: '2026-10-30T20:00:00Z', finished_at: '2026-10-30T20:00:01Z' }));
+  fs.writeFileSync(canary, JSON.stringify({ fixture: true, candidateCommit: commit, status: 'PASS' }));
+  const reference = file => ({ file, sha256: sha(fs.readFileSync(file)) });
+  const landing = () => ({ ...reference(receipt), changedFiles: [], reconciliation: 'Fixture checks apply to the identical candidate source.' });
+  const packet = { schema: 'consumer-release-offer/v1', commit,
+    manifestSha256: sha(fs.readFileSync(path.join(f.release(tag), '.release-manifest.json'))),
+    canary: { status: 'PASS', scope: 'Fixture A2 installed, A3 admission and A4 actual soak reconciliation.',
+      evidence: ['installed', 'probation', 'soak'].map(stage => ({ stage, ...reference(canary) })) },
+    landing: { status: 'PASS', scope: 'Fixture affected producer check selection.', evidence: [landing()] },
+    majors: { scope: 'All fixture candidate reviews accounted; the sole Major is corrected and checked.', unresolved: [],
+      corrections: [{ item: 'ENG-fixture-major', scope: 'Original fixture Major corrected and specifically checked.', evidence: [landing()] }] } };
+  const publish = (value = packet, attest = true) => {
+    const attestationDigest = sha(JSON.stringify(value));
+    if (attest) record('note', item, `Consumer release offer reconciled: ${attestationDigest}`, '--decision');
+    const events = fs.readFileSync(path.join(org, 'events.jsonl'), 'utf8').trim().split('\n').map(line => JSON.parse(line));
+    const file = path.join(f.root, `${tag}-offer.json`);
+    fs.writeFileSync(file, JSON.stringify({ ...value, attestationDigest, attestationSeq: events.at(-1).seq }) + '\n');
+    return file;
+  };
+  return { packet, publish, receipt, canary };
+}
+test('consumer offer refuses missing canary, landing evidence, unresolved Majors and unrecorded disposition', t => {
+  const f = scratch(t); f.ok(['build', 't1', '--landing-checks']);
+  const q = offerFixture(f), base = q.packet;
+  for (const [packet, pattern] of [
+    [{ ...base, canary: undefined }, /canary PASS/],
+    [{ ...base, canary: { ...base.canary, status: 'INCOMPLETE' } }, /canary PASS/],
+    [{ ...base, canary: { ...base.canary, evidence: base.canary.evidence.slice(0, 2) } }, /soak canary evidence/],
+    [{ ...base, landing: undefined }, /landing-test PASS/],
+    [{ ...base, majors: { ...base.majors, unresolved: ['ENG-fixture-major'] } }, /unresolved/],
+    [{ ...base, commit: 'f'.repeat(40) }, /candidate binding mismatch/],
+  ]) {
+    const result = f.run(['offer', 't1', q.publish(packet)]);
+    assert.notEqual(result.status, 0); assert.match(result.stderr, pattern);
+    assert.equal(fs.existsSync(path.join(f.home, 'offers/t1.json')), false);
+  }
+  const result = f.run(['offer', 't1', q.publish(base, false)]);
+  assert.notEqual(result.status, 0); assert.match(result.stderr, /recorded coordinator disposition/);
+  assert.equal(fs.existsSync(path.join(f.home, 'current')), false);
+  assert.equal(fs.existsSync(path.join(f.repo, '.herdr-release.json')), false);
+});
+test('consumer offers accept absent or failing full suites without executing them and enable consumer pin admission', t => {
+  const f = scratch(t);
+  for (const [tag, fullSuite] of [['t1', undefined], ['t2', { status: 'FAIL', details: 'Fixture full suite failed; unrelated diagnostic retained.' }]]) {
+    f.ok(['build', tag, '--landing-checks'], { FIXTURE_GATE_FAIL: '1', FIXTURE_LIVE_FAIL: '1' });
+    const q = offerFixture(f, tag), file = q.publish({ ...q.packet, ...(fullSuite ? { fullSuite } : {}) });
+    const manifest = fs.readFileSync(path.join(f.release(tag), '.release-manifest.json'));
+    assert.match(f.run(['pin', tag, f.repo]).stderr, /consumer offer required/);
+    f.ok(['offer', tag, file]);
+    const storedFile = path.join(f.home, 'offers', `${tag}.json`), stored = JSON.parse(fs.readFileSync(storedFile));
+    assert.equal(stored.fullSuite.status, fullSuite?.status ?? 'UNRUN');
+    assert.equal(fs.statSync(storedFile).mode & 0o222, 0);
+    assert.deepEqual(fs.readFileSync(path.join(f.release(tag), '.release-manifest.json')), manifest);
+    assert.equal(fs.existsSync(path.join(f.home, 'current')), false, 'offer does not activate');
+    assert.equal(fs.existsSync(path.join(f.repo, '.herdr-release.json')), tag === 't2', 'only prior explicit pin writes consumer config');
+    f.ok(['pin', tag, f.repo]);
+    assert.match(f.run(['offer', tag, file]).stderr, /already exists/);
+    fs.chmodSync(storedFile, 0o644); stored.packet.canary.status = 'FAIL'; fs.writeFileSync(storedFile, JSON.stringify(stored));
+    assert.match(f.run(['pin', tag, f.repo]).stderr, /consumer-offer-invalid/);
+  }
+  assert.equal(fs.existsSync(f.gateLog), false, 'offer never executes full or live suites');
+});
+test('consumer offer refuses altered, red, wrong-runtime and stale-source landing evidence', t => {
+  const f = scratch(t); f.ok(['build', 't1', '--landing-checks']); const q = offerFixture(f);
+  const original = fs.readFileSync(q.receipt), sha = bytes => createHash('sha256').update(bytes).digest('hex');
+  for (const change of [{ exit_code: 1 }, { node_version: 'v22.0.0' }, { executed: false }, { head: f.git('rev-parse', 't2').trim() }]) {
+    fs.writeFileSync(q.receipt, JSON.stringify({ ...JSON.parse(original), ...change }));
+    const ref = { ...q.packet.landing.evidence[0], sha256: sha(fs.readFileSync(q.receipt)) };
+    const packet = { ...q.packet, landing: { ...q.packet.landing, evidence: [ref] }, majors: { ...q.packet.majors, corrections: [] } };
+    const result = f.run(['offer', 't1', q.publish(packet)]);
+    assert.notEqual(result.status, 0); assert.match(result.stderr, /passing pinned-runtime check|not an ancestor/);
+  }
+  fs.writeFileSync(q.receipt, original);
+  const file = q.publish(); fs.appendFileSync(q.canary, ' ');
+  assert.match(f.run(['offer', 't1', file]).stderr, /evidence changed/);
+});
+test('optional full and live preparation alone cannot qualify a new consumer offer', t => {
+  const f = scratch(t); f.ok(['build', 't1', '--live']);
+  assert.match(f.run(['pin', 't1', f.repo]).stderr, /consumer offer required/);
+});
 test('build gates a genuine tagged checkout once, then publishes an equal read-only archive', t => {
   const f = scratch(t); f.write('bin/org.mjs', "console.log('uncommitted');");
   f.ok(['build', 't1']);
@@ -493,7 +583,9 @@ test('installed release commands can inspect and switch launchers without Git me
 });
 
 test('pin validates a complete bundle and only a canonical commit accepts activation or rollback', t => {
-  const f = scratch(t); f.ok(['build', 't1', '--live']); f.ok(['build', 't2', '--live']); f.ok(['activate', 't2']);
+  const f = scratch(t); f.ok(['build', 't1', '--live']); f.ok(['build', 't2', '--live']);
+  for (const tag of ['t1', 't2']) f.ok(['offer', tag, offerFixture(f, tag).publish()]);
+  f.ok(['activate', 't2']);
   const project = path.join(f.root, 'project'); fs.mkdirSync(project);
   const git = (...args) => execFileSync('git', ['-C', project, ...args], { env: f.env, encoding: 'utf8' });
   git('init', '-qb', 'main'); git('config', 'user.name', 'Test'); git('config', 'user.email', 'test@example.invalid');

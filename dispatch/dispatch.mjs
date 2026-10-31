@@ -37,7 +37,7 @@ import {originalPrestartProof,reviewDigest,reviewPlain} from '../line-service/re
 import {checkDispatchEligibility,launchDigest} from './launch-guard.mjs';
 import { createWorkerBrief, validateWorkerBrief, validateLineExecution, compatibleLineBrief, lineWorkerPrompt, projectExceptionAddress } from '../lib/worker-brief.mjs';
 import {outcomeFailure} from '../lib/uncertain-outcome.mjs';
-import {claimRetirementOwner,claimRetirementAllocation} from '../lib/closeout.mjs';
+import {dispatchAllocationEffect} from './allocation-effect.mjs';
 import {recordDispatchCompletion} from './completion.mjs';
 import { dispatchLaneName } from '../lib/lane-name.mjs';
 import { saveDispatchJournal, sourceConflict } from './journal-save.mjs';
@@ -143,13 +143,9 @@ function command(argv, args, cwd = job?.repo ?? path.resolve(opt.repo), mutation
 const allocationEffect=operation=>{
   // Fixtures can shorten contention waits while retaining the real lock refusal.
   const waitMs=Number(process.env.HERDR_DISPATCH_RETIREMENT_WAIT_MS??60000);
-  // Refuse a retirement of this exact allocation before taking the project
-  // lock. Waiting on it with owner.lock held would block unrelated launches.
-  const allocation=claimRetirementAllocation(job.common,`lane/${job.lane}`,{deadline:controllerDeadline});
-  try{
-    const release=claimRetirementOwner(job.common,{waitMs,deadline:controllerDeadline});
-    try{return operation();}finally{release();}
-  }finally{allocation();}
+  const project=gitProject(job.repo);
+  if(project.identity!==job.common)throw Error('dispatch allocation project identity changed');
+  return dispatchAllocationEffect({project,org:job.org,branch:`lane/${job.lane}`,waitMs,deadline:controllerDeadline},operation);
 };
 const recordCommand = args => command(recordCLI,args,undefined,args[0] !== 'show');
 const record = args => ['start','worker'].includes(args[0]) ? allocationEffect(()=>recordCommand(args)) : recordCommand(args);

@@ -62,6 +62,15 @@ New lanes use `lane open --git-only`, deferring their Herdr workspace until
 `lane dispatch` can start the worker in its initial selected tab. This leaves one
 agent tab and preserves operator focus. Existing workspaces retain their tabs.
 
+Open, preparation, record binding and native launch retain the exact branch's
+retirement allocation lock. When the owning record and queue retirement policy
+match, dispatch checks legacy ownership under the project retirement owner lock,
+then yields that project lock before the operation. Independent finished folders
+can close while startup is slow; the same allocation remains excluded. Projects
+using legacy retirement retain the project lock throughout. This changes no
+native/claim/source checks, saved attempts, service pins or watchers, and proves
+no live report-to-folder latency until a new measured window records it.
+
 Reviews and fixes start in fresh native allocations and lanes. A fresh fixer uses
 the exact kept unlanded author branch, otherwise main. A dirty saved author
 folder is retained and reported to its owner; dispatch does not branch around it.

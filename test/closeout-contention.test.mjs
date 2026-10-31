@@ -157,7 +157,7 @@ for(const change of ['activity','owner','reference','HOLD'])test(`retirement hou
   else{assert.equal(fs.existsSync(f.lane),true);assert.equal(effects(f).some(e=>e.action==='lane-removed'),false);assert.ok(evaluations(f).some(e=>!e.completed),JSON.stringify(result));}
 });
 
-for(const change of ['hints','target-receipt','unknown-receipt'])test(`removal receipt scope ${change==='hints'?'allows unrelated retirement wake hints':`retains ${change}`}`,t=>{
+for(const change of ['hints','target-receipt','unknown-receipt','redirect-parent'])test(`removal receipt scope ${change==='hints'?'allows unrelated retirement wake hints':`retains ${change}`}`,t=>{
   const f=setup(t,{occupied:false,terminal:true}),command=f.options.command,log=f.options.log;
   let prepared=false,changed=false;
   f.options.log=row=>{log(row);if(row.action==='lane-preflight')prepared=true;};
@@ -168,6 +168,8 @@ for(const change of ['hints','target-receipt','unknown-receipt'])test(`removal r
       if(change==='hints'){
         fs.writeFileSync(path.join(root,'request.json'),JSON.stringify({schema:'retirement-request/v1',revision:999,event_seq:999,source:'unrelated record close'}));
         fs.writeFileSync(path.join(root,'handled.json'),JSON.stringify({schema:'retirement-handled/v1',revision:998,keep:[],results:[]}));
+      }else if(change==='redirect-parent'){
+        fs.renameSync(root,root+'-original');fs.symlinkSync(root+'-original',root);
       }else{
         const exits=path.join(root,'exits');fs.mkdirSync(exits,{recursive:true});
         fs.writeFileSync(path.join(exits,'added.json'),JSON.stringify(change==='target-receipt'?{schema:'retirement-exit/v1',common:f.common,cwd:f.lane,run:'R-1',workspace:'target-workspace',tab:'target-tab',pane:'target-pane'}:{schema:'future-receipt/v1'}));
@@ -177,5 +179,5 @@ for(const change of ['hints','target-receipt','unknown-receipt'])test(`removal r
   };
   const result=f.drain();assert.equal(changed,true);
   if(change==='hints')assertRemoved(f);
-  else{assert.equal(fs.existsSync(f.lane),true);assert.equal(effects(f).some(e=>e.action==='lane-removed'),false);assert.ok(evaluations(f).some(e=>!e.completed&&/target removal authority changed/.test(e.reason)),JSON.stringify(result));}
+  else{assert.equal(fs.existsSync(f.lane),true);assert.equal(effects(f).some(e=>e.action==='lane-removed'),false);assert.ok(evaluations(f).some(e=>!e.completed&&/target removal authority changed|redirected scoped removal input/.test(e.reason)),JSON.stringify(result));}
 });

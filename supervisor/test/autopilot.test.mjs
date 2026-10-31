@@ -491,7 +491,7 @@ test('abandoned watcher inbox entry is handled without Herdr delivery', async t 
   f.entry.message = `[watch-no-report] run=${f.run} item=${f.item} worker=old`;
   const result = await foregroundNotice(f, f.entry.message, { id: `watch:${f.run}:no-report` });
   assert.equal(result.handled, true); assert.equal(f.calls.length, 0);
-  assert.deepEqual(f.herdrCalls().filter(a => a[0] === 'agent' && a[1] === 'prompt'), []);
+  assert.deepEqual(f.herdrCalls(), [['agent', 'get', f.entry.to]]);
   const entry = readInbox(result.inbox)[0]; assert.equal(entry.state, 'handled');
   assert.equal(entry.message, f.entry.message); assert.match(entry.autopilot.summary, /watch-no-report/);
 });
@@ -516,7 +516,7 @@ test('inbox consumes routine results before any Herdr delivery and retains origi
     executeAutopilot: f.execute, nativeAutopilotWorker: f.nativeWorker });
   assert.equal(result.delivered, true); assert.equal(result.handled, true);
   assert.equal(f.calls.length, 2);
-  assert.deepEqual(f.herdrCalls().filter(a => a[0] === 'agent' && a[1] === 'prompt'), []);
+  assert.deepEqual(f.herdrCalls(), [['agent', 'get', f.entry.to]]);
   const entry = readInbox(result.inbox)[0];
   assert.equal(entry.message, f.entry.message); assert.equal(entry.state, 'handled');
   assert.ok(entry.autopilot.receipt.startsWith(receiptDirectory(f.org, f.entry.project.identity)));

@@ -80,6 +80,25 @@ test('saved chat routing and watcher recipients survive while new replies use th
   assert.equal(createWorkerBrief(f.input).reply_to, 'record');
 });
 
+test('new line workers wait for the committed original session before ask, task work or a report; saved prompts stay unchanged', () => {
+  for (const role of ['engineer', 'reviewer']) {
+    const f = assignment({ role });
+    f.run.meta.dispatch_journal = '/record/dispatch/original.json';
+    const saved = f.prompt(f.render());
+    assert.doesNotMatch(saved, /worker-session\.mjs/);
+    f.job.workerSessionWaitProtocol = 1;
+    const prompt = f.prompt(f.render());
+    assert.ok(prompt.startsWith('Before reading the ask, running ownership preflight'));
+    assert.ok(prompt.includes("'/node20' '/brain/dispatch/worker-session.mjs' '--run' 'R-1' '--journal' '/record/dispatch/original.json' '--org' '/record'"));
+    assert.match(prompt, /first tool action/);
+    assert.match(prompt, /Exit 3 means pending: repeat this same read-only command and keep the run\/report open/);
+    assert.match(prompt, /do not substitute identity, resend the prompt or replay the launch/);
+    assert.ok(prompt.indexOf('worker-session.mjs') < prompt.indexOf('You are run R-1'));
+    delete f.job.workerSessionWaitProtocol;
+    assert.equal(f.prompt(f.render()), saved);
+  }
+});
+
 test('missing scope/execution/routing fields refuse before the launch caller proceeds and list every blocker', () => {
   const f = assignment(), contract = structuredClone(f.contract);
   delete contract.scope; delete contract.lane; delete contract.route; delete contract.workspace;

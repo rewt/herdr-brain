@@ -40,6 +40,7 @@ import {outcomeFailure} from '../lib/uncertain-outcome.mjs';
 import {claimRetirementOwner,claimRetirementAllocation} from '../lib/closeout.mjs';
 import {recordDispatchCompletion} from './completion.mjs';
 import { dispatchLaneName } from '../lib/lane-name.mjs';
+import { saveDispatchJournal, sourceConflict } from './journal-save.mjs';
 
 const local = (file) => fileURLToPath(new URL(file, import.meta.url));
 const { values: opt, positionals } = parseArgs({ usage: "Usage: node dispatch/dispatch.mjs ITEM --lane TOPIC --route ROUTE --brief FILE [OPTIONS] | --retry R-n|JOURNAL | --status R-n|JOURNAL\nAdmission counts running native workers/reviewers and durable uncertain starts under dispatch.max_sessions. Unlanded lifecycle history is diagnostic only. --from-run retains same-item/current-run guards; --unblocks records a genuine landing dependency and never bypasses native capacity.", allowPositionals: true, options: {
@@ -75,7 +76,6 @@ let controllerDeadline=Infinity;
 let preflight;
 let reviewContinuation;
 let completionAttempted = false;
-const sourceConflict = error => ['RECORD_GUARD_CONFLICT', 'RECORD_OBSERVATION_CONFLICT'].includes(error.code);
 function originalReviewContinuation(saved){
   const events=loadEvents(saved.org).events,proof=originalPrestartProof({events,org:saved.org,common:saved.common,journal,job:saved,requestHash:reviewDigest(reviewPlain(journal))});
   if(proof?.type!=='review.original-continuation'){
@@ -99,22 +99,11 @@ const atomic = (file, value) => {
   fs.writeFileSync(temp, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 });
   fs.renameSync(temp, file);
 };
-const save = () => {
-  // Only re-prepare the read-only owner check. The guarded journal write must
-  // never replay, nor may a retry refresh the saved claim or launch a worker.
-  for (let attempt = 0; ; attempt++) {
-    let writing = false;
-    const write = () => { writing = true; return atomic(journal, job); };
-    try {
-      if (job.ownership && job.run) return fenceOwner(job.org, job.run, job.ownership, write);
-      if (job.predecessor) return fenceOwner(job.org, job.predecessor.run, job.predecessor.binding, write);
-      return write();
-    } catch (error) {
-      if (writing) error.dispatchJournalEffectStarted = true;
-      if (writing || attempt >= 31 || !sourceConflict(error)) throw error;
-    }
-  }
-};
+const save = () => saveDispatchJournal({ write: () => atomic(journal, job), reserve: write => {
+  if (job.ownership && job.run) return fenceOwner(job.org, job.run, job.ownership, write);
+  if (job.predecessor) return fenceOwner(job.org, job.predecessor.run, job.predecessor.binding, write);
+  return write();
+} });
 function claimAdmission() {
   if (!job.run) return;
   const desired = job.predecessor?.binding.owner ?? brainOwner(opt.controller);
@@ -556,7 +545,7 @@ async function main() {
     const probation=actual.commit?probationRuntime(repo,{root:actual.root,home:runtimeHome})?.probation:undefined;
     if(actual.commit&&!probation)requireReadyAcceptance(checkRelease(runtimeHome,actual.id),runtimeHome);
     job = { token, repo, org, common, predecessor, release: bundleRelease(), sourceSelection: sourceSelection ?? null,...(probation?{probation}:{}),
-      invocation: invocation(), watchMode:opt['watch-mode']??'process',
+      invocation: invocation(), watchMode:opt['watch-mode']??'process', workerSessionWaitProtocol: 1,
       operatorRecordCommand: [process.execPath, local('../bin/org.mjs')],
       operatorRecordRoot: bundleRelease().root,
       operatorPlainText: true,

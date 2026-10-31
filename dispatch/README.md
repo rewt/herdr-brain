@@ -453,6 +453,19 @@ Record writes finish outside the observation timeout: the writer judges the
 saved `observed_at` against the original window, not elapsed CLI or record-lock
 time. Timely original proposals remain admissible after ingestion or expiry;
 conflicting identities, newer occupants and changed anchors still refuse.
+
+New line-dispatched prompts make `dispatch/worker-session.mjs` their first tool
+action, before task work, ownership preflight or a report. This foreground,
+read-only wait accepts only the original committed launch/session identity and
+claim for the actual native worker. A proposal or journal `bound` flag is not
+proof. Pending waits return exit 3 after one minute and repeat without reporting
+the run blocked; the dispatcher or existing line replay still owns the bind.
+Native/claim/source changes, STOP/HOLD, an inactive run or a final bind refusal
+stop the wait and use the existing supervisor exception path. Saved prompts,
+watchers and runtimes are unchanged; ordinary mutation guards remain mandatory.
+Dispatch's bounded journal-save retry also recognizes consistent-read exhaustion
+before an effect, retaining the same claim and proposal. An attempted journal
+write or a refusal is never replayed by that retry.
 Folded identity evidence lives in side tables; run objects and historical
 completion fingerprints retain their original shape.
 Correction and completion notices go through watch's

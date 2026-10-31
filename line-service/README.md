@@ -1294,6 +1294,8 @@ without opening a record plan. Unprovable old intents remain UNKNOWN and cannot
 abort current allocation refresh on unrelated landings. Selected proofs re-read
 the record, source guards and reflogs inside each bounded pure preparation;
 only pre-effect source conflicts may re-prepare, never native effects/refusals.
+An already recorded outcome decision is returned through a guarded read, even
+when closed; only a new decision takes the original no-recovery append lock.
 
 An ingested report's original watcher can remain alive while its final notice
 waits for supervisor input. That transport wait does not retain the finished

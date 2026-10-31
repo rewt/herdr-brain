@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
-import {transact} from '../lib/store.mjs';
+import {transact,loadRecord} from '../lib/store.mjs';
 import {nextItemId} from '../lib/state.mjs';
 import {intentFirstCreation} from '../lib/dispatch-template.mjs';
 import {protectRecordMutation} from '../lib/record-guard.mjs';
@@ -43,10 +43,22 @@ export function obsoleteOutcomeDecision(item,{events,entries,evaluations}) {
 export function queueOutcomeDecision({repo,org,env,check,owner='pass'}) {
   if(owner!=='pass'&&(owner!=='closeout-turn'||!check.key.startsWith('closeout:')))throw Error('finite closeout owner may queue only closeout decisions');
   const binding=serviceRecordBinding({repo,org,env,owner}),key=createHash('sha256').update(JSON.stringify([binding.identity,org,check.key])).digest('hex');
-  return transact(org,(events,state)=>{
+  const guard=()=>{
     serviceRecordBinding({repo,org,env,owner});
     for(const file of [path.join(binding.directory,'STOP'),path.join(repo,'.lane/supervisor/STOP'),path.join(repo,'.lane/supervisor/HOLD')])if(fs.existsSync(file))throw Error('STOP/HOLD prevents outcome decision');
-    const existing=[...state.items.values()].find(i=>i.meta.uncertain_outcome?.key===key);
+  };
+  const find=state=>[...state.items.values()].find(i=>i.meta.uncertain_outcome?.key===key);
+  guard();
+  const observed=loadRecord(org);
+  if(observed.tornTail)throw Error('incomplete record tail; retain original outcome decision');
+  const prior=find(observed.state);
+  // Returning an existing durable decision is a read, including a closed one.
+  // Do not contend for the append lock on every unchanged legacy defect. New
+  // decisions still use the original single-shot guarded no-recovery append.
+  if(prior)return{item:prior.id,key};
+  return transact(org,(events,state)=>{
+    guard();
+    const existing=find(state);
     if(existing)return {add:[],result:{item:existing.id,key}};
     const id=nextItemId(state,{kind:'work',role:'decision'});
     const mutation={add:[intentFirstCreation({type:'item.added',id,kind:'work',role:'decision',title:'Resolve a missing completion producer or recorded refusal',

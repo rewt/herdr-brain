@@ -36,6 +36,8 @@ test('entry policies keep ordinary landing with workers and supervisor authority
   assert.doesNotMatch(worker, /--role supervisor|supervisor\/supervisor.mjs|--start/);
   const chat = entryPolicy({ ...context, role: 'chat' }, root);
   assert.match(chat, /follow-up belongs to the recorded owning worker/);
+  assert.match(chat, /single existing record queue-review path/);
+  assert.doesNotMatch(chat, /starts one async post-code review/);
   assert.doesNotMatch(chat, /Route routine notices to.*supervisor/);
   const supervisor = entryPolicy({ ...context, role: 'supervisor' }, root).replace(/\s+/g, ' ');
   assert.match(supervisor, /reserve supervisor mutations for actual exceptions\/recovery/);

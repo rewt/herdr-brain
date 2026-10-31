@@ -13,7 +13,8 @@ import {referenceProof,resolvedReference} from '../line-service/review-reference
 import {capturedRange,REVIEW_PROOF_MAX_BYTES} from '../line-service/review-targets.mjs';
 import {reviewDigest as hash} from '../line-service/review-resolutions.mjs';
 import {reviewAttempt} from '../line-service/review.mjs';
-import {queueReviewMutation,validateQueuedReview} from '../line-service/review-queue.mjs';
+import {queueReviewMutation,validateQueuedReview,reviewQueueBrief} from '../line-service/review-queue.mjs';
+import {correctionBrief} from '../lib/correction-brief.mjs';
 import {createLineService,sourceRoot} from '../line-service/line-service.mjs';
 import {reviewQueueNoMutation} from '../line-service/review-queue-outcome.mjs';
 import {reconcileReviewQueue,inspectReviewQueue} from '../line-service/review-queue-reconcile.mjs';
@@ -151,6 +152,35 @@ test('descriptive watcher liveness neither probes a process nor replaces histori
     assert.deepEqual(f.captured(),before);assert.deepEqual(fs.readFileSync(f.reference),bytes);
   }
   assert.ok(f.calls.every(a=>a[0]==='agent'&&a[1]==='get'),'no watcher process probe or native effect');
+});
+
+test('review diff hash form reproduces the capture and survives refusal and recovery',t=>{
+  const f=fixture(t),c=f.context(),target=c.target,before=JSON.stringify(target);
+  const stdout=execFileSync('git',['-C',f.repo,'diff','--no-ext-diff','--no-textconv',f.base,f.head],{encoding:'utf8'});
+  assert.ok(stdout.endsWith('\n'));
+  assert.notEqual(hash(stdout),target.diff_sha256,'raw Git bytes are a different form');
+  assert.equal(hash(stdout.trim()),target.diff_sha256,'the documented normalization reproduces capture');
+  assert.throws(()=>capturedRange({...c,target:{...target,diff_sha256:hash(stdout)}}),/range\/diff/);
+  assert.deepEqual(capturedRange(c),[f.head],'the original capture remains valid after refusal');
+  f.prepare({...producerHandoff(f),watcher:reportWatcher(f)});resolveReviewReference(f.args());
+  const q=f.queue(),next=f.context(),item=next.state.items.get(q.review_item);
+  assert.equal(validateQueuedReview({...next,item}).diff_sha256,target.diff_sha256);
+  const form='Diff SHA256 form: SHA256 of git diff --no-ext-diff --no-textconv BASE HEAD stdout decoded as UTF-8, then JavaScript String.trim(), then encoded as UTF-8 (no final newline).';
+  for(const evidence_kind of [undefined,'native-landings/v1','supplemental-review/v1','canonical-unattributed/v1']){
+    assert.ok(reviewQueueBrief({...item,meta:{...item.meta,review_target:{...target,evidence_kind}}}).includes(form));
+  }
+  const args={item,author:c.run,reviewRun:null,findings:[],target,org:f.org,repo:f.repo};
+  assert.ok(correctionBrief(args).includes(form));
+  const ranges=[{base:f.base,head:f.head,commits:[f.head],diff_sha256:target.diff_sha256}],multi={...target,diff_kind:'producer-ranges/v1',diff_sha256:hash(JSON.stringify(ranges)),scope:{...target.scope,ranges}};
+  const manifestForm='Diff SHA256 form: SHA256 of UTF-8 JSON.stringify(scope.ranges), with no indentation or final newline. Each range diff SHA256 form:';
+  assert.ok(reviewQueueBrief({...item,meta:{...item.meta,review_target:multi}}).includes(manifestForm));
+  assert.ok(correctionBrief({...args,target:multi}).includes(manifestForm));
+  const saved={base:f.base,head:f.head,diff:stdout};
+  const fallback=correctionBrief({...args,target:undefined,saved});
+  assert.ok(fallback.includes(`diff SHA256: ${hash(stdout)}`));
+  assert.ok(fallback.includes('exact UTF-8 saved author packet diff string, without trimming'));
+  assert.ok(correctionBrief({...args,target:undefined}).includes('Diff SHA256 form: UNKNOWN'));
+  assert.equal(JSON.stringify(target),before,'describing the hash must not rewrite a saved capture');
 });
 
 test('multi-megabyte immutable diff keeps its exact hash through watcher disposition and queue admission',t=>{

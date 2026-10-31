@@ -272,6 +272,17 @@ This reconciliation writer does not make a partial range acceptable. A failed or
 command remains held under its own receipt. Existing review routes, cap1 and
 zero reviewer suites remain unchanged, including ENG-1141's Opus route.
 
+Review and correction asks record the diff SHA256 form explicitly. Single-range
+captures hash `git diff --no-ext-diff --no-textconv BASE HEAD` stdout decoded as
+UTF-8, passed through JavaScript `String.trim()`, then encoded as UTF-8. This
+removes the final newline; hashing the raw Git output produces a different hash.
+Reproduce it with Node's `createHash('sha256').update(stdout.trim()).digest('hex')`.
+For producer-range captures the top-level hash covers UTF-8
+`JSON.stringify(scope.ranges)` without indentation or a final newline; each range
+hash uses the trimmed Git form above. Saved author-packet fallback hashes cover
+the exact saved diff string without trimming. Existing captures and verdicts
+remain immutable; these descriptions do not rehash or replace them.
+
 Leave the existing line and saved callbacks in place. Its next ordinary pass
 uses the normal record `queue-review` and dispatch path where eligible. Do not
 manually queue a replacement, restart a service, or retry an original UNKNOWN

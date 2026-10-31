@@ -20,6 +20,8 @@ function fixture() {
     e.seq = i + 1;
     if (e.source) e.source.seq = seqs.get(e.source.seq);
     if (e.authority) e.authority = seqs.get(e.authority);
+    if (e.started_seq) e.started_seq = seqs.get(e.started_seq);
+    if (e.claim_generation) e.claim_generation = seqs.get(e.claim_generation);
     for (const r of Object.values(e.resources ?? {})) if (r.receipt) r.receipt.seq = seqs.get(r.receipt.seq);
   }
   for (const r of trial.runs) {r.startedSeq = seqs.get(r.startedSeq); r.claimGeneration = seqs.get(r.claimGeneration);}

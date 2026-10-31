@@ -54,7 +54,7 @@ import {ordinaryAdmissionHold} from '../lib/ordinary-admission.mjs';
 import {commandIntent,finishCommand,forgetActiveCommand,pendingSubjectCommand} from '../lib/command-receipt.mjs';
 import {refreshJournal,effectSubject} from './scheduling.mjs';
 import {appendPassJournal,withPassJournal,passJournalSize,readPassJournal} from './pass-journal.mjs';
-import {negativeEvaluationCache} from './evaluation-cache.mjs';
+import {negativeEvaluationCache,sourceEvaluationInputs} from './evaluation-cache.mjs';
 import {observeGeneralOwners} from './general-owner-alarm.mjs';
 export { reviewAttempt } from './review.mjs';
 
@@ -386,7 +386,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       const admission=readAdmission('pass-start'),admissionPolicy=admission?.review,ordinaryPolicy=admission?.ordinary;
       if(admission)try{({config}=loadDiscoveredRoutes({cwd:repo,env:childEnv}));}catch(error){holdPolicy(error,'pass-start');}
       const evaluationCounts={admission_evaluated:0,admission_skipped:0,source_evaluated:0,source_skipped:0};
-      const evaluationCache=negativeEvaluationCache({store:()=>effects,identity:project.identity,org,repo,revision:sourceRevision,
+      const evaluationCache=negativeEvaluationCache({store:()=>effects,identity:project.identity,org,repo,
         counts:evaluationCounts,dirty:()=>{noticesDirty=true;}});
       const evaluationPolicy={admissionPolicy,ordinaryPolicy,config,supervisor:childEnv.MONITOR_SUPERVISOR_AGENT??null};
       effects.review_admission.policy=admissionPolicy??null;
@@ -456,7 +456,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         }
       }catch(e){note('review-progress',e.message);}
       snapshot=current();
-      let discovered,index;try{index=canonicalReviewIndex({events:snapshot.events,state:snapshot.state,repo,org,identity:project.identity,boundary:cutoff});discovered=discoverChanges({events:snapshot.events,state:snapshot.state,repo,org,identity:project.identity,pendingOnly:true,index,heldCache:(item,run)=>evaluationCache.probe('source',{snapshot,item:item.id,run:run.id,policy:evaluationPolicy,extra:{tip:index.tip,boundary:cutoff}})});}catch(e){discovered={changes:[],holds:[{reason:e.message}]};}
+      let discovered,index;try{index=canonicalReviewIndex({events:snapshot.events,state:snapshot.state,repo,org,identity:project.identity,boundary:cutoff});discovered=discoverChanges({events:snapshot.events,state:snapshot.state,repo,org,identity:project.identity,pendingOnly:true,index,heldCache:(item,run)=>evaluationCache.probe('source',{snapshot,item:item.id,run:run.id,policy:evaluationPolicy,extra:{canonical:sourceEvaluationInputs(index,item,run),boundary:cutoff}})});}catch(e){discovered={changes:[],holds:[{reason:e.message}]};}
       for(const held of discovered.holds)note(`review-source:${held.run??'boundary'}:${held.head??''}`,held.reason,{item:held.item,run:held.run,head:held.head,review:true});
       let reviewSteps=0;
       for(const {item,run,target}of discovered.changes){

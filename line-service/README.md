@@ -1498,24 +1498,34 @@ the large-copy rotation receipt. Never point the witness at the live service.
 
 The general pass retains negative admission and source-discovery observations in
 `effects.json#negative_evaluations`. Entries bind the actual project/record and
-source revision, dependency events and folded subjects, ancestors, linked
+evaluator implementation bytes, direct dependency events and folded subjects, ancestors, linked
 prerequisites and review/question children, admission policy, brief/report/request
 files, and workspace/Git identity metadata. Fingerprinting uses filesystem reads,
 including absence, rather than invoking Git in deleted workspaces. Checkout
 contents (including linked skills and runtime output) are not read by these
-evaluations and are not inventoried. Relevant Git inventories larger than 4096
-paths, linked Git directories or unreadable inputs are evaluated fresh. The bound
-declines caching; it never truncates a fingerprint. Source revision is part of
-each v2 signature, so interleaved v2 writers cannot reset the entire shared cache.
-During the v1-to-v2 transition, a still-running v1 pass can replace the v2 envelope
-and discard its hints. This limitation lasts until the original v1 owners drain
-normally; lost hints cause fresh evaluations, and v2 passes rebuild them.
-Common source/policy changes conservatively invalidate dependent observations.
-Ancestor revisions track their own event subjects: mentioning a goal in another
-run's saved report or closeout diagnostic does not change the goal's subtree.
+evaluations and are not inventoried. Inventories larger than 4096 paths, linked
+Git refs, reftable or unreadable inputs are evaluated fresh. The bound declines
+caching; it never truncates a fingerprint. Each v3 signature resolves the worker's
+own loose/packed HEAD and Git configuration/replacement inputs, excluding shared
+index and ordinary ref timestamps. Canonical main's revision is not an input.
+The already fresh canonical review index supplies each source producer's own
+claim membership, attribution and ancestry, including competing claims. Global
+attribution, peer/dedup checks and exact-target validation remain in discovery
+and the guarded queue command. Evaluator modules and their relative module
+dependencies are hashed once per pass, so relevant implementation changes still
+invalidate observations. No new watcher, scheduling graph or service is added.
+Older interleaved writers can discard newer hints until they drain normally;
+missing, malformed or old-schema caches re-evaluate and rebuild from the record.
+Common evaluator/policy changes conservatively invalidate observations. Revisions
+track direct event subjects: mentioning another subject in a report or closeout
+diagnostic does not change that subject or its ancestor's subtree.
 Pending source discovery also retains a negative when a producer is already
 covered and has no new source to queue. A producer with any pending target stays
-fresh, even if discovery also diagnoses a hold for it.
+fresh, even if discovery also diagnoses a hold for it. The existing obligation
+fold forces reconsideration of pending landed review handoffs and pending
+dispatch/unsupported admission outcomes. Prerequisite-only reports without a
+landing do not manufacture queue debt. Intake, closeout and source-completion
+obligations retain their independent consumers outside these negative probes.
 
 Only negative evaluations can be skipped. Ready candidates, capacity failures,
 original attempts/UNKNOWN continuation readback, and all effect-boundary guards
@@ -1524,7 +1534,7 @@ replace an attempt or waive final-release coverage. Cache misses retain the
 existing hold diagnostics; hits retain the original diagnosis without repeating
 its hold/eligibility rows. The journal remains under the existing scheduling lock
 and inherits interleaved writes when that lock is yielded. `pass-complete` records
-`evaluations` (evaluated/skipped by stage, with cold/changed/uncacheable miss
+`evaluations` (evaluated/skipped by stage, with cold/changed/uncacheable/obligation miss
 counts) and the open candidate `backlog`.
 
 Read historical pass counts and duration through the B4 measurement entry:

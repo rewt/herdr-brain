@@ -2,10 +2,10 @@ import test from './helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import {currentCloseoutEntries} from '../lib/closeout.mjs';
+import {currentCloseoutEntries,unresolvedCloseoutEffect} from '../lib/closeout.mjs';
 import {closeoutNextStage} from '../lib/closeout-status.mjs';
 import {TAB_RETIREMENT_AUTHORITY_CHANGED} from '../lib/retire.mjs';
-import {setup,events,effects,selectCurrentCleanup,retainNativeOutcome} from './helpers/closeout-fixture.mjs';
+import {setup,events,effects,selectCurrentCleanup} from './helpers/closeout-fixture.mjs';
 
 function fixture(t,{continued=false,transport}={}) {
   const f=setup(t,{direct:true,bound:true,merged:true});selectCurrentCleanup(f);f.report();
@@ -62,11 +62,18 @@ for(const kind of ['UNKNOWN','refusal'])test(`bound closer retains an original n
   assert.equal(row.condition.kind,kind==='UNKNOWN'?'uncertain-invocation':'native-refusal');
   assert.equal(f.observations.filter(r=>r.action==='skip-close'&&r.why===TAB_RETIREMENT_AUTHORITY_CHANGED).length,1);
   assert.equal(effects(f).some(r=>r.action==='shell-close-requested'),false);
-  const retained=retainNativeOutcome(f,f.entry);f.drain();retained();assert.equal(sends,1);
+  const original=events(f),intent=unresolvedCloseoutEffect(f.entry,original),calls=f.herdrCalls(),actions=f.read().actions;
+  assert.ok(intent);
+  f.drain();
+  assert.deepEqual(events(f).slice(0,original.length),original,'the original attempt and disposition survive');
+  assert.deepEqual(unresolvedCloseoutEffect(f.entry,events(f)),intent,'the original intent is not replaced or settled');
+  assert.deepEqual(f.herdrCalls(),calls,'a retained native outcome grants no new native read or send');
+  assert.deepEqual(f.read().actions,actions);assert.ok(fs.existsSync(f.lane));assert.equal(sends,1);
+  assert.deepEqual(currentCloseoutEntries(f.common,f.org,events(f)).find(e=>e.key===f.entry.key),f.entry);
 });
 
 test('bound closer keeps STOP and HOLD at its fresh replan boundary',t=>{
-  for(const name of ['STOP','HOLD']){
+  for(const name of ['STOP','HOLD-WORKER-TAB-CLOSE']){
     const f=fixture(t),log=f.options.log;
     f.options.log=row=>{
       log(row);

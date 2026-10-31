@@ -1,6 +1,6 @@
 import test from './helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
-import {fold} from '../lib/state.mjs';
+import {fold,itemStatus} from '../lib/state.mjs';
 import {queuePolicy,queueClass,queueSelected,orderQueue} from '../line-service/priority-order.mjs';
 import {priorityOnlyReason,priorityMigrationPlan,priorityMigrationMutation} from '../line-service/priority-migration.mjs';
 import {haltObservation} from '../line-service/halt-repair.mjs';
@@ -71,4 +71,60 @@ test('standing selection never inherits proposal selection from a parent and mal
   for(const queue_order of ['garbage','[]','["same","same"]']){
     s.items.get('G-1').meta.queue_order=queue_order;assert.throws(()=>queuePolicy(s),/queue_order/);
   }
+});
+
+test('new and reopened release blockers precede lower-class fix-forwards without changing tie breakers',()=>{
+  const f=fixture();
+  f.add({type:'item.updated',id:'G-1',fields:{meta:{queue_order:['stable-Brain-release','finish-open-owned-work','rehearsal-publication']}}});
+  f.item('ENG-release',{queue_class:'stable-Brain-release',hold:true});
+  f.item('ENG-reopened',{}, {priority:-100});
+  f.add({type:'run.started',id:'R-old',item:'ENG-reopened',meta:{}});
+  f.add({type:'run.abandoned',id:'R-old'});
+  f.add({type:'item.closed',id:'ENG-reopened',as:'done'});
+  f.add({type:'item.reopened',id:'ENG-reopened'});
+  f.item('ENG-new',{queue_class:'rehearsal-publication'}, {priority:10});
+  f.item('ENG-fix',{queue_class:'finish-open-owned-work',review_fix_of:'original'}, {priority:3800});
+  f.item('REV-release',{review_source_item:'ENG-release',review_target:{head:'captured'},review_round_cap:1},{role:'reviewer'});
+  const ids=['ENG-reopened','ENG-new','ENG-fix','REV-release'];
+  const order=()=>{const s=f.state();return orderQueue(s,ids.map(id=>s.items.get(id))).map(i=>i.id);};
+  assert.equal(queueClass(f.state(),f.state().items.get('ENG-reopened')),'finish-open-owned-work');
+  assert.deepEqual(order(),['REV-release','ENG-fix','ENG-reopened','ENG-new']);
+  for(const blocker of ['ENG-reopened','ENG-new'])f.add({type:'link.added',blocker,blocked:'ENG-release'});
+  const s=f.state(),before=structuredClone(s);
+  assert.equal(queueClass(s,s.items.get('ENG-reopened')),'stable-Brain-release');
+  assert.deepEqual(order(),['REV-release','ENG-new','ENG-reopened','ENG-fix']);
+  assert.equal(itemStatus(s,'ENG-reopened'),'ready');
+  assert.equal(itemStatus(s,'ENG-release'),'blocked');
+  orderQueue(s,[...s.items.values()]);assert.deepEqual(s,before,'ordering never rewrites holds, selection, links or state');
+});
+
+test('dependency inheritance is transitive, cycle safe and uses the highest standing class without demotion',()=>{
+  const f=fixture();
+  f.item('ENG-top',{queue_class:'finish-open-owned-work'});
+  f.item('ENG-middle',{queue_class:'stable-Brain-release'});
+  f.item('ENG-leaf',{queue_class:'Chipnet-withdrawal',queue_selected:false});
+  f.item('ENG-low',{queue_class:'rehearsal-publication'});
+  for(const [blocker,blocked] of [['ENG-leaf','ENG-middle'],['ENG-middle','ENG-top'],['ENG-top','ENG-middle'],['ENG-leaf','ENG-low']])
+    f.add({type:'link.added',blocker,blocked});
+  const s=f.state();
+  for(const id of ['ENG-top','ENG-middle','ENG-leaf'])assert.equal(queueClass(s,s.items.get(id)),'finish-open-owned-work');
+  assert.equal(queueSelected(s.items.get('ENG-leaf')),false,'rank does not select excluded work');
+  assert.equal(itemStatus(s,'ENG-leaf'),'ready');
+  assert.equal(itemStatus(s,'ENG-top'),'blocked','rank does not release a dependency cycle');
+  f.add({type:'item.updated',id:'G-1',fields:{meta:{queue_order:['Chipnet-withdrawal','rehearsal-publication','stable-Brain-release','finish-open-owned-work']}}});
+  assert.equal(queueClass(f.state(),f.state().items.get('ENG-leaf')),'Chipnet-withdrawal','a lower downstream class cannot demote own work');
+});
+
+test('removing a link or closing its target removes inherited urgency and reopening restores it',()=>{
+  const f=fixture();f.item('ENG-blocker',{queue_class:'historical-backlog'});
+  f.item('ENG-release',{queue_class:'stable-Brain-release'});
+  f.item('ENG-unknown',{}, {parent:null});
+  f.add({type:'link.added',blocker:'ENG-blocker',blocked:'ENG-unknown'});
+  const group=()=>{const s=f.state();return queueClass(s,s.items.get('ENG-blocker'));};
+  assert.equal(group(),'historical-backlog','unclassified targets do not invent a class');
+  f.add({type:'link.added',blocker:'ENG-blocker',blocked:'ENG-release'});
+  assert.equal(group(),'stable-Brain-release');
+  f.add({type:'item.closed',id:'ENG-release',as:'done'});assert.equal(group(),'historical-backlog');
+  f.add({type:'item.reopened',id:'ENG-release'});assert.equal(group(),'stable-Brain-release');
+  f.add({type:'link.removed',blocker:'ENG-blocker',blocked:'ENG-release'});assert.equal(group(),'historical-backlog');
 });

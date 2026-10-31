@@ -234,7 +234,10 @@ item, or its nearest classified ancestor, assigns an outcome; `queue_default`
 on the order owner classifies otherwise unclassified descendants. Existing work
 with runs uses `finish-open-owned-work` unless it has its own explicit class.
 A captured source review serves its source item's outcome. Numeric item priority
-and queued-review preference break ties within an outcome. Independent lower
+and queued-review preference break ties within an outcome. A blocker inherits a
+higher-ranked class from open downstream items, including through transitive
+dependency links; closed targets and removed links no longer raise its class.
+This affects queue order only, including for reopened blockers. Independent lower
 ready work is considered when higher work is held or otherwise ineligible;
 rehearsal/withdrawal ordering adds no dependency. Invalid or ambiguous standing
 order refuses admission. Only the operator changes standing order; delegates

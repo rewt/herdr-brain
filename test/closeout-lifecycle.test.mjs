@@ -6,6 +6,9 @@ import { createHash } from 'node:crypto';
 import { fixture, hold } from './helpers/retire-fixture.mjs';
 import { assertFixtureScratch } from './helpers/scratch-fixture.mjs';
 import { fold } from '../lib/state.mjs';
+import { gitProject } from '../lib/project.mjs';
+import { runCloseoutTurn } from '../line-service/closeout-turn.mjs';
+import { refreshCloseouts } from '../lib/closeout-consumer.mjs';
 import { fold as olderFold } from './fixtures/state-v0.mjs';
 import { digest } from '../lib/completion.mjs';
 import { publishCloseoutEvents, readCloseoutEntries, readyLane, retryCloseout, recordCompletedReview, retirementOwnerLock } from '../lib/closeout.mjs';
@@ -16,7 +19,7 @@ import { finishCleanup } from '../promote/promote.mjs';
 import { retirementStatus, renderRetirementStatus } from '../lib/retire-status.mjs';
 import { closeoutWaitState } from '../lib/closeout-status.mjs';
 import { unresolvedCloseoutEffect } from '../lib/closeout.mjs';
-import { closer, lanes, events, setup, evaluations, effects, retainNativeOutcome, assertRemoved } from './helpers/closeout-fixture.mjs';
+import { closer, lanes, events, setup, evaluations, effects, retainNativeOutcome, assertRemoved, selectCurrentCleanup } from './helpers/closeout-fixture.mjs';
 
 test('optional ready, repeated ready and ingested done are one entry; NEEDS-WORK retains its worker', t => {
   const f = setup(t);
@@ -53,9 +56,24 @@ for (const project of ['bch-cloak', 'herdr-brain']) test(`${project}: a landed e
   f.drain(); assertRemoved(f);
   assert.deepEqual(readCloseoutEntries(f.common).map(e=>e.key),[ready.key],'a landed completion cannot prune its unevaluated ready source');
   assert.deepEqual(fs.readFileSync(path.join(f.common,'closeout/entries',ready.key+'.json')),readyBytes);
-  const twin=f.drain({keys:[ready.key],retrySafe:true});
-  assert.equal(twin.evaluated[0]?.completed,true,JSON.stringify(twin));assert.deepEqual(twin.evaluated[0].source,ready.source);
-  assert.match(twin.evaluated[0].reason,/same worktree retired by a later bound request/);
+  // The production finite owner chooses its own keys after the worktree is
+  // gone. A hand-named retry here would hide a selection leak in the line.
+  selectCurrentCleanup(f);
+  const nativeActionsBeforeTwin = f.read().actions;
+  const turn = runCloseoutTurn({project:gitProject(f.repo),org:f.org,env:f.env,reconcileReports:false,
+    guard:()=>{},measure:()=>{},cli:(file,args)=>{
+      assert.equal(file,'supervisor/closeout.mjs');
+      if(args[0]==='refresh')return JSON.stringify(refreshCloseouts({cwd:f.repo,org:f.org,env:f.env,retirementOptions:f.options}));
+      assert.equal(args[0],'drain');
+      return JSON.stringify(f.drain({keys:JSON.parse(args[args.indexOf('--keys')+1]),retrySafe:args.includes('--retry-safe'),
+        sessionsOnly:args.includes('--sessions-only')}));
+    }});
+  assert.deepEqual(turn.errors,[],JSON.stringify(turn));
+  assert.ok(turn.subjects.some(row=>row.key===ready.key&&row.status==='evaluated'),JSON.stringify(turn));
+  const twin = events(f).findLast(row=>row.type==='closeout.evaluated'&&row.key===ready.key&&row.completed);
+  assert.ok(twin,'the automatic line turn completes the exact ready source');assert.deepEqual(twin.source,ready.source);
+  assert.match(twin.reason,/same worktree retired by a later bound request/);
+  assert.deepEqual(f.read().actions,nativeActionsBeforeTwin,'ready bookkeeping repeats no native effects');
   assert.deepEqual(readCloseoutEntries(f.common), [], 'only durable record evidence remains after exact-source completion');
   const evaluated = evaluations(f).findLast(event => event.completed && event.source.type === 'promotion.reconciled');
   const codeRoot = fs.realpathSync(path.resolve(import.meta.dirname, '..')), marker = path.join(codeRoot, '.release-commit');

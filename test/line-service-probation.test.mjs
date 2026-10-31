@@ -210,3 +210,30 @@ test('trial restart native refusal stops that original effect and leaves STOP an
   assert.match(fs.readFileSync(f.stop,'utf8'),/Restart refused or uncertain/);
   assert.ok(fs.existsSync(entry.archive.file));assert.equal(fs.readFileSync(f.retained,'utf8'),f.jobs);
 });
+
+test('completed probation leaves separately qualified ordinary pin admission available without reviving trial authority',async t=>{
+  const f=await fixture(t);f.authorize();f.enter();
+  f.main(['probation-complete','--repo',f.cwd,'--org',f.org,'--id','original-trial'],f.args);
+  assert.throws(f.admit,/completed/);
+  const manifest=fs.readFileSync(path.join(f.next,'.release-manifest.json')),release={root:f.next,id:'trial',commit:JSON.parse(manifest).commit,protocol:1};
+  // Synthetic coordinator evidence in private scratch, through the production
+  // offer publisher. No real canary, check, READY flag or activation is claimed.
+  const evidence=path.join(f.scratch,'synthetic-landing.json');
+  fs.writeFileSync(evidence,JSON.stringify({schema:'lane-validation/v1',executed:true,exit_code:0,node_version:'v20.19.4',command:'synthetic fixture only',
+    started_at:'2026-10-30T00:00:00Z',finished_at:'2026-10-30T00:00:01Z',head:release.commit}));
+  const ref={file:evidence,sha256:sha(fs.readFileSync(evidence))};
+  const packet={schema:'consumer-release-offer/v1',commit:release.commit,manifestSha256:sha(manifest),
+    canary:{status:'PASS',scope:'Synthetic isolated coordinator acceptance, not a real canary.',evidence:['installed','probation','soak'].map(stage=>({...ref,stage}))},
+    landing:{status:'PASS',scope:'Synthetic isolated producer receipt, not a real check.',evidence:[{...ref,changedFiles:[],reconciliation:'Identical fixture source commit.'}]},
+    majors:{unresolved:[],corrections:[],scope:'Synthetic fixture has no Major findings.'}};
+  const attestationDigest=sha(JSON.stringify(packet)),note=transact(f.org,()=>({add:[{type:'note.added',id:'G-1',decision:true,text:`Consumer release offer reconciled: ${attestationDigest}`}]}),{actor:f.agent.name}).added[0];
+  const packetFile=path.join(f.scratch,'synthetic-offer.json');fs.writeFileSync(packetFile,JSON.stringify({...packet,attestationDigest,attestationSeq:note.seq}));
+  const {publishConsumerOffer}=await f.module(f.next,'lib/consumer-offer.mjs');
+  publishConsumerOffer({release,home:f.installationHome,canonical:f.cwd,file:packetFile,env:f.args.env});
+  assert.throws(f.admit,/completed/,'qualification alone never replaces a project pin');
+  fs.writeFileSync(path.join(f.cwd,'.herdr-release.json'),'{"release":"trial"}\n');f.git('add','.herdr-release.json');f.git('commit','-qm','Accept qualified fixture candidate');
+  assert.equal(f.admit().root,f.next);assert.equal(f.admit().probation,undefined);
+  assert.equal(selectRelease(f.cwd,f.installationHome).root,f.next);
+  assert.deepEqual(fs.readFileSync(path.join(f.next,'.release-manifest.json')),manifest);
+  assert.equal(loadEvents(f.org).events.filter(e=>e.type==='line-service.probation-authorized').length,1);
+});

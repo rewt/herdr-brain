@@ -52,7 +52,9 @@ export function upgradeRuntime({repo,org,id,fromRoot,targetRoot,rollback=false,d
     const stopBytes=readPlainFile(stop);if(!stopBytes)throw Error('upgrade requires this service own STOP');
     const main=loadDiscoveredRoutes({cwd:c.repo,env}).config.main??'main';
     if(git(c.repo,['symbolic-ref','--short','HEAD'])!==main||git(c.repo,['status','--porcelain=v1','--untracked-files=all']))throw Error('upgrade requires clean canonical main');
-    const previous=releaseRoot(fromRoot,home,c.repo,{allowEnded:rollback}),runtime=releaseRoot(targetRoot,home,c.repo);
+    // Reading the retained previous runtime is recovery/provenance, never a
+    // fresh trial admission, including after completion or withdrawal.
+    const previous=releaseRoot(fromRoot,home,c.repo,{allowEnded:true}),runtime=releaseRoot(targetRoot,home,c.repo);
     if(rollback&&previous.probation){
       const prior=previous.probation.previous;
       if(!same(runtime,prior.release)||digest(readPlainFile(path.join(targetRoot,'.release-manifest.json')))!==prior.manifest_sha256)

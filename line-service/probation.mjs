@@ -6,7 +6,7 @@ import {fileURLToPath} from 'node:url';
 import {createHash} from 'node:crypto';
 import {execFileSync,spawnSync} from 'node:child_process';
 import {gitProject} from '../lib/project.mjs';
-import {checkRelease,releaseHome,requireReadyAcceptance} from '../lib/releases.mjs';
+import {checkRelease,releaseHome,requireReadyAcceptance,projectPin,selectRelease} from '../lib/releases.mjs';
 import {findOrgDir,loadEvents,transact} from '../lib/store.mjs';
 import {requireRecordCompatibility} from '../lib/record-compatibility.mjs';
 import {readPlainFile,plainDirectory} from '../lib/files.mjs';
@@ -76,7 +76,18 @@ export function probationRuntime(repo,{root,home=releaseHome(),events,allowEnded
   const event=found[0],a=archived(event,c),note=loaded.events.find(e=>e.seq===a.authority);
   if(note?.type!=='note.added'||note.decision!==true||note.by!==a.owner.native.name||note.text!==`Brain probation authorized: ${sha(canonical(a.scope))}`)
     throw Error('probation exact recorded authority is missing');
-  if(!allowEnded&&ended(loaded.events,c,event.id))throw Error('probation authority withdrawn/completed; no new admissions');
+  if(!allowEnded&&ended(loaded.events,c,event.id)){
+    // Ending probation removes only its exception. A separately qualified,
+    // normally accepted exact pin can later admit this same immutable bundle.
+    try{
+      const pin=projectPin(repo);
+      if(pin?.release&&selectRelease(repo,home,{pin}).root===root){
+        requireReadyAcceptance(checkRelease(home,pin.release,{verifyFiles:true}),home);
+        requireRecordCompatibility(root,loaded.events);return null;
+      }
+    }catch{/* An ended trial never excuses a failed ordinary admission. */}
+    throw Error('probation authority withdrawn/completed; no new admissions');
+  }
   if(!allowEnded)authorityOwner(note,loaded.events);
   if(event.repo!==c.repo||a.scope.candidate.common!==c.identity||!same(tuple(root,home),a.scope.candidate))throw Error('probation candidate/project tuple drifted');
   requireRecordCompatibility(root,loaded.events);

@@ -168,10 +168,10 @@ test('settled history sweep has constant identity work and bounded log rows whil
   const exists = fs.existsSync; fs.existsSync = file => { if (String(file).startsWith('/gone-history/')) historicalReads++; return exists(file); };
   let s;
   try { s = f.service({ identify: cwd => { identities.push(cwd); return gitProject(cwd); } }); s.pass(); } finally { fs.existsSync = exists; }
-  assert.deepEqual(identities,Array(12).fill(f.repo),'construction, two report-intake guards, seven closeout guards, general scan and halt scan stay constant');
+  assert.deepEqual(identities,Array(12).fill(f.repo),'construction, two intake guards, six closeout guards, initial/resumed general scans and halt scan stay constant');
   assert.equal(historicalReads, 0); assert.equal(f.calls.length, 0);assert.equal(f.refreshes.length,1);
   const rows = fs.readFileSync(path.join(s.directory, 'passes.jsonl'), 'utf8').trim().split('\n').map(JSON.parse);
-  assert.deepEqual(rows.map(r=>r.action),['closeout-measurement','closeout-timing','pass-start','review-retained','review-health','queue-order','engineering-idle-observation','engineering-idle','pass-complete']);
+  assert.deepEqual(rows.map(r=>r.action),['closeout-measurement','closeout-timing','pass-start','review-retained','schedule-unlocked','review-health','queue-order','engineering-idle-observation','engineering-idle','pass-complete','schedule-unlocked']);
   const closeoutTiming=rows.find(r=>r.action==='closeout-timing');
   assert.ok(Number.isFinite(closeoutTiming.duration_ms)&&closeoutTiming.duration_ms>=0);
   assert.equal(closeoutTiming.budget_ms,720000);
@@ -186,7 +186,7 @@ test('settled history sweep has constant identity work and bounded log rows whil
   assert.equal(retained.notice_record.entry.scope.head, f.head);
   assert.equal(rows.find(r => r.action === 'review-health').health.errors.occurrences, 1);
   const timing = rows.find(r => r.action === 'pass-complete').timing;
-  assert.equal(timing.snapshots, 2);
+  assert.equal(timing.snapshots, 3, 'review-health yields scheduling and the resumed scan rechecks current identity');
   assert.equal(timing.historical_intake_skipped, 0, 'report intake belongs to the separate closeout turn');
   assert.equal(timing.effect_command_ms, 0, 'the separate closeout refresh is outside general-pass timing');
 });

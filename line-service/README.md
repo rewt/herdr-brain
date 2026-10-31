@@ -685,7 +685,9 @@ native input, cancellation, installation edit or restart:
 ```
 
 Revocation is allowed during project STOP/HOLD to contain admissions. It retains
-captured workers and original callbacks. Stop the controller through its normal
+captured workers and original callbacks. A separately qualified, normally
+accepted exact project pin can later admit the bundle through ordinary guards;
+this never revives its ended trial authority. Stop the controller through its normal
 owner, then use the existing `upgrade --rollback` preview/apply flow above from
 the candidate tool, reversing the roots and retaining a new stable rollback ID.
 Withdrawal does not require the candidate to remain healthy; rollback still

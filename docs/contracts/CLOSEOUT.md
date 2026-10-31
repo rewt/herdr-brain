@@ -228,11 +228,22 @@ In an independently admitted ordinary pass, exact original pane and terminal
 absence with no moved/replaced session can produce `allocation-absent` after a
 complete guarded native read. That is a current allocation observation, never a
 historical `exit-observed`, `closed`, signal success or consumer claim release.
-Absence cannot unlock a pending native intent. Only the actual original
-producer's exact recorded completion can resolve an unresolved exit/close
-outcome; named retry-safe drains, manual retries, elapsed time and later service
-passes must neither reobserve nor resend it. A missing producer remains an owned
-defect with UNKNOWN, the original source/intent and scoped failure/refusal
+For `native-closeout/v2` intents, absence cannot supply the original producer's
+exact linked completion. Except for the explicitly admitted legacy settlement
+and never-sent bridges above, unresolved exit/close outcomes require that
+completion; named retry-safe drains, manual retries, elapsed time and later
+service passes must neither reobserve nor resend them.
+
+The compatibility resolver `unresolvedCloseoutEffect` still accepts a saved
+`allocation-absent` receipt for an `agent-exit-requested` intent whose producer
+is not `native-closeout/v2`, with the same key, Git identity, source event, pane,
+terminal and session. It does not require the receipt to predate the intent, so
+historical post-intent receipts from the pre-`052e9b4b` observation path still
+count. In the current resolver, absence does not resolve a `shell-close-requested`
+or `workspace-close-requested` intent. This compatibility behavior grants no
+authority for a new readback and proves no historical exit or claim release.
+A missing producer remains an owned defect with UNKNOWN, the original
+source/intent and scoped failure/refusal
 evidence retained. Refusals, original uncertain ownership and missing
 preservation remain holds. No-intent pre-effect allowance and recorded owned
 stage progress remain separately admitted; neither supplies native completion.

@@ -674,7 +674,6 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         if(JSON.stringify(queuePolicy(snapshot.state))!==JSON.stringify(standing)||queueSelection(snapshot.state)!==selection){log({action:'queue-selection-changed'});break;}
         const observation=evaluationCache.probe('admission',{snapshot,item:item.id,policy:{...evaluationPolicy,standing}});
         if(observation.skip)continue;
-        if(!admit({item:snapshot.state.items.get(item.id)},'launch')){observation.retain('admission policy');continue;}
         if(!queueSelected(snapshot.state.items.get(item.id),snapshot.state,ordinaryPolicy)){observation.retain('not selected');continue;}
         if(obsoleteDecision(snapshot.state.items.get(item.id),snapshot)){timings.outcome_decisions_deferred++;continue;}
         const input=dispatchInput({...snapshot,item:snapshot.state.items.get(item.id),org,identity:project.identity});
@@ -689,9 +688,10 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         if(roleIs(item,'REV')&&cutoff&&isQueueReview(item)&&!index?.heads.includes(item.meta.review_target?.head)&&!snapshot.events.some(e=>e.type==='review.recovery-completed'&&e.item===item.meta.review_source_item&&e.target?.head===item.meta.review_target?.head)){
           try{sourceGit(repo,['merge-base','--is-ancestor',item.meta.review_target.head,cutoff.canonical_head]);timings.historical_review_skipped++;continue;}catch{/* Unlanded/unknown targets are errors, never historical skips. */}
         }
-        if (roleIs(item, 'REV') && !isQueueReview(item)) { note(`dispatch:${item.id}`, 'T2 legacy/manual review queue binding UNKNOWN; retain existing owner/attempt'); observation.retain('legacy review binding');continue; }
         const hold=itemLaunchHold(snapshot.state,item.id,snapshot.events);
         if (reserved(item) || hold) { note(`dispatch:${item.id}`, 'held or reserved ready item needs judgment',hold?{subject:hold.subject}:{},true);observation.retain('held or reserved');continue; }
+        if(!admit({item:snapshot.state.items.get(item.id)},'launch')){observation.retain('admission policy');continue;}
+        if (roleIs(item, 'REV') && !isQueueReview(item)) { note(`dispatch:${item.id}`, 'T2 legacy/manual review queue binding UNKNOWN; retain existing owner/attempt'); observation.retain('legacy review binding');continue; }
         try {
           const key = `dispatch:${item.id}:${input}`;
           let continuation,retryAdmission,briefRecovery,sourceRecovery,dispatchKey=key;

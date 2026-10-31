@@ -348,6 +348,36 @@ test('review admission queues and launches only exact allowlisted producer group
   assert.ok(discoverChanges(f.context()).changes.some(c=>c.item.id==='ENG-1'),'excluded debt remains discoverable');
 });
 
+test('review admission reports only otherwise ready launch exclusions and resumes after readiness and policy changes',t=>{
+  const f=fixture(t,{reported:false});
+  f.add([{type:'item.added',id:'G-9',kind:'goal',title:'Open prerequisite'},
+    {type:'item.added',id:'G-10',kind:'goal',title:'Held parent',meta:{hold:true}},
+    {type:'item.added',id:'ENG-10',role:'engineer',title:'Ready'},
+    {type:'item.added',id:'ENG-11',role:'engineer',title:'Blocked'},
+    {type:'link.added',blocker:'G-9',blocked:'ENG-11'},
+    {type:'item.added',id:'ENG-12',role:'engineer',title:'Reserved',meta:{operator_reserved:true}},
+    {type:'item.added',id:'ENG-13',role:'engineer',parent:'G-10',title:'Held by ancestor'},
+    {type:'item.added',id:'ENG-14',role:'engineer',title:'Deselected',meta:{queue_selected:false}},
+    {type:'item.added',id:'DEC-1',role:'decision',title:'Obsolete cleanup decision',meta:{uncertain_outcome:{check:{key:'closeout:gone',subject:{key:'gone'}}}}}]);
+  admissionPolicy(f,{});const s=admissionService(f);
+  const exclusions=()=>diagnostics(f).filter(r=>r.action==='review-admission-held'&&r.stage==='launch');
+  const held=()=>JSON.parse(fs.readFileSync(path.join(f.directory,'effects.json'))).review_admission.held.filter(r=>r.stage==='launch');
+  const launches=()=>s.calls.filter(a=>a[0].endsWith('/dispatch/dispatch.mjs')).map(a=>a[1]);
+  s.pass();
+  assert.deepEqual(exclusions().map(r=>r.item),['ENG-10']);
+  assert.deepEqual(held().map(r=>r.item),['ENG-10']);
+  assert.equal(held()[0].code,'REVIEW_ADMISSION_ORDINARY_HELD');
+  assert.deepEqual(launches(),[]);
+  assert.equal(Object.keys(JSON.parse(fs.readFileSync(path.join(f.directory,'effects.json'))).actions).some(k=>k.startsWith('dispatch:')),false,'policy hold records no dispatch attempt');
+  s.pass();assert.ok(exclusions().every(r=>r.item==='ENG-10'),'repeated passes never diagnose non-ready candidates as policy exclusions');
+  f.add([{type:'link.removed',blocker:'G-9',blocked:'ENG-11'}]);s.pass();
+  assert.ok(held().some(r=>r.item==='ENG-11'),'a newly ready candidate is evaluated after its blocker changes');
+  assert.deepEqual([...new Set(exclusions().map(r=>r.item))].sort(),['ENG-10','ENG-11']);
+  admissionPolicy(f,{hold_ordinary:false});s.pass();
+  assert.deepEqual(launches().sort(),['ENG-10','ENG-11'],'policy recovery launches only otherwise ready work');
+  assert.deepEqual(held(),[]);
+});
+
 test('review admission holds pre-existing reviews unchanged, then resumes only under the selected policy',t=>{
   const f=fixture(t),mutation=admissionQueue(f);
   const q=f.context().state.items.get(mutation.result.review_item),target=structuredClone(q.meta.review_target),key=target.source_group.key;

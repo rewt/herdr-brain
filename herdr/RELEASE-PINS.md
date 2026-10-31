@@ -149,11 +149,27 @@ selection. A bare direct immutable path is likewise an explicit bundle choice.
 The event log fold, promotion queue, train/completion receipts, notice inbox and
 housekeeping owner/config retain their existing schemas and lock locations.
 Release fields are additive. Older pin-aware releases ignore new fields and
-read newer state; each operation keeps its own version through recovery. The
+each operation keeps its own version through recovery. The
 same Git-common-directory worker, queue, promotion, validation and housekeeping
 locks prevent concurrent writers. A new release cannot start housekeeping over
 another runtime's live owner; the existing different-runtime refusal requires
 inspection and a controlled stop before restart.
+
+Record admission checks the captured event log against the target's actual
+`state.mjs` switch and its recognized post-switch obligation delegate. It probes
+the invoking release's pure delegate with empty per-event scratch maps; reads as
+well as writes require that delegate, including completion events, shared core
+types and payload-driven pending obligations. The target must wire the delegate
+into `apply`, initialize its map, and carry identical `obligations.mjs` source
+bytes. Target code is never executed during this inspection. A legacy switch-only
+target can still read a capture that does not need the delegate; opaque subsystem
+receipts remain outside the contract unless they create or consume obligations.
+Unknown fold layouts and missing or changed required delegates refuse admission,
+retaining the stopped installation and captured work. This is conservative source
+recognition, not semantic equivalence: even a harmless delegate source edit needs
+a matching recognized target. It does not prove arbitrary changes inside existing
+switch cases compatible. Installed consumer acceptance and rollback qualification
+remain with the release owner.
 
 `.release-manifest.json` is the new distribution-only `herdr-release/v1` format,
 with operation protocol 1 and runtime file hashes. Releases built before this

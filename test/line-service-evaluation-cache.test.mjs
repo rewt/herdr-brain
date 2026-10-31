@@ -107,7 +107,7 @@ test('real pass processes reuse admission and source negatives with linked skill
   const warm=pass();assert.notEqual(summary(first).pid,summary(warm).pid);
   assert.equal(summary(warm).evaluations.admission_skipped,1);assert.equal(summary(warm).evaluations.source_skipped,1);
   assert.equal(warm.filter(r=>['hold','admission-eligible'].includes(r.action)).length,0);
-  f.append([{type:'item.updated',id:'ENG-1',fields:{title:'Relevant subject changed'}}]);
+  f.append([{type:'item.updated',id:'ENG-1',fields:{meta:{hold:true}}}]);
   const changed=pass();assert.equal(summary(changed).evaluations.admission_evaluated,1);assert.equal(summary(changed).evaluations.source_evaluated,1);
   const recovered=pass();assert.equal(summary(recovered).evaluations.admission_skipped,1);assert.equal(summary(recovered).evaluations.source_skipped,1);
 });

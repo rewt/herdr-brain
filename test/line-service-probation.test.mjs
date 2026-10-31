@@ -389,6 +389,8 @@ test('development recovery child launch captures sealed provenance and withdrawa
   const {checkDispatchEligibility}=await f.module(recovery,'dispatch/launch-guard.mjs');
   assert.throws(()=>checkDispatchEligibility(job,file,{boundary:'launch'}),/withdrawn/);checkDispatchEligibility(job,file,{boundary:'prompt'});
   const {selectedReviewConsumer}=await f.module(recovery,'line-service/review.mjs');assert.equal(selectedReviewConsumer({repo:f.cwd,run:d.show(job.run)}).recordRoot,recovery);
+  const {main:recoveryMain}=await f.module(recovery,'line-service/launchd.mjs');
+  recoveryMain(['stop','--repo',f.cwd,'--org',f.org],f.args);
   assert.throws(()=>switchPlan(f,'return',recovery,f.next),/withdrawn/);
   assert.equal(fs.readFileSync(f.retained,'utf8'),f.jobs);
 });

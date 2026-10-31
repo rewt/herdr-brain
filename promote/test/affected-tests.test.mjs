@@ -124,7 +124,9 @@ test('opaque inputs stay unresolved until a known consumer declares its runtime 
   const otherChange = affectedTestPlan({ ...options, changed: ['unrelated.mjs'] });
   assert.deepEqual(otherChange.unknown.filter(reason => reason.startsWith('opaque-inputs:')),
     opaque.unknown.filter(reason => reason.startsWith('opaque-inputs:')), 'opaque warnings are global across edits');
-  assert.ok(otherChange.unknown.includes('unmapped-input: unrelated.mjs'));
+  assert.deepEqual(otherChange.candidates, ['unrelated.test.mjs']);
+  assert.ok(!otherChange.unknown.some(reason => reason.startsWith('unmapped-input:')),
+    'known changed-input consumers do not become unmapped because global opaque warnings exist');
   const recovered = affectedTestPlan({ ...options, consumers: { 'opaque.test.mjs': ['input.json'] } });
   assert.deepEqual(recovered.candidates, ['opaque.test.mjs']);
   assert.deepEqual(recovered.unknown, []);

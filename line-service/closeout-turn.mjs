@@ -18,6 +18,7 @@ import {recordCloseoutTurn} from './closeout-measurement.mjs';
 import {missingCloseoutBinding} from '../lib/closeout-facts.mjs';
 import {reconcileCloseoutBacklog} from '../lib/closeout-backlog.mjs';
 import {vacantAllocation} from '../lib/closeout-vacancy.mjs';
+import {endedUnboundRun} from '../lib/closeout-unbound-ended.mjs';
 
 export const closeoutServiceDirectory=(org,common)=>path.join(org,'line-service',createHash('sha256').update(JSON.stringify(common)).digest('hex').slice(0,20));
 // Git removal alone may need its existing 600s inventory-sized allowance.
@@ -175,10 +176,12 @@ function closeoutTurn({project,org,cli,guard,env=process.env,maxSteps=8,budgetMs
         '--deadline',String(Math.floor(now()+Math.min(60000,budgetMs-(clock()-started))))]);}
       catch(error){if(error.code==='CLOSEOUT_CODE_CHANGED')throw error;errors.push({stage:'refresh',reason:error.message});}
     };
+    // Ended binding-gated workers need finality before this turn selects cleanup.
     // Periodic priority also covers turns whose effects consume every second.
     // This is the same finite owner, not another executor or background loop.
     state.turn=(state.turn??0)+1;
-    if(state.turn%4===0&&!expired()){
+    if(!expired()&&(state.turn%4===0||[...observed.state.runs.values()].some(r=>
+        r.meta?.dispatch_project===project.identity&&endedUnboundRun(r,observed.events)))){
       try{guard();state.allocations=JSON.parse(cli('supervisor/closeout.mjs',['allocations','--repo',project.canonical,'--org',org,
         '--deadline',String(Math.floor(now()+Math.max(1,budgetMs-(clock()-started))))]));}
       catch(error){if(error.code==='CLOSEOUT_CODE_CHANGED')throw error;errors.push({stage:'allocations',reason:error.message});}

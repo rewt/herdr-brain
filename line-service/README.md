@@ -1415,6 +1415,17 @@ or bound unprompted evidence. Uncertain launch/delivery stays retained. New
 allocation uses the same birth-aware retirement exclusion. These source changes
 do not restart an installation, change pins, release, or prove live latency.
 
+The finite closeout turn also finalizes an original binding-gated worker that
+ended without `run.session_bound`: protocol 2, an expired unbound observation
+with no proposal or commit attempt, matching recorded and journaled `process_end`
+(`done` or `gone`), and the exact terminal dispatcher receipt are required.
+An original idle/done process or complete native absence is freshly verified;
+active/replaced occupants, pending reports, dirty work, uncertain sends or binds,
+native refusals, claim changes and STOP/HOLD remain retained. The abandonment
+records the journal hash, process-end source and missing binding, then the same
+turn's guarded closer releases the original allocation. The saved attempt and
+watcher are preserved; no session binding or successful delivery is fabricated.
+
 Delivered source carries `brain.dispatch-source/v1` in the existing post-FF
 receipt: actual Git common directory, owning record, original dispatch attempt,
 workspace, run, claim generation and immutable landing base/head. Self-landing

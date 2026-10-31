@@ -51,7 +51,7 @@ commands; the train preserves the green gate requirement.
 
 Direct `lane promote` retains its single-lane behavior. Direct promotion, train
 integration and all lane closures share the Git-common-directory lock. Gates
-recheck trees, branches, captured lane tips, STOP and record readiness before
+recheck trees, branches, captured lane tips, STOP/HOLD and record readiness before
 integration. Promoted lane refs adopt only their proved replay after main moves;
 post-integration edits preserve the lane with a warning rather than overwriting it.
 
@@ -92,7 +92,12 @@ releases its questions. Batch completion rechecks blockers and open questions
 directly; a review recorded after preparation refuses there through the
 changed-since-preparation fingerprint. The final check holds the record
 lock across the fast-forward, inside the promotion lock. It never writes events
-or trusts session metadata. Canonical supervisor STOP also refuses integration.
+or trusts session metadata. Canonical `.lane/supervisor/STOP` and `HOLD` both
+refuse integration at the shared promotion checkpoint, including direct worker
+self-promotion under the landing waiver. HOLD reports `PROMOTION_HELD: supervisor
+HOLD exists; nothing merged`; STOP retains its existing refusal. Both keep the
+branch and worktree. Once the supervisor clears the marker, a fresh request
+rechecks the current source, native identity, claim and Git fences.
 
 On success the worker runs the shared retirement planner and executor scoped to
 its promoted lane, after record reconciliation. A kept or occupied pane prevents

@@ -168,21 +168,45 @@ test('worktree expected head refuses behind main without recapture or rebase', t
   assert.equal(fs.existsSync(path.join(f.root, 'gate-ran')), false);
 });
 
-for (const kind of ['dirty-lane', 'dirty-main', 'STOP']) test(`worktree expected head retains initial ${kind} refusal`, t => {
+for (const kind of ['dirty-lane', 'dirty-main']) test(`worktree expected head retains initial ${kind} refusal`, t => {
   const f = fixture(t);
   if (kind === 'dirty-lane') fs.writeFileSync(path.join(f.workspace, 'dirty'), 'dirty');
   if (kind === 'dirty-main') fs.writeFileSync(path.join(f.repo, 'dirty'), 'dirty');
-  if (kind === 'STOP') {
-    fs.mkdirSync(path.join(f.repo, '.lane/supervisor'), { recursive: true });
-    fs.writeFileSync(path.join(f.repo, '.lane/supervisor/STOP'), 'stop');
-  }
   const result = f.promote();
   assert.equal(result.status, 1);
-  assert.match(result.stderr, /not clean|supervisor STOP/);
+  assert.match(result.stderr, /not clean/);
   f.unchanged();
 });
 
-for (const kind of ['tip', 'branch', 'main', 'dirty-lane', 'dirty-main', 'STOP', 'HOLD', 'native', 'claim-generation'])
+for (const marker of ['STOP', 'HOLD']) for (const waived of [false, true])
+test(`worktree expected head retains project ${marker} and recovers after clearing (waived=${waived})`, t => {
+  const f = fixture(t, { waived });
+  f.gate('');
+  const file = path.join(f.repo, '.lane/supervisor', marker), bytes = `${marker} for proving\n`;
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, bytes);
+  const before = loadEvents(f.org).events;
+  const refused = f.promote();
+  assert.equal(refused.status, 1, refused.stdout);
+  assert.match(refused.stderr, marker === 'HOLD'
+    ? /PROMOTION_HELD: supervisor HOLD exists; nothing merged/
+    : /supervisor STOP exists; nothing merged/);
+  f.unchanged();
+  assert.equal(git(f.workspace, ['rev-parse', 'HEAD']), f.head);
+  assert.equal(git(f.workspace, ['branch', '--show-current']), `lane/${f.topic}`);
+  assert.equal(fs.readFileSync(file, 'utf8'), bytes);
+  assert.deepEqual(loadEvents(f.org).events, before);
+  assert.equal(fs.existsSync(path.join(f.root, 'gate-ran')), false);
+  assert.equal(fs.existsSync(path.join(f.identity, 'lane-promote.lock')), false);
+  assert.equal(fs.existsSync(path.join(f.org, 'lock')), false);
+  fs.unlinkSync(file);
+  const recovered = f.promote();
+  assert.equal(recovered.status, 0, recovered.stderr || recovered.stdout);
+  assert.equal(git(f.repo, ['rev-parse', 'main']), f.head);
+  assert.equal(loadEvents(f.org).events.filter(event => event.type === 'change.landed').length, 1);
+});
+
+for (const kind of ['tip', 'branch', 'main', 'dirty-lane', 'dirty-main', 'STOP', 'project-HOLD', 'HOLD', 'native', 'claim-generation'])
 test(`worktree expected head refuses late ${kind} at the fast-forward boundary`, t => {
   const f = fixture(t);
   const update = rows => `transact(${JSON.stringify(f.org)},()=>({add:${JSON.stringify(rows)}}));`;
@@ -193,6 +217,7 @@ test(`worktree expected head refuses late ${kind} at the fast-forward boundary`,
     'dirty-lane': `fs.writeFileSync(${JSON.stringify(path.join(f.workspace, 'late-dirty'))},'dirty');`,
     'dirty-main': `fs.writeFileSync(${JSON.stringify(path.join(f.repo, 'late-dirty'))},'dirty');`,
     STOP: `fs.mkdirSync(${JSON.stringify(path.join(f.repo, '.lane/supervisor'))},{recursive:true});fs.writeFileSync(${JSON.stringify(path.join(f.repo, '.lane/supervisor/STOP'))},'stop');`,
+    'project-HOLD': `fs.mkdirSync(${JSON.stringify(path.join(f.repo, '.lane/supervisor'))},{recursive:true});fs.writeFileSync(${JSON.stringify(path.join(f.repo, '.lane/supervisor/HOLD'))},'hold');`,
     HOLD: update([{ type: 'item.updated', id: 'ENG-1', fields: { meta: { hold: true } } }]),
     native: `fs.writeFileSync(${JSON.stringify(f.nativeFile)},${JSON.stringify(JSON.stringify({ ...f.native, terminal_id: 'replaced-terminal' }))});`,
     'claim-generation': update([{ type: 'run.claimed', run: 'R-1', project: f.identity, record: f.org, owner: f.owner }]),
@@ -201,11 +226,17 @@ test(`worktree expected head refuses late ${kind} at the fast-forward boundary`,
   const result = f.promote();
   assert.equal(result.status, 1, result.stderr || result.stdout);
   assert.match(result.stderr, kind === 'main' ? /main moved during validation; re-run promote/
+    : kind === 'project-HOLD' ? /PROMOTION_HELD: supervisor HOLD exists; nothing merged/
     : kind === 'native' ? /self-promotion requires one active owning native worker\/run; nothing merged/
     : /changed|differs from expected head|not clean|STOP|HOLD|OWNED_ELSEWHERE/);
   assert.equal(result.stdout.match(/captured expected head:/g)?.length, 1);
   assert.equal(loadEvents(f.org).events.some(event => event.type === 'change.landed'), false);
   assert.equal(fs.existsSync(path.join(f.org, 'lock')), false, 'refusal releases the record lock');
+  if (kind === 'project-HOLD') {
+    assert.equal(git(f.workspace, ['rev-parse', 'HEAD']), f.head);
+    assert.equal(git(f.workspace, ['branch', '--show-current']), `lane/${f.topic}`);
+    assert.equal(fs.readFileSync(path.join(f.repo, '.lane/supervisor/HOLD'), 'utf8'), 'hold');
+  }
   if (kind === 'main') assert.notEqual(git(f.repo, ['rev-parse', 'HEAD']), f.head);
   else f.unchanged();
 });

@@ -26,6 +26,8 @@ export function preparePromotionGuard({ canonical, identity, workspace, topic, e
   }
   const checkGit = () => {
     if (fs.existsSync(path.join(canonical, '.lane/supervisor/STOP'))) throw new Error('supervisor STOP exists; nothing merged');
+    if (fs.existsSync(path.join(canonical, '.lane/supervisor/HOLD'))) throw Object.assign(
+      new Error('PROMOTION_HELD: supervisor HOLD exists; nothing merged'), { code: 'PROMOTION_HELD' });
     if (expectedHead !== undefined) {
       observeGit(workspace);
       const actual = execFileSync('git', ['-C', workspace, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();

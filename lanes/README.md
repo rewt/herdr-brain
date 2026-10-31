@@ -126,6 +126,13 @@ fast-forward checks remain in force at integration. The normal landing receipt
 includes the captured expected head and full landed base/head. Under the current
 landing waiver, this remains land-first with no new test, review or report gate.
 
+Canonical `.lane/supervisor/STOP` and `.lane/supervisor/HOLD` both refuse
+promotion, including worker self-promotion under the landing waiver. The shared
+guard checks them before preparation and again at the fast-forward boundary.
+HOLD returns `PROMOTION_HELD: supervisor HOLD exists; nothing merged` and keeps
+the lane branch and worktree. After the supervisor clears the marker, a fresh
+request must pass the current native, claim, source and Git guards.
+
 `lane promote TOPIC --expected-head FULL_COMMIT_HASH` checks an authorized head
 under the promotion lock and refuses tip changes or a required rebase. Queue
 callers use the same check. Add `--if-current-run R-n --org /record` to recheck

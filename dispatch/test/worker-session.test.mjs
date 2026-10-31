@@ -8,8 +8,10 @@ import { fold } from '../../lib/state.mjs';
 import { sessionBindFact } from '../../test/helpers/session-bind.mjs';
 import { readWorkerSession, workerSessionState, waitForWorkerSession } from '../worker-session.mjs';
 import { saveDispatchJournal } from '../journal-save.mjs';
+import { prepareSessionObservation, observeSessionBinding, commitSessionBinding } from '../session-bind.mjs';
+import { workerReceipt } from '../../lib/worker-identity.mjs';
 
-function fixture(t, { launchSession = false } = {}) {
+function fixture(t, { launchSession = false, protocol = 2 } = {}) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'worker-session-'))), cwd = path.join(root, 'project');
   const priorFleet = process.env.HERDR_MONITOR_FLEET;
   process.env.HERDR_MONITOR_FLEET = path.join(root, 'fleet');
@@ -29,7 +31,9 @@ function fixture(t, { launchSession = false } = {}) {
   ].map((e, i) => ({ ...e, seq: i + 1, at: new Date(100000 + i).toISOString(), by: 'fixture' }));
   const native = { name: 'worker', cwd, pane_id: 'w:p', workspace_id: 'w', terminal_id: 'terminal', agent_session: { value: 'session' } };
   const job = { run: 'R-1', org, common, repo: cwd, workspace: cwd, token: 'attempt', stage: 'complete', ownership: { owner, generation: 3 },
-    worker: { agentName: 'worker', pane: 'w:p', workspaceId: 'w', terminalId: 'terminal' }, sessionBinding: { status: 'observing' } };
+    workerSessionWaitProtocol: protocol,
+    worker: { agentName: 'worker', pane: 'w:p', workspaceId: 'w', terminalId: 'terminal', ...(launchSession ? { agentSessionId: 'session' } : {}) },
+    sessionBinding: { status: 'observing' } };
   const binding = { org, project: { identity: common, canonical: cwd, checkout: cwd }, native };
   const write = () => { fs.writeFileSync(journal, JSON.stringify(job)); fs.writeFileSync(path.join(org, 'events.jsonl'), events.map(e => JSON.stringify(e) + '\n').join('')); };
   const options = () => ({ id: 'R-1', org, journal, job, binding, events, state: fold(events) });
@@ -73,8 +77,51 @@ test('a pending wait yields without reporting and later accepts original line re
   assert.equal(f.job.sessionBinding.status, 'observing', 'record is authoritative even before journal receipt save');
 });
 
-test('already committed launch sessions need no late bind', t => {
-  const f = fixture(t, { launchSession: true }); assert.equal(f.read().status, 'ready'); assert.equal(f.read().event_seq, 4);
+test('saved protocol-one launch sessions retain receipt-only readiness', t => {
+  const f = fixture(t, { launchSession: true, protocol: 1 });
+  const original = structuredClone(f.job);
+  prepareSessionObservation({ job: f.job, run: f.options().state.runs.get('R-1'), receipt: () => assert.fail('saved job must not prepare another receipt') });
+  assert.deepEqual(f.job, original);
+  assert.equal(f.read().status, 'ready'); assert.equal(f.read().event_seq, 4);
+});
+
+for (const launchSession of [true, false]) test(`protocol-two ${launchSession ? 'launch-time' : 'delayed'} sessions wait for the explicit writer commit and original replay`, async t => {
+  const f = fixture(t, { launchSession }), state = f.options().state, run = state.runs.get('R-1');
+  delete f.job.sessionBinding;
+  f.job.launchProcess = { pid: 123, identity: 'native birth' };
+  const receipt = workerReceipt(run, state);
+  prepareSessionObservation({ job: f.job, run, receipt: () => receipt }); f.write();
+  assert.equal(f.read().status, 'pending', 'even a committed launch session is not the explicit binding event');
+  assert.equal(Date.parse(f.job.sessionBinding.deadline) - Date.parse(f.job.sessionBinding.prompted_at), 60000);
+  await observeSessionBinding({ job: { ...f.job, journal: f.journal }, save: f.write,
+    observe: () => ({ process: f.job.launchProcess, session: 'session' }),
+    record: () => { throw Object.assign(Error('writer unavailable'), { code: 'ETIMEDOUT' }); } });
+  assert.equal(f.job.sessionBinding.status, 'observing');
+  assert.equal(f.read().status, 'pending', 'a timely proposal alone cannot release task work');
+  const proposal = structuredClone(f.job.sessionBinding.proposed);
+  prepareSessionObservation({ job: f.job, run, receipt: () => assert.fail('proposal must stay immutable') });
+  assert.deepEqual(f.job.sessionBinding.proposed, proposal);
+  const record = () => execFileSync(process.execPath, [path.resolve('bin/org.mjs'), 'session-bind', '--journal', f.journal],
+    { cwd: f.cwd, env: { ...process.env, ORG_DIR: f.org, ORG_ACTOR: 'fixture' }, encoding: 'utf8' });
+  commitSessionBinding({ job: f.job, save: () => fs.writeFileSync(f.journal, JSON.stringify(f.job)), record,
+    now: () => Date.parse(proposal.deadline) + 1000 });
+  const ready = f.read();
+  assert.equal(ready.status, 'ready'); assert.equal(ready.session, 'session');
+  assert.equal(ready.event_seq, 5); assert.deepEqual(f.job.sessionBinding.proposed, proposal);
+  assert.equal(f.job.sessionBinding.commit_attempts[0].outcome, 'unknown');
+  assert.equal(f.job.sessionBinding.commit_attempts[1].outcome, 'bound');
+  assert.equal(JSON.parse(record()).recorded, false, 'lost-reply readback cannot add a duplicate binding');
+  assert.deepEqual(f.read(), ready);
+});
+
+test('protocol-two launch sessions with missing continuity stop without a binding or task readiness', async t => {
+  const f = fixture(t, { launchSession: true }), run = f.options().state.runs.get('R-1');
+  delete f.job.sessionBinding;
+  prepareSessionObservation({ job: f.job, run, receipt: () => workerReceipt(run, f.options().state) }); f.write();
+  await observeSessionBinding({ job: f.job, save: f.write, observe: () => assert.fail('no launch continuity'), record: () => assert.fail('no commit') });
+  assert.equal(f.job.sessionBinding.status, 'unbound');
+  assert.throws(f.read, /original binding stopped: native process continuity unavailable/);
+  assert.equal(f.events.some(e => e.type === 'run.session_bound'), false);
 });
 
 test('native replacements, changed claim/source, duplicate identity and inactive runs stop before task work', t => {

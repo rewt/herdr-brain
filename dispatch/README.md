@@ -466,7 +466,13 @@ conflicting identities, newer occupants and changed anchors still refuse.
 New line-dispatched prompts make `dispatch/worker-session.mjs` their first tool
 action, before task work, ownership preflight or a report. This foreground,
 read-only wait accepts only the original committed launch/session identity and
-claim for the actual native worker. A proposal or journal `bound` flag is not
+claim for the actual native worker. New requests use `workerSessionWaitProtocol: 2`:
+dispatch observes and commits an explicit `run.session_bound` through the same
+saved continuity/window/proposal path even if the immutable launch receipt
+already contains a session ID. The wait requires that event before readiness;
+the launch receipt alone is insufficient. Saved protocol-one requests retain
+their original receipt-only readiness and do not acquire a new observation.
+A proposal or journal `bound` flag is not
 proof. Pending waits return exit 3 after one minute and repeat without reporting
 the run blocked; the dispatcher or existing line replay still owns the bind.
 Native/claim/source changes, STOP/HOLD, an inactive run or a final bind refusal

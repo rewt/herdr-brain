@@ -93,6 +93,10 @@ test('new line workers wait for the committed original session before ask, task 
     assert.match(prompt, /first tool action/);
     assert.match(prompt, /Exit 3 means pending: repeat this same read-only command and keep the run\/report open/);
     assert.match(prompt, /do not substitute identity, resend the prompt or replay the launch/);
+    f.job.workerSessionWaitProtocol = 2;
+    const explicit = f.prompt(f.render());
+    assert.ok(explicit.startsWith('Before reading the ask, running ownership preflight'));
+    assert.match(explicit, /Readiness requires its explicit run\.session_bound event, including when the launch receipt already contains a session ID/);
     assert.ok(prompt.indexOf('worker-session.mjs') < prompt.indexOf('You are run R-1'));
     delete f.job.workerSessionWaitProtocol;
     assert.equal(f.prompt(f.render()), saved);

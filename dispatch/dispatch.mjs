@@ -23,7 +23,7 @@ import {probationRuntime} from '../line-service/probation.mjs';
 import { hookReviewDialog, codexProfile } from './hook-review.mjs';
 import { effectiveWorkerIdentity, workerReceipt, sharesWorker } from '../lib/worker-identity.mjs';
 import { lookupProcess } from '../lib/processes.mjs';
-import { nativeProcess, observeSessionBinding } from './session-bind.mjs';
+import { nativeProcess, observeSessionBinding, prepareSessionObservation } from './session-bind.mjs';
 import { acquireSessionCapLock, checkSessionCap, dispatchPool } from './session-cap.mjs';
 import { checkSourceAdmission, matchesDispatchStart } from './unlanded-cap.mjs';
 import { quote } from '../lib/shell.mjs';
@@ -297,17 +297,11 @@ function retryCommand(error) {
     ...invocationFlags(), '--retry', job.run ?? journal].map(quote).join(' ');
 }
 function prepareSessionBinding(run) {
-  const binding = job.sessionBinding;
-  if (job.worker.agentSessionId || run.meta.dispatch_attempt !== job.token ||
-      binding?.status === 'bound' || binding?.proposed) return;
   // A new delivery (or explicit confirmation of uncertain delivery) gets one
   // bounded observation window. Keep the original launch continuity and receipt:
   // recovery must never pin a replacement occupant or rewrite a saved proposal.
-  const receipt = binding ? binding.receipt
-    : workerReceipt(json(record(['show', job.run, '--json'])), identityState());
-  const prompted = job.resumeDeliveryProtocol ? Date.parse(job.resumeDelivery.started_at) : Date.now();
-  job.sessionBinding = { status: 'observing', process: binding ? binding.process : job.launchProcess ?? null, receipt,
-    prompted_at: new Date(prompted).toISOString(), deadline: new Date(prompted + 60000).toISOString() };
+  prepareSessionObservation({ job, run,
+    receipt: () => workerReceipt(json(record(['show', job.run, '--json'])), identityState()) });
 }
 async function bindSession() {
   const binding = job.sessionBinding;
@@ -541,7 +535,7 @@ async function main() {
     const probation=actual.commit?probationRuntime(repo,{root:actual.root,home:runtimeHome})?.probation:undefined;
     if(actual.commit&&!probation)requireReadyAcceptance(checkRelease(runtimeHome,actual.id),runtimeHome);
     job = { token, repo, org, common, predecessor, release: bundleRelease(), sourceSelection: sourceSelection ?? null,...(probation?{probation}:{}),
-      invocation: invocation(), watchMode:opt['watch-mode']??'process', workerSessionWaitProtocol: 1,
+      invocation: invocation(), watchMode:opt['watch-mode']??'process', workerSessionWaitProtocol: 2,
       operatorRecordCommand: [process.execPath, local('../bin/org.mjs')],
       operatorRecordRoot: bundleRelease().root,
       operatorPlainText: true,

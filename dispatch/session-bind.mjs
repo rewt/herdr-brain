@@ -3,6 +3,18 @@ import { ownerIdentity } from '../lib/process-owner.mjs';
 import path from 'node:path';
 import { outcomeFailure } from '../lib/uncertain-outcome.mjs';
 
+// Protocol 2 gives launch-time sessions the same explicit fact as late sessions.
+// Saved requests keep their original receipt-only behavior and observation window.
+export function prepareSessionObservation({ job, run, receipt, now = Date.now }) {
+  const binding = job.sessionBinding;
+  if ((job.worker.agentSessionId && job.workerSessionWaitProtocol !== 2) ||
+      run.meta.dispatch_attempt !== job.token || binding?.status === 'bound' || binding?.proposed) return;
+  const launchReceipt = binding ? binding.receipt : receipt();
+  const prompted = job.resumeDeliveryProtocol ? Date.parse(job.resumeDelivery.started_at) : now();
+  job.sessionBinding = { status: 'observing', process: binding ? binding.process : job.launchProcess ?? null,
+    receipt: launchReceipt, prompted_at: new Date(prompted).toISOString(), deadline: new Date(prompted + 60000).toISOString() };
+}
+
 // Pin the actual native foreground process, not its persistent terminal/shell.
 // An unreadable source or ambiguous foreground is no continuity evidence.
 export function nativeProcess(agent, info, readOwner) {

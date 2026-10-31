@@ -41,8 +41,10 @@ export function workerSessionState({ id, journal, org, job, binding, events, sta
   if (job.sessionBinding?.record_refusal) throw Error(`worker session wait original binding stopped: ${job.sessionBinding.reason ?? 'record refusal'}`);
   if (worker.agent_session_id) {
     if (worker.agent_session_id !== native.agent_session.value) throw Error('worker session wait native session changed');
-    return { status: 'ready', run: id, session: worker.agent_session_id,
-      event_seq: state.sessionBindings.get(id)?.[0]?.seq ?? receipt.seq, anchor };
+    const event = state.sessionBindings.get(id)?.[0];
+    if (event || job.workerSessionWaitProtocol !== 2)
+      return { status: 'ready', run: id, session: worker.agent_session_id,
+        event_seq: event?.seq ?? receipt.seq, anchor };
   }
   if (job.sessionBinding?.status === 'unbound')
     throw Error(`worker session wait original binding stopped: ${job.sessionBinding.reason ?? 'unbound'}`);

@@ -22,7 +22,7 @@ function historical(entry,intent){
   const history={main:{sha256:'b'.repeat(64),rows:[installed]},head:{sha256:'c'.repeat(64),rows:[{...installed}]}};
   return{handoff,history};
 }
-function stale(f,action='agent-exit-requested'){
+function stale(f,action='agent-exit-requested',{interveningEffect=false}={}){
   f.report();const [source]=f.append([{type:'item.closed',id:'ENG-1',as:'done',completed_run:'R-1'}]);
   const entry=readCloseoutEntries(f.common).find(e=>e.key===source.closeout_targets.find(t=>t.signal==='landed').key);
   const target=f.retirement(f.options).plan(f.lane).close[0];assert.equal(target.decision,'exit');
@@ -30,6 +30,8 @@ function stale(f,action='agent-exit-requested'){
     {action,tab_id:target.tab_id,panes:[{pane:'w:p',terminal:'term'}]};
   const [intent]=f.append([{type:'closeout.effect',key:entry.key,identity:f.common,run:entry.run,item:entry.item,source:entry.source,effect:'original-never-sent',outcome}]);
   const h=historical(entry,intent);
+  if(interveningEffect)f.append([{type:'closeout.effect',key:entry.key,identity:f.common,run:entry.run,item:entry.item,source:entry.source,
+    effect:'unrelated-effect',outcome:{action:'unrelated'}}]);
   const [handoff]=f.append([h.handoff]);
   // Preserve a real old defect wait: the positive proof must admit the next
   // ordinary pass rather than waiting for a nonexistent native producer.
@@ -127,9 +129,16 @@ test('a handoff after an actual uncertain invocation cannot manufacture never-se
   f.drain({keys:[s.entry.key],retrySafe:true});retained();
 });
 
-test('unprovable legacy UNKNOWNs skip record/source planning instead of aborting current refresh',t=>{
-  const f=setup(t,{merged:true}),s=stale(f),original=events(f);
-  for(const log of Object.values(s.history))log.rows[0].second=Math.floor(Date.parse(s.intent.at)/1000)+1;
+for(const kind of ['late-reflog','intervening-effect'])test(`unprovable legacy UNKNOWNs skip record/source planning instead of aborting current refresh (${kind})`,t=>{
+  const f=setup(t,{merged:true}),s=stale(f,'agent-exit-requested',{interveningEffect:kind==='intervening-effect'}),original=events(f);
+  if(kind==='late-reflog')for(const log of Object.values(s.history))log.rows[0].second=Math.floor(Date.parse(s.intent.at)/1000)+1;
+  if(kind==='intervening-effect'){
+    const following=original.filter(e=>e.seq>s.intent.seq&&(e.key===s.entry.key||e.keys?.includes(s.entry.key)));
+    assert.equal(following[0].type,'closeout.effect');assert.equal(following[0].effect,'unrelated-effect');
+    assert.equal(following[1].type,'closeout.code-handoff');
+    assert.ok(legacyNeverSentProof(s.entry,s.intent,following[1],original.filter(e=>e!==following[0]),s.history),
+      'valid historical proof without the intervening effect isolates the live rejection trigger');
+  }
   const originalMkdir=fs.mkdirSync;
   fs.mkdirSync=function(file,...args){
     assert.notEqual(file,path.join(f.org,'lock'),'no no-op record lock acquisition');

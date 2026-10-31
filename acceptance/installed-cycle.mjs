@@ -112,7 +112,7 @@ const service = maxStarts => createLineService({ repo, org, to: 'scratch-supervi
 if(mode==='canary') {
   for(const file of [path.join(directory,'STOP'),path.join(repo,'.lane/supervisor/STOP'),path.join(repo,'.lane/supervisor/HOLD')]) {
     fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,'Fixture-owned selection hold\n');
-    assert.throws(()=>service(1).pass(),/STOP\/HOLD/);
+    assert.match(service(1).pass().held,/STOP\/HOLD/);
     assert.equal(state().runs.size,0);fs.unlinkSync(file);
   }
   stage('S4-selection',{guards:['service STOP','project STOP','project HOLD'],runs:0});

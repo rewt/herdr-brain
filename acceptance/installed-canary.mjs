@@ -59,7 +59,7 @@ export async function runCanary(c) {
     const result=run(process.execPath,[path.join(bundle,'lanes/lane.mjs'),'promote',producer.lane,'--expected-head-from-worktree'],{cwd:lane,env:workerEnv(producer)});
     assert.notEqual(result.status,0);assert.match(result.stderr+result.stdout,/STOP|HOLD|stopped|hold/i);
     assert.equal(git(['rev-parse','main']),base);assert.ok(fs.existsSync(lane));
-    assert.throws(()=>service(0).pass(),/STOP\/HOLD/);
+    assert.match(service(0).pass().held,/STOP\/HOLD/);
     selectionGuards.push({name,status:result.status,stdout:result.stdout,stderr:result.stderr});fs.unlinkSync(file);
   }
   promote(producer);assert.equal(git(['rev-parse','main']),head);
@@ -101,7 +101,7 @@ export async function runCanary(c) {
   const noticeMs=performance.now()-reportAt;
   for(const name of ['STOP','HOLD']) {
     const file=path.join(repo,'.lane/supervisor',name);fs.writeFileSync(file,'Fixture-owned report cleanup boundary\n');
-    assert.throws(()=>service(0).pass(),/STOP\/HOLD/);assert.ok(fs.existsSync(lane));
+    assert.match(service(0).pass().held,/STOP\/HOLD/);assert.ok(fs.existsSync(lane));
     assert.equal(native().workspaces[producer.worker.workspaceId].agent.name,producer.worker.agentName);fs.unlinkSync(file);
   }
   service(0).pass();await until(()=>finished(producer)&&!fs.existsSync(lane),'A physical cleanup before review');

@@ -78,6 +78,8 @@ For new requests, a fully merged retained branch selects main, and later
 fast-forward landings on main preserve the selected commit. Launch still checks
 the exact clean registered allocation; changed unlanded author refs and main
 rewinds refuse. Older saved requests retain their original source comparison.
+Only new correction requests carry `correctionLaunchProtocol: 1`; adopting a
+new release and using `--retry` does not upgrade an older saved request.
 The brief carries both reports, immutable base/head/diff, failed and unrun proof
 locations, and the specific correction control for each Major.
 It names the ingested report copies and their hashes, the exact Git diff command,
@@ -605,6 +607,19 @@ then prompts that same worker. If a previously acknowledged watcher has stopped,
 retry reports that fact and clears its saved PID; another retry re-arms it without
 replaying the prompt. A live saved watcher is retained. Watch's per-run lock
 refuses duplicate watchers, including one whose acknowledgement was lost.
+
+For a correction request saved before `correctionLaunchProtocol: 1`, `--retry`
+keeps the strict source comparison. If main advanced after that request selected
+its source, retry still refuses with `DISPATCH_INPUT_CHANGED` ("saved author source
+changed before fresh fix launch"), even after adopting the new release. To use
+the new main-based behavior, the owning dispatcher must first inspect and dispose
+of the original definitely unlaunched request through its existing recovery path,
+then create a fresh dispatch from the current source. Keep the original journal,
+refusal and watcher evidence; do not edit in the protocol field. `--retry --fresh`
+is launch recovery for a saved request, not a new request or a protocol upgrade.
+An uncertain launch or prompt outcome must remain with its original owner and
+receipt for reconciliation; this source-drift guidance does not authorize a
+replacement launch, replay or adoption.
 
 Record start, worker receipt and claim preparation use the record's bounded
 pre-append conflict retry: an ordinary concurrent append refreshes the record

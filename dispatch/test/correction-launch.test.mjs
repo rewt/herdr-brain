@@ -28,6 +28,41 @@ function inject(f,script,marker,body) {
 const advanceMain="git(['commit','--allow-empty','-m','concurrent main landing']);";
 const job=f=>JSON.parse(fs.readFileSync(f.jobs()[0]));
 
+test('legacy correction retry retains strict source comparison and fresh dispatch uses the new protocol',t=>{
+  const f=correction(t);
+  f.fail('prepare');
+  const stopped=f.start();assert.equal(stopped.status,1,stopped.stderr);
+  const journal=f.jobs()[0],legacy=job(f);
+  assert.equal(legacy.stage,'open');assert.equal(legacy.run,null);
+  assert.equal(legacy.native_launch_attempted,false);
+  // Model a request saved by the pre-protocol dispatcher, only in this fixture.
+  delete legacy.correctionLaunchProtocol;
+  fs.writeFileSync(journal,JSON.stringify(legacy));f.fail('');
+  f.git(['commit','--allow-empty','-m','main advanced since legacy request']);
+  const retry=f.dispatch(['--retry',journal]);assert.equal(retry.status,1,retry.stderr);
+  const refused=job(f);
+  assert.equal(refused.correctionLaunchProtocol,undefined);
+  assert.equal(refused.base,legacy.base);assert.deepEqual(refused.correction,legacy.correction);
+  assert.equal(refused.failure.code,'DISPATCH_INPUT_CHANGED');
+  assert.match(refused.error,/saved author source changed before fresh fix launch/);
+  assert.equal(refused.run,null);assert.equal(refused.native_launch_attempted,false);
+  assert.equal(launches(f).length,0);assert.equal(promptCalls(f).length,0);
+  const retained=fs.readFileSync(journal,'utf8'),base=f.git(['rev-parse','main']);
+  // A separate new request gets the new protocol; never rewrite the refused one.
+  inject(f,'lane',"if(a[0]==='prepare' && !entry()) process.exit(1);",`if(a[0]==='prepare'){${advanceMain}}`);
+  const fresh=f.start(['--lane','fresh']);assert.equal(fresh.status,0,fresh.stderr);
+  const saved=JSON.parse(fs.readFileSync(f.jobs().find(file=>file!==journal)));
+  assert.equal(saved.correctionLaunchProtocol,1);assert.equal(saved.correction.base,base);
+  assert.equal(saved.base,base);assert.equal(saved.correction.ref,undefined);
+  assert.notEqual(f.git(['rev-parse','main']),base);
+  assert.equal(f.git(['rev-parse','HEAD'],saved.workspace),base);
+  assert.equal(saved.stage,'complete');assert.equal(saved.failure,undefined);
+  assert.equal(launches(f).length,1);assert.equal(promptCalls(f).length,1);
+  assert.ok(saved.watcher.pid);assert.equal(f.jobs().length,2);
+  assert.equal(fs.readFileSync(journal,'utf8'),retained);
+  assert.equal(f.git(['rev-parse','HEAD'],refused.workspace),legacy.base);
+});
+
 test('fresh fix launches its frozen main commit while main advances during preparation',t=>{
   const f=correction(t),base=f.git(['rev-parse','HEAD']);
   inject(f,'lane',"if(a[0]==='prepare' && !entry()) process.exit(1);",`if(a[0]==='prepare'){${advanceMain}}`);

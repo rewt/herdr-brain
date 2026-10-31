@@ -2,16 +2,16 @@ import test from './helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import {legacyNeverSentProof,recoverNeverStartedCloseouts} from '../lib/closeout-unsent.mjs';
+import {legacyNeverSentProof,recoverNeverStartedCloseouts,legacyNeverSentAllocation} from '../lib/closeout-unsent.mjs';
 import {closeoutNextStage} from '../lib/closeout-status.mjs';
-import {readCloseoutEntries,unresolvedCloseoutEffect,CLOSEOUT_EXIT_PENDING} from '../lib/closeout.mjs';
+import {readCloseoutEntries,currentCloseoutEntries,unresolvedCloseoutEffect,CLOSEOUT_EXIT_PENDING} from '../lib/closeout.mjs';
 import {events,setup,effects,retainNativeOutcome,selectCurrentCleanup} from './helpers/closeout-fixture.mjs';
 import {refreshCloseouts} from '../lib/closeout-consumer.mjs';
 import {settleVacantCloseouts} from '../lib/closeout-vacancy.mjs';
 import {fold} from '../lib/state.mjs';
 import {hold} from './helpers/retire-fixture.mjs';
 import {gitProject} from '../lib/project.mjs';
-import {recordSourceConflict} from '../lib/record-observation.mjs';
+import {recordSourceConflict,observeGitQuery} from '../lib/record-observation.mjs';
 
 const producer='291c4da2e2dfecda82c8626588ae841d7cc21a28';
 const graph='4c077ad48f13c6b2d7ae2afaa439589547dda558b6773c9ef696fa6222c5c825';
@@ -174,7 +174,10 @@ for(const change of ['Git','record'])test(`positive never-sent proof re-prepares
   let added;
   try{
     added=recoverNeverStartedCloseouts({...s,org:f.org,entries:[s.entry],guard:()=>{
-      gitProject(f.repo);guards++;
+      gitProject(f.repo);
+      // Project identity is unchanged by a commit. Observe the moving tip
+      // explicitly so this control actually exercises a source-conflict retry.
+      observeGitQuery(JSON.stringify([f.repo,['rev-parse','HEAD']]),()=>f.git(['rev-parse','HEAD']));guards++;
       if(change==='Git'&&!changed){changed=true;f.git(['commit','--allow-empty','-qm','unrelated landing']);}
     }});
   }finally{fs.mkdirSync=originalMkdir;}
@@ -283,8 +286,9 @@ for(const obstruction of [null,'UNKNOWN','refusal','moved-session','STOP'])test(
   else{
     const result=refresh();
     if(!obstruction){
-      assert.equal(result.created.length,1,JSON.stringify(result));
-      f.drain({keys:result.created,retrySafe:true});
+      const target=currentCloseoutEntries(f.common,f.org,events(f)).find(e=>e.cleanup?.native_only);
+      assert.ok(target,JSON.stringify(result));
+      f.drain({keys:[target.key],retrySafe:true});
       assert.equal(f.read().actions.filter(a=>a[0]==='tab'&&a[1]==='close').length,1);
       assert.deepEqual(refresh().settled,['R-1']);
       const calls=f.herdrCalls();assert.deepEqual(refresh().settled,[]);assert.deepEqual(f.herdrCalls(),calls);
@@ -300,7 +304,7 @@ for(const kind of ['replacement','terminal-unknown','moved-original','no-proof']
   const f=setup(t,{merged:true,bound:true}),s=stale(f);
   if(kind!=='no-proof')recoverNeverStartedCloseouts({...s,org:f.org,entries:[s.entry],guard:()=>{}});
   f.git(['worktree','remove',f.lane]);
-  f.state.workspaces=[];f.state.tabs=[];
+  f.state.workspaces=[{workspace_id:'other',worktree:{checkout_path:'/other',repo_key:'/other/.git',repo_root:'/other'}}];f.state.tabs=[];
   f.state.panes=[{pane_id:'w:p',terminal_id:kind==='terminal-unknown'?undefined:'replacement',workspace_id:'other',tab_id:'other:t',cwd:'/other'}];
   f.state.agents=kind==='moved-original'?[{...f.state.agents[0],pane_id:'elsewhere'}]:[];f.save();
   const before=events(f),project=gitProject(f.repo),adapter=f.retirement(f.options);
@@ -311,4 +315,15 @@ for(const kind of ['replacement','terminal-unknown','moved-original','no-proof']
   if(settled.length){assert.equal(settled[0].native_completion,false);assert.equal(settled[0].resources.folder.preservation,'UNKNOWN');}
   assert.deepEqual(events(f).slice(0,before.length),before);assert.deepEqual(f.read().actions,[]);
   assert.equal(f.git(['rev-parse','lane/topic']),f.head);
+});
+
+test('never-sent allocation admits a completed earlier exit but retains a later UNKNOWN',()=>{
+  const entry={common:'/project/.git',key:'key',source:{type:'item.closed',seq:1}},base={identity:entry.common,key:entry.key,source:entry.source};
+  const rows=[{...base,type:'closeout.effect',seq:2,effect:'exit',outcome:{action:'agent-exit-requested',pane:'p'}},
+    {...base,type:'closeout.effect',seq:3,effect:'observed',outcome:{action:'exit-observed',pane:'p'}},
+    {...base,type:'closeout.effect',seq:4,effect:'close',outcome:{action:'shell-close-requested',tab_id:'t'}},
+    {...base,type:'closeout.command-not-started',seq:5,intent:'close',action:'shell-close-requested',native_started:false,proof:{kind:'pre-intent-code-change/v1'}}];
+  assert.equal(legacyNeverSentAllocation(entry,rows),true);
+  assert.equal(legacyNeverSentAllocation(entry,[...rows,{...base,type:'closeout.effect',seq:6,effect:'uncertain',producer:'native-closeout/v2',
+    outcome:{action:'shell-close-requested',tab_id:'t'}}]),false);
 });

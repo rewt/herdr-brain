@@ -610,12 +610,13 @@ inventory; `graph.consumers` records each changed input/test pair with a witness
 `explicit-consumer` reason. Selected and deferred rows retain those witnesses.
 These are known dependencies, not evidence of executed coverage.
 
-Planner CLI JSON uses `graph.details.encoding: indexed-witnesses/v1` to avoid
+Planner CLI JSON uses `graph.details.encoding: indexed-witnesses/v2` to avoid
 repeating full witness paths for every changed-input/test pair and again in the
 selected/deferred rows. `details.paths` and `details.reasons` intern strings;
 `details.via` contains `[parentIndex, pathIndex]` prefix nodes (root parent `-1`).
-Each `graph.consumers` tuple is `[inputPathIndex, testPathIndex, viaIndex,
-reasonIndex]`; row-level `consumers` contains indices into that table.
+Each `graph.consumers` tuple is `[viaIndex, reasonIndex]`; the witness's first and
+last paths identify its changed input and test. Row-level `consumers` contains
+indices into that table. Expansion also accepts the earlier v1 four-index tuples.
 `expandPlanDetails` restores the full objects, including every input/test reason
 and witness, and the promotion adapter calls it before validating the plan.
 The in-process planner APIs retain full consumer objects. Inventory, selection,

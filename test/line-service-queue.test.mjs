@@ -57,6 +57,57 @@ function fixture(t, { outcome = 'blocked', beforeReport = () => [], producerHarn
   return { ...f, org, identity, workspace, base, head, git, env, run, context, create };
 }
 
+test('CLI deferred queue-review native refusal publishes no evidence or item and fresh authorization recovers once', t => {
+  const f = fixture(t, { guarded: true }), bin = path.join(f.scratch, 'native-bin');
+  fs.mkdirSync(bin);
+  const calls = path.join(f.scratch, 'producer-calls.jsonl'), allow = path.join(f.scratch, 'allow');
+  const native = { ...f.observation.agents[0], cwd: f.cwd };
+  const shim = path.join(bin, 'herdr.mjs');
+  fs.writeFileSync(shim, `#!${process.execPath}
+import fs from 'node:fs';
+fs.appendFileSync(${JSON.stringify(calls)}, JSON.stringify({args: process.argv.slice(2), locked: fs.existsSync(${JSON.stringify(path.join(f.org, 'lock'))})}) + '\\n');
+if (!fs.existsSync(${JSON.stringify(allow)})) {
+  console.error(JSON.stringify({error: {code: 'PRODUCER_REFUSED', message: 'native producer refused'}}));
+  process.exit(7);
+}
+console.log(JSON.stringify({result: {agent: ${JSON.stringify(native)}}}));
+`, { mode: 0o755 });
+  fs.symlinkSync('herdr.mjs', path.join(bin, 'herdr'));
+  const extra = { PATH: `${bin}:${f.env.PATH}`, ORG_ACTOR: 'fixture-worker', HERDR_ENV: '1',
+    HERDR_PANE_ID: native.pane_id, HERDR_WORKSPACE_ID: native.workspace_id, CODEX_THREAD_ID: native.agent_session.value };
+  const evidence = path.join(f.org, 'evidence');
+  const inventory = () => fs.existsSync(evidence) ? fs.readdirSync(evidence, { recursive: true }).sort().map(name => {
+    const file = path.join(evidence, name);
+    return [name, fs.statSync(file).isFile() ? fs.readFileSync(file).toString('base64') : null];
+  }) : [];
+  const before = fs.readFileSync(path.join(f.org, 'events.jsonl')), preserved = inventory();
+  const refused = f.run(['queue-review', 'R-1', '--head', f.head, '--base', f.base], extra);
+  assert.notEqual(refused.status, 0, refused.stdout);
+  assert.match(refused.stderr, /PRODUCER_REFUSED/);
+  assert.deepEqual(fs.readFileSync(path.join(f.org, 'events.jsonl')), before);
+  assert.deepEqual(inventory(), preserved, 'the deferred hook publishes no evidence on native refusal');
+  assert.equal([...f.context().state.items.values()].filter(i => i.role === 'reviewer').length, 0);
+  assert.deepEqual(fs.readFileSync(calls, 'utf8').trim().split('\n').map(JSON.parse),
+    [{ args: ['agent', 'get', native.pane_id], locked: true }], 'native check ran once inside the commit hook');
+  assert.equal(fs.existsSync(path.join(f.org, 'lock')), false);
+  // A separate authorized request demonstrates recovery; the refused invocation
+  // itself must never replay, publish evidence or allocate a reviewer.
+  fs.writeFileSync(allow, 'fresh authorization');
+  const recovered = f.run(['queue-review', 'R-1', '--head', f.head, '--base', f.base], extra);
+  assert.equal(recovered.status, 0, recovered.stderr);
+  const queued = JSON.parse(recovered.stdout), c = f.context();
+  assert.equal(queued.existing, false);
+  assert.equal([...c.state.items.values()].filter(i => i.role === 'reviewer').length, 1);
+  assert.equal(validateQueuedReview({ ...c, item: c.state.items.get(queued.review_item) }).head, f.head);
+  assert.notDeepEqual(inventory(), preserved, 'successful authorization publishes immutable evidence');
+  const replay = f.run(['queue-review', 'R-1', '--head', f.head, '--base', f.base], extra);
+  assert.equal(replay.status, 0, replay.stderr);
+  assert.equal(JSON.parse(replay.stdout).review_item, queued.review_item);
+  assert.equal(JSON.parse(replay.stdout).existing, true);
+  assert.deepEqual(fs.readFileSync(calls, 'utf8').trim().split('\n').map(JSON.parse),
+    Array.from({ length: 3 }, () => ({ args: ['agent', 'get', native.pane_id], locked: true })));
+});
+
 for (const directory of ['current', 'foreign']) {
   for (const root of [null, false, 0, '', true, 1, 'opaque', [], {}, { actions: null }, { actions: [] }]) {
     test(`service journal loader refuses ${JSON.stringify(root)} in ${directory} while opaque inventory is not a review attempt`, t => {

@@ -50,6 +50,48 @@ function briefWorkspace(t) {
   return { ...f, root, workspace, env };
 }
 
+test('CLI ingest publishes no report after exhausted planning conflicts and recovers once', t => {
+  const f = briefWorkspace(t), { dir, ok, org, root, workspace, env } = f;
+  const item = ok(['add', 'Report publication control'], { env }).trim();
+  ok(['start', item, '--workspace', workspace], { env });
+  const incoming = path.join(root, 'incoming.md'), stored = path.join(dir, 'reports/R-1.md');
+  const text = report('run: R-1\noutcome: done\nsummary: Publication recovered.');
+  fs.writeFileSync(incoming, text);
+  const events = path.join(dir, 'events.jsonl'), before = fs.readFileSync(events);
+  const hook = path.join(root, 'race.mjs');
+  // Inject an independent append at every lock acquisition in the real CLI.
+  // Exhaust the bounded pure-plan retries before its immutable commit hook.
+  fs.writeFileSync(hook, `import fs from 'node:fs';
+const mkdir = fs.mkdirSync, lock = ${JSON.stringify(path.join(dir, 'lock'))}, events = ${JSON.stringify(events)};
+fs.mkdirSync = function(file, ...args) {
+  const result = mkdir.call(this, file, ...args);
+  if (file === lock) {
+    const rows = fs.readFileSync(events, 'utf8').trim().split('\\n').map(JSON.parse);
+    fs.appendFileSync(events, JSON.stringify({seq: rows.at(-1).seq + 1, type: 'future.racer'}) + '\\n');
+  }
+  return result;
+};
+`);
+  const refused = org(['ingest', incoming], { env: { ...env,
+    NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --import=${JSON.stringify(hook)}` } });
+  assert.notEqual(refused.code, 0, refused.out);
+  assert.match(refused.err, /record planning conflict/);
+  assert.equal(fs.existsSync(stored), false, 'a losing plan leaves no immutable report');
+  const raced = fs.readFileSync(events);
+  assert.deepEqual(raced.subarray(0, before.length), before);
+  const additions = raced.subarray(before.length).toString().trim().split('\n').map(JSON.parse);
+  assert.equal(additions.length, 32, 'the CLI stops at its bounded retry limit');
+  assert.ok(additions.every(e => e.type === 'future.racer'), 'no intake or proposal event escaped');
+  assert.equal(fs.existsSync(path.join(dir, 'lock')), false);
+  assert.equal(fold(raced.toString().trim().split('\n').map(JSON.parse)).runs.get('R-1').report, null);
+  ok(['ingest', incoming], { env });
+  assert.equal(fs.readFileSync(stored, 'utf8'), text);
+  const committed = fs.readFileSync(events);
+  assert.equal(committed.toString().trim().split('\n').map(JSON.parse).filter(e => e.type === 'report.ingested').length, 1);
+  ok(['ingest', incoming], { env });
+  assert.deepEqual(fs.readFileSync(events), committed, 'same report intake is idempotent');
+});
+
 test('generated briefs use land-first queue review instructions and preserve saved legacy brief bytes',t=>{
   const {dir,ok,workspace,env}=briefWorkspace(t),first=ok(['add','Saved legacy work'],{env}).trim();ok(['start',first,'--workspace',workspace],{env});
   const saved=path.join(dir,'runs/R-1/brief.md'),legacy='Saved immutable brief\nReviewer proposals hold their parent regardless of blocking; promotion requires PASS.\n';fs.writeFileSync(saved,legacy);

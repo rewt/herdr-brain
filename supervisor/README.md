@@ -823,8 +823,18 @@ Receipts report `delivered: false`, `queued: false` and the explicit outcome;
 there is no `sending`/`sent` event, reroute, replacement ID or replay if the name
 later reappears. Native `done` means idle, not a finished run. Missing/changed
 record identity, ambiguous lookup failures and unknown native status stay held.
-An open continuation sharing the exact native session remains deliverable.
+Active worker runs use the existing native quiet gate, including while their
+recorded session binding is incomplete. Terminal worker outcomes still require
+the full identity match. Record folds are shared within a drain pass and refreshed
+before input when the log's identity, size or timestamps change.
 Lifecycle checks never resolve uncertain attempts or bypass their dependencies.
+
+The owning project's configured `promote.to` is also a supervisor role, including
+saved watcher final callbacks without `--project-supervisor`. Its absence stays
+pending without folding the worker record. The existing inbox owner re-resolves
+and delivers each original ID in recipient FIFO order after the supervisor returns.
+Final watchers accept an acknowledged queued handoff and log `queued/retained`;
+that is not a claim of native delivery.
 
 For `--project-supervisor`, `agent_not_found` stays pending whether observed by
 lookup or by `agent prompt` at input: no input happened, and the existing owner

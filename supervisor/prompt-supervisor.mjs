@@ -285,7 +285,7 @@ export async function drainInbox(file, options = {}) {
         if (predecessors.some(prior => dependent(prior, entry, first, candidate => recipient(candidate)))) {
           confirmations.delete(entry.id); continue;
         }
-        const finalDisposition = recipientOutcomes()(entry, recipient(entry));
+        const finalDisposition = outcome(entry, recipient(entry));
         if (finalDisposition) {
           confirmations.delete(entry.id);
           if (finalDisposition.hold) notify(file, entry, finalDisposition.hold);

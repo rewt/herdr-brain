@@ -12,6 +12,7 @@ import { noticeLock } from '../notice-lock.mjs';
 import { loadTimeout } from '../../lib/deadline.mjs';
 import { initOrg, transact } from '../../lib/store.mjs';
 import { waitForInboxIdle } from '../../test/helpers/inbox.mjs';
+import { recipientOutcomes } from '../../messages/recipient-outcome.mjs';
 
 const empty = fs.readFileSync(new URL('./fixtures/claude-empty.ansi', import.meta.url), 'utf8');
 const typed = fs.readFileSync(new URL('./fixtures/claude-typed.ansi', import.meta.url), 'utf8');
@@ -252,6 +253,65 @@ function recordedRecipient(f, terminal) {
   ] }));
   return { org, start, options: { org, cwd: f.root } };
 }
+
+test('saved watcher callback and explicit exception survive a named supervisor recycle and deliver original IDs in FIFO order', async t => {
+  const f = fixture(t), record = recordedRecipient(f);
+  fs.writeFileSync(path.join(f.root, '.promote.json'), JSON.stringify({ to: 'B' }));
+  const git = args => execFileSync('git', ['-C', f.root, ...args], { stdio: 'pipe' });
+  git(['add', '.promote.json']);
+  git(['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.test', 'commit', '-qm', 'Name project supervisor']);
+  f.write('targets', { A: f.target('A') });
+  f.add('watch:R-1:final', 'B', undefined, record.options);
+  f.add('exception', 'B', undefined, { ...record.options, projectSupervisor: true });
+  const receipt = await f.drain('watch:R-1:final', { waitSeconds: 0 });
+  assert.equal(receipt.delivered, false); assert.equal(receipt.queued, true);
+  assert.equal(receipt.undeliverable, undefined);
+  const pending = readInbox(f.inbox);
+  assert.deepEqual(pending.map(e => e.state), ['pending', 'pending']);
+  assert.equal(pending[0].recipient_role, undefined);
+  assert.ok(pending.every(e => !e.undeliverable));
+  const rows = () => fs.readFileSync(f.inbox, 'utf8').trim().split('\n').map(JSON.parse);
+  assert.equal(rows().some(e => ['sending', 'sent'].includes(e.type)), false);
+  assert.equal(f.calls().some(args => args[1] === 'prompt'), false);
+  const returned = { ...f.target('B'), terminal_id: 'recycled-terminal', agent_session: { value: 'recycled-session' } };
+  f.write('targets', { A: f.target('A'), B: returned });
+  assert.equal((await f.drain('exception')).delivered, true);
+  assert.deepEqual(f.sent().map(args => args[3]), ['watch:R-1:final notice-id=watch:R-1:final', 'exception notice-id=exception']);
+  for (const id of ['watch:R-1:final', 'exception']) {
+    assert.equal(rows().filter(e => e.id === id && e.type === 'sending').length, 1);
+    assert.equal(rows().filter(e => e.id === id && e.type === 'sent').length, 1);
+    assert.ok(rows().find(e => e.id === id && e.type === 'sending').occupant.includes('recycled-session'));
+  }
+  await f.drain(); assert.equal(f.sent().length, 2);
+  // An unrelated/torn worker log cannot hold or retire the configured role:
+  // supervisor classification must not parse or fold it.
+  fs.appendFileSync(path.join(record.org, 'events.jsonl'), '{torn');
+  const classify = recipientOutcomes();
+  assert.equal(classify(pending[0], { code: 'agent_not_found' }), null);
+  assert.equal(classify(pending[0], { agent: returned }), null);
+});
+
+for (const change of ['missing-session', 'conflicting-session', 'cwd']) test(`active worker with ${change} retains quiet-gate delivery`, async t => {
+  const f = fixture(t), record = recordedRecipient(f), A = f.target('A');
+  if (change === 'cwd') A.cwd += '/other';
+  else if (change === 'missing-session') transact(record.org, () => ({ add: [
+    { type: 'run.updated', id: 'R-1', meta: { agent_session_id: null } },
+  ] }));
+  else transact(record.org, () => ({ add: [{ type: 'run.session_bound', run: 'R-1', session: 'conflicting-session' }] }));
+  f.write('targets', { A }); f.add('active', 'A', undefined, record.options);
+  assert.equal((await f.drain('active')).delivered, true);
+  assert.equal(f.sent().length, 1);
+  assert.equal(readInbox(f.inbox)[0].undeliverable, undefined);
+});
+
+test('one recipient classifier refreshes its cached fold when the record changes before input', t => {
+  const f = fixture(t), record = recordedRecipient(f);
+  f.add('lifecycle', 'A', undefined, record.options);
+  const entry = readInbox(f.inbox)[0], classify = recipientOutcomes(), binding = { agent: f.target('A') };
+  assert.equal(classify(entry, binding), null);
+  transact(record.org, () => ({ add: [{ type: 'report.ingested', run: 'R-1', report: { outcome: 'done' } }] }));
+  assert.equal(classify(entry, binding).reason, 'recipient-finished');
+});
 
 for (const terminal of ['finished', 'abandoned']) test(`an exactly bound ${terminal} recipient has a recorded undeliverable outcome even with an open unknown pane`, async t => {
   const f = fixture(t), record = recordedRecipient(f, terminal), A = f.target('A'); A.agent_status = 'unknown';

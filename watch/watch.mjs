@@ -307,7 +307,10 @@ async function deliver(message, sound = 'request', id, { allowQueued = false } =
     retrySeconds: retryAfterMs / 1000, sound, title: `${runId} watch could not deliver`, id, log,
   });
   if (result.delivered) { finishWatch(); return true; }
-  if (allowQueued && result.queued && Number.isInteger(result.owner_pid) && result.owner_pid > 0) return true;
+  if (allowQueued && result.queued && Number.isInteger(result.owner_pid) && result.owner_pid > 0) {
+    log(`${id} queued/retained by inbox owner ${result.owner_pid}`);
+    return true;
+  }
   throw new Error(`could not deliver to ${opt.to}: ${result.delivery_error}; inbox=${result.inbox}`);
 }
 
@@ -499,7 +502,7 @@ async function watch() {
   const deliverFinal = (report) => deliver(reportNotice({
     run: runId, item, outcome: report.outcome, headline: report.headline ?? report.summary,
     report: reportPath, check: 'pass',
-  }), 'done', `watch:${runId}:final`, {allowQueued:opt.step});
+  }), 'done', `watch:${runId}:final`, {allowQueued:true});
 
   if (dry) {
     const status = agentStatus(agent);

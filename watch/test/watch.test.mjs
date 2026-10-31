@@ -1,6 +1,6 @@
 import { recipientAgent } from '../../test/helpers/recipient-agent.mjs';
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
+import { spawnSync, execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -692,8 +692,8 @@ esac`);
         const child = spawnChild(t, process.execPath, f.args, { env: { ...TEST_ENV,
           SUPERVISOR_INPUT_WAIT_SECONDS: '0.1' } });
         const done = await waitForExit(child);
-        assert.equal(done.code, 1, done.stdout + done.stderr);
-        assert.match(done.stderr, /drain\.lock; owner is live or unidentified/);
+        assert.equal(done.code, 0, done.stdout + done.stderr);
+        assert.match(done.stdout, /queued\/retained/);
         assert.ok(fs.existsSync(lock));
         assert.equal(fs.existsSync(ownerFile) ? fs.readFileSync(ownerFile, 'utf8') : null, ownerText);
         const entries = readInbox(inbox);
@@ -768,13 +768,61 @@ if(a[0]==='agent'&&a[1]==='get') console.log(JSON.stringify({result:{agent:${JSO
 else if(a[0]==='pane'&&a[1]==='read') process.stdout.write(fs.readFileSync(${JSON.stringify(screen)},'utf8'));
 else console.log('{}');\n`, { mode: 0o755 });
   const child = spawnChild(t, process.execPath, f.args, { env: { ...TEST_ENV, SUPERVISOR_INPUT_WAIT_SECONDS: '0' } });
-  assert.equal((await waitForExit(child)).code, 1);
+  assert.equal((await waitForExit(child)).code, 0);
   assert.equal(readInbox(inbox)[0].state, 'pending');
   assert.doesNotMatch(fs.readFileSync(f.calls, 'utf8'), /"prompt"/);
   fs.writeFileSync(screen, empty);
   await waitForText(inbox, /"type":"sent"/);
   const prompts = fs.readFileSync(f.calls, 'utf8').trim().split('\n').map(JSON.parse).filter((args) => args[1] === 'prompt');
   assert.equal(prompts.length, 1); assert.match(prompts[0][3], /notice-id=watch:R-132:final$/);
+});
+
+test('a final callback to the configured supervisor is queued across recycle and delivered once to its new session', async t => {
+  const f = watcherFixture('R-133'), inbox = path.join(f.root, '.org/supervisor/inbox.log');
+  const binding = path.join(f.root, 'supervisor-binding');
+  const git = args => execFileSync('git', ['-C', f.root, ...args], { stdio: 'pipe' });
+  git(['init', '-q']);
+  fs.writeFileSync(path.join(f.root, '.promote.json'), JSON.stringify({ to: 'supervisor-test' }));
+  git(['add', '.promote.json']);
+  git(['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.test', 'commit', '-qm', 'Name supervisor']);
+  seedOwnedRun(path.join(f.root, '.org'), 'R-133', { workspace: f.root });
+  const returned = { ...supervisorAgent(f.root), terminal_id: 'new-terminal', agent_session: { value: 'new-session' } };
+  t.after(async () => {
+    fs.writeFileSync(binding, JSON.stringify(returned));
+    await waitForInboxIdle(inbox); fs.rmSync(f.root, { recursive: true, force: true });
+  });
+  fs.writeFileSync(f.report, reportText('R-133'));
+  fs.writeFileSync(f.herdr, `#!${process.execPath}
+import fs from 'node:fs'; const a=process.argv.slice(2);
+fs.appendFileSync(${JSON.stringify(f.calls)},JSON.stringify(a)+'\\n');
+if(a[0]==='agent'&&a[1]==='get'&&a[2]==='supervisor-test') {
+ if(!fs.existsSync(${JSON.stringify(binding)})) {console.error(JSON.stringify({error:{code:'agent_not_found',message:'supervisor recycling'}}));process.exit(1);}
+ console.log(JSON.stringify({result:{agent:JSON.parse(fs.readFileSync(${JSON.stringify(binding)},'utf8'))}}));
+} else if(a[0]==='agent'&&a[1]==='get') console.log(JSON.stringify({result:{agent:{agent_status:'done'}}}));
+else if(a[0]==='pane'&&a[1]==='read') console.log('────────────────────\\n❯ \\n────────────────────');
+else console.log('{}');
+`, { mode: 0o755 });
+  const child = spawnChild(t, process.execPath, f.args, { cwd: f.root,
+    env: { ...TEST_ENV, SUPERVISOR_INPUT_WAIT_SECONDS: '0.1' } });
+  const done = await waitForExit(child);
+  assert.equal(done.code, 0, done.stdout + done.stderr);
+  assert.match(done.stdout, /queued\/retained/);
+  assert.doesNotMatch(done.stderr, /could not deliver/);
+  const entry = readInbox(inbox)[0];
+  assert.equal(entry.id, 'watch:R-133:final'); assert.equal(entry.state, 'pending');
+  assert.equal(entry.recipient_role, undefined); assert.equal(entry.undeliverable, undefined);
+  assert.ok(Number.isInteger(entry.owner_pid));
+  const rows = () => fs.readFileSync(inbox, 'utf8').trim().split('\n').map(JSON.parse);
+  assert.equal(rows().some(e => ['sending', 'sent'].includes(e.type)), false);
+  assert.doesNotMatch(fs.readFileSync(f.calls, 'utf8'), /"prompt"/);
+  fs.writeFileSync(binding, JSON.stringify(returned));
+  await waitForText(inbox, /"type":"sent"/); await waitForInboxIdle(inbox);
+  assert.equal(readInbox(inbox)[0].state, 'sent');
+  assert.equal(rows().filter(e => e.type === 'sending').length, 1);
+  assert.equal(rows().filter(e => e.type === 'sent').length, 1);
+  assert.ok(rows().find(e => e.type === 'sending').occupant.includes('new-session'));
+  const prompts = fs.readFileSync(f.calls, 'utf8').trim().split('\n').map(JSON.parse).filter(a => a[1] === 'prompt');
+  assert.equal(prompts.length, 1); assert.match(prompts[0][3], /notice-id=watch:R-133:final$/);
 });
 
 test('a report landing wakes the watcher without polling Herdr', async (t) => {

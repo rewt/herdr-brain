@@ -88,6 +88,14 @@ test('same-revision warm passes preserve zeros, unknowns, interleaving and rotat
   g.events[0].seq=2;assert.equal((await g.evaluate(s)).status,'UNRUN','truncated record coverage cannot prove absence');
 });
 
+test('complete record sequences remain complete when transaction clocks straddle the cutoff',async t=>{
+  const f=inputs(t);f.event(10.1,{type:'run.claimed',run:'R-unrelated'});f.event(9.9,{type:'note.added',id:'ENG-1',text:'Earlier transaction time, appended later'});
+  f.write([...f.pass(10,1,2),...f.pass(11,3,4)]);
+  const result=await f.evaluate(spec('same-revision-skips'));
+  assert.equal(result.status,'MET');assert.equal(result.evidence.record.through_seq,3);
+  f.events.splice(1,1);assert.equal((await f.evaluate(spec('same-revision-skips'))).status,'UNRUN','an actual missing source event still fails closed');
+});
+
 function report(f,n,reportMinute,folderMinute){
   const run=`R-${n}`,start=f.event(0,{type:'run.started',id:run,item:'ENG-1',meta:{dispatch_project:project}}),claim=f.event(0,{type:'run.claimed',run});
   f.event(reportMinute,{type:'report.available',run,project,started_seq:start.seq,claim_generation:claim.seq,producer:'original-report-watcher',observed_at:at(reportMinute),sha256:run});

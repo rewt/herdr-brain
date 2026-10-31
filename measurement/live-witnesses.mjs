@@ -44,7 +44,9 @@ export async function evaluateWitness({spec,events,project,passes,now,readPasses
     project,owner:spec.owner,next:spec.next,status,reason,terminal,recorded_at:now,condition_at:conditionAt,
     delay_ms:timestamp(conditionAt)===null?null:Math.max(0,timestamp(now)-timestamp(conditionAt)),evidence:{...evidence,...detail}});
   if(end<timestamp(spec.from))return result('UNRUN','window has not opened',{},null,false);
-  if(!selected.length||selected.some((e,i)=>!Number.isSafeInteger(e.seq)||e.seq!==(i?selected[i-1].seq+1:1)||timestamp(e.at)===null))return result('UNRUN','record sequence or timestamp coverage is incomplete',{},null,false);
+  // Transactions capture their time before append: complete sequence order
+  // need not be clock order. Check the original snapshot before time selection.
+  if(!selected.length||events.some((e,i)=>!Number.isSafeInteger(e.seq)||e.seq!==(i?events[i-1].seq+1:1))||selected.some(e=>timestamp(e.at)===null))return result('UNRUN','record sequence or timestamp coverage is incomplete',{},null,false);
   if(spec.kind==='unavailable')return result('UNRUN',spec.reason);
   if(spec.kind==='folder-median'){
     const lifecycle=measureLifecycle({events:selected,project,from:spec.from,cutoff,throughSeq:selected.at(-1)?.seq??0});

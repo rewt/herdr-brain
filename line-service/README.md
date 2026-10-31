@@ -1481,6 +1481,11 @@ paths, linked Git directories or unreadable inputs are evaluated fresh. The boun
 declines caching; it never truncates a fingerprint. Source revision is part of
 each signature, so interleaved revisions cannot reset the entire shared cache.
 Common source/policy changes conservatively invalidate dependent observations.
+Ancestor revisions track their own event subjects: mentioning a goal in another
+run's saved report or closeout diagnostic does not change the goal's subtree.
+Pending source discovery also retains a negative when a producer is already
+covered and has no new source to queue. A producer with any pending target stays
+fresh, even if discovery also diagnoses a hold for it.
 
 Only negative evaluations can be skipped. Ready candidates, capacity failures,
 original attempts/UNKNOWN continuation readback, and all effect-boundary guards

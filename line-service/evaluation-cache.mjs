@@ -57,10 +57,13 @@ export function negativeEvaluationCache({store,identity,org,repo,revision,dirty=
   let indexed;
   const index=snapshot=>{
     if(indexed?.events===snapshot.events)return indexed;
-    const {state,events}=snapshot,revisions=new Map(),dependencies=new Map();
+    const {state,events}=snapshot,revisions=new Map(),ownRevisions=new Map(),dependencies=new Map();
     const edge=(a,b)=>{if(a&&b){const set=dependencies.get(a)??new Set();set.add(b);dependencies.set(a,set);}};
     for(const e of events){
       for(const id of new Set(ids(e)))revisions.set(id,e.seq);
+      // A saved diagnostic/report can mention an ancestor without changing it.
+      // Do not turn another subject's recurring closeout into a subtree change.
+      for(const id of [e.id,e.item,e.run,e.blocked,e.blocker,e.review_item,e.review_run,e.source_item,e.source_run])if(id)ownRevisions.set(id,e.seq);
       // Historical removed links still participate in blocked-report recovery.
       if(e.type==='link.added')edge(e.blocked,e.blocker);
     }
@@ -72,7 +75,7 @@ export function negativeEvaluationCache({store,identity,org,repo,revision,dirty=
     }
     for(const link of state.links)edge(link.blocked,link.blocker);
     for(const run of state.runs.values())edge(run.id,run.item);
-    return indexed={events,revisions,dependencies};
+    return indexed={events,revisions,ownRevisions,dependencies};
   };
   const entries=()=>{
     const parent=store();
@@ -83,7 +86,7 @@ export function negativeEvaluationCache({store,identity,org,repo,revision,dirty=
   };
   const fingerprint=({snapshot,item,run,policy,extra})=>{
     try{
-      const {state}=snapshot,{revisions,dependencies}=index(snapshot),related=new Set(),expand=[item,run].filter(Boolean),ancestors=new Set();
+      const {state}=snapshot,{revisions,ownRevisions,dependencies}=index(snapshot),related=new Set(),expand=[item,run].filter(Boolean),ancestors=new Set();
       while(expand.length){const id=expand.pop();if(related.has(id))continue;related.add(id);expand.push(...dependencies.get(id)??[]);
         const subject=state.items.get(id);if(subject)expand.push(...subject.runs);
       }
@@ -93,7 +96,7 @@ export function negativeEvaluationCache({store,identity,org,repo,revision,dirty=
       const files=new Set([path.join(repo,'.lane.json')]),workspaces=new Set(),record=[];
       const ancestorRuns=[...ancestors].flatMap(id=>state.items.get(id)?.runs??[]);
       for(const id of [...new Set([...related,...ancestors,...ancestorRuns])].sort()){
-        const i=state.items.get(id),r=state.runs.get(id);record.push([id,revisions.get(id)??0,i??r??null]);
+        const i=state.items.get(id),r=state.runs.get(id);record.push([id,(related.has(id)?revisions:ownRevisions).get(id)??0,i??r??null]);
         if(!r)continue;
         files.add(r.brief_path);files.add(r.report?.file&&path.resolve(org,r.report.file));files.add(r.meta?.dispatch_journal);
         if(related.has(id)){

@@ -70,6 +70,18 @@ test('deleted source trees retain one diagnosed hold, then cache it until own in
   f.append([{type:'note.added',id:'R-1',text:'New source evidence'}]);assert.equal(summary(f.pass()).evaluations.source_evaluated,1);
 });
 
+test('another subject mentioning an ancestor in recurring diagnostics does not invalidate its subtree',t=>{
+  const f=fixture(t);f.append([{type:'item.added',id:'G-1',kind:'goal',title:'Held goal',meta:{hold:true}},
+    work('ENG-1',{parent:'G-1'}),work('ENG-2')]);
+  f.pass();
+  f.append([{type:'closeout.evaluated',item:'ENG-2',run:'R-2',resources:{author_packet:{report:{summary:'Follow G-1'}}}}]);
+  const warm=f.pass();assert.equal(summary(warm).evaluations.admission_skipped,1);
+  assert.equal(warm.some(r=>r.action==='admission-eligible'&&r.item==='ENG-1'),false);
+  f.append([{type:'item.updated',id:'G-1',fields:{meta:{hold:false}}}]);
+  const released=f.pass();assert.equal(summary(released).evaluations.admission_evaluated,2);
+  assert.ok(f.calls.includes('ENG-1'),'an actual ancestor change still wakes its child');
+});
+
 test('Git inputs, brief bytes, source revision and malformed hints invalidate negatives without authorizing a start',t=>{
   const f=fixture(t),lane=path.join(f.root,'lane'),brief=path.join(f.root,'ask.md');fs.mkdirSync(lane);fs.writeFileSync(path.join(lane,'source'),'one');fs.writeFileSync(brief,'first');
   fs.mkdirSync(path.join(lane,'.git'));fs.writeFileSync(path.join(lane,'.git/HEAD'),'first');

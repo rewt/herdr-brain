@@ -213,7 +213,7 @@ export function discoverChanges({events,state,repo,org,identity,boundary,readGit
     const relevant=(landed.get(run.id)??[]).length||backfills.length||tokens.some(token=>index.heads.some(head=>head.startsWith(token)));
     if(!relevant&&!(tokens.length&&run.report?.seq>boundary.seq))continue;
     const cached=heldCache?.(item,run);if(cached?.skip)continue;
-    const holdStart=holds.length;
+    const holdStart=holds.length,changeStart=changes.length;
     try {
     // Settled history remains two batched Git index reads, no per-report disk
     // or native inventory. An immutable report's intermediate heads are one group.
@@ -275,7 +275,12 @@ export function discoverChanges({events,state,repo,org,identity,boundary,readGit
           if(extra)changes.push({item,run,target:extra,cutoff});
         }
     }catch(e){holds.push({item:item.id,run:run.id,reason:e.message,...(e.source_provenance?{source_provenance:e.source_provenance}:{})});}
-    }finally{if(holds.length>holdStart)cached?.retain(holds.slice(holdStart).map(h=>h.reason).join('; '));}
+    }finally{
+      if(changes.length===changeStart){
+        if(holds.length>holdStart)cached?.retain(holds.slice(holdStart).map(h=>h.reason).join('; '));
+        else if(pendingOnly)cached?.retain('no pending source');
+      }
+    }
   }
   if(runId===undefined)for(const row of index.entries)if(row.attribution==='missing'){
     const selector=canonicalSelector(row.head),retained=queues.filter(q=>q.meta.review_source_selector===selector);

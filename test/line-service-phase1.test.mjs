@@ -37,6 +37,7 @@ import {readProjectPolicy} from '../lib/config-policy.mjs';
 import {haltObservation,completeHaltPass} from '../line-service/halt-repair.mjs';
 import {inspectReviewAdmission} from '../line-service/review-admission.mjs';
 import {queueSelected} from '../line-service/priority-order.mjs';
+import {negativeEvaluationCache} from '../line-service/evaluation-cache.mjs';
 
 const hash=b=>createHash('sha256').update(b).digest('hex');
 function fixture(t,{reported=true,role='engineer'}={}){
@@ -106,6 +107,31 @@ function admissionQueue(f){
 }
 
 const ordinaryPolicy=(f,policy)=>setConfig('ordinary_admission',JSON.stringify({selected_only:true,...policy}),{cwd:f.cwd,env:f.env,who:'explicit ordinary fixture wave'});
+
+test('pending source discovery caches covered producers across journal reloads but keeps targets and changed evidence fresh',t=>{
+  const f=fixture(t),counts={};let document={actions:{}};
+  const scan=()=>{
+    const c=f.context(),index=canonicalReviewIndex(c),cache=negativeEvaluationCache({store:()=>document,identity:f.identity,repo:f.cwd,org:f.org,revision:'fixture',counts});
+    const found=discoverChanges({...c,index,pendingOnly:true,runId:'R-1',heldCache:(item,run)=>cache.probe('source',{
+      snapshot:c,item:item.id,run:run.id,policy:{},extra:{tip:index.tip,boundary:index.boundary}})});
+    document=JSON.parse(JSON.stringify(document));return found;
+  };
+  assert.equal(scan().changes.length,1);assert.equal(scan().changes.length,1);
+  assert.equal(document.negative_evaluations.entries['source:R-1'],undefined,'pending targets cannot be reused as negatives');
+  const queued=admissionQueue(f),capture=f.context().state.items.get(queued.result.review_item).meta.review_target;
+  assert.equal(scan().changes.length,0);assert.equal(document.negative_evaluations.entries['source:R-1'].reason,'no pending source');
+  assert.equal(scan().changes.length,0);assert.equal(counts.source_skipped,1,'covered source survives a serialized journal reload');
+  assert.deepEqual(f.context().state.items.get(queued.result.review_item).meta.review_target,capture);
+  fs.writeFileSync(f.file,'changed immutable report');
+  assert.match(scan().holds[0].reason,/immutable producer report bytes changed/);
+  assert.equal(scan().holds.length,0,'unchanged diagnosed holds also reuse their negative');
+  fs.writeFileSync(f.file,f.report);assert.equal(scan().holds.length,0,'restored report is re-evaluated');
+  assert.equal(document.negative_evaluations.entries['source:R-1'].reason,'no pending source');
+  const before=counts.source_evaluated;independentProducer(f);scan();
+  assert.equal(counts.source_evaluated,before+1,'a canonical tip change wakes covered producers');
+  f.add([{type:'item.updated',id:queued.result.review_item,fields:{meta:{review_target:{...capture,head:'0'.repeat(40)}}}}]);
+  scan();assert.equal(counts.source_evaluated,before+2,'a changed bound review also wakes its producer');
+});
 
 test('ordinary admission read-only preview includes every pending exclusion and proposed named ancestors without applying policy',t=>{
   const f=fixture(t,{reported:false});

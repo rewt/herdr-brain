@@ -1,3 +1,4 @@
+// Runtime planner codec: shared by installed promotion and source-only planners.
 // Lossless wire representation: share path strings, witness prefixes and rows.
 // The in-process planner/adapter API continues to expose full consumer objects.
 const ENCODING = 'indexed-witnesses/v2';

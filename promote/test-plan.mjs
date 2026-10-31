@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { expandPlanDetails } from '../test/helpers/plan-details.mjs';
+import { expandPlanDetails } from './plan-details.mjs';
 export const quote = value => "'" + value.replaceAll("'", "'\\''") + "'";
 const validFiles = files => Array.isArray(files) && files.length <= 512 && new Set(files).size === files.length &&
   files.every(f => typeof f === 'string' && /^[\w./-]+\.test\.mjs$/.test(f) && !f.split('/').includes('..') && !path.isAbsolute(f));

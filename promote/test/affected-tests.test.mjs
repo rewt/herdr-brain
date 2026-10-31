@@ -7,7 +7,7 @@ import { spawnSync } from 'node:child_process';
 import { affectedTests, affectedTestPlan, boundAffectedTests, DEFAULT_BUDGET_MS, DEFAULT_MAX_FILES } from '../../test/helpers/affected-tests.mjs';
 import { releasePhases } from '../../test/helpers/release-suites.mjs';
 import { affectedOnlyCommand, plannedCommand, promotionTestPlan } from '../test-plan.mjs';
-import { compactPlanDetails, expandPlanDetails } from '../../test/helpers/plan-details.mjs';
+import { compactPlanDetails, expandPlanDetails } from '../plan-details.mjs';
 const root = fs.realpathSync(new URL('../../', import.meta.url));
 // The planner reads git ls-files of the product tree; a release build's git-archive snapshot has none.
 const gitTree = spawnSync('git', ['-C', root, 'rev-parse', '--is-inside-work-tree'], { encoding: 'utf8' }).stdout.trim() === 'true';

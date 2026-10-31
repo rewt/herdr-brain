@@ -4,7 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { isMain } from '../../lib/cli-help.mjs';
 import { affectedTestPlan, boundAffectedTests } from './affected-tests.mjs';
 import { trackedTestInventory } from './test-inventory.mjs';
-import { compactPlanDetails } from './plan-details.mjs';
+import { compactPlanDetails } from '../../promote/plan-details.mjs';
 import { main as runSelected, releasePhases } from './release-suites.mjs';
 
 function git(cwd, args) {

@@ -7,6 +7,20 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { copyProduct } from '../lib/product-files.mjs';
 import { releaseEnvironment } from './helpers/release-environment.mjs';
 
+test('copied runtime loads lane CLI without source-only test helpers', t => {
+  const source = path.resolve(import.meta.dirname, '..');
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'release-lane-')));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const bundle = path.join(root, 'bundle');
+  copyProduct(source, bundle);
+  assert.equal(fs.existsSync(path.join(bundle, 'test')), false);
+  const result = spawnSync(process.execPath, [path.join(bundle, 'lanes/lane.mjs'), '--help'], {
+    cwd: root, env: releaseEnvironment(process.env), encoding: 'utf8',
+  });
+  assert.equal(result.status, 0, result.error?.message ?? result.stdout + result.stderr);
+  assert.match(result.stdout, /Usage: lane/);
+});
+
 test('release build retains shared skill discovery and seals an archive without harness trees', t => {
   const source = path.resolve(import.meta.dirname, '..');
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'release-skills-')));

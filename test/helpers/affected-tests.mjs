@@ -5,7 +5,7 @@ import { isMain } from '../../lib/cli-help.mjs';
 import { tierFiles } from './tier.mjs';
 import { trackedTestInventory } from './test-inventory.mjs';
 import { affectedTestPlan } from './affected-graph.mjs';
-import { compactPlanDetails } from './plan-details.mjs';
+import { compactPlanDetails } from '../../promote/plan-details.mjs';
 export { affectedTestPlan } from './affected-graph.mjs';
 import { main as runRelease } from './release-suites.mjs';
 const durations = JSON.parse(fs.readFileSync(new URL('./test-durations.json', import.meta.url), 'utf8'));

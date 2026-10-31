@@ -423,7 +423,7 @@ test('blocked and reserved work stays held while another READY item dispatches',
   f.record(['block', blocked, '--by', blocker]); const reserved = f.add('Reserved', 30); f.record(['set', reserved, 'meta.operator_reserved=true']);
   const ready = f.add('Ready', 10); f.service().pass(); f.service().pass(); f.service().pass();
   assert.ok(f.calls.every(call => ![blocked, reserved].includes(call.args[1])));
-  assert.equal(f.calls[0].args[1], ready); assert.equal(f.notes.length,0);const notices=Object.values(JSON.parse(fs.readFileSync(path.join(f.service().directory,'effects.json'))).record_notices);assert.ok(notices.some(n=>/reserved/.test(n.reason)&&n.count===3));
+  assert.equal(f.calls[0].args[1], ready); assert.equal(f.notes.length,0);const notices=Object.values(JSON.parse(fs.readFileSync(path.join(f.service().directory,'effects.json'))).record_notices);assert.ok(notices.some(n=>/reserved/.test(n.reason)&&n.count===1&&n.inspection_due===true));
 });
 test('STOP, HOLD and an incomplete tail prevent all effects', t => {
   const f = fixture(t); f.add('Ready'); const s = f.service();

@@ -345,7 +345,7 @@ test('review admission retains an existing UNKNOWN launch and legacy review with
   assert.equal(s.calls.some(a=>a[0].endsWith('/dispatch/dispatch.mjs')),false);
   const kept=JSON.parse(fs.readFileSync(path.join(f.directory,'effects.json'))).actions[key];
   for(const [field,value]of Object.entries(original))assert.deepEqual(kept[field],value,'original attempt and receipt stay intact');
-  assert.equal(kept.original_outcome.status,'unknown','existing readback may annotate the retained attempt without replacing it');
+  assert.equal(kept.original_outcome,undefined,'a started or UNKNOWN original command is not re-read or annotated by another pass');
   assert.equal(kept.history,undefined);assert.equal(fs.readFileSync(saved,'utf8'),savedBytes);
   assert.deepEqual(f.context().state.items.get(q.id).meta.review_target,target);
   assert.ok(diagnostics(f).some(r=>r.action==='review-admission-held'&&r.item==='REV-99'&&r.code==='REVIEW_ADMISSION_BINDING_UNKNOWN'));
@@ -836,7 +836,9 @@ test('canonical unattributed queue assigns current real reviewer responsibility 
     f.add([{type:'run.started',id:'R-50',item:q.id,workspace:f.cwd}]);const started=f.context(),report={outcome:'done',extra:{verdict:'FAIL'},proposals:[]},events=reviewResultEvents({...started,run:started.state.runs.get('R-50'),report,sha256:'d'.repeat(64),body:'- [Major] source-1:1 - Fix this landed change.'});f.add(events);
     const final=f.context(),health=reviewHealth({...final,index:canonicalReviewIndex(final)});assert.equal(health.done_commits,1);assert.equal(events[0].item,q.id);assert.equal(events[1].parent,q.id);assert.equal(events[1].meta.severity,'major');assert.equal(events[1].meta.review_owner_run,null);assert.equal(final.state.runs.has('canonical:'+target.head),false);
     // The frozen fold predates session-bound run ownership; compare the projection it supports.
-    const old=historicalFold(final.events);assert.deepEqual(old.items,final.state.items);assert.deepEqual([...old.runs.keys()],[...final.state.runs.keys()]);
+    const old=historicalFold(final.events);
+    assert.deepEqual(old.items,new Map([...final.state.items].map(([id,item])=>[id,Object.fromEntries(Object.entries(item).filter(([key])=>key!=='finding_bindings'))])));
+    assert.ok(final.state.items.get(events[1].id).finding_bindings.length,'the current fold retains the newer typed correction binding');assert.deepEqual([...old.runs.keys()],[...final.state.runs.keys()]);
     for(const [id,run] of old.runs){const current=final.state.runs.get(id);assert.deepEqual(Object.keys(current).filter(k=>!Object.hasOwn(run,k)).filter(k=>!['owner','owner_generation'].includes(k)),[]);assert.deepEqual(run,Object.fromEntries(Object.keys(run).map(k=>[k,current[k]])));}for(const e of final.events){if(e.type==='run.started')assert.ok(final.state.items.has(e.item));if(e.type==='change.reviewed')assert.ok(final.state.items.has(e.item)&&final.state.items.has(e.review_item)&&final.state.runs.has(e.review_run));}
     assert.throws(()=>validateQueuedReview({...final,item:final.state.items.get(q.id)}),/already has a run/);assert.equal(queueReviewMutation({...final,runId:selector,env}).add.length,0);
   }finally{process.chdir(before);}

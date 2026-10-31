@@ -372,7 +372,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       // Retain every excluded open ordinary row, even beyond the start/cap limit.
       for(const item of snapshot.state.items.values())if(ordinaryPolicy.selected_only&&!item.closed&&item.kind!=='goal'){
         const selection=evaluationCache.probe('selection',{snapshot,item:item.id,policy:evaluationPolicy});
-        if(selection.skip){effects.ordinary_admission.held.push({stage:'selection',item:item.id,...selection.reason,cached:true});continue;}
+        if(selection.skip){effects.ordinary_admission.held.push({stage:'selection',item:item.id,...selection.reason,cached:true});noticesDirty=true;continue;}
         const held=ordinaryHold(item,snapshot.state,'selection');if(held)selection.retain(held);
       }
       const admit=(subject,stage,fresh=false)=>{
@@ -658,7 +658,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         }
         if (roleIs(item, 'REV') && !isQueueReview(item)) { note(`dispatch:${item.id}`, 'T2 legacy/manual review queue binding UNKNOWN; retain existing owner/attempt'); observation.retain('legacy review binding');continue; }
         const hold=itemLaunchHold(snapshot.state,item.id,snapshot.events);
-        if (reserved(item) || hold) { note(`dispatch:${item.id}`, 'held or reserved ready item needs judgment',hold?{subject:hold.subject}:{});observation.retain('held or reserved');continue; }
+        if (reserved(item) || hold) { note(`dispatch:${item.id}`, 'held or reserved ready item needs judgment',hold?{subject:hold.subject}:{},true);observation.retain('held or reserved');continue; }
         try {
           const key = `dispatch:${item.id}:${input}`;
           let continuation,retryAdmission,briefRecovery,sourceRecovery,dispatchKey=key;

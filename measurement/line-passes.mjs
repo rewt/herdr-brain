@@ -19,10 +19,11 @@ export async function measureLinePasses({file,from,cutoff}){
     }
     if(at>=start){hash.update(line+'\n');selected++;if(Object.hasOwn(totals,row.action)){totals[row.action]++;if(owner===null)unattributed[row.action]++;}}
     const pass=active.get(owner);
+    if(pass&&row.action==='queue-order'&&Array.isArray(row.candidates))pass.backlog=row.candidates.length;
     if(pass&&Object.hasOwn(totals,row.action))pass[row.action]++;
     if(row.action==='pass-complete'){
       if(at>=start)passes.push({...pass,pid:owner,completed_at:row.at,counts_known:Boolean(pass),
-        ...(pass?{}:{hold:null,'admission-eligible':null}),duration_ms:row.timing?.duration_ms??null,backlog:row.backlog??null,evaluations:row.evaluations??null});
+        ...(pass?{}:{hold:null,'admission-eligible':null}),duration_ms:row.timing?.duration_ms??null,backlog:row.backlog??pass?.backlog??null,evaluations:row.evaluations??null});
       active.delete(owner);
     }
   }

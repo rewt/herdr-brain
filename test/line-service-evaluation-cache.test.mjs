@@ -54,6 +54,7 @@ test('large held backlog skips unchanged evaluations across process instances an
   const config=JSON.parse(fs.readFileSync(f.config));config.ordinary_admission={selected_only:true,items:[]};fs.writeFileSync(f.config,JSON.stringify(config));
   assert.equal(summary(f.pass()).evaluations.admission_evaluated,201,'admission policy invalidates all affected candidates');
   const last=f.pass();assert.equal(summary(last).evaluations.admission_evaluated,0);assert.equal(last.filter(r=>r.action==='ordinary-admission-held').length,0);
+  const retained=JSON.parse(fs.readFileSync(path.join(f.directory,'effects.json'))).ordinary_admission.held;assert.equal(retained.length,201);assert.ok(retained.every(row=>row.cached===true));
   t.diagnostic(JSON.stringify({first:summary(first),unchanged:summary(second),parent:summary(parent),policy_unchanged:summary(last)}));
 });
 

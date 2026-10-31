@@ -395,8 +395,11 @@ if (worker) {
               (child.exitCode !== null || child.signalCode !== null)), suite: owner });
           const receipt = `${process.env[SCRATCH_JOURNAL]}.${child.pid}.recovery.json`;
           fs.writeFileSync(receipt, JSON.stringify(recovery) + '\n', { flag: 'wx', mode: 0o600 });
-          console.error(`SCRATCH_RECOVERY: ${JSON.stringify({ receipt, created: recovery.created, removed: recovery.removed, absent: recovery.absent, retained: recovery.retained })}`);
-          if (recovery.results.some(row => row.owner?.pgid === owner?.pid && row.status === 'retained')) result = 1;
+          console.error(`SCRATCH_RECOVERY: ${JSON.stringify({ receipt, created: recovery.created, removed: recovery.removed, absent: recovery.absent, retained: recovery.retained,
+            retained_live: recovery.retained_live, retained_unknown: recovery.retained_unknown })}`);
+          // Unknown ownership prohibits removal, but is not a failed assertion
+          // or proof of a surviving fixture. Keep the original result intact.
+          if (recovery.retained_live) result = 1;
         } catch (error) { console.error(`Scratch recovery failed: ${error.stack ?? error}`); result = 1; }
         finishTiming({ exit_code: result, ...(watcher ? watcher.snapshot() : {}) });
         cleanupHerdr();

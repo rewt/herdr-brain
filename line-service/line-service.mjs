@@ -455,7 +455,9 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
           }
           queueConsumer({run,env:childEnv});reviewSteps++;
           effect(key,()=>{
-            const fresh=observe(),checked=discoverChanges({events:fresh.events,state:fresh.state,repo,org,identity:project.identity}).changes.find(c=>c.item.id===item.id&&c.target.head===target.head);
+            // Selection scanned all producers. This fresh exact-target fence
+            // keeps global attribution/peers without rebuilding their ranges.
+            const fresh=observe(),checked=discoverChanges({events:fresh.events,state:fresh.state,repo,org,identity:project.identity,runId:run.id}).changes.find(c=>c.item.id===item.id&&c.target.head===target.head);
             if(!checked||JSON.stringify(checked.target)!==JSON.stringify(target))throw Error('immutable landed target/evidence changed before queue mutation');
             queueConsumer({run:checked.run,env:childEnv});
             return JSON.parse(cli('bin/org.mjs',['queue-review',run.id,'--head',target.head,'--base',target.base]));

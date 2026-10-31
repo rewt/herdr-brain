@@ -646,6 +646,47 @@ test('phase1 creates one queue item per whole producer change with immutable evi
   }finally{process.chdir(before);}
 });
 
+for(const changed of [false,true])test(`phase1 service queue recheck scopes producer evidence and retains changed-source refusal: ${changed}`,t=>{
+  const f=fixture(t);independentProducer(f);
+  const env=installedService(f),calls=[],unrelated=[],selected=[],read=fs.readFileSync,write=fs.writeFileSync;
+  let active,changedSource=false;
+  const written=t.mock.method(fs,'writeFileSync',(file,bytes,...args)=>{
+    const result=write(file,bytes,...args);
+    // Observe the durable effect boundary, after general discovery selected
+    // both producers. A stale selected report must still stop its own command.
+    if(typeof file==='number'&&typeof bytes==='string'&&bytes.startsWith('{')){
+      let row;try{row=JSON.parse(bytes);}catch{}
+      if(row?.action==='effect-intent'){
+        active=row.key;
+        if(changed&&!changedSource&&active===`review:ENG-1:${f.heads[1]}`){
+          changedSource=true;write(f.file,f.report+'changed immutable source\n');
+        }
+      }
+      if(row?.action==='effect')active=null;
+    }
+    return result;
+  });
+  const reads=t.mock.method(fs,'readFileSync',(file,...args)=>{
+    if(active===`review:ENG-1:${f.heads[1]}`){
+      if(file===path.join(f.org,'reports/R-3.md')){unrelated.push(file);throw Error('unrelated producer source read');}
+      if(file===f.file)selected.push(file);
+    }
+    return read(file,...args);
+  });
+  try{
+    createLineService({repo:f.cwd,org:f.org,to:'supervisor-test',env,maxStarts:0,recordNotice:d=>({id:d.id}),
+      command:(_exe,args)=>{calls.push(args);return{status:0,stdout:JSON.stringify({result:'review_queued',review_item:'REV-100'}),stderr:''};}
+    }).pass({reconcileCloseout:false});
+  }finally{reads.mock.restore();written.mock.restore();}
+  assert.deepEqual(unrelated,[],'an exact queue effect cannot re-read the other selected producer');
+  assert.ok(selected.length>0,'the selected report is freshly checked after its intent');
+  const queued=calls.filter(args=>args[1]==='queue-review').map(args=>args[2]);
+  assert.deepEqual(queued,changed?['R-3']:['R-1','R-3'],'independent source remains eligible after the selected source changes');
+  const effects=JSON.parse(fs.readFileSync(path.join(f.directory,'effects.json'))),entry=effects.actions[`review:ENG-1:${f.heads[1]}`];
+  assert.equal(entry.state,changed?'held':'complete');
+  if(changed)assert.match(entry.error,/immutable landed target\/evidence changed/);
+});
+
 test('phase1 named producer queue validation leaves unrelated report evidence unread while preserving the global ownership index',t=>{
   const f=fixture(t),other=independentProducer(f),before=process.cwd(),env={...installedService(f),ORG_ACTOR:'line-service'},c=f.context(),
     full=discoverChanges(c),expected=full.changes.find(change=>change.run.id==='R-1').target;

@@ -646,11 +646,13 @@ test('phase1 creates one queue item per whole producer change with immutable evi
   }finally{process.chdir(before);}
 });
 
-test('phase1 named producer queue validation leaves unrelated producer files unread while preserving the global ownership index',t=>{
+test('phase1 named producer queue validation leaves unrelated report evidence unread while preserving the global ownership index',t=>{
   const f=fixture(t),other=independentProducer(f),before=process.cwd(),env={...installedService(f),ORG_ACTOR:'line-service'},c=f.context(),
     full=discoverChanges(c),expected=full.changes.find(change=>change.run.id==='R-1').target;
   assert.equal(full.changes.length,2);
-  const denied=new Set([path.join(f.org,'reports/R-3.md'),path.join(f.org,'dispatch/independent.json')]),read=fs.readFileSync,reads=[];
+  // Typed dispatch inventory remains necessary to exclude duplicate/UNKNOWN
+  // launches. Only the unrelated producer's full report/range is out of scope.
+  const denied=new Set([path.join(f.org,'reports/R-3.md')]),read=fs.readFileSync,reads=[];
   const mocked=t.mock.method(fs,'readFileSync',(file,...args)=>{
     if(typeof file==='string'&&denied.has(file)){reads.push(file);throw Error('unrelated producer source read');}
     return read(file,...args);

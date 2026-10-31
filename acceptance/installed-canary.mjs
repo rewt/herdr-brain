@@ -88,7 +88,7 @@ export async function runCanary(c) {
   // Report A with two real intake controls. Source close and physical cleanup
   // must happen while its one original review has no verdict or worker.
   const proposals=[{role:'engineer',title:'Ordinary retained canary proposal',why:'Scripted intake control'},
-    {role:'engineer',title:'Reserved retained canary proposal',why:'Scripted reserved control',extra:{operator_reserved:true}}];
+    {role:'engineer',title:'Reserved retained canary proposal',why:'Scripted reserved control',operator_reserved:true}];
   report(producer,[`source: ${head}; base: ${base}`],'',proposals);
   const reportAt=performance.now();await until(()=>available(producer),'A watcher availability');
   const noticeMs=performance.now()-reportAt;

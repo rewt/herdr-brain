@@ -222,7 +222,9 @@ export function finishDuty({ org, handoffSeq, successorSeq, cwd = process.cwd(),
   const events = loadEvents(org).events, next = inspectDuty({ org, handoffSeq: successorSeq, events });
   if (next.handoff.seq <= handoffSeq || next.duty.id === doc.duty.id || !next.duty.predecessor ||
       next.duty.predecessor.start_seq !== start.seq ||
-      next.handoff.workspace !== doc.handoff.workspace || next.handoff.author !== start.native.name)
+      !['canonical', 'common', 'org'].every(k => next.duty.project[k] === doc.duty.project[k]) ||
+      next.handoff.workspace !== doc.handoff.workspace || next.handoff.author !== start.native.name ||
+      doc.duty.successor.owner !== next.handoff.author)
     throw Error('successor must be a fresh recorded duty in the original supervisor slot');
   if (doc.duty.obligations.some(o => !next.duty.obligations.some(n => same(n, o))))
     throw Error('successor handoff must preserve original callback/job obligations and owners');

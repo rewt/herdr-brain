@@ -207,6 +207,21 @@ test('safe handback holds on a live child, unhandled sent callback and changed s
   assert.equal(f.events().some(e => e.type === 'supervisor.duty.completed'), false);
 });
 
+test('successor handback refuses a foreign project or a different recorded successor owner', t => {
+  for (const changed of ['project', 'owner']) {
+    const f = fixture(t);
+    if (changed === 'owner') {
+      f.manifest.successor.owner = 'unbound-release-label';
+      f.options.handoffSeq = f.save(f.manifest).seq;
+    }
+    const r = runDuty(f.options);
+    const next = f.save({ ...f.manifest, id: 'duty-b', predecessor: { start_seq: r.start.seq, result_seq: r.receipt.seq },
+      project: { ...f.manifest.project, ...(changed === 'project' ? { common: path.join(f.scratch, 'foreign/.git') } : {}) } });
+    assert.throws(() => finishDuty({ ...f.options, successorSeq: next.seq }), /original supervisor slot/);
+    assert.equal(f.events().some(e => e.type === 'supervisor.duty.completed'), false);
+  }
+});
+
 test('line-unavailable recovery is independently readable, preserves attempts and explicitly counts manual assistance', t => {
   const f = fixture(t), r = runDuty({ ...f.options, command: () => ({ status: null, error: Error('UNKNOWN') }) });
   const before = fs.readFileSync(path.join(f.org, 'events.jsonl')), calls = f.calls.length;

@@ -1258,6 +1258,10 @@ Original-binding refresh counts early identity/ownership keeps in its existing
 target budget too. A historical retention census cannot append continuously for
 the whole deadline merely because no executable binding was created. Original
 keeps and UNKNOWNs remain unchanged, and unobserved subjects retain fair priority.
+Within report cleanup, original report sequence orders subjects that still lack
+an exact-source evaluation. Failed admission checkpoints cannot place them behind
+every newly arriving report. After a real evaluation, normal retry fairness
+applies; the closer still owns every fresh admission and effect guard.
 
 Each `closeout.evaluated` now carries independent `resources.session`, `.folder`
 and `.branch` dispositions. Only exact `closeout.effect` receipts establish

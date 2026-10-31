@@ -78,6 +78,16 @@ test('one-step turns rotate report and legacy service even with unequal historic
   assert.deepEqual(selected,['report','old-0','report','old-1']);
 });
 
+test('an unobserved older report precedes newly arrived reports after admission failure and yields after its evaluation',()=>{
+  const old={key:'old-report',reportCloseout:true,source:{seq:100,type:'report.ingested'},panes:[{}]},
+    incoming=Array.from({length:20},(_,i)=>({key:`incoming-${i}`,reportCloseout:true,source:{seq:101+i,type:'report.ingested'},panes:[{}]})),
+    attempts={'old-report':2582};
+  const select=rows=>scheduleLineCloseouts([...incoming,old],rows,{batch:true,attempts,turn:1}).map(x=>x.entry.key);
+  assert.equal(select([])[0],'old-report','a checkpointed pre-admission failure never serves the report');
+  assert.equal(select([{type:'closeout.evaluated',key:old.key,source:old.source,seq:3000,completed:false}])[0],'incoming-0','an evaluated keep returns to ordinary retry fairness');
+  assert.equal(select([{type:'closeout.evaluated',key:old.key,source:{seq:99,type:'cleanup.bound'},seq:3000,completed:false}])[0],'old-report','another source cannot supply this report observation');
+});
+
 test('line classifies parked UNKNOWN and missing preservation without replay, and retains unreported allocation truth',t=>{
   const f=setup(t,{direct:true,bound:true});selectCurrentCleanup(f);f.report();const entry=target(f);
   f.append([{type:'closeout.effect',identity:f.common,key:entry.key,source:entry.source,effect:'original',producer:'native-closeout/v2',

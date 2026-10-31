@@ -202,6 +202,49 @@ archive, an existing review, or any other UNKNOWN receipt cannot replay. No new
 supervisor command, replacement reviewer, service restart or delivery is needed.
 Brain's other retained outcome notes remain held unless their own proof fits.
 
+Two historical status-1 planner exits have a separate, explicit owner writer:
+the exact Node 20.19.4 record-observation stack from ENG-1141/R-1546 and the
+source-selection stack from ENG-1150/R-1543 (DEC-445/R-1567). The complete
+diagnostics, including stack locations, are fingerprinted in
+`review-queue-proof.mjs`; path substitution covers only the actual canonical
+repository. Similar messages, new stack locations, other status-1 failures,
+signals, nonempty stdout, helper errors and native refusals remain UNKNOWN.
+The original helper receipt must match its saved intent, project, record,
+source run, queue head/base, result and execution times. No absence inference
+or general status-1 retry is permitted.
+
+Read each original attempt once, saving the output as its resolution input:
+
+```sh
+node line-service/review-queue-reconcile.mjs inspect --repo REPO --org ORG --run R-1546 --attempt 34654b83-0f3e-4692-8cd3-f70eb5607852
+node line-service/review-queue-reconcile.mjs inspect --repo REPO --org ORG --run R-1543 --attempt bd9efe8d-1ca8-4997-84e6-f283c98ef177
+```
+
+The actual PROJECT SUPERVISOR records a decision on the owning item/run naming
+the stable reconciliation ID, item, run, attempt, `original_sha256` and
+`command_sha256` from that input. Then, in its canonical native context:
+
+```sh
+node line-service/review-queue-reconcile.mjs resolve --repo REPO --org ORG --run R-n --resolution OWN.json --decision-seq N --id STABLE --role supervisor
+```
+
+Use the project's pinned Node/source entry. The writer retains native supervisor,
+source/clean-head CAS, pass/promotion/record locks, command quiescence, claim,
+STOP/HOLD, reserved subject and competing-review guards. It archives the exact
+original entry, full terminal command and target, then appends
+`line-service.review-queue-reconciled`; it never rewrites the original journal or
+executes `queue-review`. An identical request is idempotent. Consumers revalidate
+the archive, decision, owner generation and original command bytes.
+
+The line can then continue once for the same target, saving the old entry in
+history and the disposition in `queue_recovery`. If later landings require a
+different whole producer target, only the disposed original stops fencing that
+producer: fresh discovery must still derive and validate the complete group.
+ENG-1181 owns ENG-1150's independent whole-range discovery hold; this writer
+does not make a partial range acceptable. A failed or uncertain new queue
+command remains held under its own receipt. Existing review routes, cap1 and
+zero reviewer suites remain unchanged, including ENG-1141's Opus route.
+
 Leave the existing line and saved callbacks in place. Its next ordinary pass
 uses the normal record `queue-review` and dispatch path where eligible. Do not
 manually queue a replacement, restart a service, or retry an original UNKNOWN

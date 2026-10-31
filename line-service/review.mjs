@@ -16,9 +16,10 @@ import {effectiveWorkerIdentity} from '../lib/worker-identity.mjs';
 import {additionalTarget,disjointCapture,captureEvidence} from './review-targets.mjs';
 import {producerReviewObservation} from './review-observation.mjs';
 import {producerReportHandoff,resolvedReference} from './review-reference-proof.mjs';
+import {resolvedQueuePlanning} from './review-queue-proof.mjs';
 
 const codeRoot = fs.realpathSync(fileURLToPath(new URL('../', import.meta.url)));
-const capabilityFiles = ['line-service/review.mjs','line-service/review-reference-proof.mjs','line-service/review-observation.mjs','line-service/review-targets.mjs','line-service/review-group.mjs', 'settle/settle.mjs', 'supervisor/supervisor.mjs'];
+const capabilityFiles = ['line-service/review.mjs','line-service/review-queue-proof.mjs','line-service/review-reference-proof.mjs','line-service/review-observation.mjs','line-service/review-targets.mjs','line-service/review-group.mjs', 'settle/settle.mjs', 'supervisor/supervisor.mjs'];
 const capability = capabilityFiles.map(file => createHash('sha256').update(fs.readFileSync(path.join(codeRoot, file))).digest('hex'));
 
 const sha = value => createHash('sha256').update(value).digest('hex');
@@ -153,12 +154,15 @@ function changeReviewAttempt(item,{org,identity,events,state,repo,effects,target
   }
   const pending=(actions,file)=>Object.entries(actions??{}).some(([key,value])=>{
     if(resolution?.effects.some(e=>e.file===file&&e.key===key&&e.sha256===reviewDigest(JSON.stringify(value))))return false;
+    if(file===path.join(org,'line-service',reviewDigest(JSON.stringify(identity)).slice(0,20),'effects.json')&&
+      resolvedQueuePlanning({events,state,repo,org,identity,item:item.id,run:capturedRun,key,entry:value}))return false;
     if(ignoreService&&ignoreService.file===file&&ignoreService.key===key&&value.review_operation===ignoreService.operation&&JSON.stringify(value.review_target)===JSON.stringify(ignoreService.target)&&
       (['started','held'].includes(value.state)&&!ignoreQueue||value.state==='complete'&&value.result?.review_item===ignoreQueue))return false;
     if(!/review/i.test(key))return false;
     return key===`review:${item.id}:${target.head}`||key.includes(item.id)&&heads(value).has(target.head)||matches(value,key.match(/R-\d+/)?.[0]);
   });
-  if(pending(effects?.actions,ignoreService?.file))return 'existing same-change service intent/result';
+  const currentEffectsFile=ignoreService?.file??(effects?.identity===identity&&effects.org===org?path.join(org,'line-service',reviewDigest(JSON.stringify(identity)).slice(0,20),'effects.json'):undefined);
+  if(pending(effects?.actions,currentEffectsFile))return 'existing same-change service intent/result';
   for(const dir of ['retirement/occupants','retirement/reviews','settle'])for(const entry of entries(path.join(org,dir))){
     if(!entry.name.endsWith('.json'))continue;const file=path.join(org,dir,entry.name);if(archivedReviewFile(resolution,file))continue;const hint=entry.name.match(/R-\d+/)?.[0];let value;
     value=reference(path.join(org,dir,entry.name));

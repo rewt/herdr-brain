@@ -16,6 +16,9 @@ import {reviewAttempt} from '../line-service/review.mjs';
 import {queueReviewMutation,validateQueuedReview} from '../line-service/review-queue.mjs';
 import {createLineService,sourceRoot} from '../line-service/line-service.mjs';
 import {reviewQueueNoMutation} from '../line-service/review-queue-outcome.mjs';
+import {reconcileReviewQueue,inspectReviewQueue} from '../line-service/review-queue-reconcile.mjs';
+import {terminalQueuePlanningProof,resolvedQueuePlanning} from '../line-service/review-queue-proof.mjs';
+import {commandIntent,finishCommand,forgetActiveCommand} from '../lib/command-receipt.mjs';
 
 const root=fs.realpathSync(sourceRoot);
 function fixture(t,{diffBytes=0}={}){
@@ -410,6 +413,102 @@ const failedQueue=(f,receipt=contentionReceipt(f))=>({state:'held',owner:'line-s
   at:'2026-10-30T01:00:00Z',finished_at:'2026-10-30T01:01:00Z',review_target:f.context().target,review_operation:'record-queue',
   error:receipt.stderr.trim(),receipt,failure:{kind:'unknown',code:'OUTCOME_UNKNOWN'}});
 const noMutation=(f,entry,context=f.context())=>reviewQueueNoMutation({...context,entry,key:`review:ENG-1:${f.head}`});
+
+function planningFixture(t,index=0){
+  const f=fixture(t);f.prepare({producerEvidence:{kind:'checks'}});
+  const saved=JSON.parse(fs.readFileSync(new URL('./fixtures/review-queue-planning-errors.json',import.meta.url)))[index];
+  const receipt={...contentionReceipt(f),status:1,stderr:saved.stderr.replaceAll('<repo>',f.repo)};
+  createLineService({repo:f.repo,org:f.org,to:'fixture-supervisor',env:f.serviceEnv,command:(_exe,args)=>args[1]==='queue-review'?receipt:{status:0,stdout:'{"created":[]}',stderr:''}}).pass();
+  const file=path.join(f.directory,'effects.json'),key=`review:ENG-1:${f.head}`,journal=JSON.parse(fs.readFileSync(file)),entry=journal.actions[key];
+  // Retain a real foreground-helper terminal receipt. The fixture repository
+  // models Brain's canonical source/consumer checkout without executing it.
+  const ref=commandIntent(f.directory,{exe:process.execPath,args:[path.join(f.repo,'bin/org.mjs'),'queue-review','R-1','--head',f.head,'--base',f.base],cwd:f.repo,project:f.identity,org:f.org,subject:'ENG-1',key,consumer:'line-service'});
+  const terminal=finishCommand(ref,receipt,{pid:1234,identity:'fixture-birth',started_at:JSON.parse(fs.readFileSync(ref.file)).at});forgetActiveCommand(ref);
+  entry.commands=[ref];entry.finished_at=terminal.finished_at;fs.writeFileSync(file,JSON.stringify(journal));
+  const proof=terminalQueuePlanningProof({...f.context(),item:'ENG-1',run:'R-1',entry,key});assert.ok(proof);
+  const id='terminal-planning',resolution=path.join(f.org,'queue-resolution.json'),input={item:'ENG-1',run:'R-1',key,attempt:entry.attempt,target:entry.review_target,original_sha256:proof.original_sha256,command_sha256:proof.command_sha256};
+  fs.writeFileSync(resolution,JSON.stringify(input));
+  f.add([{type:'note.added',id:'ENG-1',decision:true,text:`Reconcile ${id} ENG-1 R-1 ${entry.attempt} ${proof.original_sha256} ${proof.command_sha256}; pure pre-append only, preserve the original.`}]);
+  const decisionSeq=f.context().events.at(-1).seq,args=()=>({...f.args(),resolution,decisionSeq,id});
+  return{...f,file,key,entry,proof,input,resolution,reconcileArgs:args,receipt};
+}
+
+for(const index of [0,1])for(const next of ['queued','unknown','contention'])test(`guarded status-1 planning disposition ${index} permits one line continuation: ${next}`,t=>{
+  const f=planningFixture(t,index),before=fs.readFileSync(f.file),terminal=fs.readFileSync(f.entry.commands[0].receipt);
+  assert.deepEqual(inspectReviewQueue({repo:f.repo,org:f.org,runId:'R-1',attempt:f.entry.attempt}),f.input);
+  assert.equal(noMutation(f,f.entry),null,'status 1 alone never permits continuation');
+  const result=reconcileReviewQueue(f.reconcileArgs());assert.equal(result.existing,false);
+  assert.deepEqual(fs.readFileSync(f.file),before);assert.deepEqual(fs.readFileSync(f.entry.commands[0].receipt),terminal);
+  assert.equal(reconcileReviewQueue(f.reconcileArgs()).existing,true);
+  assert.equal(noMutation(f,f.entry).reconciliation_seq,f.context().events.at(-1).seq);
+  let calls=0;
+  const options={repo:f.repo,org:f.org,to:'fixture-supervisor',env:f.serviceEnv,command:(_exe,args)=>{
+    if(args[1]!=='queue-review')return{status:0,stdout:'{"created":[]}',stderr:''};
+    calls++;
+    if(next==='unknown')return{status:1,signal:null,stdout:'',stderr:'lost reply after possible append',signal_sent:false,activity:{}};
+    if(next==='contention')return contentionReceipt(f);
+    return{status:0,stdout:JSON.stringify(f.queue()),stderr:''};
+  }};
+  createLineService(options).pass();createLineService(options).pass();createLineService(options).pass();
+  assert.equal(calls,1);
+  const after=JSON.parse(fs.readFileSync(f.file)).actions[f.key];assert.deepEqual(after.history,[f.entry]);
+  assert.equal(after.queue_recovery.original_sha256,f.proof.original_sha256);
+  assert.equal([...f.context().state.items.values()].filter(q=>q.role==='reviewer').length,next==='queued'?1:0);
+  assert.equal(f.context().events.filter(e=>e.type==='line-service.review-queue-reconciled').length,1);
+  assert.ok(f.calls.every(a=>a[0]==='agent'&&a[1]==='get'),'no native effects');
+});
+
+test('terminal planning writer refuses mismatched original inputs and unaudited status-1 results',t=>{
+  const f=planningFixture(t),before=f.captured(),originalBytes=fs.readFileSync(f.file);
+  for(const mutate of [x=>x.attempt='other',x=>x.target.head=f.base,x=>x.original_sha256='0'.repeat(64),x=>x.command_sha256='0'.repeat(64),x=>x.run='R-99']){
+    const input=structuredClone(f.input);mutate(input);fs.writeFileSync(f.resolution,JSON.stringify(input));
+    assert.throws(()=>reconcileReviewQueue(f.reconcileArgs()),/differs|not proven/);
+    assert.deepEqual(f.captured(),before);assert.deepEqual(fs.readFileSync(f.file),originalBytes);
+  }
+  fs.writeFileSync(f.resolution,JSON.stringify(f.input));
+  for(const mutate of [x=>x.receipt.stderr+='native input refused\n',x=>x.receipt.status=0,x=>x.receipt.signal='SIGTERM',x=>x.receipt.stdout='REV-1',x=>x.receipt.signal_sent=true,x=>x.receipt.error='EPERM',x=>x.history=[f.entry],x=>x.native_launch_attempted=true,x=>x.failure.kind='fence',x=>x.commands=[],x=>x.commands[0].sha256='0'.repeat(64)]){
+    const entry=structuredClone(f.entry);mutate(entry);
+    let proof;try{proof=terminalQueuePlanningProof({...f.context(),item:'ENG-1',run:'R-1',entry,key:f.key});}catch{proof=null;}
+    assert.equal(proof,null,mutate.toString());
+  }
+  const bytes=fs.readFileSync(f.entry.commands[0].receipt),command=JSON.parse(bytes);command.result.stdout='possible append';fs.writeFileSync(f.entry.commands[0].receipt,JSON.stringify(command));
+  assert.throws(()=>reconcileReviewQueue(f.reconcileArgs()),/not proven/);fs.writeFileSync(f.entry.commands[0].receipt,bytes);
+  assert.deepEqual(f.captured(),before);
+});
+
+for(const obstacle of ['STOP','HOLD','reserved','foreign-native','changed-claim','existing-review','uncertain-command'])test(`terminal planning disposition retains ${obstacle}`,t=>{
+  const f=planningFixture(t);
+  if(obstacle==='STOP')fs.writeFileSync(path.join(f.directory,'STOP'),'hold');
+  if(obstacle==='HOLD'){fs.mkdirSync(path.join(f.repo,'.lane/supervisor'),{recursive:true});fs.writeFileSync(path.join(f.repo,'.lane/supervisor/HOLD'),'hold');}
+  if(obstacle==='reserved')f.add([{type:'item.updated',id:'ENG-1',fields:{meta:{operator_reserved:true}}}]);
+  if(obstacle==='foreign-native')f.observation.agents[0].name='foreign-supervisor';
+  if(obstacle==='changed-claim')f.add([{type:'run.claimed',run:'R-1',record:f.org,project:'/foreign/.git',owner:{controller:'brain',legacy:false,release:{id:'source',root,identity:gitProject(root).identity,commit:null}}}]);
+  if(obstacle==='existing-review')f.queue();
+  if(obstacle==='uncertain-command')commandIntent(f.directory,{exe:process.execPath,args:[],cwd:f.repo,subject:'ENG-1'});
+  const before=f.captured(),journal=fs.readFileSync(f.file);
+  assert.throws(()=>reconcileReviewQueue(f.reconcileArgs()),/STOP\/HOLD|held\/reserved|SUPERVISOR|claim|project|review attempt retained|active or UNKNOWN/i);
+  assert.deepEqual(f.captured(),before);assert.deepEqual(fs.readFileSync(f.file),journal);
+});
+
+test('resolved original planning attempt does not fence a later whole-producer target or excuse its new UNKNOWN',t=>{
+  const f=planningFixture(t,1);reconcileReviewQueue(f.reconcileArgs());
+  const c=f.context(),target={...c.target,head:f.base,reportHash:'a'.repeat(64),source_group:{...c.target.source_group,owned_commits:[f.head,f.base]}};
+  // Discovery remains responsible for producing a real whole target. Inventory
+  // must settle only the original, even when that target's key is different.
+  const context={...c,target,effects:JSON.parse(fs.readFileSync(f.file))};
+  assert.equal(reviewAttempt(c.item,context),null);
+  const key=`review:ENG-1:${f.base}`;context.effects.actions[key]={...f.entry,subject:key,review_target:target,attempt:'new-unknown',receipt:{status:1,stderr:'unknown'}};
+  assert.match(reviewAttempt(c.item,context),/service intent/);
+});
+
+test('queue planning consumers revalidate immutable archive and owner binding',t=>{
+  const f=planningFixture(t);reconcileReviewQueue(f.reconcileArgs());
+  const c=f.context(),options={...c,item:'ENG-1',run:'R-1',entry:f.entry,key:f.key},event=c.events.find(e=>e.type==='line-service.review-queue-reconciled');
+  assert.ok(resolvedQueuePlanning(options));
+  const bytes=fs.readFileSync(event.archive.file);fs.chmodSync(event.archive.file,0o600);fs.appendFileSync(event.archive.file,' ');
+  assert.throws(()=>resolvedQueuePlanning(options),/archive changed/);fs.writeFileSync(event.archive.file,bytes);
+  event.claim_generation++;assert.throws(()=>resolvedQueuePlanning(options),/owner\/claim changed/);
+});
 
 for(const next of ['queued','unknown','contention','pathless'])test(`resolved reference settles only proven pre-append contention once; continuation ${next}`,t=>{
   const f=fixture(t);resolveReviewReference(f.args());let calls=0;

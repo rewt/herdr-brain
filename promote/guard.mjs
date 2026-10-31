@@ -24,10 +24,13 @@ export function preparePromotionGuard({ canonical, identity, workspace, topic, e
     const settings = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8'))?.autopilot : undefined;
     if (settings?.enabled !== true || !['clean-pass', 'green-pass'].includes(settings.cohort)) throw Error('AUTOPILOT_DISABLED: pilot disabled before integration; nothing merged');
   }
-  const checkGit = () => {
+  const checkHalt = () => {
     if (fs.existsSync(path.join(canonical, '.lane/supervisor/STOP'))) throw new Error('supervisor STOP exists; nothing merged');
     if (fs.existsSync(path.join(canonical, '.lane/supervisor/HOLD'))) throw Object.assign(
       new Error('PROMOTION_HELD: supervisor HOLD exists; nothing merged'), { code: 'PROMOTION_HELD' });
+  };
+  const checkGit = () => {
+    checkHalt();
     if (expectedHead !== undefined) {
       observeGit(workspace);
       const actual = execFileSync('git', ['-C', workspace, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
@@ -91,7 +94,13 @@ export function preparePromotionGuard({ canonical, identity, workspace, topic, e
     checkGit();
   };
   if (run !== undefined) return prepareRecordGuard(org, check, { label: 'promotion-guard' });
-  const { validate } = captureReads(checkGit);
+  const { validate: validateReads } = captureReads(checkGit);
+  const validate = () => {
+    // Surface a current halt before the generic observation conflict, including
+    // batch validation. Keep the original read fence; never recapture an attempt.
+    checkHalt();
+    validateReads();
+  };
   let used = false;
   return { validate, run(operation = () => {}) {
     if (used) throw Error('promotion guard was already used; nothing merged');

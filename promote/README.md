@@ -98,6 +98,10 @@ self-promotion under the landing waiver. HOLD reports `PROMOTION_HELD: superviso
 HOLD exists; nothing merged`; STOP retains its existing refusal. Both keep the
 branch and worktree. Once the supervisor clears the marker, a fresh request
 rechecks the current source, native identity, claim and Git fences.
+For a prepared request without a run, the final boundary checks current STOP/HOLD
+before validating the original observation fence, so a late HOLD also reports
+`PROMOTION_HELD`. Other captured source changes still refuse through that fence;
+the request is never recaptured to clear a conflict.
 
 For queued trains, HOLD present at capture produces a terminal `outcome: refused`,
 code `PROMOTION_HELD` for each request, with no validation or landing. It does not park those

@@ -131,6 +131,44 @@ test('cold start unlanded advisory excludes review, human, closed, foreign and l
   assert.equal(f.calls().length, 0);
 });
 
+async function observeAndReleaseBarrier(pending, observe, release) {
+  let observationError, releaseError, completionError;
+  try { await observe(); } catch (error) { observationError = error; }
+  try { assert.equal(release(), true, 'the barrier must be released'); }
+  catch (error) {
+    releaseError = error;
+    // A broken release must not leave handle waiting for its admission deadline.
+    pending.child.kill();
+  }
+  try { await pending.done; } catch (error) { completionError = error; }
+  if (observationError) throw observationError;
+  if (releaseError) throw releaseError;
+  if (completionError) throw completionError;
+}
+
+test('supervisor barrier cleanup preserves the first failure and joins the child', async () => {
+  for (const observationFails of [false, true]) for (const releaseResult of [true, false, 'throws']) {
+    const original = new assert.AssertionError({ message: JSON.stringify({ stdout: 'output', stderr: 'missing wait' }) });
+    const releaseError = new Error('release failed');
+    let finish, killed = false, joined = false;
+    const pending = { child: { kill() { killed = true; finish(); } },
+      done: new Promise(resolve => { finish = resolve; }).then(() => { joined = true; }) };
+    const operation = observeAndReleaseBarrier(pending, () => {
+      if (observationFails) throw original;
+    }, () => {
+      if (releaseResult === 'throws') throw releaseError;
+      if (releaseResult) finish();
+      return releaseResult;
+    });
+    if (observationFails) await assert.rejects(operation, error => error === original);
+    else if (releaseResult === 'throws') await assert.rejects(operation, error => error === releaseError);
+    else if (!releaseResult) await assert.rejects(operation, /the barrier must be released/);
+    else await operation;
+    assert.equal(joined, true);
+    assert.equal(killed, releaseResult !== true);
+  }
+});
+
 for (const stage of ['review', 'correction']) {
   const barrier = stage === 'review' ? 'memory wait before pressure clears' : 'proving wait before reservation ends';
   test(`supervisor handle exposes ${stage} ${barrier}`, async t => {
@@ -158,19 +196,19 @@ for (const stage of ['review', 'correction']) {
     pending.child.stderr.on('data', data => { stderr += data; });
     pending.child.stdout.on('data', data => { stdout += data; });
     const waiting = stage === 'review' ? /waiting; memory pressure/ : /dispatch: waiting; proving.*correction launch barrier/;
-    try {
+    await observeAndReleaseBarrier(pending, async () => {
       let completed = false;
-      pending.done.finally(() => { completed = true; });
+      pending.done.then(() => { completed = true; }, () => { completed = true; });
       while (!waiting.test(stderr) && !completed) await new Promise(r => setTimeout(r, 20));
       assert.match(stderr, waiting, JSON.stringify({ stdout, stderr }));
       assert.equal(pending.child.exitCode, null, 'reason must be visible while handle is still waiting');
       assert.equal(f.calls().filter(a => a[1] === 'start').length, stage === 'review' ? 0 : 1,
         'the held launch must not start another worker');
-    } finally {
-      if (reservation) assert.equal(reservation.release(), true);
-      else fs.writeFileSync(memory, JSON.stringify(healthy));
-    }
-    await pending.done;
+    }, () => {
+      if (reservation) return reservation.release();
+      fs.writeFileSync(memory, JSON.stringify(healthy));
+      return true;
+    });
     assert.equal(pending.child.exitCode, 0, stderr);
     assert.equal(JSON.parse(stdout).result, stage === 'review' ? 'promotable' : 'fix_round');
     assert.match(stderr, stage === 'review' ? /memory pressure cleared; proceeding/ : /proving reservation ended; proceeding/);

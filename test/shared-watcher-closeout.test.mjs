@@ -6,6 +6,7 @@ import {fold} from '../lib/state.mjs';
 import {gitProject} from '../lib/project.mjs';
 import {effectiveWorkerIdentity} from '../lib/worker-identity.mjs';
 import {sharedWatcherDischarged} from '../lib/shared-watcher-release.mjs';
+import {createRetirement} from '../lib/retire-runtime.mjs';
 import {runCloseoutTurn} from '../line-service/closeout-turn.mjs';
 import {events,setup,selectCurrentCleanup,effects} from './helpers/closeout-fixture.mjs';
 
@@ -51,7 +52,12 @@ test('shared host separation requires the exact completed duty and original fina
     ['missing final fact',p=>{p.events=p.events.filter(e=>e.type!=='note.added');}],
     ['foreign final fact',p=>{p.events.find(e=>e.watch_notice_id).watch_ownership.generation++;}],
   ];
-  for(const[name,change]of changes){const p=structuredClone(f.proof());change(p);assert.notEqual(sharedWatcherDischarged(p),true,name);}
+  for(const[name,change]of changes){
+    const p=structuredClone(f.proof()),diagnostics=[];change(p);
+    const discharged=sharedWatcherDischarged({...p,diagnostics});assert.notEqual(discharged,true,name);
+    assert.equal(diagnostics.length,discharged===false?1:0,name);
+    if(discharged===false)assert.match(diagnostics[0].reason,/shared watcher discharge rejected:/,name);
+  }
   const files=[
     ['duty',d=>{d.run='R-2';}],['duty',d=>{d.source+='/other';}],['duty',d=>{d.native.session='replacement';}],
     ['duty',d=>{d.ownership.generation++;}],['host',d=>{d.pid++;}],['host',d=>{d.identity='replacement';}],
@@ -62,12 +68,49 @@ test('shared host separation requires the exact completed duty and original fina
     ['receipt',d=>{d.deliveries.push('original-unfinished-callback');}],['receipt',d=>{d.ownership.generation++;}],
   ];
   for(const[key,change]of files){const value=structuredClone(f[key]);change(value);f.put(f.files[key],value);
-    assert.equal(sharedWatcherDischarged(f.proof()),false,key);f.put(f.files[key],f[key]);}
+    const diagnostics=[];assert.equal(sharedWatcherDischarged({...f.proof(),diagnostics}),false,key);
+    assert.equal(diagnostics.length,1,key);assert.equal(diagnostics[0].run,'R-1');
+    f.put(f.files[key],f[key]);}
   f.put(f.files.held,{run:'R-1',reason:'original failure',stuck_owner:f.duty.stuck_owner});
   assert.equal(sharedWatcherDischarged(f.proof()),false,'held failure cannot become discharged');fs.unlinkSync(f.files.held);
   f.put(f.files.duty,null);assert.equal(sharedWatcherDischarged(f.proof()),false,'malformed registration cannot fall back to per-run mode');
   f.put(f.files.duty,f.duty);fs.renameSync(f.files.step,f.files.step+'.saved');fs.symlinkSync(f.files.step+'.saved',f.files.step);
   assert.equal(sharedWatcherDischarged(f.proof()),false,'redirected completion keeps the original');
+});
+
+test('retirement diagnoses a failed intermediate shared callback and recovers without weakening the hold',t=>{
+  const f=fixture(t,{recordOnly:false}),intermediate={...f.notice,id:'watch:R-1:intermediate'},
+    adapter=createRetirement({cwd:f.repo,org:f.org,env:f.env,...f.options,reportCloseout:{run:'R-1',cwd:f.lane}}),
+    observe=()=>adapter.observe(f.lane),watcher=s=>s.references.some(r=>r.kind==='watcher callback'&&r.run==='R-1');
+  const initial=observe();assert.equal(watcher(initial),false);assert.deepEqual(initial.diagnostics,[]);
+  f.put(f.files.receipt,{...f.receipt,deliveries:[intermediate.id,f.notice.id]});
+  const writeNotices=failed=>{
+    f.inbox();
+    const final=fs.readFileSync(f.receipt.inbox,'utf8'),rows=[intermediate,{...f.owned,id:intermediate.id},
+      failed?{type:'autopilot',id:intermediate.id,result:{disposition:'handled',undeliverable:{reason:'original refusal'}}}:
+        {type:'sent',id:intermediate.id}];
+    fs.writeFileSync(f.receipt.inbox,rows.map(row=>JSON.stringify(row)+'\n').join('')+final);
+  };
+  writeNotices(true);
+  const saved=new Map([...Object.values(f.files).filter(file=>fs.existsSync(file)),f.receipt.inbox].map(file=>[file,fs.readFileSync(file)])),
+    failed=observe();
+  assert.equal(watcher(failed),true);
+  assert.deepEqual(failed.diagnostics,[{run:'R-1',reason:'shared watcher discharge rejected: callback watch:R-1:intermediate is undeliverable: original refusal'}]);
+  for(const[file,bytes]of saved)assert.deepEqual(fs.readFileSync(file),bytes,'diagnostics leave original evidence unchanged');
+  writeNotices(false);
+  const recovered=observe();assert.equal(watcher(recovered),false);assert.deepEqual(recovered.diagnostics,[]);
+  fs.appendFileSync(f.receipt.inbox,'{"type":');
+  const torn=observe();assert.equal(watcher(torn),true);assert.equal(torn.diagnostics.length,1);
+  assert.match(torn.diagnostics[0].reason,/callback inbox evidence unreadable: torn inbox tail:/);
+  writeNotices(false);assert.deepEqual(observe().diagnostics,[]);
+  fs.writeFileSync(f.files.duty,'{"schema":');
+  const malformed=observe();assert.equal(watcher(malformed),true);
+  assert.match(malformed.diagnostics[0].reason,/shared registration evidence unreadable:/);
+  f.put(f.files.duty,f.duty);assert.equal(watcher(observe()),false);
+  fs.unlinkSync(f.files.duty);
+  const diagnostics=[];assert.equal(sharedWatcherDischarged({...f.proof(),diagnostics}),null);assert.deepEqual(diagnostics,[]);
+  t.diagnostic(JSON.stringify({witness:'shared-discharge-diagnostics',failed:failed.diagnostics,torn:torn.diagnostics,
+    malformed:malformed.diagnostics,recovered:{watcher:watcher(recovered),diagnostics:recovered.diagnostics}}));
 });
 
 for(const recordOnly of [true,false])

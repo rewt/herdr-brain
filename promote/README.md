@@ -600,12 +600,26 @@ whole-file coverage; the reduced affected-only command subtracts nothing.
 The shared `affectedTestPlan` follows static consumer edges transitively through
 helpers, re-exports and cycles. It recognizes relative imports/require, literal
 dynamic imports, `new URL`, fixture data paths and launched-script literals,
-including conservative script-basename matches for joined paths. Changed paths
+including conservative script-basename matches for joined paths. Paths
+named only as ordinary test-path string literals in lists do not create content
+dependencies. Actual imports, recognized input calls and explicit declarations
+still create edges to test files. Changed paths
 include both old and new names. `graph.inventory` records the complete live test
 inventory; `graph.consumers` records each changed input/test pair with a witness
 `via` path and `changed-test`, `direct-reference`, `transitive-reference` or
 `explicit-consumer` reason. Selected and deferred rows retain those witnesses.
 These are known dependencies, not evidence of executed coverage.
+
+Planner CLI JSON uses `graph.details.encoding: indexed-witnesses/v1` to avoid
+repeating full witness paths for every changed-input/test pair and again in the
+selected/deferred rows. `details.paths` and `details.reasons` intern strings;
+`details.via` contains `[parentIndex, pathIndex]` prefix nodes (root parent `-1`).
+Each `graph.consumers` tuple is `[inputPathIndex, testPathIndex, viaIndex,
+reasonIndex]`; row-level `consumers` contains indices into that table.
+`expandPlanDetails` restores the full objects, including every input/test reason
+and witness, and the promotion adapter calls it before validating the plan.
+The in-process planner APIs retain full consumer objects. Inventory, selection,
+deferrals and unknown warnings remain readable fields in CLI JSON.
 
 Computed runtime inputs can be declared in the candidate's tracked
 `test/helpers/test-consumers.json`:
@@ -631,7 +645,10 @@ Detailed plans expose `unknown` strings for changed inputs with no known test
 consumer and for undeclared opaque import/require/URL/file-read/directory-read
 sites with test consumers. Opaque sites cannot be assigned to a particular edit
 statically, so those warnings remain visible even if other static tests were
-selected; warnings do not select unrelated suites. The scan is conservative,
+selected; warnings do not select unrelated suites. These global opaque-site
+warnings must not be counted as per-change missing
+coverage by the release-coverage consumer.
+The scan is conservative,
 not a JavaScript interpreter: aliases, generated paths and arbitrary runtime
 behavior need explicit declarations. The legacy three-argument planner retains
 its accepted top-level fields; detailed consumers use the fourth required-files

@@ -4,6 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { isMain } from '../../lib/cli-help.mjs';
 import { affectedTestPlan, boundAffectedTests } from './affected-tests.mjs';
 import { trackedTestInventory } from './test-inventory.mjs';
+import { compactPlanDetails } from './plan-details.mjs';
 import { main as runSelected, releasePhases } from './release-suites.mjs';
 
 function git(cwd, args) {
@@ -47,7 +48,7 @@ export function main(argv = process.argv.slice(2), {
     else { if (base !== undefined) throw Error('--base may only be supplied once'); base = argv[++i]; }
   }
   const plan = combinedPlan({ cwd, base, extra });
-  output(JSON.stringify({ ...plan, execution: planOnly ? 'unrun-plan' : plan.files.length ? 'selected-checks' : 'unrun-empty' }));
+  output(JSON.stringify(compactPlanDetails({ ...plan, execution: planOnly ? 'unrun-plan' : plan.files.length ? 'selected-checks' : 'unrun-empty' })));
   if (planOnly) return 0;
   if (!plan.files.length) {
     output('No focused tests selected; no tests executed. This is not full coverage or a test PASS.');

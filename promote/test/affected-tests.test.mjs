@@ -7,10 +7,91 @@ import { spawnSync } from 'node:child_process';
 import { affectedTests, affectedTestPlan, boundAffectedTests, DEFAULT_BUDGET_MS, DEFAULT_MAX_FILES } from '../../test/helpers/affected-tests.mjs';
 import { releasePhases } from '../../test/helpers/release-suites.mjs';
 import { affectedOnlyCommand, plannedCommand, promotionTestPlan } from '../test-plan.mjs';
+import { compactPlanDetails, expandPlanDetails } from '../../test/helpers/plan-details.mjs';
 const root = fs.realpathSync(new URL('../../', import.meta.url));
 // The planner reads git ls-files of the product tree; a release build's git-archive snapshot has none.
 const gitTree = spawnSync('git', ['-C', root, 'rev-parse', '--is-inside-work-tree'], { encoding: 'utf8' }).stdout.trim() === 'true';
 const SNAPSHOT = 'no Git work tree (release snapshot)';
+test('test-path list membership does not propagate content changes, but helper imports still do', t => {
+  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'affected-test-list-'));
+  t.after(() => fs.rmSync(scratch, { recursive: true, force: true }));
+  const sources = { 'list.mjs': "export default ['a.test.mjs'];",
+    'other.test.mjs': "import './list.mjs';", 'a.test.mjs': '' };
+  for (const [file, text] of Object.entries(sources)) fs.writeFileSync(path.join(scratch, file), text);
+  const options = { root: scratch, files: Object.keys(sources) };
+  assert.deepEqual(affectedTestPlan({ ...options, changed: ['a.test.mjs'] }).candidates, ['a.test.mjs']);
+  assert.deepEqual(affectedTestPlan({ ...options, changed: ['list.mjs'] }).candidates, ['other.test.mjs']);
+  // Actual content dependencies on a test remain valid, including explicit ones.
+  for (const reference of ["import './a.test.mjs';", "new URL('./a.test.mjs', import.meta.url);"]) {
+    fs.writeFileSync(path.join(scratch, 'list.mjs'), reference);
+    assert.deepEqual(affectedTestPlan({ ...options, changed: ['a.test.mjs'] }).candidates, ['a.test.mjs', 'other.test.mjs']);
+  }
+  fs.writeFileSync(path.join(scratch, 'list.mjs'), sources['list.mjs']);
+  assert.deepEqual(affectedTestPlan({ ...options, changed: ['a.test.mjs'],
+    consumers: { 'list.mjs': ['a.test.mjs'] } }).candidates, ['a.test.mjs', 'other.test.mjs']);
+});
+
+test('a listed live test edit excludes unrelated compatibility, line and adoption suites', t => {
+  if (!gitTree) return t.skip(SNAPSHOT);
+  const plan = promotionTestPlan({ cwd: root, planner: 'test/helpers/affected-tests.mjs',
+    changed: ['test/tier-plan.test.mjs'], baseCommand: 'node test/helpers/affected-tests.mjs --promotion' });
+  assert.ok(plan.files.includes('test/tier-plan.test.mjs'));
+  for (const file of ['test/compat.test.mjs', 'test/line-service.test.mjs', 'test/adopt.test.mjs']) {
+    assert.ok(!plan.files.includes(file), `${file} is unrelated to the changed test`);
+  }
+  t.diagnostic(`listed-test candidates: ${JSON.stringify(plan.files)}`);
+});
+
+test('thirty widely imported core changes produce a validated plan below 512 KiB', t => {
+  if (!gitTree) return t.skip(SNAPSHOT);
+  const tracked = spawnSync('git', ['ls-files', '-z'], { cwd: root, encoding: 'utf8' });
+  assert.equal(tracked.status, 0, tracked.stderr);
+  const files = tracked.stdout.split('\0').filter(Boolean), known = new Set(files), counts = new Map();
+  for (const file of files.filter(file => /\.(?:mjs|js|cjs)$/.test(file))) {
+    const source = fs.readFileSync(path.join(root, file), 'utf8');
+    const imports = /(?:\b(?:import|export)\s*(?:[^;'"`]*?\bfrom\s*)?|\b(?:import|require)\s*\(\s*)(['"])([^'"\r\n]+)\1/g;
+    for (const match of source.matchAll(imports)) {
+      if (!match[2].startsWith('.')) continue;
+      const target = path.posix.normalize(path.posix.join(path.posix.dirname(file), match[2]));
+      if (known.has(target)) counts.set(target, (counts.get(target) ?? 0) + 1);
+    }
+  }
+  const required = ['lib/cli-help.mjs', 'lib/store.mjs', 'lib/state.mjs', 'lib/render.mjs', 'bin/org.mjs'];
+  const ranked = files.filter(file => /^lib\/.*\.mjs$/.test(file) && !required.includes(file))
+    .sort((a, b) => (counts.get(b) ?? 0) - (counts.get(a) ?? 0) || a.localeCompare(b));
+  const changed = [...required, ...ranked.slice(0, 25)];
+  assert.equal(new Set(changed).size, 30);
+  const baseCommand = 'node test/helpers/affected-tests.mjs --promotion';
+  const plan = promotionTestPlan({ cwd: root, planner: 'test/helpers/affected-tests.mjs', changed, baseCommand });
+  assert.ok(plan.files.includes('test/flow.test.mjs'));
+  assert.deepEqual(plan.deferred, []);
+  const stdout = spawnSync(process.execPath, ['test/helpers/affected-tests.mjs', '--plan',
+    JSON.stringify(changed), JSON.stringify(baseCommand), '[]'], { cwd: root, encoding: 'utf8', maxBuffer: 1024 * 1024 });
+  assert.equal(stdout.status, 0, stdout.stderr || stdout.error?.message);
+  const bytes = Buffer.byteLength(stdout.stdout);
+  assert.ok(bytes < 512 * 1024, `${bytes} bytes must stay below 512 KiB`);
+  const expanded = expandPlanDetails(JSON.parse(stdout.stdout));
+  assert.deepEqual(expanded.graph, plan.graph);
+  assert.deepEqual(expanded.selected, plan.selected);
+  assert.deepEqual(expanded.files, plan.files);
+  assert.equal(plan.graph.consumers.filter(row => row.file === 'test/flow.test.mjs').length > 1, true);
+  t.diagnostic(`wide-plan bytes=${bytes}; consumers=${plan.graph.consumers.length}; files=${plan.files.length}; changed=${JSON.stringify(changed)}`);
+});
+
+test('indexed planner details preserve shared witnesses and reject invalid references', () => {
+  const consumers = [{ input: 'a.mjs', file: 'a.test.mjs', via: ['a.mjs', 'helper.mjs', 'a.test.mjs'], reason: 'transitive-reference' },
+    { input: 'b.mjs', file: 'a.test.mjs', via: ['b.mjs', 'helper.mjs', 'a.test.mjs'], reason: 'explicit-consumer' }];
+  const plan = { files: ['a.test.mjs'], graph: { consumers }, selected: [{ file: 'a.test.mjs', consumers }], deferred: [] };
+  const compact = compactPlanDetails(plan);
+  assert.deepEqual(expandPlanDetails(JSON.parse(JSON.stringify(compact))), plan);
+  const invalidRow = structuredClone(compact);
+  invalidRow.selected[0].consumers = [consumers.length];
+  assert.throws(() => expandPlanDetails(invalidRow), /invalid indexed planner details/);
+  const cyclic = structuredClone(compact);
+  cyclic.graph.details.via[0][0] = 0;
+  assert.throws(() => expandPlanDetails(cyclic), /invalid indexed planner details/);
+});
+
 test('reduced planning selects unchanged historical promotion consumers from the complete inventory', t => {
   if (!gitTree) return t.skip(SNAPSHOT);
   const plan = promotionTestPlan({ cwd: root, planner: 'test/helpers/affected-tests.mjs',

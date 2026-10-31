@@ -39,6 +39,11 @@ export function affectedTestPlan({ root, changed, files, tests = testInventory(f
     // Preserve explicit attribution when a static reference names the same edge.
     if (kind === 'explicit' || !reverse.get(input).has(consumer)) reverse.get(input).set(consumer, kind);
   };
+  // Test names in tier lists/manifests describe membership, not content inputs.
+  // Actual imports/calls and explicit declarations still establish dependencies.
+  const literalEdge = (input, consumer) => {
+    if (!input.endsWith('.test.mjs')) edge(input, consumer, 'static');
+  };
   const basenames = new Map();
   for (const file of known) {
     const name = path.posix.basename(file);
@@ -66,9 +71,9 @@ export function affectedTestPlan({ root, changed, files, tests = testInventory(f
     for (const match of text.matchAll(/['"`]([^'"`\n]+\.[A-Za-z0-9_-]+)['"`]/g)) {
       const literal = match[1];
       if (literal.includes('${')) continue;
-      for (const target of [path.posix.normalize(path.posix.join(path.posix.dirname(file), literal)), literal]) edge(target, file, 'static');
+      for (const target of [path.posix.normalize(path.posix.join(path.posix.dirname(file), literal)), literal]) literalEdge(target, file);
       if (!literal.includes('/') && sourceFile(literal)) {
-        for (const target of basenames.get(literal) ?? []) edge(target, file, 'static');
+        for (const target of basenames.get(literal) ?? []) literalEdge(target, file);
       }
     }
     // Opaque call sites are reported even when a different, static consumer was

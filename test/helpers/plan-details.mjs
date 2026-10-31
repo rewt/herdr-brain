@@ -1,0 +1,67 @@
+// Lossless wire representation: share path strings, witness prefixes and rows.
+// The in-process planner/adapter API continues to expose full consumer objects.
+const ENCODING = 'indexed-witnesses/v1';
+export function compactPlanDetails(plan) {
+  if (!Array.isArray(plan.graph?.consumers)) return plan;
+  const paths = [], pathIds = new Map(), via = [], viaIds = new Map(), reasons = [], reasonIds = new Map();
+  const intern = (value, values, ids) => {
+    if (!ids.has(value)) { ids.set(value, values.length); values.push(value); }
+    return ids.get(value);
+  };
+  const pathId = value => intern(value, paths, pathIds);
+  const rows = plan.graph.consumers.map(row => {
+    let parent = -1;
+    for (const file of row.via) {
+      const id = pathId(file), key = `${parent}:${id}`;
+      if (!viaIds.has(key)) { viaIds.set(key, via.length); via.push([parent, id]); }
+      parent = viaIds.get(key);
+    }
+    return [pathId(row.input), pathId(row.file), parent, intern(row.reason, reasons, reasonIds)];
+  });
+  const rowIds = new Map(plan.graph.consumers.map((row, index) => [JSON.stringify(row), index]));
+  const compactRows = entries => entries?.map(row => row.consumers ? { ...row,
+    consumers: row.consumers.map(consumer => {
+      const index = rowIds.get(JSON.stringify(consumer));
+      if (index === undefined) throw Error('consumer missing from plan graph');
+      return index;
+    }) } : row);
+  return { ...plan,
+    ...(plan.selected ? { selected: compactRows(plan.selected) } : {}),
+    ...(plan.deferred ? { deferred: compactRows(plan.deferred) } : {}),
+    graph: { ...plan.graph, consumers: rows, details: { encoding: ENCODING, paths, via, reasons } } };
+}
+
+export function expandPlanDetails(plan) {
+  if (!plan?.graph?.details) return plan; // Existing third-party planners stay valid.
+  const { encoding, paths, via, reasons } = plan.graph.details;
+  const fail = () => { throw Error('invalid indexed planner details'); };
+  if (encoding !== ENCODING || ![paths, via, reasons, plan.graph.consumers].every(Array.isArray) ||
+      [...paths, ...reasons].some(value => typeof value !== 'string')) fail();
+  const at = (values, index) => {
+    if (!Number.isSafeInteger(index) || index < 0 || index >= values.length) fail();
+    return values[index];
+  };
+  const witnesses = [];
+  for (const node of via) {
+    if (!Array.isArray(node) || node.length !== 2) fail();
+    // Parents must precede children, so malformed input cannot create cycles.
+    witnesses.push([...(node[0] === -1 ? [] : at(witnesses, node[0])), at(paths, node[1])]);
+  }
+  const consumers = plan.graph.consumers.map(row => {
+    if (!Array.isArray(row) || row.length !== 4) fail();
+    return { input: at(paths, row[0]), file: at(paths, row[1]), via: at(witnesses, row[2]), reason: at(reasons, row[3]) };
+  });
+  const expandRows = rows => {
+    if (!Array.isArray(rows)) fail();
+    return rows.map(row => {
+      if (!row || typeof row !== 'object') fail();
+      if (row.consumers === undefined) return row;
+      if (!Array.isArray(row.consumers)) fail();
+      return { ...row, consumers: row.consumers.map(index => at(consumers, index)) };
+    });
+  };
+  const { details, ...graph } = plan.graph;
+  return { ...plan, graph: { ...graph, consumers },
+    ...(plan.selected !== undefined ? { selected: expandRows(plan.selected) } : {}),
+    ...(plan.deferred !== undefined ? { deferred: expandRows(plan.deferred) } : {}) };
+}

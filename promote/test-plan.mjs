@@ -2,6 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { expandPlanDetails } from '../test/helpers/plan-details.mjs';
 export const quote = value => "'" + value.replaceAll("'", "'\\''") + "'";
 const validFiles = files => Array.isArray(files) && files.length <= 512 && new Set(files).size === files.length &&
   files.every(f => typeof f === 'string' && /^[\w./-]+\.test\.mjs$/.test(f) && !f.split('/').includes('..') && !path.isAbsolute(f));
@@ -14,7 +15,7 @@ export function promotionTestPlan({ cwd, plannerRoot = cwd, planner, changed, re
   const r = spawnSync(process.execPath, [file, '--plan', JSON.stringify(changed), JSON.stringify(baseCommand), JSON.stringify(required)], { cwd, env, encoding: 'utf8', maxBuffer: 1024 * 1024 });
   if (r.error || r.status !== 0) throw Error(r.stderr || r.error?.message || 'promotion test planning failed');
   if (!r.stdout.trim()) throw Error(`promotion test planner produced no output${r.stderr.trim() ? ': ' + r.stderr.trim() : ''}`);
-  const plan = JSON.parse(r.stdout);
+  const plan = expandPlanDetails(JSON.parse(r.stdout));
   if (!plan || Object.keys(plan).some(key => !['files', 'covered', 'graph', 'selected', 'deferred', 'budget', 'unknown'].includes(key))) throw Error('invalid promotion test plan fields');
   if (plan.unknown !== undefined && (!Array.isArray(plan.unknown) || plan.unknown.some(name => typeof name !== 'string' || !name.trim()))) throw Error('invalid unknown test selection');
   if (plan.covered !== undefined && !validFiles(plan.covered)) throw Error('invalid promotion test coverage');

@@ -5,6 +5,7 @@ import { isMain } from '../../lib/cli-help.mjs';
 import { tierFiles } from './tier.mjs';
 import { trackedTestInventory } from './test-inventory.mjs';
 import { affectedTestPlan } from './affected-graph.mjs';
+import { compactPlanDetails } from './plan-details.mjs';
 export { affectedTestPlan } from './affected-graph.mjs';
 import { main as runRelease } from './release-suites.mjs';
 const durations = JSON.parse(fs.readFileSync(new URL('./test-durations.json', import.meta.url), 'utf8'));
@@ -70,9 +71,9 @@ export function main(argv = process.argv.slice(2)) {
       maxFiles: Number(process.env.MONITOR_PROMOTION_EXTRA_MAX_FILES ?? DEFAULT_MAX_FILES) });
     // The validator already on main accepts only the legacy fields. Callers
     // opt into the detailed receipt by supplying the required-files argument.
-    console.log(JSON.stringify({ covered: promotion.filter(file => files.includes(file)),
+    console.log(JSON.stringify(compactPlanDetails({ covered: promotion.filter(file => files.includes(file)),
       ...(requiredJson !== undefined ? { ...bound, unknown: analysis.unknown } : { files: bound.files }),
-      graph: analysis.graph }));
+      graph: analysis.graph })));
   } else throw Error('expected --plan or --run');
 }
 if (isMain(import.meta.url)) main();

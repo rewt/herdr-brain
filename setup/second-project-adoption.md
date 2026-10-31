@@ -9,13 +9,24 @@ directory, record, native supervisor, workspace, line and saved watchers.
 | Question | Supported path or gap | Command | Release |
 | --- | --- | --- | --- |
 | Q1: workspace and standard-slot enrollment | `record adopt` enrolls the existing invoking canonical native supervisor and its workspace, with KEEP plus observed-adoption controller evidence. It does not create the workspace or enroll arbitrary other occupied tabs. Missing chat creation has a separate scoped authorization. | `node "$ADOPTION_PRODUCT/bin/org.mjs" adopt . --inspect --expires "$ADOPTION_EXPIRY"`, then `adopt . --scope "$ADOPTION_SCOPE" --decision "$ADOPTION_ANSWER"` | Existing command in rc-20261030-98002dc75c. Native bootstrap / additional occupied-slot selection gap: ENG-1093, no carrying release yet. |
-| Q2: default triage holds | No native enforcement/materialization/activation adapter can satisfy these requirements today. A committed home Workspace containing only chat/supervisor is a supported narrower scope; existing explicit resources remain requirements. | Generate the composition below, commit it, then `node "$ADOPTION_PRODUCT/setup/setup.mjs" plan --project "$ADOPTION_PROJECT"` | Scoping already in rc-20261030-98002dc75c. Automatic initial scope: ENG-1094, no carrying release yet. |
+| Q2: default triage holds | No native enforcement/materialization/activation adapter can satisfy these requirements today. A committed home Workspace containing only chat/supervisor is a supported narrower scope; existing explicit resources remain requirements. | First generate and commit the [initial workspace composition](#scope-the-initial-workspace), then capture adoption scope and enroll. After enrollment, run `node "$ADOPTION_PRODUCT/setup/setup.mjs" plan --project "$ADOPTION_PROJECT"`. | Scoping already in rc-20261030-98002dc75c. Automatic initial scope: ENG-1094, no carrying release yet. |
 | Q3: canonical native owner and line recipient | An actual distinct native supervisor in the new canonical project is required. A name, shell `cd`, actor or inherited pane is insufficient. Fresh release installation now has an exact plan/apply path; apply records the actual canonical cutoff and starts one job. | `launchd.mjs install --id initial-line --dry-run`, then the identical command with `--expected-plan SHA256`; exact bindings below | ENG-1095 source extension; requires a qualified READY release containing it. The audited rc-20261030-98002dc75c does not contain it. Native bootstrap remains ENG-1093. |
 
 Use a qualified release containing each required extension. Source changes and
 fixture checks do not prove live adoption or acceptance of a carrying release.
 
 ## Enroll an existing supervisor
+
+**Scope first, then enroll.** If using the narrower initial workspace, set the
+variables below, complete [Scope the initial workspace](#scope-the-initial-workspace)
+and commit the composition before running `adopt --inspect` below. Then return
+here to capture the adoption scope, obtain its exact authorization and enroll.
+Copied templates retain `template-supervisor`, while implicit defaults use
+`default-supervisor-<hash>`; enrollment is keyed by UID. Committing the composition
+after adoption changes that UID and loses the enrolled supervisor's KEEP.
+Re-adopting a changed scope is refused with "saved scope differs from the original
+binding; owner disposition required". If already in that state, preserve the
+original binding and seek its owner's disposition rather than retrying adoption.
 
 Run from the **new project's canonical checkout inside its own actual native
 supervisor session**, under its owning identity. The old bch-cloak supervisor

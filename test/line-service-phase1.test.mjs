@@ -359,7 +359,7 @@ test('review admission reports only otherwise ready launch exclusions and resume
     {type:'item.added',id:'ENG-13',role:'engineer',parent:'G-10',title:'Held by ancestor'},
     {type:'item.added',id:'ENG-14',role:'engineer',title:'Deselected',meta:{queue_selected:false}},
     {type:'item.added',id:'DEC-1',role:'decision',title:'Obsolete cleanup decision',meta:{uncertain_outcome:{check:{key:'closeout:gone',subject:{key:'gone'}}}}}]);
-  admissionPolicy(f,{});const s=admissionService(f);
+  admissionPolicy(f,{});const s=admissionService(f,{haltAfter:100});
   const exclusions=()=>diagnostics(f).filter(r=>r.action==='review-admission-held'&&r.stage==='launch');
   const held=()=>JSON.parse(fs.readFileSync(path.join(f.directory,'effects.json'))).review_admission.held.filter(r=>r.stage==='launch');
   const launches=()=>s.calls.filter(a=>a[0].endsWith('/dispatch/dispatch.mjs')).map(a=>a[1]);

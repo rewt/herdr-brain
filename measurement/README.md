@@ -1,70 +1,108 @@
-# Recorded live witnesses
+# Consumer lifecycle baseline
 
-`record witness evaluate` evaluates machine-readable specs in item notes. The
-existing finite line pass calls it after writing `pass-complete` when specs are
-pending. No new service, watcher or loop is installed. A direct invocation uses
-the same finite command; `--item ENG-n` bounds selection and `--dry-run` omits
-result writes. Use the project's source entry and pinned Node.
+Supervisor retirement adds a read-only [duty/absence coverage annex](RETIREMENT-COVERAGE.md)
+to the existing installed soak; it creates no second observation service.
 
-The command reads the owning record and its existing `passes.jsonl` (including
-rotated segments). It writes only ordinary, non-decision item notes through the
-record's mutation guard. Results cannot close, select, clear HOLD, activate or
-release anything. STOP/HOLD and project-record binding still fence writes.
+`bin/measure-lifecycle.mjs` is a dependency-free, model-free historical reader.
+It prints JSON to stdout and never changes a record, runs a native command, or
+closes anything. Redirect output only to your own evidence directory.
 
-An item's owner registers an explicit observation with the existing `record note`
-command. Its text begins exactly `Live witness spec: ` followed by one JSON object:
-
-```json
-{
-  "schema": "brain.live-witness/v1",
-  "id": "reopen-window-1",
-  "kind": "start-within-pass",
-  "project": "/absolute/project/.git",
-  "owner": "existing-witness-owner",
-  "next": "consume the result in the existing owning item",
-  "from": "2026-10-31T16:20:00Z",
-  "cutoff": "2026-10-31T18:35:00Z",
-  "subject": "ENG-1248",
-  "trigger": {"type": "item.reopened", "after_seq": 0}
-}
+```sh
+node bin/measure-lifecycle.mjs --events /project/.org/events.jsonl \
+  --project /project/repository/.git \
+  --from 2026-10-30T00:00:00Z --cutoff 2026-10-30T22:30:00Z \
+  --hand-actor supervisor-name > /own/evidence/baseline.json
 ```
 
-Specs express recorded acceptance; registration grants no authority and never
-causes a trigger. The last spec note for an ID is current. A new note explicitly
-starts a new observation; previous results remain in history. Owners must choose
-the subject, trigger fence and UTC window from their acceptance/evidence, rather
-than choosing a successful window after inspecting the result.
+Use the configured project's **real Git common directory**, not a display label.
+Explicit timestamps include a timezone; both endpoints are inclusive. UTC-day
+and local-day windows differ. Starts are `run.started` events with that recorded
+`meta.dispatch_project`. The default line actor is `line-service`; repeat
+`--line-actor` and `--hand-actor` to declare others. Hand means owner-initiated
+dispatch, not proof that a human personally typed a command. Other actors are
+unknown. Starts count allocated attempts, including failures; session-bound
+starts are reported separately. Legacy starts without a project binding are
+listed as unscoped, never silently assigned to this project.
 
-Supported observations:
+The run table includes starts in the window and carry-in runs whose report was
+observed or ingested in the window. Latency and resource summaries use only that
+**report cohort**. Report origin is the first matching original-watcher
+`report.available.observed_at`, joined to run start, claim generation and ingested
+report hash. This is a report *observation*, an upper bound on writing time; file
+mtime, ingestion time and current folder absence do not substitute for it.
+An ingested report without that origin remains in the denominator as unknown.
+Ingestion throughput is counted by ingest event time, separately from starts.
 
-| Kind | Observation and target |
-| --- | --- |
-| `start-within-pass` | First matching subject event (`item.reopened`, `item.added` or `item.updated`) after `trigger.after_seq`, inside the window. The first PID-bound queue snapshot after it defines the next scheduling pass. No start by that completed pass is NOT MET. MET requires a project line `run.started`, matching pass admission and committed native session. A preceding incomplete queue pass stays UNRUN. |
-| `start-within-pass` with `required_class` | Also checks the subject's recorded queue class and that no lower-class admission precedes it in that pass's recorded policy order. Missing class evidence is UNRUN. The check does not infer available capacity, eligibility, priority exceptions or why a subject was stale. |
-| `same-revision-skips` | Consecutive completed passes with PID-bound starts on the same recorded revision, both started in the window. At least one warm pass must have `admission_skipped > 0` and `source_skipped > 0`. Known zero counts at cutoff are NOT MET; no pair or unknown counts are UNRUN. |
-| `folder-median` | `under_ms` is the strict median target. Reuses the lifecycle reader's whole report cohort and report/claim/effect/receipt joins. The window must finish, the cohort must be nonempty and every latency must be known. Pending folders and missing observations remain UNRUN; they are never dropped to improve a median. |
-| `unavailable` | Required `reason` explains why the current readers cannot express the witness. Always UNRUN. This is coverage accounting, not a successful observation. |
+Item closure requires `item.closed.completed_run` and `as: done`; older manual
+closures lacking attribution are unknown. Folder/session retirement requires an
+actual `closeout.effect` cited by a typed `closeout.evaluated` resource, joined by
+run, project, source seq/type, allocation key, effect ID and ordering. Tabs require
+the closed session receipt's explicit tab ID. Repeated evaluations count once.
+Explicit kept resources are pending with their recorded owner/reason; no receipt
+and no explicit hold is unknown. Unknown owners stay null for the owning line to
+resolve. Per-run pending rows and owner/reason groups are included. Resource
+counts are per run, not a count of unique physical tabs shared across runs.
 
-Result notes start `Live witness result: ` and retain the spec hash, status,
-reason, evidence/window/record fences, source hashes, owner/next event,
-condition time and recording delay (null when unknown). Reader errors produce
-nonterminal UNRUN notes without repairing or editing the source. Malformed record
-tails refuse all result writes. Unchanged observations deduplicate; a terminal
-window is not replayed. A first missed pass cannot be erased by a later start.
+Latencies use milliseconds, the ordinary median and nearest-rank p90. Counts show
+known and unknown denominators. Missing, negative and not-yet-observed durations
+are null, never zero. Censored runs remain unknown and are not included in the
+quantiles; compare completion coverage alongside speed to avoid survivor bias.
+Unreported starts remain visible in `runs`, outside the report cohort.
 
-An absent trigger, empty sample or unknown input is never MET. Free-text
-supervisor verdicts are not inputs to the observation logic. Source hashes
-identify the selected evidence; they grant no native authority or complete
-manual-intervention coverage. Use the nudge journal for recorded nudges, with its
-existing unknown-total qualification. The first three automated results require
-one comparison against raw journals, recorded as producer evidence; further
-supervisor reading is not required by the check.
+Optionally pass `--census FILE` for an existing closeout measurement v1/v2 frame.
+The content-addressed reader verifies referenced object hashes. The project,
+observation time and record sequence must fit the cutoff. The saved Herdr and
+folder observations appear separately with their original time and coverage;
+they never prove a retirement action or timestamp. No live native reads occur.
+Copy the decoded frame into your evidence if the service's latest file can move.
 
-For the 31 October coverage set: ENG-1250 maps to the reopen observation,
-ENG-1277 to its class variant, ENG-1201 to same-revision skips, and ENG-1221(a)
-to the full-cohort median. ENG-1241 requires more than closeout counters: a
-durable HOLD interval, unchanged-main evidence and native/folder release in the
-same finite turn. The currently listed readers do not join that complete proof;
-record it as `unavailable` rather than copying the supervisor's PASS note. The
-existing witness/runtime owners retain that missing evidence and all acceptance,
-Major-correction, review and release decisions.
+Explicit `closeout.manual-assistance` and `lifecycle.manual-nudge` events count as recorded hand nudges.
+Historical records do not journal all prompts or rescues, so the total is unknown
+even when the explicit count is zero. Free-text notes cannot establish a complete
+count. The supported journal below makes prospective interventions measurable;
+it cannot establish that every intervention was recorded.
+
+The owner performing a manual lifecycle prompt, rescue or recovery is responsible
+for journaling it promptly in the owning project:
+
+```sh
+ORG_ACTOR=your-worker node bin/org.mjs nudge --id R-123:report:prompt-1 \
+  --run R-123 --project /project/repository/.git --actor assisting-owner \
+  --occurred-at 2026-10-31T08:00:00Z --stage report \
+  --action 'Prompted the worker to finish its report' \
+  --reason 'The report had stalled' --evidence /own/evidence/prompt.txt
+```
+
+Use one stable ID per actual intervention, and reuse the exact arguments for a
+retry. The locked append writes once; a changed payload or intervention actor under
+the same ID is refused. A new intervention needs a new ID. Record it promptly,
+including failed interventions and their later recovery as separate actions.
+Do not journal the same action again if an existing manual-assistance event
+already records it. The command records what happened; it executes no prompt or
+recovery and grants no native authority. `--actor` attributes the actual assisting
+owner; the store's `by` separately preserves the recorder. Neither grants native
+authority, and a retry retains the original recorder.
+Stage, action, reason and evidence are required descriptive text; they are not
+inferred from notes. Run binding, real Git identity and record ownership must
+match; unscoped/foreign runs and times before run start or after recording fail.
+
+The projection's `hand_nudges.journal` retains each journal event's stable ID,
+project, run, actor, occurrence time, recording receipt, stage, action, reason and
+evidence. Journal events use occurrence time inside the window and must also have
+been recorded by the cutoff/sequence fence. Legacy events retain recording-time
+semantics. `recorded` combines the two explicit sources; `total` remains null.
+This changes neither the canary rescue policy nor any consumer's runtime or hooks.
+
+Save the input event snapshot and census with your evidence. Output records a
+hash of selected events, census inventory hash, cutoff and sequence fence. Repeat
+with `--through-seq N` from the first output to freeze the event boundary. The
+same inputs/cutoff/fence produce identical bytes. Malformed JSON and out-of-order
+sequences fail closed; events with missing timestamps inside the fence remain
+available for joins and are listed diagnostically. No current clock is consulted.
+
+Focused checks: `node test/helpers/run.mjs test/lifecycle-nudge.test.mjs test/consumer-lifecycle.test.mjs` through
+the owning clean committed lane's `lane check --cmd`. Full release suites and
+live acceptance belong to the release owner.
+
+Recorded live witnesses use the existing finite line turn and result-only item
+notes; see [live witness specifications and evidence rules](LIVE-WITNESSES.md).

@@ -8,6 +8,81 @@ import { fileURLToPath } from 'node:url';
 import { testSlotEnvironment } from '../../test/helpers/test-slot-env.mjs';
 
 const cli = fileURLToPath(new URL('../test-slot.mjs', import.meta.url));
+for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) test(`${signal} during the pre-grant watch audit joins cleanup and permits recovery`, async t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'watch-pre-grant-cancel-'));
+  const auditing = path.join(root, 'auditing'), resume = path.join(root, 'resume');
+  const ready = path.join(root, 'ready'), lock = path.join(root, 'slot');
+  const preload = path.join(root, 'audit.mjs'), receipt = path.join(root, 'result.json');
+  // Hold the actual synchronous startup audit, before fd 3 grants the payload.
+  // The native signal queues while JS is blocked; releasing the audit lets the
+  // installed handler run. Payload exec may race that delivery after the grant.
+  fs.writeFileSync(preload, `import cp from 'node:child_process';import fs from 'node:fs';import {syncBuiltinESMExports} from 'node:module';
+const execute=cp.spawnSync;cp.spawnSync=(file,args,...rest)=>{
+  if(file==='/bin/ps'&&args.includes('pid=,time=,stat=')&&!fs.existsSync(${JSON.stringify(auditing)})){
+    fs.writeFileSync(${JSON.stringify(auditing)},JSON.stringify({pids:args.at(-1).split(','),payload_ready:fs.existsSync(${JSON.stringify(ready)}),listeners:process.listenerCount(${JSON.stringify(signal)})})+'\\n');
+    while(!fs.existsSync(${JSON.stringify(resume)}))Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,10);
+  }
+  return execute(file,args,...rest);
+};syncBuiltinESMExports();`);
+  const env = { ...testSlotEnvironment(), MONITOR_TEST_SLOT_PATH: lock, MONITOR_TEST_SLOT_COMPAT_PATH: lock };
+  const childEnv = { ...env, NODE_OPTIONS: `${env.NODE_OPTIONS ?? ''} --import=${JSON.stringify(preload)}` };
+  const child = spawn(process.execPath, [cli, 'run', 'pre-grant cancellation', '--result-path', receipt, '--',
+    process.execPath, '-e', `require('fs').writeFileSync(${JSON.stringify(ready)},String(process.pid));setInterval(()=>{},1000);`],
+  { env: childEnv, stdio: ['ignore', 'pipe', 'pipe'] });
+  let stderr = '', spawnError, exited = false, pgid;
+  child.stderr.on('data', data => { stderr += data; }); child.stdout.resume();
+  child.once('error', error => { spawnError = error; });
+  const done = new Promise(resolve => child.once('close', (code, signal) => { exited = true; resolve({ code, signal }); }));
+  t.after(async () => {
+    fs.writeFileSync(resume, 'resume');
+    if (!exited) {
+      if (pgid) try { process.kill(-pgid, 'SIGKILL'); } catch {}
+      child.kill('SIGKILL');
+    }
+    await done;
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+  let audit;
+  for (;;) {
+    if (spawnError) throw spawnError;
+    assert.equal(exited, false, `watch wrapper exited before the pre-grant audit: ${stderr}`);
+    const text = fs.existsSync(auditing) ? fs.readFileSync(auditing, 'utf8') : '';
+    if (text.endsWith('\n')) { audit = JSON.parse(text); break; }
+    await new Promise(resolve => setTimeout(resolve, 20));
+  }
+  pgid = Number(audit.pids[0]);
+  assert.ok(Number.isSafeInteger(pgid) && pgid > 0);
+  assert.equal(audit.payload_ready, false);
+  assert.equal(fs.existsSync(ready), false, 'the payload has not passed the grant barrier');
+  assert.ok(audit.listeners > 0, 'cancellation is handled before the first synchronous audit');
+  assert.equal(child.kill(signal), true);
+  fs.writeFileSync(resume, 'resume');
+  const result = await done;
+  assert.equal(result.signal, null, 'the wrapper handles the signal rather than dying by default');
+  assert.notEqual(result.code, 0, stderr);
+  assert.equal(JSON.parse(fs.readFileSync(receipt, 'utf8')).signal, signal, 'the real cancellation handler records the queued signal');
+  assert.throws(() => process.kill(-pgid, 0), { code: 'ESRCH' }, 'no gated group outlives the wrapper');
+  if (fs.existsSync(ready)) assert.throws(() => process.kill(Number(fs.readFileSync(ready, 'utf8')), 0), { code: 'ESRCH' });
+  assert.equal(fs.existsSync(lock), false, 'pre-grant cancellation releases the slot');
+  assert.deepEqual(fs.readdirSync(`${lock}.occupancy`), []);
+
+  // Reuse the same private slot with no audit preload to witness recovery.
+  const recovered = spawn(process.execPath, [cli, 'run', 'after pre-grant cancellation', '--', process.execPath, '-e', 'process.stdout.write("recovered")'],
+    { env, stdio: ['ignore', 'pipe', 'pipe'] });
+  let output = '', recoveryError = '';
+  recovered.stdout.on('data', data => { output += data; });
+  recovered.stderr.on('data', data => { recoveryError += data; });
+  t.after(() => { if (recovered.exitCode === null && recovered.signalCode === null) recovered.kill('SIGKILL'); });
+  const recovery = await new Promise((resolve, reject) => {
+    recovered.once('error', reject);
+    recovered.once('close', (code, signal) => resolve({ code, signal }));
+  });
+  assert.deepEqual(recovery, { code: 0, signal: null }, recoveryError);
+  assert.equal(output, 'recovered');
+  assert.equal(fs.existsSync(lock), false);
+  assert.deepEqual(fs.readdirSync(`${lock}.occupancy`), []);
+});
+
 for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) test(`${signal} during the first payload watch audit reaches compound descendants`, async t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'watch-cancel-'));
   const ready = path.join(root, 'ready'), got = path.join(root, 'got'), auditing = path.join(root, 'auditing');

@@ -5,14 +5,15 @@ import os from 'node:os';
 import path from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {initOrg,transact,loadRecord} from '../../lib/store.mjs';
+import {sessionBindFact} from '../../test/helpers/session-bind.mjs';
 import {gitProject} from '../../lib/project.mjs';
 import {brainOwner,outstandingEffects,readOwnedRun} from '../../lib/run-owner.mjs';
 import {bundleRelease} from '../../lib/releases.mjs';
-import {sharedDirectory,registrationFile,stepFile,nativeBinding} from '../shared.mjs';
+import {sharedDirectory,registrationFile,stepFile,nativeBinding,readWatchSubject} from '../shared.mjs';
 
 const watch=path.resolve(import.meta.dirname,'../watch.mjs'),source=path.resolve(import.meta.dirname,'../..');
 const reportText=(run='R-1')=>`---\nrun: ${run}\noutcome: done\nsummary: Finished the isolated task.\nheadline: The task is complete\nblockers: []\nproposals: []\nlearnings: []\nartifacts: []\n---\n`;
-function fixture(t,{startGrace='0',idleGrace='0',longAfter='3600'}={}){
+function fixture(t,{startGrace='0',idleGrace='0',longAfter='3600',lateSession=false}={}){
   const root=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'watch-step-'))),repo=path.join(root,'project'),org=path.join(repo,'.org'),report=path.join(root,'report.md');fs.mkdirSync(repo);
   const fleet=process.env.HERDR_MONITOR_FLEET;process.env.HERDR_MONITOR_FLEET=path.join(root,'fleet');
   t.after(()=>{if(fleet===undefined)delete process.env.HERDR_MONITOR_FLEET;else process.env.HERDR_MONITOR_FLEET=fleet;fs.rmSync(root,{recursive:true,force:true});});
@@ -20,9 +21,10 @@ function fixture(t,{startGrace='0',idleGrace='0',longAfter='3600'}={}){
   const project=gitProject(repo),owner=brainOwner();initOrg(org);
   const native={name:'worker-one',pane_id:'w1:p1',workspace_id:'w1',terminal_id:'term-one',cwd:repo,agent_session:{value:'original-session'},agent_status:'working',state_change_seq:1};
   const initial=transact(org,()=>({add:[{type:'item.added',id:'ENG-9',title:'Isolated work',role:'engineer'},
-    {type:'run.started',id:'R-1',item:'ENG-9',workspace:repo,report_path:report,meta:{agent:native.name,pane:native.pane_id,worker_workspace:native.workspace_id,terminal_id:native.terminal_id,agent_session_id:native.agent_session.value,dispatch_project:project.identity,dispatch_record:org}},
-    {type:'run.claimed',run:'R-1',record:org,project:project.identity,owner}]}));
-  const ownership={owner,generation:initial.added.at(-1).seq};
+    {type:'run.started',id:'R-1',item:'ENG-9',workspace:repo,report_path:report,meta:{dispatch_project:project.identity,dispatch_record:org,dispatch_journal:path.join(root,'dispatch.json'),dispatch_attempt:'original-attempt'}},
+    {type:'run.claimed',run:'R-1',record:org,project:project.identity,owner},
+    {type:'run.updated',id:'R-1',meta:{agent:native.name,pane:native.pane_id,worker_workspace:native.workspace_id,terminal_id:native.terminal_id,...(lateSession?{}:{agent_session_id:native.agent_session.value})}}]}));
+  const ownership={owner,generation:initial.added.find(e=>e.type==='run.claimed').seq};
   const status=path.join(root,'native.json'),calls=path.join(root,'calls'),herdr=path.join(root,'herdr');
   fs.writeFileSync(status,JSON.stringify(native));
   fs.writeFileSync(herdr,`#!${process.execPath}\nimport fs from 'node:fs';const a=process.argv.slice(2);fs.appendFileSync(${JSON.stringify(calls)},JSON.stringify(a)+'\\n');const n=JSON.parse(fs.readFileSync(${JSON.stringify(status)}));if(n===null){process.stderr.write(JSON.stringify({error:{code:'agent_not_found',message:'gone'}}));process.exitCode=1;}else process.stdout.write(JSON.stringify({result:{agent:n}}));\n`,{mode:0o755});
@@ -80,4 +82,16 @@ test('changed claim stops the original finite duty before a notice and retains i
   const f=fixture(t);ok(f);
   transact(f.org,()=>({add:[{type:'run.claimed',run:'R-1',record:f.org,project:gitProject(f.repo).identity,owner:{...loadRecord(f.org).state.runs.get('R-1').owner,controller:'other'}}]}));
   const r=f.step();assert.equal(r.status,1);assert.match(r.stderr,/RUN_OWNED_ELSEWHERE/);assert.equal(f.notices().length,0);assert.ok(fs.existsSync(registrationFile(f.org,'R-1')));
+});
+
+test('finite compact reads retain a late native session and reject conflicting binding facts',t=>{
+  const f=fixture(t,{lateSession:true});
+  const state=loadRecord(f.org).state,run=state.runs.get('R-1');
+  const fact=sessionBindFact(run,state,{session:f.native.agent_session.value});
+  transact(f.org,()=>({add:[fact]}));
+  const subject=readWatchSubject(f.org,'R-1');assert.equal(subject.meta.agent_session_id,f.native.agent_session.value);assert.equal(subject.meta.identity_conflict,false);
+  ok(f);
+  transact(f.org,()=>({add:[{...fact,session:'conflicting-session'}]}));
+  assert.equal(readWatchSubject(f.org,'R-1').meta.identity_conflict,true);
+  const result=f.step();assert.equal(result.status,1);assert.match(result.stderr,/original record\/native worker binding changed/);assert.equal(f.state().phase,'failed');assert.equal(f.notices().length,0);
 });

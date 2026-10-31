@@ -18,10 +18,8 @@ import { bundleRelease, continueRelease, forwardRelease } from '../lib/releases.
 
 import { acquireWatcherLock } from './lock.mjs';
 import { createRunEventTail } from './record-tail.mjs';
-import {registrationFile, stepFile, readJson, nativeBinding, sameNative, observerReceipt, digest} from './shared.mjs';
+import {registrationFile, stepFile, readJson, nativeBinding, sameNative, observerReceipt, digest, readWatchSubject} from './shared.mjs';
 import {herdrSocketPath} from '../lanes/board/herdr-client.mjs';
-import {openRecordReader} from '../lib/record-reader.mjs';
-import {effectiveWorkerIdentity} from '../lib/worker-identity.mjs';
 import { readReport } from '../lib/report.mjs';
 import { BRAIN_CONTROLLER, readOwnedRun, requireController, assertOwner, fenceOwner, continueOwnerRelease } from '../lib/run-owner.mjs';
 import { writeFileAtomic,transact } from '../lib/store.mjs';
@@ -144,14 +142,7 @@ function jsonResult(result, label) {
 }
 
 function readRun() {
-  if(opt.step){
-    const reader=openRecordReader(recordFile);
-    try{
-      if(reader.tornTail)throw Error('incomplete record prevents finite watcher observation');
-      const current=reader.state.runs.get(runId);if(!current)throw Error('original run is missing');
-      return {...current,meta:effectiveWorkerIdentity(current,reader.state)};
-    }finally{reader.close();}
-  }
+  if(opt.step)return readWatchSubject(opt.org,runId);
   return jsonResult(org(['show', runId, '--json', ...(opt.step ? ['--compact'] : [])]), `org show ${runId}`);
 }
 
@@ -522,7 +513,7 @@ async function watch() {
     // Capture the cursor before reading state so an append during inspection
     // is still checked after the filesystem subscriptions become live.
     const recordChanged = createRunEventTail(recordFile, { run: runId, item });
-    if (fs.existsSync(stopFile) || opt.step && (fs.existsSync(path.join(canonical,'.lane/supervisor/HOLD')) || fs.existsSync(path.join(opt.org,'STOP')))) { checkpoint('held');log('Supervisor STOP/HOLD; stopping without delivery'); return; }
+    if (fs.existsSync(stopFile) || opt.step && (fs.existsSync(path.join(canonical,'.lane/supervisor/HOLD')) || fs.existsSync(path.join(opt.org,'STOP')))) { checkpoint('held');log(opt.step?'Supervisor STOP/HOLD; stopping without delivery':'Supervisor STOP; stopping without delivery'); return; }
     let owned;
     try { owned = assertOwner(readOwnedRun(opt.org, runId), ownership); } catch (error) { log(`${error.message}; stopping without delivery`); return; }
     current = readRun();

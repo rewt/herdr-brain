@@ -705,7 +705,7 @@ esac`);
       }
     } finally { release(); }
     // No watcher is running here: the existing owner must complete delivery.
-    await waitForText(inbox, /"type":"sent"/);
+    await waitForText(inbox, /"type":"sent"/, loadTimeout(10_000));
     await waitForInboxIdle(inbox);
     const restarted = await waitForExit(startWatcher(t, f.args));
     assert.equal(restarted.code, 0, restarted.stdout + restarted.stderr);

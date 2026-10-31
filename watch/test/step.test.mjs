@@ -5,6 +5,8 @@ import os from 'node:os';
 import path from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {initOrg,transact,loadRecord} from '../../lib/store.mjs';
+import {ownerIdentity} from '../../lib/process-owner.mjs';
+import {herdrSocketPath} from '../../lanes/board/herdr-client.mjs';
 import {sessionBindFact} from '../../test/helpers/session-bind.mjs';
 import {gitProject} from '../../lib/project.mjs';
 import {brainOwner,outstandingEffects,readOwnedRun} from '../../lib/run-owner.mjs';
@@ -36,7 +38,8 @@ function fixture(t,{startGrace='0',idleGrace='0',longAfter='3600',lateSession=fa
   const state=()=>JSON.parse(fs.readFileSync(stepFile(org,'R-1')));
   const setNative=value=>fs.writeFileSync(status,JSON.stringify(value));
   const notices=()=>loadRecord(org).state.runs.get('R-1').notes.filter(n=>n.text.startsWith('[watch record-only]'));
-  return {root,repo,org,report,native,step,state,setNative,notices,calls};
+  const register=()=>spawnSync(process.execPath,[watch,...args,'--shared'],{cwd:repo,env:{...process.env,ORG_DIR:org,ORG_ACTOR:'watch-step-fixture'},encoding:'utf8'});
+  return {root,repo,org,report,native,step,state,setNative,notices,calls,register};
 }
 function ok(f){const r=f.step();assert.equal(r.status,0,r.stderr||r.stdout);return r;}
 
@@ -94,4 +97,19 @@ test('finite compact reads retain a late native session and reject conflicting b
   transact(f.org,()=>({add:[{...fact,session:'conflicting-session'}]}));
   assert.equal(readWatchSubject(f.org,'R-1').meta.identity_conflict,true);
   const result=f.step();assert.equal(result.status,1);assert.match(result.stderr,/original record\/native worker binding changed/);assert.equal(f.state().phase,'failed');assert.equal(f.notices().length,0);
+});
+
+for(const existing of [false,true])test(`shared registration ${existing?'refuses a pre-existing per-run watcher':'uses the matching live host and preserves its original duty on retry'}`,t=>{
+  const f=fixture(t),file=registrationFile(f.org,'R-1');fs.unlinkSync(file);
+  const directory=path.join(f.org,'watch/observer');fs.mkdirSync(directory,{recursive:true});
+  fs.writeFileSync(path.join(directory,'owner.json'),JSON.stringify({schema:'brain.run-observer-owner/v1',org:f.org,repo:f.repo,
+    project:gitProject(f.repo).identity,source,socket:herdrSocketPath(),pid:process.pid,identity:ownerIdentity(process.pid),log:path.join(directory,'observations.jsonl')}));
+  if(existing)transact(f.org,()=>({add:[{type:'run.updated',id:'R-1',meta:{watcher_pid:process.pid,watcher_identity:ownerIdentity(process.pid)}}]}));
+  const r=f.register();
+  if(existing){assert.equal(r.status,1);assert.match(r.stderr,/existing watcher\/receipt retained/);assert.equal(fs.existsSync(file),false);}
+  else{
+    assert.equal(r.status,0,r.stderr);const receipt=JSON.parse(r.stdout);assert.equal(receipt.pid,process.pid);assert.equal(receipt.shared,file);
+    const saved=fs.readFileSync(file),d=JSON.parse(saved);assert.equal(d.native.session,f.native.agent_session.value);assert.equal(d.consumer,'watch/watch.mjs --step');assert.equal(d.stuck_owner,'supervisor-test');assert.ok(!d.argv.includes('--shared'));
+    const retry=f.register();assert.equal(retry.status,0,retry.stderr);assert.equal(fs.readFileSync(file).compare(saved),0);ok(f);assert.equal(f.state().phase,'waiting');
+  }
 });

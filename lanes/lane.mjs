@@ -1219,6 +1219,8 @@ async function dispatch(topic, promptText, options = {}) {
     ? await import('../dispatch/launch-guard.mjs') : {};
   let launchRequest;
   const checkLaunch=()=>{
+    if (['STOP', 'HOLD'].some(name => existsSync(join(REPO_ROOT, '.lane/supervisor', name))))
+      fail('STOP/HOLD prevents native lane launch; retain the original allocation');
     if(!options.dispatchJournal)return;
     try{launchRequest=checkDispatchLaunch({journal:options.dispatchJournal,sha256:options.dispatchSha256,repo:REPO_ROOT,workspace:path,topic});}
     catch(error){
@@ -2823,11 +2825,11 @@ function closeLocked(topic, { gitOnly = false, expectedTip } = {}) {
 
 const [command, topic, ...rest] = process.argv.slice(2);
 // Parent coordinators may have already waited before saving a launch stage.
-// Always check canonical STOP, including when that redundant wait is skipped.
+// Always check canonical STOP/HOLD, including when that redundant wait is skipped.
 function launchMemoryGate(label, alreadyChecked = false) {
-  const reason = 'Supervisor STOP appeared before lane launch; no new worker launched';
+  const reason = 'Supervisor STOP/HOLD appeared before lane launch; no new worker launched';
   const check = () => {
-    if (existsSync(join(REPO_ROOT, '.lane/supervisor/STOP'))) {
+    if (['STOP', 'HOLD'].some(name => existsSync(join(REPO_ROOT, '.lane/supervisor', name)))) {
       const error = new Error(reason);
       error.code = 'LANE_STOPPED';
       throw error;

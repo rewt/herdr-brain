@@ -27,7 +27,8 @@ for (const mode of ['legacy', 'history', 'lost-reply', 'refused']) test(mode ===
   ? 'explicit dispatch retry keeps a saved proposal record refusal final without native observation or prompt'
   : `timely saved unbound proposal retries through dispatch without a new native observation or prompt (${mode})`, t => {
   const refused = mode === 'refused';
-  const f = fixture(t, { lateSession: 'delayed' }), first = f.start(); assert.equal(first.status, 0, first.stderr);
+  const f = fixture(t, { lateSession: 'delayed', timingRecord: mode === 'lost-reply' });
+  const first = f.start(); assert.equal(first.status, 0, first.stderr);
   const file = f.jobs()[0], job = JSON.parse(fs.readFileSync(file)), b = job.sessionBinding;
   const eventFile = path.join(f.org, 'events.jsonl');
   const events = fs.readFileSync(eventFile, 'utf8').trim().split('\n').map(JSON.parse).filter(e => e.type !== 'run.session_bound');

@@ -37,7 +37,8 @@ export async function runCanary(c) {
     await until(()=>available(job),'actual watcher report notice');
     const availability=performance.now()-start;
     service(0).pass();
-    await until(()=>finished(job)&&!fs.existsSync(job.worker.cwd),'same-turn source close and folder removal');
+    await until(()=>finished(job)&&!fs.existsSync(job.worker.cwd)&&!native().workspaces[job.worker.workspaceId],
+      'same-turn source, session, native workspace and folder closeout');
     const after=events(),ingested=after.filter(e=>e.type==='report.ingested'&&e.run===job.run);
     assert.equal(ingested.length,1);assert.equal(native().workspaces[job.worker.workspaceId],undefined);
     assert.equal(git(['branch','--list','lane/'+job.lane]),'');
@@ -319,7 +320,8 @@ export async function runCanary(c) {
       await until(()=>fs.existsSync(path.join(org,'watch/steps',reportJob.run+'.json')),'report shared duty first observation');
       report(reportJob,[]);
       await until(()=>events().some(e=>e.type==='note.added'&&e.id===reportJob.run&&e.watch_notice_id===`watch:${reportJob.run}:final`),'lost report hint recovered by original finite watcher');
-      service(0).pass();await until(()=>!fs.existsSync(reportJob.worker.cwd),'shared report physical cleanup');
+      service(0).pass();await until(()=>!fs.existsSync(reportJob.worker.cwd)&&!native().workspaces[reportJob.worker.workspaceId],
+        'shared report physical and native cleanup');
       assert.equal(events().filter(e=>e.type==='report.ingested'&&e.run===reportJob.run).length,1);
       assert.equal(native().workspaces[reportJob.worker.workspaceId],undefined);
       assert.equal(journals().filter(j=>j.item===sharedItem||j.item===reportItem).length,2);

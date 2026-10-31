@@ -1440,11 +1440,14 @@ The general pass retains negative admission and source-discovery observations in
 `effects.json#negative_evaluations`. Entries bind the actual project/record and
 source revision, dependency events and folded subjects, ancestors, linked
 prerequisites and review/question children, admission policy, brief/report/request
-files, and workspace/Git input metadata. Fingerprinting uses filesystem reads,
-including absence, rather than invoking Git in deleted workspaces. Inventories
-larger than 4096 paths, linked directory trees or unreadable inputs are evaluated
-fresh. The bound declines caching; it never truncates a fingerprint. Common
-source/policy changes conservatively invalidate their dependent observations.
+files, and workspace/Git identity metadata. Fingerprinting uses filesystem reads,
+including absence, rather than invoking Git in deleted workspaces. Checkout
+contents (including linked skills and runtime output) are not read by these
+evaluations and are not inventoried. Relevant Git inventories larger than 4096
+paths, linked Git directories or unreadable inputs are evaluated fresh. The bound
+declines caching; it never truncates a fingerprint. Source revision is part of
+each signature, so interleaved revisions cannot reset the entire shared cache.
+Common source/policy changes conservatively invalidate dependent observations.
 
 Only negative evaluations can be skipped. Ready candidates, capacity failures,
 original attempts/UNKNOWN continuation readback, and all effect-boundary guards
@@ -1453,7 +1456,8 @@ replace an attempt or waive final-release coverage. Cache misses retain the
 existing hold diagnostics; hits retain the original diagnosis without repeating
 its hold/eligibility rows. The journal remains under the existing scheduling lock
 and inherits interleaved writes when that lock is yielded. `pass-complete` records
-`evaluations` (evaluated/skipped by stage) and the open candidate `backlog`.
+`evaluations` (evaluated/skipped by stage, with cold/changed/uncacheable miss
+counts) and the open candidate `backlog`.
 
 Read historical pass counts and duration through the B4 measurement entry:
 

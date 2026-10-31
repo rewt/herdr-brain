@@ -8,18 +8,19 @@ import {declaredSourceRanges} from '../settle/review-range.mjs';
 
 const hash=value=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const ids=value=>[...JSON.stringify(value??null).matchAll(/\b[A-Z]+-[1-9]\d*\b/g)].map(m=>m[0]);
-const schema='line-negative-evaluation/v1';
+const schema='line-negative-evaluation/v2';
 
-// Physical observations use no Git subprocesses, including for deleted trees.
-// Bound large/unknown trees by declining to cache, never by truncating inputs.
+// Scheduling reads evidence files and Git/workspace identity, not checkout
+// contents. In particular, ordinary linked skills are not scheduling inputs.
+// Bound relevant inventories by declining to cache, never by truncating inputs.
 function physicalInputs(files,workspaces,identity){
   const rows=[],seen=new Set();let remaining=4096;
-  const stat=file=>{
+  const stat=(file,identityOnly=false)=>{
     file=path.resolve(file);if(seen.has(file))return null;seen.add(file);
     if(--remaining<0)throw Error('evaluation input inventory exceeds cache bound');
     try{
       const l=fs.lstatSync(file,{bigint:true}),s=fs.statSync(file,{bigint:true});
-      rows.push([file,fs.realpathSync(file),...[l,s].map(v=>[v.dev,v.ino,v.mode,v.size,v.mtimeNs,v.ctimeNs].map(String))]);
+      rows.push([file,fs.realpathSync(file),...[l,s].map(v=>(identityOnly&&v.isDirectory()?[v.dev,v.ino,v.mode]:[v.dev,v.ino,v.mode,v.size,v.mtimeNs,v.ctimeNs]).map(String))]);
       return s;
     }catch(e){if(!['ENOENT','ENOTDIR'].includes(e.code))throw e;rows.push([file,e.code]);return null;}
   };
@@ -36,7 +37,7 @@ function physicalInputs(files,workspaces,identity){
   };
   for(const file of [...files].filter(Boolean).sort())stat(file);
   for(const workspace of [...workspaces].filter(Boolean).sort()){
-    if(!stat(workspace)?.isDirectory())continue;
+    if(!stat(workspace,true)?.isDirectory())continue;
     if(path.basename(workspace)==='.git'){git(workspace);continue;}
     const marker=path.join(workspace,'.git'),s=stat(marker);
     if(s?.isDirectory())git(marker);
@@ -46,10 +47,6 @@ function physicalInputs(files,workspaces,identity){
       git(path.resolve(workspace,text.slice(8)));
     }
     for(const name of ['.lane/HOLD','.lane/supervisor/HOLD','.lane/supervisor/STOP'])stat(path.join(workspace,name));
-    for(const name of fs.readdirSync(workspace).sort()){
-      if(['.git','.org','.lane','node_modules'].includes(name))continue;
-      tree(path.join(workspace,name));
-    }
   }
   // Shared refs/config can change the meaning of a source observation.
   for(const name of ['config','packed-refs','shallow','info/grafts','objects/info/alternates'])stat(path.join(identity,name));
@@ -79,8 +76,8 @@ export function negativeEvaluationCache({store,identity,org,repo,revision,dirty=
   };
   const entries=()=>{
     const parent=store();
-    if(parent.negative_evaluations?.schema!==schema||parent.negative_evaluations.identity!==identity||parent.negative_evaluations.org!==org||parent.negative_evaluations.revision!==revision||!parent.negative_evaluations.entries||typeof parent.negative_evaluations.entries!=='object'||Array.isArray(parent.negative_evaluations.entries)){
-      parent.negative_evaluations={schema,identity,org,revision,entries:{}};dirty();
+    if(parent.negative_evaluations?.schema!==schema||parent.negative_evaluations.identity!==identity||parent.negative_evaluations.org!==org||!parent.negative_evaluations.entries||typeof parent.negative_evaluations.entries!=='object'||Array.isArray(parent.negative_evaluations.entries)){
+      parent.negative_evaluations={schema,identity,org,entries:{}};dirty();
     }
     return parent.negative_evaluations.entries;
   };
@@ -106,7 +103,7 @@ export function negativeEvaluationCache({store,identity,org,repo,revision,dirty=
       }
       const actions=Object.entries(store().actions??{}).filter(([key])=>key.startsWith(`dispatch:${item}:`));
       for(const [,entry]of actions){files.add(entry.result?.journal);files.add(entry.original_outcome?.journal);}
-      return hash([record,policy,extra,actions,physicalInputs(files,workspaces,identity)]);
+      return hash([revision,record,policy,extra,actions,physicalInputs(files,workspaces,identity)]);
     }catch{return null;} // Unknown/missing inventory is never a cache hit.
   };
   return{
@@ -114,6 +111,8 @@ export function negativeEvaluationCache({store,identity,org,repo,revision,dirty=
       const key=`${stage}:${subject.run??subject.item}`,signature=fingerprint(subject),prior=entries()[key];
       if(signature&&prior?.signature===signature&&prior?.negative===true){counts[`${stage}_skipped`]=(counts[`${stage}_skipped`]??0)+1;return{skip:true,reason:prior.reason};}
       counts[`${stage}_evaluated`]=(counts[`${stage}_evaluated`]??0)+1;
+      const miss=!signature?'uncacheable':!prior?'cold':'changed';
+      counts[`${stage}_${miss}`]=(counts[`${stage}_${miss}`]??0)+1;
       // Invalidate before evaluation. Exceptions and positive results leave no
       // reusable entry, even if an old cache document was stale or malformed.
       if(prior){delete entries()[key];dirty();}

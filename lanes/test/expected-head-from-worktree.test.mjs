@@ -99,7 +99,8 @@ test('worktree expected head captures the topic from an unrelated cwd and emits 
   assert.equal(fs.existsSync(path.join(f.root, 'gate-ran')), false);
 });
 
-test('worktree expected head promotes while unrelated open runs retain a removed workspace', t => {
+for (const fullTuple of [false, true])
+test(`worktree expected head promotes while unrelated open runs retain a removed workspace (full tuple=${fullTuple})`, t => {
   const f = fixture(t, { waived: true });
   const removed = openLane(f, 'removed-lane');
   git(f.repo, ['worktree', 'remove', removed]);
@@ -116,6 +117,10 @@ test('worktree expected head promotes while unrelated open runs retain a removed
       { type: 'run.started', id: run, item, workspace: removed, meta: { ...worker, [key]: `other-${key}` } },
       { type: 'run.claimed', run, project: f.identity, record: f.org, owner: f.owner }];
   });
+  if (fullTuple) rows.push(
+    { type: 'item.added', id: 'ENG-7', role: 'engineer', title: 'Stale native tuple' },
+    { type: 'run.started', id: 'R-7', item: 'ENG-7', workspace: removed, meta: { ...worker } },
+    { type: 'run.claimed', run: 'R-7', project: f.identity, record: f.org, owner: f.owner });
   f.add(rows);
   const before = loadEvents(f.org).events;
   const result = f.promote();
@@ -147,12 +152,16 @@ test(`worktree expected head refuses ${kind} before capture`, t => {
   if (kind === 'foreign-claim') f.add([{ type: 'run.claimed', run: 'R-1', project: f.identity, record: f.org, owner: { ...f.owner, controller: 'foreign' } }]);
   if (kind === 'HOLD') f.add([{ type: 'item.updated', id: 'ENG-1', fields: { meta: { hold: true } } }]);
   f.saveNative();
+  const before = loadEvents(f.org).events;
   const result = f.promote();
   assert.equal(result.status, 1, result.stdout);
-  assert.match(result.stderr, kind === 'missing-run-workspace' ? /ENOENT/
+  assert.match(result.stderr, kind === 'missing-run-workspace'
+    ? /self-promotion cannot resolve owning recorded workspace for R-1; nothing merged/
     : /native|owning|UNCLAIMED|OWNED_ELSEWHERE|HOLD/);
+  assert.doesNotMatch(result.stderr, /ENOENT/);
   assert.doesNotMatch(result.stdout, /captured expected head:/);
   f.unchanged();
+  assert.deepEqual(loadEvents(f.org).events, before);
 });
 
 test('worktree expected head refuses behind main without recapture or rebase', t => {

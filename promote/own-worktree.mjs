@@ -20,20 +20,24 @@ export function ownWorktreeGuard({ canonical, identity, workspace, topic, env = 
     const binding = nativeSender(org, { cwd: workspace, env, ...(call ? { call } : {}) });
     if (binding.project.identity !== identity || binding.project.canonical !== canonical ||
         binding.project.checkout !== fs.realpathSync(workspace)) throw Error('self-promotion source/project differs; nothing merged');
-    const native = binding.native;
+    const native = binding.native, unavailable = [];
     const matches = [...state.runs.values()].filter(run => {
       const item = state.items.get(run.item), worker = effectiveWorkerIdentity(run, state);
-      return item?.kind === 'work' && item.role === 'engineer' &&
+      const candidate = item?.kind === 'work' && item.role === 'engineer' &&
         item.runs.findLast(id => !state.runs.get(id)?.abandoned) === run.id &&
         !item.closed && !item.meta.operator_reserved && !run.abandoned && !run.report &&
         run.workspace && (!run.meta.lane || run.meta.lane === topic) && !worker.identity_conflict &&
         worker.agent === native.name && worker.pane === native.pane_id &&
         worker.worker_workspace === native.workspace_id && worker.terminal_id === native.terminal_id &&
-        worker.agent_session_id === native.agent_session.value &&
-        // Removed workspaces on unrelated open runs are valid. Resolve only
-        // the exact native worker's source; its real path must still match.
-        fs.realpathSync(run.workspace) === fs.realpathSync(workspace);
+        worker.agent_session_id === native.agent_session.value;
+      if (!candidate) return false;
+      // Even a stale full-tuple match may retain a removed workspace. It is
+      // not the owning source; a resolvable exact path is still required.
+      try { return fs.realpathSync(run.workspace) === binding.project.checkout; }
+      catch { unavailable.push(run.id); return false; }
     });
+    if (!matches.length && unavailable.length)
+      throw Error(`self-promotion cannot resolve owning recorded workspace for ${unavailable.join(', ')}; nothing merged`);
     if (matches.length !== 1) throw Error('self-promotion requires one active owning native worker/run; nothing merged');
     const run = readOwnedRun(org, matches[0].id, events), owner = requireController(run, 'brain');
     dispatchSourceBinding({run,events,identity,org,workspace});

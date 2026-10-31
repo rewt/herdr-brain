@@ -1262,6 +1262,11 @@ Within report cleanup, original report sequence orders subjects that still lack
 an exact-source evaluation. Failed admission checkpoints cannot place them behind
 every newly arriving report. After a real evaluation, normal retry fairness
 applies; the closer still owns every fresh admission and effect guard.
+Read-only project identity and selected lane registration use semantic read
+projections during record planning. Unrelated worktree HEADs are not those
+results. Explicit head observations remain exact, and the projection's final
+physical Git-input seal still spans append/effect admission; identity changes,
+redirected paths and changes after sealing retain their refusal.
 
 Each `closeout.evaluated` now carries independent `resources.session`, `.folder`
 and `.branch` dispositions. Only exact `closeout.effect` receipts establish

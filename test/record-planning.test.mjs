@@ -10,6 +10,8 @@ import { gitProject } from '../lib/project.mjs';
 import { nextItemId, fold } from '../lib/state.mjs';
 import { fold as oldFold } from './fixtures/state-v0.mjs';
 import { protectRecordMutation } from '../lib/record-guard.mjs';
+import {bindCleanupEntry} from '../lib/closeout.mjs';
+import {setup as closeoutFixture,events as closeoutEvents} from './helpers/closeout-fixture.mjs';
 
 function fixture(t) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'record-plan-'))), dir = path.join(root, '.org');
@@ -32,6 +34,36 @@ function onAcquisition(f, t, action) {
   };
   t.after(() => { fs.mkdirSync = original; });
 }
+
+test('project identity projections tolerate unrelated worktree commits during planning while retaining the append fence',t=>{
+  const f=fixture(t);f.git(['init','-qb','main']);f.git(['config','user.name','Planner']);f.git(['config','user.email','planner@example.invalid']);f.git(['commit','--allow-empty','-qm','base']);
+  const lane=path.join(f.root,'other-lane');f.git(['worktree','add','-qb','lane/other',lane]);
+  const move=()=>execFileSync('git',['-C',lane,'commit','--allow-empty','-qm','other lane changed']);
+  const result=planTransaction(f.dir,()=>{const before=gitProject(f.root);move();assert.deepEqual(gitProject(f.root),before);return{add:[{type:'note.added',id:'ENG-1',text:'same actual project'}]};});
+  assert.equal(result.added.length,1);
+  const prior=loadEvents(f.dir).events;onAcquisition(f,t,move);
+  assert.throws(()=>planTransaction(f.dir,()=>{gitProject(f.root);return{add:[{type:'note.added',id:'ENG-1',text:'must not append after seal changed'}]};}),isRecordSourceConflict);
+  assert.deepEqual(loadEvents(f.dir).events,prior,'a change across lock acquisition still refuses the append');
+});
+
+test('project identity explicit heads retain semantic main CAS during planning',t=>{
+  const f=fixture(t);f.git(['init','-qb','main']);f.git(['config','user.name','Planner']);f.git(['config','user.email','planner@example.invalid']);f.git(['commit','--allow-empty','-qm','base']);
+  const prior=loadEvents(f.dir).events;
+  assert.throws(()=>planTransaction(f.dir,()=>{gitProject(f.root,{includeHead:true});f.git(['commit','--allow-empty','-qm','main changed']);gitProject(f.root,{includeHead:true});return{add:[{type:'note.added',id:'ENG-1',text:'must not append'}]};}),isRecordSourceConflict);
+  assert.deepEqual(loadEvents(f.dir).events,prior);
+});
+
+test('closeout registration projection tolerates another lane landing while preserving the selected allocation tuple',t=>{
+  const f=closeoutFixture(t,{direct:true,bound:true,merged:true}),project=gitProject(f.repo),source={type:'report.ingested',seq:0};
+  const other=f.lane+'-other';f.git(['worktree','add','-qb','lane/other',other]);
+  const observed=captureReads(()=>{
+    const first=bindCleanupEntry(project,f.org,closeoutEvents(f),source,'R-1','ready');
+    execFileSync('git',['-C',other,'commit','--allow-empty','-qm','other lane landed']);
+    assert.deepEqual(bindCleanupEntry(project,f.org,closeoutEvents(f),source,'R-1','ready'),first);
+    return first;
+  });
+  observed.validate();observed.seal()();assert.equal(observed.value.cwd,f.lane);assert.equal(observed.value.head,f.head);
+});
 
 test('Git semantic rechecks stay outside the record lock across slow failed and changed queries', async t => {
   const realGit = execFileSync('/usr/bin/which', ['git'], { encoding: 'utf8' }).trim();

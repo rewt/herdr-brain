@@ -4,8 +4,66 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { copyProduct } from '../lib/product-files.mjs';
+import { copyProduct, productFiles } from '../lib/product-files.mjs';
 import { releaseEnvironment } from './helpers/release-environment.mjs';
+
+test('copied runtime closes static imports for every shipped module', t => {
+  const source = path.resolve(import.meta.dirname, '..');
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'release-imports-')));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const bundle = path.join(root, 'bundle'), files = productFiles(source);
+  copyProduct(source, bundle);
+  assert.equal(fs.existsSync(path.join(bundle, 'test')), false);
+  const modules = files.filter(file => file.endsWith('.mjs'));
+  const entries = ['bin/org.mjs', 'watch/watch.mjs', 'line-service/line-service.mjs',
+    'supervisor/supervisor.mjs', 'settle/settle.mjs'];
+  for (const entry of [...entries, 'lanes/lane.mjs']) assert.ok(modules.includes(entry), entry);
+  // Use Node's parser, not a text regex: comments, fixture strings and multiline
+  // imports must not change the graph. Never link/evaluate command bodies.
+  // Computed imports of consumer-checkout code are not static bundle edges.
+  const scan = () => spawnSync(process.execPath, ['--experimental-vm-modules', '--input-type=module', '-e', `
+    import fs from 'node:fs';
+    import path from 'node:path';
+    import { pathToFileURL, fileURLToPath } from 'node:url';
+    import { SourceTextModule } from 'node:vm';
+    const { bundle, files } = JSON.parse(fs.readFileSync(0, 'utf8'));
+    const inventory = new Set(files), missing = [];
+    let checked = 0;
+    for (const file of files.filter(file => file.endsWith('.mjs'))) {
+      const url = pathToFileURL(path.join(bundle, file));
+      const module = new SourceTextModule(fs.readFileSync(url, 'utf8'), { identifier: url.href });
+      checked++;
+      for (const specifier of module.dependencySpecifiers) {
+        if (!specifier.startsWith('./') && !specifier.startsWith('../')) continue;
+        const target = path.relative(bundle, fileURLToPath(new URL(specifier, url)));
+        if (!inventory.has(target) || !fs.statSync(path.join(bundle, target), { throwIfNoEntry: false })?.isFile())
+          missing.push({ file, specifier, target });
+      }
+    }
+    console.log(JSON.stringify({ checked, missing }));
+    process.exitCode = missing.length ? 1 : 0;
+  `], { cwd: root, env: releaseEnvironment(process.env), input: JSON.stringify({ bundle, files }), encoding: 'utf8' });
+  const verify = (result, status, missing) => {
+    assert.equal(result.status, status, result.error?.message ?? result.stdout + result.stderr);
+    assert.deepEqual(JSON.parse(result.stdout), { checked: modules.length, missing });
+  };
+  verify(scan(), 0, []);
+  // Inject the original shipped-to-test defect outside the lane CLI graph.
+  // Cover named, side-effect and multiline imports, plus both re-export forms.
+  const declarations = ["import { absent } from '../test/not-shipped.mjs';",
+    "import '../test/not-shipped.mjs';", "export * from '../test/not-shipped.mjs';",
+    "export { absent } from '../test/not-shipped.mjs';",
+    "import {\n absent\n} from\n '../test/not-shipped.mjs';"];
+  for (const [index, file] of entries.entries()) {
+    const target = path.join(bundle, file), original = fs.readFileSync(target, 'utf8');
+    try {
+      fs.appendFileSync(target, `\n${declarations[index]}\n`);
+      verify(scan(), 1, [{ file, specifier: '../test/not-shipped.mjs', target: 'test/not-shipped.mjs' }]);
+    } finally { fs.writeFileSync(target, original); }
+  }
+  verify(scan(), 0, []);
+  t.diagnostic(`Checked ${modules.length} shipped modules; five excluded-import failures and restored-runtime recovery verified.`);
+});
 
 test('copied runtime loads lane CLI without source-only test helpers', t => {
   const source = path.resolve(import.meta.dirname, '..');

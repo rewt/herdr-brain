@@ -15,6 +15,7 @@ import {effectiveWorkerIdentity} from '../lib/worker-identity.mjs';
 import {resumeSource} from './resume-source.mjs';
 import {matchesDispatchStart} from './unlanded-cap.mjs';
 import {probationRuntime} from '../line-service/probation.mjs';
+import {checkExceptionTriage} from '../line-service/exception-triage.mjs';
 
 export const launchDigest = bytes => createHash('sha256').update(bytes).digest('hex');
 const changed = (reason, input) => {
@@ -48,6 +49,8 @@ export function checkDispatchEligibility(job, journal, {boundary='launch'}={}) {
     refuse('original stopped allocation has entered final disposition; retain its original request');
   const item=state.items.get(job.item),hold=itemLaunchHold(state,job.item,events);
   if(hold)refuse(hold.reason,hold.subject);
+  try{checkExceptionTriage(item,{state,events,repo:job.repo,org:job.org,identity:job.common});}
+  catch(error){refuse(error.message);}
   // An open recorded start owns this item/lane even without a native pane.
   // Use immutable start attribution, not mutable worker/display metadata. The
   // exact original journal may recover its own start under the existing guards.

@@ -56,6 +56,7 @@ import {refreshJournal,effectSubject} from './scheduling.mjs';
 import {appendPassJournal,withPassJournal,passJournalSize,readPassJournal} from './pass-journal.mjs';
 import {negativeEvaluationCache,sourceEvaluationInputs} from './evaluation-cache.mjs';
 import {observeGeneralOwners} from './general-owner-alarm.mjs';
+import {consumeExceptions,returnExceptionReports,checkExceptionTriage} from './exception-triage.mjs';
 export { reviewAttempt } from './review.mjs';
 
 export const sourceRoot = fileURLToPath(new URL('../', import.meta.url));
@@ -146,10 +147,10 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
   delete childEnv.ORG_GUARD_OVERRIDE; // A routine line never inherits an explicit judgment override.
   delete childEnv.HERDR_LINE_SUBJECT;delete childEnv.HERDR_LINE_SUBJECT_TOKEN;
   let timings,commandTurn;
-  const invoke = (exe, args, { receipt = false } = {}) => {
+  const invoke = (exe, args, { receipt = false, environment } = {}) => {
     const started = performance.now();
     let r;
-    try { const options={ cwd: repo, env: childEnv, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024,timeout:0 };
+    try { const options={ cwd: repo, env: environment?{...childEnv,...environment}:childEnv, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024,timeout:0 };
       r = commandTurn ? commandTurn(exe,args,options) : command(exe,args,options); }
     finally { if (timings) timings.effect_command_ms += performance.now() - started; }
     if (r.error || r.status !== 0) throw Object.assign(Error((r.stderr || r.stdout || r.error?.message || `exit ${r.status}`).trim()), { code:r.error?.code,receipt: { status: r.status, signal: r.signal, stdout: r.stdout, stderr: r.stderr,error:r.error?.code,...(r.activity?{activity:r.activity,signal_sent:r.signal_sent}:{}) } });
@@ -664,6 +665,15 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
           }
         }catch(e){note(key,e.message,{item});}
       }
+      if(config&&!policyHold)try{
+        checkpointNotices();
+        const supervisor=projectExceptionAddress(repo,config,config.routes?.['engineer-xhigh']?'engineer-xhigh':'engineer',childEnv).to;
+        outside('exception-intake','exception-intake',()=>consumeExceptions({repo,org,env:childEnv,config,supervisor,native,max:maxStepsPerStage,diagnostics:effects.record_notices,audit}));
+        const replies=[];
+        outside('exception-reports','exception-reports',()=>returnExceptionReports({repo,org,env:childEnv,enqueue:r=>replies.push(r)}));
+        for(const reply of replies)effect(reply.id,()=>cli('supervisor/prompt-supervisor.mjs',[reply.to,reply.message,'--org',org,'--run',reply.correlation.run,'--id',reply.id],{environment:{SUPERVISOR_INPUT_WAIT_SECONDS:'0'}}));
+        stale=true;snapshot=current();
+      }catch(error){note('exception-intake',error.message);}
       const standing=queuePolicy(snapshot.state);
       // Productive cleanup is allowed to finish. It cannot consume READY work's
       // independent admission allowance. All actual effects still recount and
@@ -699,6 +709,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         if(obsoleteDecision(snapshot.state.items.get(item.id),snapshot)){timings.outcome_decisions_deferred++;continue;}
         const input=dispatchInput({...snapshot,item:snapshot.state.items.get(item.id),org,identity:project.identity});
         if(!input){observation.retain('no dispatch input');continue;}
+        try{checkExceptionTriage(item,{...snapshot,repo,org,identity:project.identity});}catch(error){observation.retain(error.message);continue;}
         const eligibleAt=now(),decisionStarted=performance.now();
         log({action:'admission-eligible',item:item.id,input,source_seq:item.created.seq,source_at:item.created.at,
           observed_at:eligibleAt,wake_owner:'line-service',event_to_wake_ms:null});

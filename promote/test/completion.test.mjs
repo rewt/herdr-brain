@@ -1,6 +1,7 @@
 import test from '../../test/helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { reconcileBatchCompletion } from '../completion.mjs';
@@ -64,10 +65,14 @@ test('worker receipt and session bind preserve main run bytes and completion fin
 });
 
 test('completion fixture delivers through a loaded quiet-confirmation window', async t => {
-  // Model slow native reads against a small base window without adding host
-  // load or waiting ten seconds for every unsuccessful drain pass.
-  const f = fixture(t, { inputWaitMs: 10, inputAllowance: ms => loadTimeout(ms * 500),
-    recipientDelayMs: 300, noticeWaitMs: 3000 });
+  // Exercise the fixture defaults with a deterministic load sample. A fixed
+  // ten-second window must fail this assertion even if delivery is fast.
+  const load = t.mock.method(os, 'loadavg', () => [8, 8, 8]);
+  const capacity = t.mock.method(os, 'availableParallelism', () => 4);
+  let f;
+  try { f = fixture(t, { recipientDelayMs: 300 }); }
+  finally { load.mock.restore(); capacity.mock.restore(); }
+  assert.equal(f.env.SUPERVISOR_INPUT_WAIT_SECONDS, '20');
   const member = f.lane('loaded');
   f.drain();
   await f.waitForNotices();

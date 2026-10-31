@@ -1289,6 +1289,11 @@ most eight reports and eight closeouts with its own 720-second allowance;
 native drains receive the remaining deadline. Least-recently-selected targets
 run first, including after a crash. A kept target yields to independent peers.
 Original UNKNOWN/refused commands remain governed by their original record facts.
+The historical never-sent bridge first selects positively provable subjects
+without opening a record plan. Unprovable old intents remain UNKNOWN and cannot
+abort current allocation refresh on unrelated landings. Selected proofs re-read
+the record, source guards and reflogs inside each bounded pure preparation;
+only pre-effect source conflicts may re-prepare, never native effects/refusals.
 
 An ingested report's original watcher can remain alive while its final notice
 waits for supervisor input. That transport wait does not retain the finished

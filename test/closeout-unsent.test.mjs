@@ -7,6 +7,8 @@ import {closeoutNextStage} from '../lib/closeout-status.mjs';
 import {readCloseoutEntries,unresolvedCloseoutEffect,CLOSEOUT_EXIT_PENDING} from '../lib/closeout.mjs';
 import {events,setup,effects,retainNativeOutcome} from './helpers/closeout-fixture.mjs';
 import {hold} from './helpers/retire-fixture.mjs';
+import {gitProject} from '../lib/project.mjs';
+import {recordSourceConflict} from '../lib/record-observation.mjs';
 
 const producer='291c4da2e2dfecda82c8626588ae841d7cc21a28';
 const graph='4c077ad48f13c6b2d7ae2afaa439589547dda558b6773c9ef696fa6222c5c825';
@@ -123,4 +125,80 @@ test('a handoff after an actual uncertain invocation cannot manufacture never-se
   assert.deepEqual(events(f),prior);
   const retained=retainNativeOutcome(f,s.entry);
   f.drain({keys:[s.entry.key],retrySafe:true});retained();
+});
+
+test('unprovable legacy UNKNOWNs skip record/source planning instead of aborting current refresh',t=>{
+  const f=setup(t,{merged:true}),s=stale(f),original=events(f);
+  for(const log of Object.values(s.history))log.rows[0].second=Math.floor(Date.parse(s.intent.at)/1000)+1;
+  const originalMkdir=fs.mkdirSync;
+  fs.mkdirSync=function(file,...args){
+    assert.notEqual(file,path.join(f.org,'lock'),'no no-op record lock acquisition');
+    return originalMkdir.call(this,file,...args);
+  };
+  try{
+    assert.deepEqual(recoverNeverStartedCloseouts({...s,org:f.org,entries:[s.entry],guard:()=>{
+      assert.fail('unprovable history must not enter a source guard vulnerable to unrelated landings');
+    }}),[]);
+  }finally{fs.mkdirSync=originalMkdir;}
+  assert.deepEqual(events(f),original);
+  assert.ok(unresolvedCloseoutEffect(s.entry,events(f)),'original UNKNOWN is retained');
+  assert.deepEqual(f.read().actions,[]);
+});
+
+for(const change of ['Git','record'])test(`positive never-sent proof re-prepares after unrelated ${change} movement without replaying effects`,t=>{
+  const f=setup(t,{merged:true}),s=stale(f),original=events(f);
+  let guards=0,changed=false;
+  const originalMkdir=fs.mkdirSync;
+  if(change==='record')fs.mkdirSync=function(file,...args){
+    const result=originalMkdir.call(this,file,...args);
+    if(file===path.join(f.org,'lock')&&!changed){
+      changed=true;
+      // A separate fixture writer wins just before this preparation's CAS.
+      fs.appendFileSync(f.eventFile,JSON.stringify({type:'note.added',id:'ENG-1',text:'unrelated writer',
+        seq:original.at(-1).seq+1,at:new Date().toISOString(),by:'fixture'})+'\n');
+    }
+    return result;
+  };
+  let added;
+  try{
+    added=recoverNeverStartedCloseouts({...s,org:f.org,entries:[s.entry],guard:()=>{
+      gitProject(f.repo);guards++;
+      if(change==='Git'&&!changed){changed=true;f.git(['commit','--allow-empty','-qm','unrelated landing']);}
+    }});
+  }finally{fs.mkdirSync=originalMkdir;}
+  assert.ok(changed);assert.ok(guards>=3,'fresh preparation reruns both source guards');
+  assert.equal(added.filter(e=>e.type==='closeout.command-not-started').length,1);
+  assert.equal(events(f).filter(e=>e.type==='closeout.command-not-started').length,1);
+  assert.deepEqual(events(f).slice(0,original.length),original);
+  assert.deepEqual(f.read().actions,[],'proof preparation has no native executor');
+});
+
+test('a re-preparation reads changed reflogs again and retains newly unprovable intent',t=>{
+  const f=setup(t,{merged:true}),s=stale(f),original=events(f);
+  const writeHistory=()=>{
+    for(const [name,file]of [['main','logs/refs/heads/main'],['head','logs/HEAD']])
+      fs.writeFileSync(path.join(f.common,file),s.history[name].rows.map(row=>
+        `${row.old} ${row.head} Fixture <fixture@example.invalid> ${row.second} +0000\t${row.message}\n`).join(''));
+  };
+  writeHistory();let guards=0;
+  const added=recoverNeverStartedCloseouts({...s,history:undefined,org:f.org,entries:[s.entry],guard:()=>{
+    if(++guards===2){
+      for(const log of Object.values(s.history))log.rows[0].second=Math.floor(Date.parse(s.intent.at)/1000)+1;
+      writeHistory();
+      throw recordSourceConflict('fixture source changed before append');
+    }
+  }});
+  assert.ok(guards>=3);assert.deepEqual(added,[]);
+  assert.deepEqual(events(f),original);
+  assert.ok(unresolvedCloseoutEffect(s.entry,events(f)));
+  assert.deepEqual(f.read().actions,[]);
+});
+
+for(const code of ['EPERM','CLOSEOUT_CODE_CHANGED','RECORD_OBSERVATION_CONFLICT'])test(`never-sent preparation preserves a real ${code} guard refusal without retry`,t=>{
+  const f=setup(t,{merged:true}),s=stale(f),original=events(f);
+  const refusal=Object.assign(Error('original source/native guard refused'),{code});let guards=0;
+  assert.throws(()=>recoverNeverStartedCloseouts({...s,org:f.org,entries:[s.entry],guard:()=>{
+    guards++;throw refusal;
+  }}),error=>error===refusal);
+  assert.equal(guards,1);assert.deepEqual(events(f),original);assert.deepEqual(f.read().actions,[]);
 });

@@ -93,18 +93,30 @@ function normalizeFile(file, roots) {
 }
 
 // TAP stream totals measure test time, not the time between npm/pnpm markers.
-// Multi-file TAP streams have no per-file identity; keep them as groups.
+// Legacy multi-file TAP streams without identity remain groups.
 export function parseLog(text, roots = []) {
   const steps = [], files = [], groups = [], failing = new Set(), failingSteps = new Set();
   let step = '(unmarked gate)', commandFiles = [], failed = false, pendingFile = null, pendingFailed = false, stream = false, labeledFiles = false;
+  let nextDocumentFile = null, documentFile = null;
   for (const raw of text.replace(/\x1b\[[0-9;]*[A-Za-z]/g, '').split('\n')) {
     const marker = raw.match(/^> \S+@\S+ ((?:test|validate):\S+)(?:\s|$)/);
     if (marker) { step = marker[1]; commandFiles = []; }
     if (/^> (?:node|.*\bnode)\b/.test(raw)) commandFiles = [...raw.matchAll(testPath)].map(m => normalizeFile(m[0], roots));
-    if (raw === 'TAP version 13') { failed = false; stream = true; labeledFiles = false; }
+    const binding = raw.match(/^# FILE_TAP: (.*)$/);
+    if (binding) {
+      nextDocumentFile = null;
+      try {
+        const value = JSON.parse(binding[1]);
+        if (typeof value.file === 'string' && value.file) nextDocumentFile = normalizeFile(value.file, roots);
+      } catch { /* Malformed labels supply no attribution. */ }
+    }
+    if (raw === 'TAP version 13') {
+      failed = false; stream = true; labeledFiles = false; pendingFile = null;
+      documentFile = nextDocumentFile; nextDocumentFile = null;
+    }
     if (/^not ok\b/.test(raw)) { failed = true; if (pendingFile) pendingFailed = true; failingSteps.add(step); }
     const subtest = raw.match(/^# Subtest: (.+\.(?:test|spec)\.[cm]?[jt]sx?)$/);
-    if (subtest) { pendingFile = normalizeFile(subtest[1], roots); pendingFailed = false; }
+    if (subtest && !documentFile) { pendingFile = normalizeFile(subtest[1], roots); pendingFailed = false; }
     const duration = raw.match(/^  duration_ms: ([\d.]+)$/);
     if (duration && pendingFile) { files.push({ name: pendingFile, duration_s: Number(duration[1]) / 1000, step, failed: pendingFailed }); pendingFile = null; labeledFiles = true; }
     if (/^\s+location:|^not ok\b|^\s*(?:FAIL|❯|×)\s|error TS\d+/.test(raw)) {
@@ -119,7 +131,11 @@ export function parseLog(text, roots = []) {
     if (total && stream) {
       const row = { name: step, duration_s: Number(total[1]) / 1000, failed, source: 'TAP stream total (test time)' };
       steps.push(row);
-      if (!labeledFiles && commandFiles.length === 1 && !/[*?\[\]{}]/.test(commandFiles[0])) files.push({ ...row, name: commandFiles[0], step });
+      if (documentFile) {
+        files.push({ ...row, name: documentFile, step });
+        if (failed) failing.add(documentFile);
+      }
+      else if (!labeledFiles && commandFiles.length === 1 && !/[*?\[\]{}]/.test(commandFiles[0])) files.push({ ...row, name: commandFiles[0], step });
       else if (!labeledFiles && commandFiles.length) groups.push({ ...row, name: commandFiles.join(' + '), step });
       stream = false; pendingFile = null;
     }

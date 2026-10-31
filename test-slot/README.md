@@ -419,7 +419,7 @@ phase identity, so repeated attempts can be distinguished. Adapter-default
 scratch receipts remain temporary; callers needing durable measurements pass
 `executionReceipt`. These files do not enter healthy-clock history or the record.
 
-Automatic receipt writes prune managed receipt/telemetry pairs to the newest
+Automatic receipt writes prune managed receipts and their telemetry/TAP to the newest
 **20 per profile id** in that directory, across revisions and bindings. The receipt
 being written is always kept. Receipts also retain their holder identity and lock
 paths: live or unknown holders and matching live/unknown lock records are
@@ -429,8 +429,17 @@ missing command identity retains it. A later write retries pruning after those
 holders finish. Files from before this retention schema,
 malformed or redirected files, and explicit caller-selected receipts remain
 untouched; protected evidence can exceed the normal bound. Pruning is best effort
-and cannot change the command result. Only fixed sibling telemetry paths are
-eligible for deletion; receipt-provided pointers are never followed.
+and cannot change the command result. Only fixed sibling telemetry paths and
+`test-file-tap-<journal-name SHA256>-<six random characters>` directories beside
+the fixed timing sibling are eligible for deletion; receipt-provided pointers
+are never followed. Nested runners sharing that journal share its retention
+lifetime. A redirected TAP directory protects the whole receipt. Legacy unbound
+TAP directories remain untouched. Explicit caller-selected evidence retains its
+existing lifetime, including its TAP; this policy does not sweep lane history.
+Each serialized TAP document carries a JSON file comment for timing attribution.
+On worker cancellation the coordinator copies unfinished TAP and raw stderr to
+the log and publishes the terminal artifact references before exiting, so later
+execution retention does not erase the inline diagnostic.
 
 Telemetry keeps the **last 256 rows per run**, shared across both attempts of a
 permitted retry. Each successful write atomically replaces that tail. Aggregate

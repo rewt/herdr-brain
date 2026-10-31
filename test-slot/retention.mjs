@@ -2,6 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { readPlainFile } from '../lib/files.mjs';
+import { tapArtifactPrefix } from './tap-artifacts.mjs';
 
 export const EXECUTIONS_PER_PROFILE = 20;
 export const RETENTION_SCHEMA = 'test-slot-retention/v1';
@@ -41,12 +42,19 @@ export function pruneExecutions(currentFile, profileId, stateOfHolder) {
       }
       if (protectedByLock || readPlainFile(row.file) !== row.bytes) continue;
       const siblings = [`${row.file}.samples.jsonl`, `${row.file}.timings.jsonl`];
+      const prefix = path.basename(tapArtifactPrefix(`${row.file}.timings.jsonl`));
+      const artifacts = fs.readdirSync(directory).filter(name => name.startsWith(prefix) &&
+        /^[A-Za-z0-9]{6}$/.test(name.slice(prefix.length))).map(name => path.join(directory, name));
       // Do not follow a telemetry pointer from receipt content, or remove a
       // redirected/non-file sibling. Only this fixed managed pair is eligible.
       for (const file of siblings) {
         try { if (!fs.lstatSync(file).isFile()) throw Error('redirected evidence sibling'); }
         catch (error) { if (error.code !== 'ENOENT') throw error; }
       }
+      for (const artifact of artifacts) {
+        if (!fs.lstatSync(artifact).isDirectory()) throw Error('redirected TAP artifact directory');
+      }
+      for (const artifact of artifacts) fs.rmSync(artifact, { recursive: true });
       for (const file of siblings) {
         try { fs.unlinkSync(file); }
         catch (error) { if (error.code !== 'ENOENT') throw error; }

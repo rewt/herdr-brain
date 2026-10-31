@@ -16,6 +16,7 @@ import { SCRATCH_JOURNAL, evidenceDirectory, recoverScratch } from './scratch.mj
 import { watchRun } from '../../test-slot/watch.mjs';
 import { silenceNotice } from '../../test-slot/watch-notice.mjs';
 import * as timingJournal from '../../test-slot/timings.mjs';
+import { tapArtifactPrefix } from '../../test-slot/tap-artifacts.mjs';
 const { TIMINGS_ENV, startTiming, timing } = timingJournal;
 
 // The coordinator retains ownership evidence beside TAP, outside all fixtures.
@@ -101,8 +102,8 @@ if (worker) {
     // Independent reporter streams retain each admitted file before copying
     // completed TAP to the build log.
     // Keep artifacts beside the durable journal, outside disposable fixtures.
-    const directory = evidenceDirectory(path.join(process.env[TIMINGS_ENV]
-      ? path.dirname(path.resolve(process.env[TIMINGS_ENV])) : tmpdir(), 'test-file-tap-'));
+    const directory = evidenceDirectory(process.env[TIMINGS_ENV]
+      ? tapArtifactPrefix(process.env[TIMINGS_ENV]) : path.join(tmpdir(), 'test-file-tap-'));
     let code = 0;
     let next = 0, allFilesDone = false, wakeOutput, copyingFileOutput = false;
     const completed = [];
@@ -113,6 +114,7 @@ if (worker) {
         copyingFileOutput = true;
         try {
           if (entry.stderr) await copyOutput(fs.createReadStream(entry.stderr), process.stderr);
+          if (entry.file) yield `# FILE_TAP: ${JSON.stringify({ file: entry.file })}\n`;
           yield* fs.createReadStream(entry.artifact);
         } finally { copyingFileOutput = false; }
       }
@@ -224,7 +226,7 @@ if (worker) {
         if (fileCode) code = 1;
         // Serialize whole completed files, never wait behind an unfinished one.
         // Admission and artifact retention continue even if log output is slow.
-        completed.push({ artifact, stderr: fileCode ? reference.stderr_artifact : null }); wakeOutput?.(); wakeOutput = undefined;
+        completed.push({ artifact, file: reference.file, stderr: fileCode ? reference.stderr_artifact : null }); wakeOutput?.(); wakeOutput = undefined;
       }
     }
     await Promise.all(Array.from({ length: Math.min(concurrency, files.length) }, admit));
@@ -430,6 +432,7 @@ if (worker) {
           if (fileGroup && process.connected) process.send({ fileTapComplete: completion });
           else forwardOutput(`\nFILE_TAP_COMPLETE: ${JSON.stringify(completion)}\n`, process.stderr);
           await copyOutput(fs.createReadStream(reference.stderr_artifact), process.stderr);
+          await copyOutput([`# FILE_TAP: ${JSON.stringify({ file: reference.file })}\n`], process.stdout);
           await copyOutput(fs.createReadStream(reference.artifact), process.stdout);
         }
         fileArtifacts.clear();

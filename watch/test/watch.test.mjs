@@ -502,7 +502,7 @@ esac`);
       const calls = fs.readFileSync(f.calls, 'utf8').trim().split('\n');
       const prompts = calls.filter(call => call.startsWith('agent prompt '));
       assert.equal(prompts.length, 1, calls.join('\n'));
-      assert.ok(calls.every(call => !call.startsWith('agent get lane-nine')), calls.join('\n'));
+      assert.ok(calls.every(call => !call.includes('lane-nine')), calls.join('\n'));
       assert.equal(prompts[0], `agent prompt supervisor-test ${reportNotice({ run: 'R-941', item: 'ENG-9',
         outcome: 'done', headline: report.headline, report: f.report, check: 'pass' })} notice-id=watch:R-941:final`);
       const entries = readInbox(inbox);

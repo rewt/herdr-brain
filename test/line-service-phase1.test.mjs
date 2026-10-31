@@ -984,6 +984,26 @@ test('original REV4-shaped continuation preserves its disjoint PASS peer and zer
   assert.equal(terminal.stage,'complete',JSON.stringify(terminal));assert.equal(promptCalls(f.d).length,1);const saved=JSON.parse(fs.readFileSync(f.journal));assert.equal(saved.token,'original-r4');assert.equal(saved.reviewQueue.head,f.heads[0]);assert.equal(saved.reviewQueue.base,f.base);assert.equal(saved.native_launch_attempted,true);assert.equal(saved.preflightContinuations[0].native_launch_attempted,false);assert.equal(saved.preflightContinuations[0].original_prestart_seq,proof.seq);assert.equal(f.context().state.items.get('REV-4').runs.length,1);assert.deepEqual(f.context().events.find(e=>e.seq===verdict.seq),verdict);assert.equal([...f.context().state.items.values()].filter(i=>i.role==='reviewer').length,2);
 });
 
+test('original scoped continuation leaves unrelated producer reports unread and preserves its captured peer',t=>{
+  const f=originalPartialFixture(t);independentProducer(f);
+  const before=f.context(),peer=before.state.items.get('REV-5').meta.review_target,read=fs.readFileSync,unrelated=[],selected=[];
+  const mocked=t.mock.method(fs,'readFileSync',(file,...args)=>{
+    if(file===path.join(f.org,'reports/R-3.md')){unrelated.push(file);throw Error('unrelated producer source read');}
+    if(file===f.file)selected.push(file);
+    return read(file,...args);
+  });
+  const cwd=process.cwd(),release=noticeLock(path.join(f.directory,'pass.lock'));process.chdir(f.cwd);
+  let result;
+  try{result=recoverServiceReview({repo:f.cwd,org:f.org,reviewId:'REV-4',env:f.env,call:()=>JSON.stringify({result:{agents:[]}})});}
+  finally{process.chdir(cwd);release();mocked.mock.restore();}
+  assert.deepEqual(unrelated,[]);assert.ok(selected.length>0,'the actual producer evidence remains required');
+  assert.equal(result.result,'original_prestart_ready');
+  const after=f.context();assert.deepEqual(after.state.items.get('REV-5').meta.review_target,peer);
+  assert.deepEqual(after.state.items.get('REV-4').meta.review_target,f.target);
+  assert.equal(after.events.some(e=>e.type==='review.recovery-completed'),false,'original scope is retained without a replacement');
+  assert.equal([...after.state.items.values()].filter(i=>i.role==='reviewer').length,2);
+});
+
 test('original partial continuation holds overlap active native owners altered evidence and admission captures without spending a replacement',t=>{
   for(const kind of ['overlap','active','changed','admission']){
     const f=originalPartialFixture(t),cwd=process.cwd(),release=noticeLock(path.join(f.directory,'pass.lock'));process.chdir(f.cwd);

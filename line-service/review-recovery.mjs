@@ -83,7 +83,7 @@ export function recoverServiceReview({repo,org,reviewId,env=process.env,call=inv
   if(hash(bytes)!==progress.request_sha256||job.item!==q.id||job.repo!==repo||job.org!==org||job.common!==project.identity||path.basename(journal)!==`${job.token}.json`||job.reviewQueueProtocol!==1||JSON.stringify(job.reviewQueue)!==JSON.stringify(target))throw Error('original review request/source/target CAS changed');
   if(/EPERM|EACCES|native refusal|foreign|identity|reserved|HOLD|STOP/i.test(job.error??'')||q.meta.hold||q.meta.held||q.meta.reserved||q.meta.operator_reserved)throw Error('native/ownership/reserved refusal remains stopped; no automatic replacement');
   const prior=reviewResolution({events:initial,org,item:source.id,head:target.head});if(prior)throw Error('one exact producer replacement budget already spent');
-  const current=discoverChanges({events:initial,state,repo,org,identity:project.identity}).changes.find(c=>c.item.id===source.id&&c.run.id===run.id);
+  const current=discoverChanges({events:initial,state,repo,org,identity:project.identity,runId:run.id}).changes.find(c=>c.item.id===source.id&&c.run.id===run.id);
   if(!current||current.authorization)throw Error('historical/unknown target differs from its actual producer source; retain it');
   const originalScope=peers.length!==1||!sameCapturedTarget(target,current.target),validatePeers=fresh=>{
     capturedProducerTarget({repo,target,whole:current});const ours=new Set(capturedReviewCommits(target));

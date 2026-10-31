@@ -196,6 +196,25 @@ test('report intake retains an occupied intake owner and resumes on the next wak
   runCloseoutTurn({...f.args,cli:ingestReports(f,calls)});assert.equal(calls.length,1);
 });
 
+test('scheduled intake wakes return while their finite closeout child remains occupied',t=>{
+  const f=fixture(t),calls=[],commands=[];reportCandidate(f,'R-2');
+  const lock=path.join(f.directory,'closeout-turn.lock'),release=noticeLock(lock),owner=fs.readFileSync(path.join(lock,'owner.json'));
+  const service=createLineService({repo:f.repo,org:f.org,to:'supervisor-test',env:f.env,maxStarts:0,closeoutMeasure:()=>{},
+    command:(exe,args)=>{commands.push(args);return{status:0,stdout:ingestReports(f,calls)(path.relative(sourceRoot,args[0]),args.slice(1)),stderr:''};}});
+  service.closeout=()=>{assert.fail('the scheduled parent must not wait for closeout');};
+  let launches=0;
+  const wake=()=>wakeLineService({service,launch:()=>({pid:100}),launchCloseout:()=>{launches++;return{pid:200};}});
+  try{
+    assert.equal(wake().intake.ingested,1);reportCandidate(f,'R-3');
+    assert.equal(wake().intake.ingested,1);assert.equal(launches,2);
+    assert.deepEqual(calls.map(args=>args[args.indexOf('--run')+1]),['R-2','R-3']);
+    assert.deepEqual(fs.readFileSync(path.join(lock,'owner.json')),owner);
+    const before=commands.length;
+    service.pass({reconcileCloseout:false});
+    assert.equal(commands.slice(before).some(args=>args[0].endsWith('supervisor/closeout.mjs')),false,'general children do not repeat closeout');
+  }finally{release();}
+});
+
 test('historical and foreign report files spend no finite ingest slots across repeated turns',t=>{
   const f=fixture(t),calls=[];
   reportCandidate(f,'R-2');f.append([{type:'item.closed',id:'ENG-2',as:'done'}]);

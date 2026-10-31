@@ -39,7 +39,7 @@ export function runCloseoutTurn(options) {
   try{
     // Intake has its own finite owner. A retained closeout command must never
     // prevent the next scheduled wake from committing a finished report.
-    const intake=runReportIntake(options),result=closeoutTurn({...options,intake});
+    const intake=options.reconcileReports===false?{}:runReportIntake(options),result=closeoutTurn({...options,intake});
     contended=Boolean(result.already_running);return result;
   }
   catch(error){
@@ -77,9 +77,9 @@ export function runReportIntake({project,org,cli,guard,maxSteps=8,budgetMs=CLOSE
     // Migrate only the fair intake cursor. The old checkpoint remains intact;
     // closeout and intake never write one another's scheduling authority.
     const legacy=path.join(directory,'closeout-turn.json');
-    const previous=fs.existsSync(file)?JSON.parse(fs.readFileSync(file,'utf8')):
+    const own=fs.existsSync(file),previous=own?JSON.parse(fs.readFileSync(file,'utf8')):
       fs.existsSync(legacy)?JSON.parse(fs.readFileSync(legacy,'utf8')):null;
-    if(previous&&(previous.identity!==project.identity||previous.org!==org))throw Error('intake checkpoint identity changed');
+    if(previous&&(previous.schema!==(own?'line-report-intake/v1':'line-closeout-turn/v1')||previous.identity!==project.identity||previous.org!==org))throw Error('intake checkpoint identity changed');
     const state={schema:'line-report-intake/v1',identity:project.identity,org,attempt:previous?.attempt??0,ingest:previous?.ingest??{}};
     const save=()=>writeFileAtomic(file,JSON.stringify(state)+'\n',0o600);
     const read=()=>{guard();code.verify();const loaded=loadEvents(org);if(loaded.tornTail)throw Error('incomplete closeout record');return{events:loaded.events,state:fold(loaded.events)};};

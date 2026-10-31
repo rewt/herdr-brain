@@ -455,7 +455,7 @@ test('wake closeout failure retains its original code and command receipt before
     launches++;
     const rows=fs.readFileSync(path.join(s.directory,'passes.jsonl'),'utf8').trim().split('\n').map(JSON.parse);
     assert.deepEqual(rows.filter(row=>row.action==='closeout-held').map(({at,...row})=>row),
-      [{action:'closeout-held',reason:'closeout native refusal',code:'EACCES',receipt}]);
+      [{pid:process.pid,action:'closeout-held',reason:'closeout native refusal',code:'EACCES',receipt}]);
     return{considered:true};
   }});
   assert.equal(closeouts,1,'the refused closeout is not retried');assert.equal(launches,1);

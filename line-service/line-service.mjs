@@ -45,7 +45,7 @@ import {judgmentDispatchAllowed} from './decision-policy.mjs';
 import {outcomeFailure} from '../lib/uncertain-outcome.mjs';
 import {queueOutcomeDecision,observeOutcomeDecisions} from './outcome-decision.mjs';
 import {registerCloseoutWait,closeoutWait,closeoutWaitState,closeoutNextStage} from '../lib/closeout-status.mjs';
-import {runCloseoutTurn,CLOSEOUT_TURN_BUDGET_MS} from './closeout-turn.mjs';
+import {runCloseoutTurn,runReportIntake,CLOSEOUT_TURN_BUDGET_MS} from './closeout-turn.mjs';
 import {transact} from '../lib/store.mjs';
 import {readReviewAdmission,readOrdinaryAdmission,reviewAdmissionSubject} from './review-admission.mjs';
 import {reviewAdmissionHold} from '../lib/review-admission.mjs';
@@ -185,13 +185,14 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
     if (reported && !run.report) throw Error('report not ingested');
     return { ...snapshot, run, item };
   };
-  const closeout=()=>runCloseoutTurn({project,org,env:childEnv,cli,guard:observe,maxSteps:maxStepsPerStage,budgetMs:CLOSEOUT_TURN_BUDGET_MS,clock:workClock,
+  const intake=()=>runReportIntake({project,org,cli,guard:observe,maxSteps:maxStepsPerStage,clock:workClock});
+  const closeout=(options={})=>runCloseoutTurn({project,org,env:childEnv,cli,guard:observe,maxSteps:maxStepsPerStage,budgetMs:CLOSEOUT_TURN_BUDGET_MS,clock:workClock,...options,
     ...(closeoutMeasure?{measure:closeoutMeasure}:{})});
   const acquirePass=(options={})=>noticeLock(path.join(directory,'pass.lock'),{...options,onRecovery:recovery=>{
     observe();
     log({action:'general-pass-lock-recovery',schema:'line-pass-lock-recovery/v1',project:project.identity,org,...recovery});
   }});
-  function pass() {
+  function pass(options) {
     // pass.lock serializes scans, but is deliberately yielded for foreground
     // effects. Keep at most two whole passes (one slow owner plus independent
     // admission) instead of retaining a full record for every scheduled wake.
@@ -202,12 +203,12 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       }});
     }catch(error){if(!error.message.startsWith('locked:'))throw error;}
     if(!releaseGeneral){log({action:'general-owner-held',reason:'two finite general passes already own the scheduling allowance'});return{already_running:true};}
-    try{return generalPass();}finally{releaseGeneral();}
+    try{return generalPass(options);}finally{releaseGeneral();}
   }
-  function generalPass() {
+  function generalPass({reconcileCloseout=true}={}) {
     const closeoutStarted=workClock();
     let closeout_ms;
-    try { closeoutOrHold(closeout, log); }
+    try { if(reconcileCloseout)closeoutOrHold(closeout, log); }
     finally {
       closeout_ms=Math.max(0,workClock()-closeoutStarted);
       log({action:'closeout-timing',duration_ms:closeout_ms,budget_ms:CLOSEOUT_TURN_BUDGET_MS});
@@ -786,17 +787,20 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       log({action:'schedule-unlocked',pass:passAt,pid:process.pid,duration_ms:performance.now()-lockedAt});release();release=null;
     }}} }
   }
-  return { pass, closeout, directory, log, acquirePass };
+  return { pass, closeout, intake, directory, log, acquirePass };
 }
 
 // The existing launchd schedule stays finite while the general pass runs in
 // its own finite child. Every wake reconciles closeout even during long review.
 // pass.lock serializes scheduling/journal writes; subject locks retain ongoing
 // commands while another finite wake can admit independent work.
-export function wakeLineService({service,launch}){
+export function wakeLineService({service,launch,launchCloseout}){
   // A held closeout grants no authority over its effect. The general child
   // retains its own fresh identity, STOP/HOLD, source and admission guards.
-  const closeout=closeoutOrHold(()=>service.closeout(),row=>service.log(row));
+  // The scheduled process must return while cleanup runs. Otherwise launchd
+  // cannot supply another intake wake, even with separate intake/closeout locks.
+  const intake=launchCloseout?closeoutOrHold(()=>service.intake(),row=>service.log(row)):undefined;
+  const closeout=closeoutOrHold(()=>launchCloseout?launchCloseout():service.closeout(),row=>service.log(row));
   let general,release;
   try{release=(service.acquirePass??(()=>noticeLock(path.join(service.directory,'pass.lock'))))();}
   catch(error){
@@ -808,12 +812,12 @@ export function wakeLineService({service,launch}){
     general={already_running:true,reason:error.message};
   }
   if(release){release();general=launch();}
-  return{result:'line-wake-complete',closeout,general};
+  return{result:'line-wake-complete',...(intake?{intake}:{}),closeout,general};
 }
 
 export async function main(argv = process.argv.slice(2), {home}={}) {
   const { values } = parseArgs({ args: argv, usage: 'line-service.mjs --once --repo CANONICAL --org RECORD --to SUPERVISOR', options: {
-    once: { type: 'boolean' },'general-pass':{type:'boolean'},digest:{type:'boolean'},since:{type:'string'}, repo: { type: 'string' }, org: { type: 'string' }, to: { type: 'string' }, herdr: { type: 'string' },
+    once: { type: 'boolean' },'general-pass':{type:'boolean'},'closeout-pass':{type:'boolean'},digest:{type:'boolean'},since:{type:'string'}, repo: { type: 'string' }, org: { type: 'string' }, to: { type: 'string' }, herdr: { type: 'string' },
   } });
   if(values.digest){
     if(!values.org)throw Error('--digest needs --org RECORD');
@@ -827,15 +831,17 @@ export async function main(argv = process.argv.slice(2), {home}={}) {
   serviceSource(values.repo,{home});
   installedContext(values.repo,values.org??findOrgDir({cwd:values.repo,env:{...process.env,ORG_DIR:''}}));
   const service = createLineService({...values,runtimeHome:home});
-  const result = values['general-pass'] ? service.pass() : wakeLineService({service,launch:()=>{
+  const launchFinite=flag=>{
     const output=fs.openSync(path.join(service.directory,'launchd.log'),'a',0o600);
     try{
-      const child=spawn(process.execPath,[fileURLToPath(import.meta.url),...argv,'--general-pass'],
+      const child=spawn(process.execPath,[fileURLToPath(import.meta.url),...argv,flag],
         {cwd:values.repo,env:process.env,detached:true,stdio:['ignore',output,output]});
-      child.on('error',error=>service.log({action:'general-start-deferred',reason:error.message}));child.unref();
+      child.on('error',error=>service.log({action:'finite-start-deferred',role:flag,reason:error.message}));child.unref();
       return{pid:child.pid};
     }finally{fs.closeSync(output);}
-  }});
+  };
+  const result = values['general-pass'] ? service.pass({reconcileCloseout:false}) : values['closeout-pass'] ? service.closeout({reconcileReports:false}) :
+    wakeLineService({service,launch:()=>launchFinite('--general-pass'),launchCloseout:()=>launchFinite('--closeout-pass')});
   process.stdout.write(JSON.stringify(result) + '\n');
 }
 if (isMain(import.meta.url)) main().catch(e => { process.stderr.write(`line-service: ${e.message}\n`); process.exitCode = 1; });

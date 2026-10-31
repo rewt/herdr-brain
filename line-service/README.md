@@ -165,7 +165,12 @@ only the existing receipted dead-owner recovery can reclaim one.
 Report intake precedes closeout-owner acquisition and uses its own finite
 `report-intake.lock` and fair cursor in `report-intake.json`. Each scheduled wake
 can therefore ingest finished reports while another turn retains the closeout
-owner or a general pass owns scheduling. Intake keeps the existing bounded
+owner or a general pass owns scheduling. The scheduled parent runs intake and
+launches separate finite `--closeout-pass` and `--general-pass` children, then
+returns so launchd can supply the next intake wake. General children skip
+closeout; closeout children retain the original closeout owner lock and do not
+repeat intake. No extra schedule or long-lived process is installed.
+Intake keeps the existing bounded
 selection, fresh project/source/claim/current-run/STOP/HOLD checks and guarded
 ingest command. Contention retains the original owner; the next wake reconciles
 the committed report facts. No saved watcher or native attempt is replaced.
@@ -1156,9 +1161,11 @@ checks target index/generation, effective Git policy, actual loaded source,
 preservation, STOP/HOLD and main CAS under the existing lifecycle lock; unrelated
 main index/config activity is outside that footprint.
 
-The existing installation's `--once` entry first runs bounded report ingest and
-closeout, then starts (or finds) the ordinary finite general-pass child. Its
-existing launchd interval therefore continues waking while a slow review owns
+The existing installation's `--once` entry first runs bounded report ingest,
+then starts finite closeout and general-pass children. The closeout child takes
+the existing closeout owner lock or returns with that original owner retained;
+the scheduled parent does not wait for it. Its existing launchd interval
+therefore continues waking while a slow closeout runs or a slow review owns
 `pass.lock`. Startup and each scheduled wake reconcile committed run/report
 sources; no second launchd job, saved watcher replacement or core loop is needed.
 The wake probes `pass.lock` through the same notice-lock owner guard as the pass,

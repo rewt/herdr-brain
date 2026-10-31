@@ -246,7 +246,7 @@ function finish(result, reason, extra = {}) {
     } else { job.reviewDeliveryError = delivery.error?.message || delivery.stderr || `exit ${delivery.status}`; save(); }
   }
   try {
-    if (closeoutPolicy(job.repo) && readCloseoutEntries(job.common).some(e => e.branch === `lane/${job.lane}`))
+    if (closeoutPolicy(job.repo, undefined, { requireServiceSource: false }) && readCloseoutEntries(job.common).some(e => e.branch === `lane/${job.lane}`))
       retryCloseout({ cwd: job.repo, org: opt.org, topic: job.lane, why: 'settle callback ended; verdict recorded' });
   } catch (e) { process.stderr.write(`settle: closeout wake deferred: ${e.message}; retry the named lane\n`); }
   print();

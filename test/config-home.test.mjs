@@ -46,9 +46,9 @@ test('installed cleanup policy reads the adopted home despite a different develo
   const receipt = { repo: f.cwd, org: binding.record, source: path.resolve(import.meta.dirname, '..'), node: process.execPath,
     file: path.join(directory, 'service.plist'), target: `gui/${process.getuid()}/dev.herdr.line.${path.basename(directory)}` };
   fs.writeFileSync(installation, JSON.stringify(receipt));
-  const probe = (missingSource = false) => spawnSync(process.execPath, ['--input-type=module', '-e', `
+  const probe = (missingSource = false, matching = false) => spawnSync(process.execPath, ['--input-type=module', '-e', `
     import assert from 'node:assert/strict';
-    import { closeoutPolicy, kickCloseout } from ${JSON.stringify(path.join(f.bundle, 'lib/closeout.mjs'))};
+    import { closeoutPolicy, closeoutSourceEnabled, kickCloseout } from ${JSON.stringify(path.join(f.bundle, 'lib/closeout.mjs'))};
     import { gitProject } from ${JSON.stringify(path.join(f.bundle, 'lib/project.mjs'))};
     import { readProjectPolicy } from ${JSON.stringify(path.join(f.bundle, 'lib/config-policy.mjs'))};
     assert.equal(readProjectPolicy(process.cwd(), 'lane').file, ${JSON.stringify(file)});
@@ -57,12 +57,24 @@ test('installed cleanup policy reads the adopted home despite a different develo
         assert.throws(() => closeoutPolicy(process.cwd(), undefined, { requireServiceSource }), { message: 'line cleanup ownership is UNKNOWN' });
       assert.throws(() => kickCloseout(gitProject(process.cwd()), ${JSON.stringify(binding.record)}), { message: 'line cleanup ownership is UNKNOWN' });
     } else {
-      assert.equal(closeoutPolicy(process.cwd(), 'report.ingested'), true);
-      assert.equal(kickCloseout(gitProject(process.cwd()), ${JSON.stringify(binding.record)}).owned_by, 'line-service');
-      assert.throws(() => closeoutPolicy(process.cwd(), undefined, { requireServiceSource: true }), /ownership is UNKNOWN/);
+      const entry = { project: process.cwd(), source: { type: 'report.ingested' } };
+      assert.equal(closeoutPolicy(process.cwd(), 'report.ingested', { requireServiceSource: false }), true);
+      assert.equal(closeoutSourceEnabled(entry, [], { requireServiceSource: false }), true);
+      for (const options of [undefined, { requireServiceSource: true }]) {
+        if (${matching}) {
+          assert.equal(closeoutPolicy(process.cwd(), 'report.ingested', options), true);
+          assert.equal(closeoutSourceEnabled(entry, [], options), true);
+        } else {
+          assert.throws(() => closeoutPolicy(process.cwd(), 'report.ingested', options), /ownership is UNKNOWN/);
+          assert.throws(() => closeoutSourceEnabled(entry, [], options), /ownership is UNKNOWN/);
+        }
+      }
+      if (!${matching}) assert.equal(kickCloseout(gitProject(process.cwd()), ${JSON.stringify(binding.record)}).owned_by, 'line-service');
     }
   `], { cwd: f.cwd, env: f.env, encoding: 'utf8' });
   let result = probe(); assert.equal(result.status, 0, result.stdout + result.stderr);
+  fs.writeFileSync(installation, JSON.stringify({ ...receipt, source: f.bundle }));
+  result = probe(false, true); assert.equal(result.status, 0, result.stdout + result.stderr);
   for (const changed of [{ repo: f.scratch }, { org: f.scratch }, { source: 'relative-source' }, { node: '/foreign/node' }, { target: 'foreign' }]) {
     fs.writeFileSync(installation, JSON.stringify({ ...receipt, ...changed }));
     result = probe(); assert.notEqual(result.status, 0, JSON.stringify(changed));

@@ -90,7 +90,7 @@ function scheduledRetirement({ cwd, common, dryRun, log }) {
   try {
     const project = homeProject(cwd)?.git ?? gitProject(cwd);
     const transferred = () => {
-      if (!closeoutPolicy(project.canonical)) return false;
+      if (!closeoutPolicy(project.canonical, undefined, { requireServiceSource: false })) return false;
       release?.(); release = null;
       log({ action: 'retirement-skipped', why: 'retirement ownership transferred to closeout queue' });
       return true;

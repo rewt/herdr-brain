@@ -9,7 +9,7 @@ export function dispatchAllocationEffect({project,org,branch,waitMs=60000,deadli
   let release;
   try{
     release=claimRetirementOwner(project.identity,{waitMs,deadline});
-    if(closeoutRecordMatches(project,org)&&closeoutPolicy(project.canonical)){
+    if(closeoutRecordMatches(project,org)&&closeoutPolicy(project.canonical, undefined, { requireServiceSource: false })){
       assertQueueOwnership(project,org);
       release();release=null;
     }

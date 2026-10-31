@@ -355,7 +355,7 @@ export function finishCleanup(job, result, queue, { now = Date.now() } = {}) {
     reason: result.gate?.outcome === 'waived' ? 'operator-waived fast-forward; awaiting exact closeout handoff' : 'green fast-forward; awaiting post-reconcile closeout handoff and joined attempt' });
   // Git-only trains have no run/source to bind in the record queue. Keep their
   // existing guarded foreground cleanup rather than delegating to no request.
-  const queueOwnsJob = () => closeoutPolicy(queue.project.canonical) && Boolean(job.run && job.org);
+  const queueOwnsJob = () => closeoutPolicy(queue.project.canonical, undefined, { requireServiceSource: false }) && Boolean(job.run && job.org);
   let ownership;
   const warnings = [];
   let held;
@@ -470,7 +470,7 @@ function retryCleanupLocked(queue, { now = Date.now() } = {}) {
 
 function consumeRequests(queue) {
   try {
-    if (closeoutPolicy(queue.project.canonical)) {
+    if (closeoutPolicy(queue.project.canonical, undefined, { requireServiceSource: false })) {
       const completedJobs = queue.load().closeout_pending ?? [];
       for (const job of completedJobs) {
         let outcome, keys, handed = false;

@@ -65,7 +65,7 @@ else if (group === 'agent' && verb === 'prompt') {
   if (!agent) missing();
   if (args[3] !== '/exit') {
     const events = fs.readFileSync(path.join(state.repo, '.org/events.jsonl'), 'utf8').trim().split('\n').map(JSON.parse);
-    const binding = events.find(e => e.type === 'run.session_bound' && e.session === agent.agent_session.value);
+    const binding = events.findLast(e => e.type === 'run.session_bound' && e.session === agent.agent_session.value);
     fs.appendFileSync(path.join(root, 'evidence/native-input.jsonl'), JSON.stringify({ agent: agent.name,
       process: workspace.agentProcess, session: agent.agent_session.value,
       binding: binding ? { seq: binding.seq, run: binding.run, process: binding.process, session: binding.session } : null }) + '\n');

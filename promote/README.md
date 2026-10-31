@@ -649,6 +649,8 @@ statically, so those warnings remain visible even if other static tests were
 selected; warnings do not select unrelated suites. These global opaque-site
 warnings must not be counted as per-change missing
 coverage by the release-coverage consumer.
+`graph.unknown_scope` labels `opaque-inputs` as `global` and `unmapped-input` as
+`changed-input`, so coverage accounting can keep these two kinds distinct.
 The scan is conservative,
 not a JavaScript interpreter: aliases, generated paths and arbitrary runtime
 behavior need explicit declarations. The legacy three-argument planner retains

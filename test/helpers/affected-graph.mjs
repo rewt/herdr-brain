@@ -115,5 +115,6 @@ export function affectedTestPlan({ root, changed, files, tests = testInventory(f
   }
   return { candidates: [...new Set(reasons.map(row => row.file))].sort(), consumers: reasons, unknown,
     graph: { paths: files.length, inventory: inventoryTests, test_files: inventoryTests.length,
+      unknown_scope: { 'opaque-inputs': 'global', 'unmapped-input': 'changed-input' },
       consumers: reasons, max_paths: 10000, max_bytes: 32 * 1024 * 1024, max_suite_files: 4, hops: 'transitive' } };
 }

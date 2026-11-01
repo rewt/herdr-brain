@@ -43,7 +43,7 @@ export function reviewFindingKey(review, finding) {
 export function reviewCorrectionEvents({ state, events, run, review, report, findings, verdict, sha256, usedIds = [] }) {
   const target = review.meta.review_target, source = review.meta.review_source_item;
   const reviewKey = `${source}:${target.head}`, add = [], taken = new Set(usedIds);
-  const rows = new Map(), linked = new Map();
+  const rows = new Map(), linked = new Map(), historicalMeta = new Map();
   for (const finding of findings) {
     const key = reviewFindingKey(review, finding);
     if (!rows.has(key)) rows.set(key, { ...finding, key });
@@ -143,6 +143,14 @@ export function reviewCorrectionEvents({ state, events, run, review, report, fin
           parent: review.id, from_run: run.id, accept: proposal?.accept ?? selected.map(row => row.text),
           why: proposal?.why ?? selected.map(row => row.text).join('\n'), meta: { ...proposal?.extra, ...meta, queue_selected:true } }));
       } else if (!historical.meta.review_fix_of) {
+        // Several groups can resolve to the same pre-intake proposal. The fold
+        // replaces each meta value shallowly, so carry the whole planned set.
+        const prior = historicalMeta.get(id) ?? historical.meta;
+        meta.severity = prior.severity === 'major' || severity === 'major' ? 'major' : 'minor';
+        meta.review_finding_keys = [...new Set([...(prior.review_finding_keys ?? []), ...missing])];
+        meta.review_correction_checks = { ...prior.review_correction_checks, ...meta.review_correction_checks };
+        meta.review_live_triggers = [...(prior.review_live_triggers ?? []), ...triggers];
+        historicalMeta.set(id, meta);
         add.push({ type: 'item.updated', id, fields: { meta } });
       }
       for (const row of selected) link(row, id);

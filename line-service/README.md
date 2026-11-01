@@ -996,17 +996,29 @@ proposal. Automatic queue selection and fresh dispatch-input checks both defer
 them; selecting the item alone is not a live witness. Existing finding bindings
 are retained, including historical mixed Major corrections.
 
-After actually observing the condition, its owner records a note on the linked
-correction item through `record note ENG-n 'review-live-witness: JSON'`. The JSON
+After actually observing the condition, any record writer may assert a witness
+by recording a note on the linked correction item through
+`record note ENG-n 'review-live-witness: JSON'`. The JSON
 must contain `schema: "brain.review-live-witness/v1"`, the exact `finding_key`
 and `trigger` printed by `record show`, an `observed_at` timestamp with timezone,
 and a nonempty `evidence` reference to the live observation. The note must follow
 the finding binding and cannot claim an observation later than its recording.
+The selector does not enforce a designated author, compare the observation time
+with the source commit, or validate the cited evidence; the writer is responsible
+for asserting that the observation applies to the reviewed condition.
 Ordinary notes, test results, selection and incomplete/wrong-finding witness
 notes do not release the deferral. A matching witness restores only ordinary
 eligibility; all existing ownership, STOP/HOLD and native guards still apply.
+Unwitnessed deferred findings do not make their source item's Accepted condition
+False or put it in needs-work. They remain linked and visible even if never seen;
+dropping an unwitnessed correction does not discharge a finding. A witness makes
+the correction applicable again; immediate findings on historical mixed items
+retain their obligations.
 Structured Minor findings may supply `live_trigger` explicitly; legacy finding
-text saying “fix forward [only] if/when/once ... live” supplies the trigger too.
+text saying “fix forward [only] if/when/once ... live” supplies the trigger too,
+as does “if/when/once ... live, [then] fix forward [only]”. Dots inside file names
+are allowed, but the condition cannot cross a sentence boundary or semicolon.
+Other wording must use the explicit field.
 An explicit verdict may be in frontmatter or a standalone `Verdict: PASS`,
 `Verdict: FAIL` or `Verdict: NEEDS-WORK` body line, including Markdown headings.
 An isolated `**PASS**`, `**FAIL**` or `**NEEDS-WORK**` is also a declaration.

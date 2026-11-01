@@ -989,6 +989,24 @@ immutable already-ingested bytes even when the selected record consumer is old;
 it uses its actual owned pass/installation and fresh run ownership, without
 changing that consumer, a pin or the report. Major correction checks remain
 required before final release.
+Conditional Minors such as “Fix forward if it is ever seen live” remain linked
+and visible in `record show` as deferred, with their exact trigger. Intake keeps
+them separate from immediate findings, including findings in one engineer
+proposal. Automatic queue selection and fresh dispatch-input checks both defer
+them; selecting the item alone is not a live witness. Existing finding bindings
+are retained, including historical mixed Major corrections.
+
+After actually observing the condition, its owner records a note on the linked
+correction item through `record note ENG-n 'review-live-witness: JSON'`. The JSON
+must contain `schema: "brain.review-live-witness/v1"`, the exact `finding_key`
+and `trigger` printed by `record show`, an `observed_at` timestamp with timezone,
+and a nonempty `evidence` reference to the live observation. The note must follow
+the finding binding and cannot claim an observation later than its recording.
+Ordinary notes, test results, selection and incomplete/wrong-finding witness
+notes do not release the deferral. A matching witness restores only ordinary
+eligibility; all existing ownership, STOP/HOLD and native guards still apply.
+Structured Minor findings may supply `live_trigger` explicitly; legacy finding
+text saying “fix forward [only] if/when/once ... live” supplies the trigger too.
 An explicit verdict may be in frontmatter or a standalone `Verdict: PASS`,
 `Verdict: FAIL` or `Verdict: NEEDS-WORK` body line, including Markdown headings.
 An isolated `**PASS**`, `**FAIL**` or `**NEEDS-WORK**` is also a declaration.

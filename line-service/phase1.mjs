@@ -23,6 +23,7 @@ import {producerGroupKey,queueProducerGroup,sameProducerQueue,capturedReviewComm
 import {producerRanges} from './producer-ranges.mjs';
 import {additionalTarget,supplementalTarget,canonicalTarget,canonicalSelector,validateAdditionalTarget} from './review-targets.mjs';
 import {reviewCorrectionEvents} from './review-findings.mjs';
+import {conditionalMinorDeferrals} from '../lib/review-live-trigger.mjs';
 
 export function reviewCompletionPlan({events,state,runId}){
   const run=state.runs.get(runId),item=state.items.get(run?.item),key=item?.meta.review_key;
@@ -341,6 +342,7 @@ export function capturedProducerTarget({repo,target,whole}){
 
 export function dispatchInput({events,state,item,org,identity}) {
   if (!item || item.closed || item.kind === 'goal') return null;
+  if (conditionalMinorDeferrals(item).length) return null;
   const run = state.runs.get(item.runs.at(-1));
   if(run?.report?.outcome==='blocked'){
     // New source on the original reported run is an owned recovery, not whole
@@ -401,6 +403,7 @@ export function reviewResultEvents({state,events,run,report,sha256,body=report.b
   if(distinct.size!==1)throw Error('queued review report has ambiguous contradictory verdicts; retain immutable bytes for judgment');
   const findings=[];
   const raw=report.extra?.findings;if(Array.isArray(raw))for(const f of raw)if(f&&['major','minor'].includes(String(f.severity).toLowerCase()))findings.push({severity:String(f.severity).toLowerCase(),text:String(f.text??f.summary??''),
+    ...(typeof f.live_trigger==='string'&&f.live_trigger.trim()?{live_trigger:f.live_trigger.trim()}:{}),
     ...(typeof f.correction_check==='string'&&f.correction_check.trim()?{correction_check:f.correction_check.trim()}:{})});
   // Structured declarations are canonical per severity; the brief allows only
   // Majors in frontmatter and Minors in the body. Paraphrased body summaries of

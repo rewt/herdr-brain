@@ -6,6 +6,7 @@ import { nextItemId } from '../lib/state.mjs';
 import { roleIs } from '../lib/roles.mjs';
 import { capturedReviewCommits } from './review-group.mjs';
 import { intentFirstCreation } from '../lib/dispatch-template.mjs';
+import { conditionalMinorTrigger } from '../lib/review-live-trigger.mjs';
 
 const text = value => String(value ?? '').replace(/\s+/g, ' ').trim();
 const digest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
@@ -46,11 +47,11 @@ export function reviewCorrectionEvents({ state, events, run, review, report, fin
   for (const finding of findings) {
     const key = reviewFindingKey(review, finding);
     if (!rows.has(key)) rows.set(key, { ...finding, key });
-    else if (finding.correction_check) {
+    else for (const field of ['correction_check', 'live_trigger']) if (finding[field]) {
       const row = rows.get(key);
-      if (row.correction_check && row.correction_check !== finding.correction_check)
-        throw Error('one immutable finding has contradictory correction checks');
-      row.correction_check = finding.correction_check;
+      if (row[field] && row[field] !== finding[field])
+        throw Error(`one immutable finding has contradictory ${field === 'correction_check' ? 'correction checks' : 'live triggers'}`);
+      row[field] = finding[field];
     }
   }
   const declared = new Set(rows.keys());
@@ -92,7 +93,8 @@ export function reviewCorrectionEvents({ state, events, run, review, report, fin
   const link = (row, id) => {
     bind(row.key, id);
     add.push({ type: 'review.finding-linked', item: id, correction_item: id, finding_key: row.key,
-      finding: { severity: row.severity, text: row.text }, source_item: source,
+      finding: { severity: row.severity, text: row.text,
+        ...(conditionalMinorTrigger(row) ? { live_trigger: conditionalMinorTrigger(row) } : {}) }, source_item: source,
       head: target.head, base: target.base, review_item: review.id, review_run: run.id, report_sha256: sha256 });
   };
   const create = (keys, proposal) => {
@@ -127,6 +129,8 @@ export function reviewCorrectionEvents({ state, events, run, review, report, fin
       const meta = { review_fix_of: reviewKey, review_source_item: source,
         review_source_run: review.meta.review_source_run, review_owner_run: review.meta.review_source_run,
         review_round_cap: 1, severity, review_finding_keys: missing };
+      const triggers = selected.flatMap(row => conditionalMinorTrigger(row) ? [{ finding_key: row.key, trigger: conditionalMinorTrigger(row) }] : []);
+      if (triggers.length) meta.review_live_triggers = triggers;
       meta.review_correction_checks = Object.fromEntries(selected.filter(row => row.severity === 'major').map(row =>
         [row.key, row.correction_check ?? proposal?.extra?.review_correction_checks?.[row.key] ??
           proposal?.extra?.review_correction_checks?.[row.text] ?? proposal?.extra?.correction_check ??
@@ -150,6 +154,11 @@ export function reviewCorrectionEvents({ state, events, run, review, report, fin
       }
     }
   };
+  const createGroups = (keys, proposal) => {
+    const immediate = keys.filter(key => !conditionalMinorTrigger(rows.get(key)));
+    if (immediate.length) create(immediate, proposal);
+    for (const key of keys.filter(key => conditionalMinorTrigger(rows.get(key)))) create([key], proposal);
+  };
   for (const proposal of proposals) {
     const refs = list(proposal.extra?.review_findings);
     let keys = proposalRows.get(proposal);
@@ -166,7 +175,7 @@ export function reviewCorrectionEvents({ state, events, run, review, report, fin
       keys = proposals.length === 1 || rows.size === 1 ? [...rows.keys()] : [];
     }
     if (!keys.length) throw Error('multiple correction proposals need explicit review_findings links to their immutable findings');
-    create([...new Set(keys)], proposal);
+    createGroups([...new Set(keys)], proposal);
   }
   for (const key of rows.keys()) create([key]);
   return { add, findings: [...rows.values()].filter(row => declared.has(row.key)) };

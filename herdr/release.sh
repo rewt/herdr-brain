@@ -165,14 +165,16 @@ ship() {
   die "ship $tag failed its post-activation check and there is no previous release; $tag stays active: activate a good tag"
 }
 activate() {
-  local tag=$1 dir="$HOME_DIR/releases/$1"
+  local tag=$1 dir="$HOME_DIR/releases/$1" recovery=${2:-}
   valid_tag "$tag"
   [[ "$tag" != *.partial ]] || die "unfinished release cannot activate: $tag"
   [ -d "$dir" ] && [ ! -L "$dir" ] && [ -f "$dir/.release-commit" ] || die "no built release $tag; run: release.sh build $tag"
   for l in $LAUNCHERS; do absent_or_link "$BIN_DIR/${l%%:*}"; [ -f "$dir/${l#*:}" ] || die "release is missing ${l#*:}"; done
   absent_or_link "$HOME_DIR/current"; absent_or_link "$HOME_DIR/previous"
   node "$TOOLS" verify-bundle "$dir"
-  node "$TOOLS" check-consumer-pins "$HOME_DIR"
+  # Consumer pins select their own release independently of current. Their
+  # preflight gates forward activation, never recovery of a broken current.
+  if [ "$recovery" != rollback ]; then node "$TOOLS" check-consumer-pins "$HOME_DIR"; fi
   retire_brain_service
   mkdir -p "$BIN_DIR"
   if [ -L "$HOME_DIR/current" ] && [ "$(readlink "$HOME_DIR/current")" != "$dir" ]; then
@@ -187,7 +189,7 @@ rollback() {
   [ -L "$HOME_DIR/previous" ] || die "no previous release to roll back to"
   local prev; prev=$(readlink "$HOME_DIR/previous")
   case "$prev" in
-    "$HOME_DIR/releases/"*) activate "${prev#"$HOME_DIR/releases/"}" ;;
+    "$HOME_DIR/releases/"*) activate "${prev#"$HOME_DIR/releases/"}" rollback ;;
     *) die "previous is outside the releases directory: $prev" ;;
   esac
 }

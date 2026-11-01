@@ -200,6 +200,22 @@ test('native and lane-removal waits consume exact statuses and completed parent 
     assert.equal(obligationPending(row), true, change); assert.equal(row.supported, false, change);
     assert.deepEqual(row.waiting, waiting); assert.equal(rows(s, 'native-outcome')[0].attempt, native.intent);
   }
+  for (const type of ['closeout.exit-settled', 'closeout.command-not-started']) {
+    const failed = { type: 'closeout.command-failed', ...scope, intent: native.intent, failure: { kind: 'unknown', code: 'OUTCOME_UNKNOWN' } };
+    const failedStatus = { ...statuses[0], status: 'failed', completion: { type: failed.type, seq: 7 } };
+    const disposition = { type, ...scope, intent: native.intent, native_started: false };
+    const complete = { ...statuses[0], completion: { type, seq: 10 } };
+    const s = fold(stampEvents([...start, { ...report, closeout_targets: [target] }, intent, wait,
+      failed, failedStatus, evaluation])), row = rows(s, 'closeout-wait')[0];
+    assert.equal(obligationPending(row), true); assert.equal(row.supported, false);
+    add(s, [disposition, complete, removed, { ...statuses[1], completion: { type: removed.type, seq: 12 } }]);
+    assert.equal(obligationPending(row), false); assert.deepEqual(row.waiting, waiting);
+    assert.deepEqual(row.statuses.map(s => s.status), ['failed', 'complete', 'complete']);
+    assert.equal(rows(s, 'native-outcome').length, 1);
+    assert.equal(rows(s, 'native-outcome')[0].attempt, native.intent);
+    assert.equal(rows(s, 'native-outcome')[0].outcome.result.state, type === 'closeout.exit-settled' ? 'settled-UNKNOWN' : 'never-started');
+    assert.equal(rows(s, 'native-outcome')[0].original.action, native.action);
+  }
 });
 
 test('UNKNOWN native attempts survive unrelated results and preserve exact refusals without replacement', () => {
@@ -252,4 +268,35 @@ test('projection crashes at source, cache publication, result and checkpoint bou
   assert.equal(result.status, 0, result.stderr); const inventory = JSON.parse(result.stdout);
   assert.equal(inventory.counts['review-handoff'].pending, 0); assert.equal(inventory.position.lastSeq, outcome[0].seq);
   assert.equal(fs.readFileSync(log, 'utf8').trim().split('\n').length, outcome[0].seq);
+});
+
+test('compact rebuild and incremental correction folding retain superseded drafts, historical closes and current review coverage', t => {
+  const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'obligation-correction-reader-')));
+  const savedFleet = process.env.HERDR_MONITOR_FLEET; process.env.HERDR_MONITOR_FLEET = path.join(dir, 'no-fleet.json');
+  t.after(() => { if (savedFleet === undefined) delete process.env.HERDR_MONITOR_FLEET; else process.env.HERDR_MONITOR_FLEET = savedFleet; fs.rmSync(dir, { recursive: true, force: true }); });
+  initOrg(dir);
+  const append = events => transact(dir, () => ({ add: events }), { actor: 'fixture', strictTail: true });
+  append([...start, { type: 'report.available', run: 'R-1', sha256: 'draft', file: report.file, started_seq: 2, claim_generation: 3 }, landing, queue]);
+  const first = loadRecordReader(dir);
+  assert.equal(rows(first.state, 'review-handoff')[0].supported, false); first.close();
+  append([report]);
+  const ingested = loadRecordReader(dir);
+  const draft = rows(ingested.state, 'report-intake')[0], review = rows(ingested.state, 'review-handoff')[0];
+  assert.equal(draft.supported, false); assert.match(draft.diagnosis, /superseded/); assert.equal(draft.report.sha256, 'draft');
+  assert.equal(review.supported, true); assert.equal(review.diagnosis, null); assert.equal(obligationPending(review), false);
+  ingested.close();
+  append([{ type: 'item.closed', id: 'ENG-1', as: 'done', note: 'legacy prose close' },
+    { ...queue, id: 'REV-other', meta: { ...queue.meta, review_target: { ...queue.meta.review_target, reportHash: 'unmatched' } } }]);
+  const tail = loadRecordReader(dir);
+  assert.equal(rows(tail.state, 'source-completion')[0].supported, false);
+  assert.match(rows(tail.state, 'source-completion')[0].diagnosis, /historical/);
+  assert.equal(rows(tail.state, 'source-completion')[0].outcome, null);
+  assert.equal(rows(tail.state, 'review-handoff')[0].supported, true);
+  assert.equal(rows(tail.state, 'review-handoff')[0].diagnosis, null);
+  assert.deepEqual(new Map(tail.state.obligations), loadRecord(dir, { snapshot: false }).state.obligations);
+  tail.close();
+  fs.unlinkSync(path.join(dir, READER_FILE));
+  const rebuilt = loadRecordReader(dir);
+  assert.deepEqual(new Map(rebuilt.state.obligations), loadRecord(dir, { snapshot: false }).state.obligations);
+  rebuilt.close();
 });

@@ -237,6 +237,13 @@ A captured source review serves its source item's outcome. Numeric item priority
 and queued-review preference break ties within an outcome. A blocker inherits a
 higher-ranked class from open downstream items, including through transitive
 dependency links; closed targets and removed links no longer raise its class.
+Open targets intentionally keep lending urgency while held or deselected
+(`queue_selected:false`), including through intermediate targets in that state.
+Selection and holds control admission, not the declared outcome's rank: a selected,
+ready blocker of excluded work can therefore precede other selected work. The
+blocker's own selection and readiness still govern its admission; inheriting a
+class never selects an excluded blocker or releases a held one. Close the target
+or remove the dependency to stop it lending urgency; reopening restores it.
 This affects queue order only, including for reopened blockers. Independent lower
 ready work is considered when higher work is held or otherwise ineligible;
 rehearsal/withdrawal ordering adds no dependency. Invalid or ambiguous standing

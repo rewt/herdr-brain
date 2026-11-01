@@ -50,6 +50,8 @@ function classifier(state,policy) {
   if(!policy)return ()=>null;
   // Dependency urgency is a snapshot view, never a stored class change. Walk
   // open dependents with a per-root seen set so cycles cannot invent urgency.
+  // Held and deselected targets still lend urgency: their admission state does
+  // not withdraw their outcome. Each blocker's own admission guards still apply.
   const dependents=new Map(),cache=new Map();
   for(const {blocker,blocked} of state.links){
     const target=state.items.get(blocked);

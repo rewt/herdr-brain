@@ -77,9 +77,12 @@ test('a newer router uses the selected admission contract rather than its own st
 });
 
 test('the first array-based admission contract remains usable and still refuses unsupported core events',t=>{
-  const f=fixture(t),module=path.join(f.bundle,'lib/record-compatibility.mjs');
-  fs.writeFileSync(module,execFileSync('git',['show','fc75053b:lib/record-compatibility.mjs']));
-  f.seal(f.bundle,'1'.repeat(40));f.pin('compatible');f.ok(f.activate('compatible'));
+  const f=fixture(t),commit=execFileSync('git',['rev-parse','fc75053b'],{encoding:'utf8'}).trim();
+  const archive=path.join(f.scratch,'first-admission'),root=path.join(f.installationHome,'releases','array');
+  fs.mkdirSync(archive);
+  const bytes=execFileSync('git',['archive',commit],{maxBuffer:64*1024*1024});
+  execFileSync('tar',['-x','-C',archive],{input:bytes});
+  copyProduct(archive,root);f.seal(root,commit);f.pin('array');f.ok(f.activate('compatible'));
   assert.match(f.ok(f.run(process.execPath,[path.join(f.bin,'record'),'show','ENG-1'])),/Pinned consumer work/);
   fs.appendFileSync(f.record,JSON.stringify({type:'item.future-contract',seq:999})+'\n');
   const refused=f.run(process.execPath,[path.join(f.bin,'record'),'show','ENG-1']);

@@ -11,6 +11,7 @@ import {gitProject} from '../lib/project.mjs';
 import {lineDirectory} from '../line-service/cutoff.mjs';
 import {launchPlist} from '../line-service/plist.mjs';
 import {noticeLock} from '../supervisor/notice-lock.mjs';
+import {fixture as probationFixture,state as probationState} from './helpers/line-service-probation-fixture.mjs';
 
 async function fixture(t){
   const f=configFixture(t,{custom:true}),org=f.env.ORG_DIR,identity=gitProject(f.cwd).identity,directory=lineDirectory(org,identity);
@@ -49,6 +50,38 @@ async function fixture(t){
     retarget:extra=>main([...argv,...(extra??[])],options)};
 }
 const parsePlist=file=>JSON.parse(spawnSync('/usr/bin/plutil',['-convert','json','-o','-','--',file],{encoding:'utf8'}).stdout);
+
+test('bootstrap retarget refuses preview apply and no-op without changes on the candidate recovery and return',async t=>{
+  const f=await probationFixture(t,{development:true}),preview=f.control({dryRun:true});f.authorize();
+  const recovery=preview.scope.previous.release.root;
+  const switchTo=(main,id,from,to)=>{
+    const args=['probation-switch','--repo',f.cwd,'--org',f.org,'--trial','original-trial','--id',id,'--from-root',from,'--target-root',to];
+    const plan=main([...args,'--dry-run'],f.args);
+    const authority=transact(f.org,()=>({add:[{type:'note.added',id:'G-1',decision:true,text:plan.required_decision}]}),{actor:f.agent.name}).added[0].seq;
+    return main([...args,'--expected-plan',plan.plan_sha256,'--authority',String(authority)],f.args);
+  };
+  const refuse=async root=>{
+    const {main}=await f.module(root,'line-service/launchd.mjs');
+    const {installedContext}=await f.module(root,'line-service/cutoff.mjs');
+    assert.equal(installedContext(f.cwd,f.org).installation.probation_bootstrap.trial,'original-trial');
+    const before={...probationState(f),stop:fs.readFileSync(f.stop,'utf8')},listing=fs.readdirSync(f.directory).sort();
+    f.calls.length=0;
+    for(const to of ['next-supervisor',f.agent.name])for(const extra of [[],['--dry-run']]){
+      assert.throws(()=>main(['retarget','--repo',f.cwd,'--org',f.org,'--to',to,...extra],f.args),/retarget refuses a bootstrap-bound installation until development history replays recipient changes/);
+      assert.deepEqual({...probationState(f),stop:fs.readFileSync(f.stop,'utf8')},before);
+      assert.deepEqual(fs.readdirSync(f.directory).sort(),listing);
+    }
+    assert.equal(f.calls.length,0,'refusal precedes service inspection and mutation');
+    assert.equal(installedContext(f.cwd,f.org).installation.source,root,'unchanged history remains admissible');
+    return main;
+  };
+  switchTo(f.main,'entry',f.cwd,f.next);await refuse(f.next);
+  assert.equal(switchTo(f.main,'recovery',f.next,recovery).runtime.root,recovery);
+  const recoveryMain=await refuse(recovery);
+  assert.equal(switchTo(recoveryMain,'return',recovery,f.next).runtime.root,f.next);
+  await refuse(f.next);
+  assert.equal(loadEvents(f.org).events.filter(e=>e.type==='line-service.recipient-retargeted').length,0);
+});
 
 test('retarget dry-run is read-only; apply changes only recipient and appends an immutable receipt without starting a service',async t=>{
   const f=await fixture(t),before=f.snapshot(),listing=fs.readdirSync(f.directory).sort();

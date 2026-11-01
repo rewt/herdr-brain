@@ -399,6 +399,13 @@ BCH's own canonical repository and record. These are owner commands, not worker
 authorization to operate either real service. Restart remains a separate owner
 action subject to its existing guards and release acceptance.
 
+An installation with `probation_bootstrap` refuses retarget previews, applies and
+already-current recipients before service inspection or control locks. Its
+development recovery history cannot replay recipient changes yet. Keep the
+current recipient and trial/recovery history; ENG-939's routing owner must retain
+this restriction until a separately delivered replay or supported conversion
+makes retargeting safe. Source landing alone does not update an installed runtime.
+
 The dry run writes no installation, plist or receipt. Apply preserves every
 plist byte except the recipient string at `ProgramArguments[8]` and sets only
 `installation.recipient`. It first writes an exclusive immutable before/after

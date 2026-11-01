@@ -139,6 +139,67 @@ test('HOLD-stopped dispatch rechecks the original proof after capacity observati
   assert.equal(loadEvents(f.org).events.some(e=>e.type==='line-service.dispatch-readmitted'),false);
 });
 
+for(const code of ['DISPATCH_STOPPED','DISPATCH_FAILED'])test(`HOLD-stopped dispatch records a recovery's ${code} outcome once across another HOLD and restart`,t=>{
+  const f=stoppedFixture(t),barrier=path.join(f.repo,'.lane/supervisor/HOLD');
+  const journal=path.join(f.org,'dispatch/stopped-recovery.json');
+  const command=(exe,args,options)=>{
+    const result=f.command(exe,args,options);
+    if(args[0]!==path.join(sourceRoot,'dispatch/dispatch.mjs')||args[1]!==f.item)return result;
+    const job={...f.job,token:'stopped-recovery',brief:args[args.indexOf('--brief')+1],
+      ...(code==='DISPATCH_FAILED'?{error:'dispatch setup failed',failure:{...f.job.failure,code,kind:'error'}}:{})};
+    const bytes=JSON.stringify(job),terminal={...f.terminal,journal,code,error:job.error};
+    fs.writeFileSync(journal,bytes);fs.mkdirSync(journal+'.driver');
+    fs.writeFileSync(journal+'.driver/results.jsonl',JSON.stringify(terminal)+'\n');
+    transact(f.org,()=>({add:[{...f.completion,journal,attempt:job.token,failure:job.failure,
+      request_sha256:createHash('sha256').update(bytes).digest('hex')}]}));
+    return{status:0,stdout:JSON.stringify({result:'detached',journal,run:null,item:f.item}),stderr:''};
+  };
+  const service=()=>createLineService({repo:f.repo,org:f.org,to:'supervisor-test',env:f.env,command,haltAfter:100,
+    capacity:()=>({count:0,cap:2}),recordNotice:data=>({id:data.id,state:'record-only'})});
+  const line=service();fs.mkdirSync(path.dirname(barrier),{recursive:true});fs.writeFileSync(barrier,'first HOLD');
+  assert.match(line.pass().held,/HOLD/);fs.unlinkSync(barrier);line.pass();
+  const key=JSON.parse(fs.readFileSync(f.file)).actions[f.key].stop_recovery.key;
+  assert.equal(fs.existsSync(journal+'.lock'),false,'fresh driver lock is released');
+  fs.writeFileSync(barrier,'second HOLD');assert.match(line.pass().held,/HOLD/);fs.unlinkSync(barrier);
+  line.pass();line.pass();service().pass();
+  const effects=JSON.parse(fs.readFileSync(f.file));
+  assert.equal(effects.actions[key].recorded_dispatch_status.journal,journal);
+  const signals=loadEvents(f.org).events.filter(e=>e.type==='item.added'&&e.meta?.uncertain_outcome?.check.key===key);
+  assert.equal(signals.length,1,'one durable owner decision, including after restart');
+  assert.equal(signals[0].parent,f.item);
+  assert.deepEqual(signals[0].meta.uncertain_outcome.check.subject,{item:f.item,run:null,journal,attempt:'stopped-recovery',
+    original_key:f.key,original_journal:f.journal});
+  assert.equal(signals[0].meta.uncertain_outcome.check.status.failure.code,code);
+  assert.equal(f.calls.filter(call=>call.args[1]===f.item).length,1,'no further fresh command for the retained attempt');
+  assert.equal(loadEvents(f.org).events.filter(e=>e.type==='line-service.dispatch-readmitted').length,1);
+  assert.equal(fs.readFileSync(f.journal,'utf8'),f.bytes);
+  assert.equal(fs.readFileSync(f.journal+'.driver/results.jsonl','utf8'),JSON.stringify(f.terminal)+'\n');
+  assert.equal(fs.readFileSync(f.brief,'utf8'),'# Original assignment\n');
+});
+
+test('HOLD-stopped dispatch capacity retry keeps its recovery ask and preserves the original across restart',t=>{
+  const f=stoppedFixture(t);let attempts=0;
+  const command=(exe,args,options)=>{
+    const result=f.command(exe,args,options);
+    if(args[0]!==path.join(sourceRoot,'dispatch/dispatch.mjs')||args[1]!==f.item)return result;
+    if(++attempts===1)return{status:1,stdout:JSON.stringify({result:'failed',code:'DISPATCH_SESSION_CAP',reason:'session capacity reached'}),stderr:''};
+    return result;
+  };
+  const service=()=>createLineService({repo:f.repo,org:f.org,to:'supervisor-test',env:f.env,command,haltAfter:100,
+    capacity:()=>({count:0,cap:2}),recordNotice:data=>({id:data.id,state:'record-only'})});
+  service().pass();service().pass();service().pass();
+  const calls=f.calls.filter(call=>call.args[1]===f.item);
+  assert.equal(calls.length,2,'one capacity refusal and one successful retry');
+  const asks=calls.map(call=>call.args[call.args.indexOf('--brief')+1]);
+  const effects=JSON.parse(fs.readFileSync(f.file)),key=effects.actions[f.key].stop_recovery.key;
+  assert.equal(asks[0],path.join(f.service.directory,createHash('sha256').update(JSON.stringify(key)).digest('hex')+'.ask.md'));
+  assert.equal(asks[1],asks[0]);assert.notEqual(asks[1],f.brief);
+  assert.equal(loadEvents(f.org).events.some(e=>e.type==='item.added'&&e.meta?.uncertain_outcome?.check.key===key),false,'capacity wait is not a terminal owner decision');
+  assert.equal(fs.readFileSync(f.journal,'utf8'),f.bytes);
+  assert.equal(fs.readFileSync(f.journal+'.driver/results.jsonl','utf8'),JSON.stringify(f.terminal)+'\n');
+  assert.equal(fs.readFileSync(f.brief,'utf8'),'# Original assignment\n');
+});
+
 test('REV-63 session retirement advances to physical cleanup',t=>{
   for(const refused of [false,true]){
     const f=closeoutFixture(t,{merged:true}),command=f.options.command;

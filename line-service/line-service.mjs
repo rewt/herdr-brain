@@ -683,8 +683,12 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       }
       // Failed cleanup/review never prevents considering independent ready work.
       snapshot = current();
-      for(const [key,entry]of Object.entries(effects.actions))if(key.startsWith('dispatch:')&&(entry.state!=='complete'||entry.result?.result==='detached'&&entry.original_outcome?.status!=='dispatch-complete')){
-        const item=key.split(':')[1];
+      // Follow the saved readmission edge, including opaque recovery keys. A
+      // recovery's terminal failure belongs to the original item's owner too.
+      const stoppedRecoveries=new Map(Object.entries(effects.actions).filter(([key,entry])=>key.startsWith('dispatch:')&&entry.stop_recovery)
+        .map(([key,entry])=>[entry.stop_recovery.key,{key,journal:entry.stop_recovery.journal}]));
+      for(const [key,entry]of Object.entries(effects.actions))if((key.startsWith('dispatch:')||stoppedRecoveries.has(key))&&(entry.state!=='complete'||entry.result?.result==='detached'&&entry.original_outcome?.status!=='dispatch-complete')){
+        const original=stoppedRecoveries.get(key),item=(original?.key??key).split(':')[1];
         try{
           if(entry.state==='started'){
             // Consume only the exact saved dispatch command after its caller
@@ -722,7 +726,15 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
           if(!entry.original_outcome){entry.original_outcome=outcome;save();log({action:'dispatch-outcome-readback',key,...outcome});}
           status??=snapshot.events.findLast(e=>e.type==='dispatch.completed'&&e.project===project.identity&&e.journal===outcome.journal&&e.attempt===outcome.producer?.attempt&&e.item===item&&e.run===outcome.run);
           if(status&&!entry.recorded_dispatch_status){entry.recorded_dispatch_status=status;save();log({action:'dispatch-linked-status',key,status});}
-          if(status&&outcomeFailure(status).kind==='fence'){
+          if(original&&(status&&(status.failure||status.exit_code!==0)||!outcome.producer&&entry.state==='held'&&!initialCapacityRefusal(entry))){
+            if(status){entry.failure=outcomeFailure(status);entry.state='held';entry.error=`Recovery dispatch failed: ${status.failure?.code??status.exit_code}`;}
+            effects.outcome_decisions??={};
+            effects.outcome_decisions[key]??=queueOutcomeDecision({repo,org,env:childEnv,check:{key,
+              subject:{item,run:status?.run??outcome.run,journal:status?.journal??outcome.journal,attempt:status?.attempt??outcome.producer?.attempt,
+                original_key:original.key,original_journal:original.journal},failure:status?.failure??entry.failure,status,outcome,receipt:entry.receipt}});
+            save();stale=true;
+          }
+          else if(status&&outcomeFailure(status).kind==='fence'){
             // The detached parent acknowledged only the original start. Its
             // child's exact terminal refusal stops that effect, without
             // changing the saved acknowledgement or issuing another dispatch.
@@ -880,7 +892,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
               if(reviewTarget)validateQueuedReview({item:current,state:fresh.state,events:fresh.events,org,repo,allowJournal:continuation.journal});
               return startDispatch(['--retry',continuation.journal,'--repo',repo,'--org',org,'--continue-preflight']);
             }
-            const brief = path.join(directory, `${digest(stopRecovery?dispatchKey:key)}.ask.md`);
+            const brief = path.join(directory, `${digest(stopRecovery||effects.actions[key]?.stop_recovery?dispatchKey:key)}.ask.md`);
             const target = reviewTarget ? validateQueuedReview({ item: current, state: fresh.state, events: fresh.events, org, repo }) : null;
             const correction = correctionSource({ item: current, state: fresh.state, events: fresh.events, repo, org });
             writeFileAtomic(brief, target ? reviewQueueBrief(current) : isDecision(current) ? decisionBrief(current) : lineWorkAsk(current, correction?.brief ?? ''), 0o600);
@@ -934,6 +946,9 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       if(performance.now()-passStarted>600000)note('long-pass','line pass exceeded ten minutes',{},true);
       checkpointNotices();const duration_ms = performance.now() - passStarted;
       for(const [key,entry]of Object.entries(effects.actions))if(entry.state!=='started'&&((entry.failure??outcomeFailure(entry)).kind==='fence'||key.startsWith('review:')&&entry.state!=='complete'&&!entry.recorded_review_status))try{
+        // The dispatch status reader records both ends of a stopped recovery.
+        // Do not let this generic fallback claim its decision first.
+        if(Object.values(effects.actions).some(original=>original.stop_recovery?.key===key))continue;
         if(key.startsWith('review:')&&entry.failure?.kind!=='fence'){
           const q=[...current().state.items.values()].find(q=>q.meta.review_source_item===key.split(':')[1]&&q.meta.review_target?.head===entry.review_target?.head);
           if(q){entry.recorded_review_status={item:q.id,created_seq:q.created.seq};save();continue;}

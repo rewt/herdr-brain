@@ -1460,6 +1460,11 @@ links `stop_recovery` plus `line-service.dispatch-readmitted` to the original
 proof. The original journal, terminal receipt and acknowledgement remain intact;
 restart never replays the original request or repeats the fresh action. Current
 readiness, capacity, source, ownership and STOP/HOLD guards still apply.
+The status loop follows the saved stopped-readmission edge to link the fresh
+attempt's completion. A terminal failure, including another STOP/HOLD, queues one
+durable outcome decision naming both attempts; it does not grant another retry.
+Capacity retries keep the fresh attempt's separate ask path, preserving the
+original ask as well as its journal and terminal receipt.
 
 Final reports and authorized abandonments bind their original run/claim, dispatch,
 launch receipt, common directory and worktree/branch generation in the source

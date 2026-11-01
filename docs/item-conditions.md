@@ -82,6 +82,19 @@ correction_discharge:
       requirement: Exact original required Major check text
       evidence: /owning/.org/evidence/correction/gate.json
       sha256: SHA256_OF_GATE_JSON_BYTES
+      prior_checks: # every earlier receipt for this command in this run/lane
+        - head: FULL_EARLIER_HEAD
+          next_head: FULL_LANDED_CORRECTION_HEAD
+          reason: Required rebase onto advanced main
+          command: node test/helpers/run.mjs test/affected.test.mjs
+          evidence: /owning/.org/evidence/correction/earlier-gate.json
+          sha256: SHA256_OF_EARLIER_GATE_BYTES
+          log:
+            evidence: /owning/.org/evidence/correction/earlier.log
+            sha256: SHA256_OF_EARLIER_LOG_BYTES
+          execution_receipt:
+            evidence: /owning/.org/evidence/correction/earlier.execution.json
+            sha256: SHA256_OF_EARLIER_EXECUTION_BYTES
 ```
 
 Intake checks the original correction/finding/run binding, claim and landed head,
@@ -106,7 +119,25 @@ including for a byte-identical owned diff; intake still requires
 
 Before checking, preserve every earlier gate JSON, log and execution receipt in
 the owning record evidence directory, and record the old/new heads, rebase reason
-and selected command. Run only that control once per new head. Reuse an existing
+and selected command. Each finding's `prior_checks` supplies the preserved gate,
+log and execution sidecar with their byte hashes. A changed head names `next_head`
+(the final landed head) and a nonempty `reason`; same-head failed attempts still
+retain their receipts. Earlier results need not be green. Intake compares these
+copies with the actual common-directory receipts and rejects omitted or changed
+evidence, even if the worker hashes its changed copy again.
+
+Validation records each executed or reused receipt independently under
+`lane-validation/history/BRANCH_HASH/`, using exclusive creation. The cache and
+lane-local gate may advance without replacing those observations. Copy the gate
+at its `history_receipt`, plus its log and execution receipt; legacy gates without
+that field use their keyed receipt. Intake selects the recorded lane's command
+receipts observed since this run started, up to report intake. New gates
+use the branch-specific history; legacy gates also inspect the keyed inventory.
+Other lanes, commands and earlier runs do not create preservation obligations.
+This verifies retained validation evidence; it does not cryptographically attest
+the worker's reason or recover evidence deleted from the source inventory.
+
+Run only that control once per new head. Reuse an existing
 green final-head receipt instead of replaying it for another receipt; the lane's
 existing tree/environment cache may also supply a reused receipt with the current
 head and original execution evidence. Another required rebase makes a different

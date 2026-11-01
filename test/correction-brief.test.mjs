@@ -91,6 +91,8 @@ test('full fix context survives review intake and detached prompt with both repo
     assert.match(prompt, /Run only that affected control once per new head/);
     assert.match(prompt, /existing green final-head receipt is reused, never replayed/);
     assert.match(prompt, /First preserve every earlier gate JSON, log and execution receipt/);
+    assert.match(prompt, /each finding must also supply prior_checks/);
+    assert.match(prompt, /omitted or changed earlier proof leaves acceptance Unknown/);
     assert.match(prompt, /formal correction's explicit final-head authorization in its fix context/);
     assert.equal(c.state.items.get(item.id).meta.review_round_cap, 1);
     assert.deepEqual(f.read().actions, []);

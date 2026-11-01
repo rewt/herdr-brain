@@ -156,11 +156,15 @@ test('same tree after empty commits and a clean rebase reuses validation across 
   fs.writeFileSync(path.join(f.workspace, 'work'), 'worker\n');
   f.git(['add', 'work'], f.workspace); f.git(['commit', '-qm', 'Implement worker tree'], f.workspace);
   f.good(f.lane(['check'])); const original = f.gate();
+  const originalBytes = fs.readFileSync(original.history_receipt);
   f.git(['commit', '--allow-empty', '-qm', 'Integration metadata']);
   const output = f.good(f.lane(['promote', 'topic'], f.repo));
   assert.match(output, /rebased/); assert.match(output, /REUSE/);
   assert.notEqual(f.gate().head, original.head); assert.equal(f.gate().tree, original.tree);
   assert.equal(f.gate().validated_head, original.head); assert.deepEqual(f.count(), ['same']);
+  assert.notEqual(f.gate().history_receipt, original.history_receipt);
+  assert.equal(JSON.parse(fs.readFileSync(f.gate().history_receipt)).head, f.gate().head);
+  assert.deepEqual(fs.readFileSync(original.history_receipt), originalBytes, 'reuse retains the actual earlier receipt');
 });
 
 test('tree, command, environment, preparation and declared environment changes invalidate reuse', { timeout: 20000 }, t => {
@@ -183,7 +187,13 @@ test('tree, command, environment, preparation and declared environment changes i
 
 test('red, signal, dirty and moved-head executions never supply reusable green evidence', { timeout: 20000 }, t => {
   const f = fixture(t, { fast: 'node check.cjs check' });
-  for (let i = 0; i < 2; i++) assert.equal(f.lane(['check'], f.workspace, { RED: '1' }).status, 7);
+  let original, originalBytes;
+  for (let i = 0; i < 2; i++) {
+    assert.equal(f.lane(['check'], f.workspace, { RED: '1' }).status, 7);
+    if (!original) { original = f.gate(); originalBytes = fs.readFileSync(original.history_receipt); }
+  }
+  assert.notEqual(f.gate().history_receipt, original.history_receipt);
+  assert.deepEqual(fs.readFileSync(original.history_receipt), originalBytes, 'a second execution cannot replace earlier red evidence');
   assert.deepEqual(f.count(), ['check', 'check']);
   assert.equal(f.lane(['check', '--cmd', 'kill -9 $$']).status, 137);
   assert.equal(f.gate().exit_code, 137);

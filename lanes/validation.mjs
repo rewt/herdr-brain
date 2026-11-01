@@ -107,6 +107,15 @@ function unchanged(cwd, before, label) {
   if (JSON.stringify(after) !== JSON.stringify(before)) throw new Error('worktree branch or lane tip changed during validation');
 }
 
+// Cache entries can advance or be reused on a new head. Retain the actual
+// receipt observed by each caller independently of that mutable cache.
+function retainObservation(directory, gate) {
+  const file = path.join(plainDirectory(path.join(directory, 'history', digest(gate.branch))), `${randomUUID()}.json`);
+  const observed = { ...gate, observed_at: new Date().toISOString(), history_receipt: file };
+  fs.writeFileSync(file, JSON.stringify(observed, null, 2) + '\n', { flag: 'wx', mode: 0o600 });
+  return observed;
+}
+
 export function validateTree({ cwd, common, command, tier, prepare = [], environment = '', env = process.env, label, onStart, historyKey, timeoutSeconds, idleTimeoutSeconds, exact, watchContext = env }) {
   const admittedRelease = bundleRelease();
   // Notice routing is transport context, outside the exact proof environment.
@@ -134,8 +143,8 @@ export function validateTree({ cwd, common, command, tier, prepare = [], environ
       if (hit) {
         unchanged(cwd, before, label);
         process.stdout.write(`EXACT_REUSE key=${key} receipt=${exactReceipt}\n`);
-        return { ...hit.receipt, ...before, tier, reused: true, validated_head: hit.receipt.head,
-          exact: { ...hit.receipt.exact, outcome: 'reused', excluded_delta: hit.excluded } };
+        return retainObservation(directory, { ...hit.receipt, ...before, tier, reused: true, validated_head: hit.receipt.head,
+          exact: { ...hit.receipt.exact, outcome: 'reused', excluded_delta: hit.excluded } });
       }
     }
     let previous;
@@ -155,7 +164,7 @@ export function validateTree({ cwd, common, command, tier, prepare = [], environ
       if (usable) {
         unchanged(cwd, before, label);
         process.stdout.write(`REUSE tree=${before.tree} tier=${tier} command=${JSON.stringify(command)} log=${previous.log}\n`);
-        return { ...previous, ...before, tier, reused: true, validated_head: previous.head };
+        return retainObservation(directory, { ...previous, ...before, tier, reused: true, validated_head: previous.head });
       }
     }
     // The cache receipt can advance; every execution's log remains immutable.
@@ -213,9 +222,10 @@ export function validateTree({ cwd, common, command, tier, prepare = [], environ
       try { executionHash = digest(readPlainFile(executionReceipt)); } catch { /* Incomplete sources never reuse. */ }
       gate.exact = { schema: identity.schema, key, identity, outcome: 'executed', excluded_delta: [], execution_hash: executionHash };
     }
-    writeFileAtomic(receipt, JSON.stringify(gate, null, 2) + '\n', 0o600);
-    if (exact && gate.outcome === 'green' && gate.executed && !gate.gate_timeout) writeFileAtomic(exactReceipt, JSON.stringify(gate, null, 2) + '\n', 0o600);
-    return gate;
+    const observed = retainObservation(directory, gate);
+    writeFileAtomic(receipt, JSON.stringify(observed, null, 2) + '\n', 0o600);
+    if (exact && gate.outcome === 'green' && gate.executed && !gate.gate_timeout) writeFileAtomic(exactReceipt, JSON.stringify(observed, null, 2) + '\n', 0o600);
+    return observed;
   } finally { process.off('exit', release); release(); }
 }
 

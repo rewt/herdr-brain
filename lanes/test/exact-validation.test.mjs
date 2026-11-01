@@ -63,8 +63,12 @@ test('exact reuse verifies source, log and completed sidecar and never calls onS
   const f = exactFixture(t), opts = options(f); let starts = 0;
   const first = validateTree({ ...opts, onStart: () => starts++ });
   assert.equal(first.executed, true); assert.equal(first.exact.outcome, 'executed');
+  const firstBytes = fs.readFileSync(first.history_receipt);
   const second = validateTree({ ...opts, env: { ...f.env, UNLISTED: 'changed' }, onStart: () => starts++ });
   assert.equal(second.reused, true); assert.equal(second.exact.outcome, 'reused'); assert.equal(starts, 1); assert.equal(f.runs(), 1);
+  assert.notEqual(second.history_receipt, first.history_receipt);
+  assert.deepEqual(fs.readFileSync(first.history_receipt), firstBytes);
+  assert.equal(JSON.parse(fs.readFileSync(second.history_receipt)).reused, true);
   const original = path.join(f.common, 'lane-validation', first.key + '.json'), exact = path.join(f.common, 'lane-validation/exact', first.key + '.json');
   const cases = [
     ['receipt', () => { const doc = JSON.parse(fs.readFileSync(exact)); doc.duration_s++; fs.writeFileSync(exact, JSON.stringify(doc)); }],

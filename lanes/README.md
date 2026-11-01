@@ -89,6 +89,13 @@ executes that command and writes `.lane/gate.json` plus the log and receipt in
 `GIT_COMMON_DIR/lane-validation/`. The receipt includes the actual command, exit
 status, Node version and each top-level TAP summary (null when absent). Settle
 inherits this evidence through the same path for configured and default projects.
+In Brain's source repository, changes to `lib/state.mjs` or
+`lib/obligations.mjs` relative to the lane's merge base with main also require
+`test/release-record-compatibility.test.mjs`. Ordinary checks append the bounded
+runner for that file, independent of selected name filters; exact gates include
+it in their required test plan. A direct, unfiltered run of that file already
+satisfies the ordinary check. Other repositories without Brain's admission reader
+keep their selected command.
 Settle performs code/report review with no
 suite, and the promotion train runs the promotion tier on each integration batch.
 Workers never run the release gate; `bash herdr/release.sh build TAG`

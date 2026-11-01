@@ -49,7 +49,7 @@ import { INHERITED_GATE_NON_CLAIM } from './review-evidence.mjs';
 import { writeFileAtomic as writeAgentFileAtomic } from '../lib/files.mjs';
 import { VALIDATION_TIERS, resolveValidation, validateValidation, validateTree, validationEnvironment } from './validation.mjs';
 import { readReceiptDeclaration, restrictEnvironment, excludedAdditions, requireExactPlan, selectionUnknown } from './exact-validation.mjs';
-import { changedPaths, plannedCommand } from '../promote/test-plan.mjs';
+import { changedPaths, plannedCommand, quote } from '../promote/test-plan.mjs';
 import { canonicalTestPlan } from '../settle/test-plan.mjs';
 
 import {
@@ -2575,6 +2575,16 @@ function check(args) {
   const branch = git(["branch", "--show-current"]);
   if (branch === "") fail("current checkout is detached; check requires a branch");
 
+  // Brain's admission reader pins these source shapes. Keep its backstop even
+  // for a worker-selected command; other consumer repositories have no reader.
+  const compatibilityTest = 'test/release-record-compatibility.test.mjs';
+  const compatibilitySources = ['lib/state.mjs', 'lib/obligations.mjs'];
+  const comparisonBase = git(['merge-base', MAIN, head]);
+  const compatibilityRequired = existsSync(join(REPO_ROOT, 'lib/record-compatibility.mjs')) &&
+    changedPaths(REPO, comparisonBase, head).some(file => compatibilitySources.includes(file));
+  if (compatibilityRequired && !required.includes(compatibilityTest)) required.push(compatibilityTest);
+  required.sort();
+
   let exact, env = validationEnvironment(), prepare = CONFIG.prepare ?? [], environment = settings.environment, profile;
   if (exactGate) {
     try {
@@ -2608,6 +2618,14 @@ function check(args) {
       if (required.some(file => !covered.includes(file))) throw Error('promotion test plan no longer covers the bound deferred test evidence');
       command = plannedCommand(settings.tiers.promotion.command, plan);
     } catch (error) { fail(error.code === 'SELECTION_UNKNOWN' ? error.message : selectionUnknown(error.message).message); }
+  }
+  if (compatibilityRequired && !exact) {
+    // A separate runner invocation keeps a selected name filter from skipping
+    // this file. The subshell also contains an explicit `exit` in --cmd.
+    const backstop = `${quote(process.execPath)} test/helpers/run.mjs ${compatibilityTest}`;
+    const direct = [`node test/helpers/run.mjs ${compatibilityTest}`, backstop,
+      `${process.execPath} test/helpers/run.mjs ${compatibilityTest}`];
+    if (!direct.includes(command)) command = `( ${command}\n) && ${backstop}`;
   }
   let gate;
   try { gate = validateTree({ cwd: REPO, common: REPO_IDENTITY, command, tier,

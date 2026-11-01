@@ -1242,3 +1242,45 @@ esac`);
   assert.match(calls, /\[watch-unavailable\].*socket_unavailable.*server down/);
   assert.doesNotMatch(calls, /\[watch-no-report\]/);
 });
+
+test('failed sign-in delivers one stable supervisor notice, queues a missing recipient and never prompts the worker',async t=>{
+  for(const missing of [false,true]){
+    const f=watcherFixture(missing?'R-137':'R-136'),run=missing?'R-137':'R-136';
+    const inbox=path.join(f.root,'.org/supervisor/inbox.log'),record=path.join(f.root,'.org/events.jsonl');
+    const done=path.join(f.root,'abandoned'),available=path.join(f.root,'recipient-available');
+    const worker={...recipientAgent('lane-nine',f.root),pane_id:'worker-pane',agent_status:'idle'};
+    const current={id:run,item:'ENG-9',workspace:f.root,report_path:f.report,started:{at:new Date().toISOString()},meta:{
+      agent:worker.name,pane:worker.pane_id,worker_workspace:worker.workspace_id,terminal_id:worker.terminal_id,agent_session_id:worker.agent_session.value}};
+    const empty=fs.readFileSync(new URL('../../supervisor/test/fixtures/claude-empty.ansi',import.meta.url),'utf8');
+    if(!missing)fs.writeFileSync(available,'yes');
+    fs.writeFileSync(f.org,`#!${process.execPath}\nimport fs from 'node:fs';
+console.log(JSON.stringify({...${JSON.stringify(current)},abandoned:fs.existsSync(${JSON.stringify(done)})}));\n`);
+    fs.writeFileSync(f.herdr,`#!${process.execPath}\nimport fs from 'node:fs';const a=process.argv.slice(2);
+fs.appendFileSync(${JSON.stringify(f.calls)},JSON.stringify(a)+'\\n');
+if(a[0]==='agent'&&a[1]==='get'){
+  const agent=a[2]==='lane-nine'?${JSON.stringify(worker)}:fs.existsSync(${JSON.stringify(available)})?${JSON.stringify(supervisorAgent(f.root))}:null;
+  if(agent)console.log(JSON.stringify({result:{agent}}));else{console.error(JSON.stringify({error:{code:'agent_not_found'}}));process.exitCode=1;}
+}else if(a[0]==='pane'&&a[1]==='read')process.stdout.write(a[2]==='worker-pane'?'  ⎿ Not logged in · Please run /login\\n\\n✻ Cogitated for 0s · done 11:27 AM\\n\\n❯':${JSON.stringify(empty)});
+else if(a[0]==='agent'&&a[1]==='wait'){await new Promise(r=>setTimeout(r,20));console.log('{}');}
+else console.log('{}');\n`,{mode:0o755});
+    const before=fs.readFileSync(record),calls=()=>fs.existsSync(f.calls)?fs.readFileSync(f.calls,'utf8').trim().split('\n').map(JSON.parse):[];
+    const until=async predicate=>{const end=Date.now()+loadTimeout(15000);while(!predicate()){if(Date.now()>end)throw Error('sign-in notice fixture timed out');await new Promise(r=>setTimeout(r,20));}};
+    const child=spawnChild(t,process.execPath,[...f.args,'--cwd',f.root,'--start-grace','0','--retry-after','0.05'],{env:{...TEST_ENV,SUPERVISOR_INPUT_WAIT_SECONDS:'0'}});
+    t.after(async()=>{fs.writeFileSync(done,'yes');fs.writeFileSync(available,'yes');await waitForExit(child);await waitForInboxIdle(inbox);fs.rmSync(f.root,{recursive:true,force:true});});
+    await until(()=>readInbox(inbox).length===1);
+    const notice=readInbox(inbox)[0];
+    assert.equal(notice.id,`watch:${run}:sign-in-required:0`);assert.equal(notice.to,'supervisor-test');
+    assert.match(notice.message,new RegExp(`run=${run}.*worker=lane-nine.*action=restore-sign-in`));
+    await until(()=>calls().filter(a=>a[0]==='agent'&&a[1]==='wait').length>=3);
+    assert.equal(readInbox(inbox).length,1);
+    if(missing){assert.equal(readInbox(inbox)[0].state,'pending');assert.equal(calls().filter(a=>a[1]==='prompt').length,0);fs.writeFileSync(available,'yes');}
+    await until(()=>readInbox(inbox)[0]?.state==='sent');
+    const waits=calls().filter(a=>a[1]==='wait').length;
+    await until(()=>calls().filter(a=>a[1]==='wait').length>waits);
+    assert.equal(calls().filter(a=>a[1]==='prompt'&&a[2]==='supervisor-test').length,1);
+    assert.equal(calls().filter(a=>a[1]==='prompt'&&a[2]==='lane-nine').length,0);
+    assert.equal(readInbox(inbox).length,1);assert.equal(readInbox(inbox)[0].id,notice.id);
+    assert.deepEqual(fs.readFileSync(record),before,'no item/run events added');
+    fs.writeFileSync(done,'yes');assert.equal((await waitForExit(child)).code,0);
+  }
+});

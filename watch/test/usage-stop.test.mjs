@@ -163,3 +163,14 @@ test('usage stop rechecks fences during quiet confirmation without replaying an 
   await f.reconcile();assert.equal(f.prompts(),0);assert.equal(f.saved().phase,'uncertain');
   fs.rmSync(path.join(f.root,'.lane/supervisor/HOLD'));await f.reconcile();assert.equal(f.prompts(),0);
 });
+
+// Retained incident panes are byte-for-byte copies, including the varying footer.
+test('all retained failed sign-ins and an unknown footer verb classify without accepting a stale assistant turn',()=>{
+  for(const run of [1856,1857,1858]){
+    const pane=fs.readFileSync(new URL(`./fixtures/R-${run}-sign-in.txt`,import.meta.url),'utf8');
+    assert.equal(classifyUsageStop(pane).kind,'sign-in-required',`R-${run}`);
+  }
+  const pane=fs.readFileSync(new URL('./fixtures/R-1857-sign-in.txt',import.meta.url),'utf8');
+  assert.equal(classifyUsageStop(pane.replace('Cogitated','Contemplated')).kind,'sign-in-required');
+  assert.equal(classifyUsageStop(pane.replace('✻ Cogitated','• A later assistant turn completed\n\n✻ Cogitated')).kind,'unclassified-stop');
+});

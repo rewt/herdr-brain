@@ -171,3 +171,72 @@ test('fresh release history supports stopped retarget, restart, upgrade and roll
   assert.equal(loadEvents(f.org).events.some(e=>e.type==='line-service.runtime-migrated'),false);
   assert.equal(fs.readFileSync(f.jobs,'utf8'),f.before.jobs);
 });
+
+// Synthesize the pre-registration fresh-install format, rather than calling a
+// service on the host or rewriting a retained real installation/history.
+async function oldInstallation(t){
+  const f=await fixture(t),preview=f.plan(),plan=structuredClone(preview.plan);
+  delete plan.installation.login;
+  const {createHash}=await import('node:crypto');
+  const bytes=JSON.stringify(plan)+'\n',ref={id:plan.id,file:preview.archive.file,sha256:createHash('sha256').update(bytes).digest('hex')};
+  fs.mkdirSync(path.dirname(ref.file),{recursive:true});fs.writeFileSync(ref.file,bytes,{mode:0o444});
+  fs.writeFileSync(f.file,plan.plist);
+  fs.writeFileSync(f.receipt,JSON.stringify({...plan.installation,phase:'installed',fresh_install:ref})+'\n');
+  fs.writeFileSync(f.stop,'Original service STOP\n');
+  transact(f.org,()=>({add:[{type:'line-service.cutover',...plan.cutover,project:f.identity,repo:f.cwd,org:f.org,install_plan:ref,native_caller:plan.owner,runtime_started:false}]}));
+  const args=['register-login','--repo',f.cwd,'--org',f.org];
+  return {...f,registrationArgs:args,previewLogin:()=>f.main([...args,'--dry-run'],f.options),applyLogin:sha=>f.main([...args,'--expected-plan',sha],f.options)};
+}
+
+test('existing installation registers login only through the native stopped plan-hash path and preserves every other binding',async t=>{
+  const f=await oldInstallation(t),record=fs.readFileSync(path.join(f.org,'events.jsonl')),before=fs.readFileSync(f.receipt),plist=fs.readFileSync(f.file),stop=fs.readFileSync(f.stop);
+  const tree=()=>fs.readdirSync(f.directory).sort(),names=tree(),plan=f.previewLogin(),login=JSON.parse(plan.plan.after.installation).login;
+  assert.deepEqual(fs.readFileSync(f.receipt),before);assert.deepEqual(tree(),names);assert.equal(fs.existsSync(path.dirname(login.file)),false);
+  assert.deepEqual(fs.readFileSync(path.join(f.org,'events.jsonl')),record);
+  assert.throws(()=>f.applyLogin('a'.repeat(64)),/plan changed/);
+  const result=f.applyLogin(plan.expected_plan);assert.equal(result.registered,true);assert.equal(result.runtime_started,false);
+  assert.equal(fs.readlinkSync(login.file),f.file);assert.deepEqual(JSON.parse(fs.readFileSync(f.receipt)),{...JSON.parse(before),login});
+  assert.deepEqual(fs.readFileSync(f.file),plist);assert.deepEqual(fs.readFileSync(f.stop),stop);assert.equal(boots(f).length,0);
+  const inode=fs.lstatSync(login.file).ino,receipt=fs.readFileSync(f.receipt),archive=fs.readFileSync(result.archive.file);
+  assert.equal(f.applyLogin(plan.expected_plan).unchanged,true);assert.equal(fs.lstatSync(login.file).ino,inode);
+  assert.deepEqual(fs.readFileSync(f.receipt),receipt);assert.deepEqual(fs.readFileSync(result.archive.file),archive);
+  const {installedContext}=await f.module('line-service/cutoff.mjs');assert.deepEqual(installedContext(f.cwd,f.org).installation.login,login);
+  const recovery=f.main(['status','--repo',f.cwd,'--org',f.org],f.options).recovery;
+  assert.equal(recovery.some(n=>n.boundary==='login-registration'),false);
+  const events=loadEvents(f.org).events,newEvents=events.slice(record.toString().trim().split('\n').length);
+  assert.deepEqual(newEvents.map(e=>e.type),['line-service.login-registered']);
+  assert.equal(newEvents.some(e=>/^(item|run)\./.test(e.type)),false);
+  assert.equal(fs.readFileSync(f.jobs,'utf8'),f.before.jobs);
+  assert.equal(fs.readFileSync(path.join(f.cwd,'.herdr-release.json'),'utf8'),f.before.pin);
+  fs.chmodSync(result.archive.file,0o644);fs.appendFileSync(result.archive.file,' ');
+  assert.throws(()=>installedContext(f.cwd,f.org),/archive changed/);
+});
+
+test('existing-install login registration refuses conflicting entries, native absence, fences and stale plans without replacement',async t=>{
+  const f=await oldInstallation(t),preview=f.previewLogin(),login=JSON.parse(preview.plan.after.installation).login;
+  assert.throws(()=>f.main([...f.registrationArgs,'--dry-run'],{...f.options,env:{...f.options.env,HERDR_ENV:'',HERDR_PANE_ID:''}}),/native/);
+  assert.throws(()=>f.main([...f.registrationArgs,'--dry-run'],{...f.options,env:{...f.options.env,CODEX_THREAD_ID:'foreign'}}),/native/);
+  fs.mkdirSync(path.join(f.cwd,'.lane/supervisor'),{recursive:true});
+  for(const marker of [path.join(f.cwd,'.lane/supervisor/STOP'),path.join(f.cwd,'.lane/supervisor/HOLD'),path.join(f.org,'STOP')]){
+    fs.writeFileSync(marker,'retain');assert.throws(()=>f.applyLogin(preview.expected_plan),/STOP\/HOLD/);assert.equal(fs.readFileSync(marker,'utf8'),'retain');fs.unlinkSync(marker);
+  }
+  f.setLoaded(true);assert.throws(()=>f.applyLogin(preview.expected_plan),/positively stopped/);f.setLoaded(false);
+  f.agent.terminal_id='changed';assert.throws(()=>f.applyLogin(preview.expected_plan),/plan changed/);f.agent.terminal_id='terminal';
+  fs.mkdirSync(path.dirname(login.file),{recursive:true});fs.writeFileSync(login.file,'foreign');
+  const before=fs.readFileSync(f.receipt);assert.throws(()=>f.applyLogin(preview.expected_plan),/differs/);
+  assert.equal(fs.readFileSync(login.file,'utf8'),'foreign');assert.deepEqual(fs.readFileSync(f.receipt),before);assert.equal(boots(f).length,0);
+  fs.unlinkSync(login.file);fs.symlinkSync(f.file,login.file);
+  assert.throws(()=>f.applyLogin(preview.expected_plan),/no replacement or adoption/);assert.equal(fs.readlinkSync(login.file),f.file);
+});
+
+test('interrupted registration preserves the original intent and entry and refuses replay under a new plan',async t=>{
+  for(const phase of ['intent','login','installation']){
+    const f=await oldInstallation(t),preview=f.previewLogin(),login=JSON.parse(preview.plan.after.installation).login;
+    const {registerLogin}=await f.module('line-service/register-login.mjs');
+    assert.throws(()=>registerLogin({...f.options,expectedPlan:preview.expected_plan,fault:point=>{if(point===phase)throw Error('interrupted '+phase);}}),/interrupted/);
+    const archive=fs.readFileSync(preview.archive.file);
+    assert.throws(()=>f.previewLogin(),/UNKNOWN login registration/);assert.throws(()=>f.applyLogin(preview.expected_plan),/UNKNOWN login registration/);
+    assert.deepEqual(fs.readFileSync(preview.archive.file),archive);assert.equal(fs.existsSync(f.stop),true);assert.equal(boots(f).length,0);
+    if(phase!=='intent')assert.equal(fs.readlinkSync(login.file),f.file);
+  }
+});

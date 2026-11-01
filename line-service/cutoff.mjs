@@ -13,6 +13,7 @@ import { noticeLock } from '../supervisor/notice-lock.mjs';
 import { loadDiscoveredRoutes } from '../lanes/routes.mjs';
 import { bundleRelease } from '../lib/releases.mjs';
 import {migratedCutover} from './runtime.mjs';
+import {loginChanges,applyLoginChange} from './login-history.mjs';
 import {recipientChanges,legacyRecipientHistory} from './recipient-history.mjs';
 import {readPlainFile} from '../lib/files.mjs';
 import {assertCommandQuiescence} from '../lib/command-receipt.mjs';
@@ -52,8 +53,16 @@ export function serviceCutoff(events,{repo,org,identity}) {
   if(e.mode==='accepted-release-install'||e.source!==developmentRoot||installation?.migration||installation?.probation_bootstrap||events.some(row=>['line-service.runtime-upgraded','line-service.probation-switched'].includes(row.type)&&row.project===identity&&row.org===org)){
     if(!installation||installation.source!==developmentRoot||installation.repo!==repo||installation.org!==org)reject('service cutover binding is UNKNOWN');
     migratedCutover(events,{repo,org,identity,directory,installation,cutover:e});
-  }else if(changes.length){
-    legacyRecipientHistory(changes,{installation,plist:readPlainFile(path.join(directory,'service.plist')),cutover:e});
+  }else{
+    const logins=loginChanges(events,{repo,org,identity,directory});
+    const plist=logins.length||changes.length?readPlainFile(path.join(directory,'service.plist')):null;
+    if(logins.length){
+      const before=JSON.parse(logins[0].archive.before.installation);
+      legacyRecipientHistory(changes,{installation:before,plist,cutover:e});
+      const last=changes.at(-1)?.event??e;
+      const state=applyLoginChange(logins[0],{installation:before,plist,last});
+      if(canonical(state.installation)!==canonical(installation))throw Error('login registration installation drifted');
+    }else if(changes.length)legacyRecipientHistory(changes,{installation,plist,cutover:e});
   }
   return e;
 }

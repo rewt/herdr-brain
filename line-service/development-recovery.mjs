@@ -8,6 +8,7 @@ import {canonical} from '../messages/schema.mjs';
 import {requireRecordCompatibility} from '../lib/record-compatibility.mjs';
 import {installationPhaseProof,settledInstallation} from './runtime-phase.mjs';
 import {replacementPlist} from './migrate-runtime.mjs';
+import {loginChanges,applyLoginChange} from './login-history.mjs';
 import {successorHistory} from './probation-successor-history.mjs';
 
 export const recoveryDigest=bytes=>createHash('sha256').update(bytes).digest('hex');
@@ -118,6 +119,9 @@ export function developmentHistory(events,{repo,org,identity,directory,installat
   }
   const successor=successorHistory(events,{repo,org,identity,directory},{trial,scope,saved,savedBytes,plist,last});
   saved=successor.installation;plist=successor.plist;last=successor.last;
+  for(const change of loginChanges(events,{repo,org,identity,directory})){
+    const next=applyLoginChange(change,{installation:saved,plist,last});saved=next.installation;last=next.last;
+  }
   if(!rows.length||saved.source!==root||!same(saved,installation)||readPlainFile(path.join(directory,'service.plist'))!==plist)
     throw Error('development recovery installation/plist drifted');
   return{last,installation:saved,plist,successor};

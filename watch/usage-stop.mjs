@@ -26,7 +26,7 @@ export function classifyUsageStop(screen) {
   const tail = start < 0 ? [] : lines.slice(start);
   const prompt = tail.findIndex(line=>/^\s*[›❯](?:\s|$)/.test(line));
   let body = prompt < 0 ? tail : tail.slice(0,prompt);
-  const completion = body.findIndex(line => /^\s*[✻✽✶✳✢·]\s+(?:Cooked|Worked|Churned|Baked|Sautéed|Brewed)\s+for\b/.test(line));
+  const completion = body.findIndex(line => /^\s*[✻✽✶✳✢·]\s+\S+(?:\s+\S+)*?\s+for\s+\d+(?:\.\d+)?(?:ms|s|m|h)\b/.test(line));
   if (completion >= 0) body = body.slice(0,completion);
   const blank = body.findIndex(line=>!line.trim());
   // A stale error above a later assistant turn is not this turn's stop.

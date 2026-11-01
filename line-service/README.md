@@ -364,21 +364,41 @@ The service's own STOP, project STOP/HOLD, runtime admission and every native/ru
 guard still apply. Failed installations retain their intent, login entry if
 already created, and STOP; they are not replayed or replaced.
 
-Existing installations are not silently registered or restarted. `status` now
-includes `recovery` notices naming the project supervisor from `promote.to`, the
-exact saved-source status/stop/restart controls, missing login registration and
-open runs with absent or unknown watcher owners. Scheduled startup records changed
-notices in `passes.jsonl` and `host-recovery.latest.json`, even before runtime
-admission, without changing runs, claims, folders, dispatch journals or watchers.
-No process started means no startup observer can execute: for an older installation
-without a login entry, its supervisor must pull status after login and use its
-original controls. Automatic login registration of an existing installation is
-not provided by status or a runtime upgrade; it remains a separately guarded
-installation change. Never edit its saved receipt to claim registration.
+Existing installations gain the same entry through an explicit stopped-service
+control, after the release owner activates a source containing the login history
+reader. The original frozen runtime is never edited. The canonical native project
+supervisor previews and applies the exact plan from that source:
+
+```sh
+node line-service/launchd.mjs register-login --repo /OWN/CANONICAL --org /OWN/RECORD --dry-run
+node line-service/launchd.mjs register-login --repo /OWN/CANONICAL --org /OWN/RECORD --expected-plan SHA256
+```
+
+Preview writes nothing. Apply requires the recorded supervisor's native binding,
+clean canonical main/source, the service's own STOP and positively unloaded state,
+no project/record STOP or HOLD, and fresh source/record/configuration/native CAS.
+It creates one exclusive login entry and saves its immutable intent, completion
+and installation receipt. It never loads a service, clears STOP, changes the plist,
+rebinds a terminal or changes pins. Existing/conflicting entries are retained;
+completed repeat application changes nothing. An interrupted/unknown intent
+refuses replay, including under a different plan. A runtime without the new reader
+is refused before any effect. Activation, restart and rollback compatibility stay
+with the release owner; an old frozen recovery reader cannot consume this new
+installation effect. Registration during a development probation therefore must
+not precede that owner's resolution of its frozen recovery/return obligation.
+
+`status` includes recovery notices naming the project supervisor from `promote.to`,
+exact saved-source controls, missing login registration and absent/unknown watcher
+owners. Scheduled startup records changed notices without changing runs, claims,
+folders, dispatch journals or watchers. Until a compatible runtime is activated
+and registration is applied, the supervisor retains manual restoration through
+status/stop/restart. Never hand-edit the installation receipt to claim recovery.
 
 A failed native sign-in (`Not logged in`, including Claude's zero-second `/login`
 failure) is saved distinctly as `sign-in-required` by the original watcher. It
-stays held without automated input: the supervisor restores sign-in in the
+stays held without automated input and delivers one stable restore-sign-in notice
+through the original watcher recipient/inbox. A missing recipient leaves that same
+ID queued; rechecks and watcher restarts retain it. To restore: the supervisor restores sign-in in the
 original worker and verifies its original claim/source/native binding before
 continuing that run. Observed work resolves the hold; an idle prompt alone does
 not prove sign-in. Terminal-ID drift, even with the same pane/session and a

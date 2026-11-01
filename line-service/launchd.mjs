@@ -16,6 +16,7 @@ import {nativeSender} from '../messages/operator-inbox.mjs';
 import {noticeLock} from '../supervisor/notice-lock.mjs';
 import {acquireLock} from '../lanes/promotion-lock.mjs';
 import {retargetService,liveRecipient} from './retarget.mjs';
+import {registerLogin} from './register-login.mjs';
 import {installRelease} from './install.mjs';
 import {bundleRelease} from '../lib/releases.mjs';
 import {probationControl} from './probation.mjs';
@@ -30,7 +31,7 @@ export {launchPlist} from './plist.mjs';
 
 export function main(argv = process.argv.slice(2), { command = spawnSync,call:nativeCall,home,cwd=process.cwd(),env=process.env } = {}) {
   const { positionals, values: v } = parseArgs({ args: argv, allowPositionals: true,
-    usage: 'launchd.mjs install|migrate|upgrade|probation-authorize|probation-switch|probation-successor|probation-withdraw|probation-complete|retarget|restart|status|stop|revert --repo CANONICAL [--org RECORD --id HANDOFF --trial ORIGINAL_TRIAL --development-recovery --authority NOTE_SEQ --from-root CURRENT --target-root TARGET --rollback --dry-run --expected-plan SHA256 --to SUPERVISOR --herdr ABS_PATH --socket ABS_PATH --interval 30 --commit SHA]', options: {
+    usage: 'launchd.mjs install|register-login|migrate|upgrade|probation-authorize|probation-switch|probation-successor|probation-withdraw|probation-complete|retarget|restart|status|stop|revert --repo CANONICAL [--org RECORD --id HANDOFF --trial ORIGINAL_TRIAL --development-recovery --authority NOTE_SEQ --from-root CURRENT --target-root TARGET --rollback --dry-run --expected-plan SHA256 --to SUPERVISOR --herdr ABS_PATH --socket ABS_PATH --interval 30 --commit SHA]', options: {
       repo: { type: 'string' }, org: { type: 'string' }, to: { type: 'string' }, herdr: { type: 'string' }, socket: { type: 'string' },
       interval: { type: 'string' }, commit: { type: 'string', multiple: true },
       id:{type:'string'},'dry-run':{type:'boolean'},
@@ -56,6 +57,10 @@ export function main(argv = process.argv.slice(2), { command = spawnSync,call:na
     if(positionals.length!==1||!v.repo||v.to||v.herdr||v.socket||v.interval||v.commit||v.rollback)throw Error('probation preserves installation, transport, pins and native services');
     return probationControl({repo:v.repo,org:v.org??findOrgDir({cwd:v.repo,env:{...env,ORG_DIR:''}}),id:v.id,fromRoot:v['from-root'],targetRoot:v['target-root'],authority:v.authority,
       recoveryAuthority:v['recovery-authority'],developmentRecovery:v['development-recovery'],finish:action==='probation-authorize'?undefined:action==='probation-withdraw'?'withdrawn':'completed',dryRun:v['dry-run'],expectedPlan:v['expected-plan'],command,call:nativeCall,home,cwd,env});
+  }
+  if(action==='register-login'){
+    if(positionals.length!==1||!v.repo||v.id||v.to||v.herdr||v.socket||v.interval||v.commit||v['from-root']||v['target-root']||v.rollback||v.authority)throw Error('register-login preserves all saved installation and transport bindings');
+    return registerLogin({repo:v.repo,org:v.org??findOrgDir({cwd:v.repo,env:{...env,ORG_DIR:''}}),dryRun:v['dry-run'],expectedPlan:v['expected-plan'],command,call:nativeCall,home,cwd,env});
   }
   if(v['recovery-authority'])throw Error('--recovery-authority applies only to probation entry commands');
   if(v.authority)throw Error('--authority applies only to probation-authorize');

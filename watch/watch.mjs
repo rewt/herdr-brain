@@ -628,6 +628,14 @@ async function watch() {
     if (report.kind === 'missing' && (state === 'idle' || state === 'done')) {
       const recovery=await usageStop(status.native);
       if(recovery.handled){
+        if(recovery.receipt?.kind==='sign-in-required'){
+          const id=`watch:${runId}:sign-in-required:${recovery.receipt.attempt}`;
+          // Adopt the original payload/ID after a restart, including queued,
+          // refused or uncertain delivery. The inbox owns any pending input.
+          const prior=readInbox(path.resolve(opt.inbox??inboxPath({org:opt.org,cwd:opt.cwd}))).find(entry=>entry.id===id);
+          const message=prior?.message??`[watch-sign-in-required] run=${runId} item=${item} worker=${agent} action=restore-sign-in; supervisor must restore sign-in in the original worker, verify its run/claim/source/native binding, then continue the same run; no automatic worker input`;
+          if(!prior)await sendOnce(message,undefined,{id});
+        }
         // A reset deadline is a wake-up fact, never permission to replay input.
         // Both resident and finite/shared watches keep the same durable offer.
         const signal=await waitForSignal(agent,['working'],reportPath,recovery.wait_ms,beforeStamp,recordChanged,stopFile);

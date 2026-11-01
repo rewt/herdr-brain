@@ -7,6 +7,7 @@ import {fileURLToPath} from 'node:url';
 import {gitProject} from '../lib/project.mjs';
 import {bundleRelease,projectPin,selectRelease,checkRelease,releaseHome,requireReadyAcceptance} from '../lib/releases.mjs';
 import {readPlainFile,plainDirectory} from '../lib/files.mjs';
+import {loginChanges,applyLoginChange} from './login-history.mjs';
 import {recipientChanges,applyRecipientChange,legacyRecipientHistory} from './recipient-history.mjs';
 import {installationPhaseProof,settledInstallation} from './runtime-phase.mjs';
 import {freshInstallation} from './install-history.mjs';
@@ -69,6 +70,7 @@ export function runtimeHistory(events,{repo,org,identity,directory,installation,
   legacyRecipientHistory(changes.filter(c=>c.event.seq<event.seq),{installation:JSON.parse(archive.before.installation),plist:archive.before.plist,cutover});
   if(saved.source!==event.source||JSON.stringify(saved.runtime)!==JSON.stringify(event.runtime))throw Error('service runtime migration archive changed');
   }
+  const logins=loginChanges(events,{repo,org,identity,directory});
   const upgrades=events.filter(e=>e.type==='line-service.runtime-upgraded'&&e.project===identity&&e.org===org);
   const upgradeDirectory=path.join(directory,'upgrades');
   if(fs.existsSync(upgradeDirectory)){
@@ -78,7 +80,11 @@ export function runtimeHistory(events,{repo,org,identity,directory,installation,
     if(JSON.stringify(files)!==JSON.stringify(upgrades.map(e=>e.id+'.json').sort()))throw Error('existing/UNKNOWN runtime upgrade is retained; no replay or replacement');
   }else if(upgrades.length)throw Error('service runtime upgrade archive is missing');
   const ids=new Set();
-  for(const next of [...upgrades,...changes.filter(c=>c.event.seq>historyStart).map(c=>c.event)].sort((a,b)=>a.seq-b.seq)){
+  for(const next of [...upgrades,...logins.map(c=>c.event),...changes.filter(c=>c.event.seq>historyStart).map(c=>c.event)].sort((a,b)=>a.seq-b.seq)){
+    if(next.type==='line-service.login-registered'){
+      const state=applyLoginChange(logins.find(c=>c.event.seq===next.seq),{installation:saved,plist,last});
+      saved=state.installation;last=state.last;continue;
+    }
     if(next.type==='line-service.recipient-retargeted'){
       const state=applyRecipientChange(changes.find(c=>c.event.seq===next.seq),{installation:saved,plist,last});
       saved=state.installation;plist=state.plist;last=state.last;continue;

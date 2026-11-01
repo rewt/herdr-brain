@@ -1,0 +1,25 @@
+  source_report_sha256 (actual immutable producer report hash), head (captured head), and
+  claim_generation (captured source_provenance claim_generation or landed_evidence
+  owner_generation). Missing report/result or a historical unknown binding stays Unknown; name the
+  missing proof and responsible owner in this report. Never wait, retarget, launch another review
+  or run suites to fill it.
+  A single unbound engineer proposal covers the report findings. For multiple or narrower
+  correction proposals, supply review_findings as a list of exact finding texts; distinct findings
+  retain distinct identities. Repeated intake reuses the linked correction and preserves every
+  historical item and attempt.
+  For each Major, include a structured frontmatter findings entry with severity, text (the exact
+  finding text), and correction_check: the specific focused control/command and expected corrected
+  behavior. Structured findings are canonical per severity: if you include any entries of a
+  severity, include every finding of that severity there; body bullets of that severity are
+  display summaries. For a severity with no structured entries, intake uses its body bullets.
+  Minors may therefore remain body-only when only Majors are in frontmatter. Name failed and unrun
+  proof locations in artifacts. Do not execute the checks; the fixer inherits them.
+
+  ⎿  Not logged in · Please run /login
+
+✻ Cogitated for 0s · done 11:27 AM
+
+───────────────────────────────────────────────────────────────────────────────────────────────────
+❯
+───────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle)

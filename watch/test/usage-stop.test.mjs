@@ -29,7 +29,7 @@ function fixture(t) {
   fs.writeFileSync(path.join(org,'events.jsonl'),'');
   const add=events=>transact(org,()=>({add:events}),{actor:'fixture'});
   add([{type:'item.added',id:'ENG-1',role:'engineer',title:'Usage recovery'},
-    {type:'run.started',id:'R-1',item:'ENG-1',workspace:root,meta:current.meta},
+    {type:'run.started',id:'R-1',item:'ENG-1',workspace:root,report_path:current.report_path,meta:current.meta},
     {type:'run.claimed',run:'R-1',project:identity,record:org,owner}]);
   fs.writeFileSync(path.join(root,'unsaved.txt'),'preserve me');
   let screen=limit,clock=Date.parse(reset)-10000,prompts=0,reads=0,input='delivered',hook=()=>{};
@@ -126,7 +126,7 @@ test(`usage stop fresh ${hold} fence prevents input`,async t=>{
   }else if(hold==='org-STOP')fs.writeFileSync(path.join(f.org,'STOP'),'held');
   else if(hold==='report')fs.writeFileSync(f.current.report_path,'partial report');
   else if(hold==='closed')f.add([{type:'item.closed',id:'ENG-1'}]);
-  else if(hold==='item-hold')f.add([{type:'item.updated',id:'ENG-1',meta:{hold:'held'}}]);
+  else if(hold==='item-hold')f.add([{type:'item.updated',id:'ENG-1',fields:{meta:{hold:'held'}}}]);
   else if(hold==='source')f.add([{type:'run.updated',id:'R-1',meta:{dispatch_attempt:'changed'}}]);
   else f.add([{type:'run.claimed',run:'R-1',project:f.git(['rev-parse','--absolute-git-dir']),record:f.org,owner:f.owner}]);
   if(hold==='claim')await assert.rejects(f.reconcile(),/OWNED_ELSEWHERE/);

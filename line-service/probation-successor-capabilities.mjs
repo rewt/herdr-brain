@@ -24,7 +24,7 @@ const profiles = new Map([
   // 8cab40f1: owner-closure admission and host status changes preserve v1 archives.
   ['53f1a5a5371fd261c63eba58766e4ddce520853108b8025120e2002ee129e613', 'successor-host-recovery'],
   // DEC-501: per-extension full history, recovery-only entry and exact return.
-  ['7847e8cd9a45f01c256faeef94ecb9530593cf383e5ca25b9f96c3f9c80ceefe', 'successor-extensions'],
+  ['4b05f3a79af17e59292391b24a4d89cec8ab5a5f5076ed3a4649e8113fedd144', 'successor-extensions'],
 ]);
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 export function successorFingerprint(root) {

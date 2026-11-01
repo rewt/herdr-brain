@@ -190,6 +190,14 @@ function savedChain(f){
     history,verified,references,from:new Date(Date.now()+1000).toISOString(),startSeq:events.at(-1).seq};
 }
 
+test('successor refuses reused legacy effect IDs before effects',async t=>{
+  const f=await successorFixture(t),before=state(f);
+  for(const id of ['old-entry','old-anchor'])assert.throws(()=>f.run({id,dryRun:true}),/completed legacy probation effect id retained/);
+  assert.equal(f.run({id:'fresh-entry',dryRun:true}).runtime.root,f.successor);
+  assert.deepEqual(state(f),before);
+  assert.equal(fs.existsSync(path.join(f.directory,'probation-successor-effects')),false);
+});
+
 test('append-only extensions preserve the actual legacy first archive and sealed recovery, and return to an earlier compatible extension',async t=>{
   const f=await successorFixture(t),legacy=f.candidate('legacy',{legacy:true}),second=f.candidate('successor-two');
   const names=['probation-successor.mjs','probation-successor-history.mjs','probation.mjs','development-recovery.mjs','runtime.mjs','launchd.mjs'];
@@ -337,7 +345,7 @@ test('partial later extensions and completed later rollback clears retain startu
     for(const id of [options.id,'replacement'])assert.throws(()=>f.run({id,dryRun:true}),/UNKNOWN|completed successor|fence retained/);
     await oldRefuses(f);
     const {main}=await f.module(second,'line-service/launchd.mjs');
-    assert.throws(()=>main(['restart','--repo',f.cwd,'--org',f.org],f.args),/UNKNOWN|fence retained|binding differs|drifted/);
+    assert.throws(()=>main(['restart','--repo',f.cwd,'--org',f.org],f.args),/UNKNOWN|fence retained|binding differs|drifted|executing line runtime differs from the accepted project pin/);
     assert.deepEqual(state(f),retained);assert.deepEqual(fs.readFileSync(firstFile),firstBytes);
     assert.equal(fs.readFileSync(f.retained,'utf8'),f.jobs);
   });

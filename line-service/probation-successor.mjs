@@ -71,6 +71,8 @@ export function probationSuccessor({repo,org,id,trial,fromRoot,targetRoot,rollba
     git(c.repo,['merge-base','--is-ancestor',p.source.commit,head]);
     const extensions=successorExtensions(events,c,original),rows=successorRows(events,c);
     if(rows.some(e=>e.id===id))throw Error('completed successor id retained; no replay');
+    if(events.some(e=>e.type==='line-service.probation-switched'&&e.project===c.identity&&e.org===c.org&&e.id===id))
+      throw Error('completed legacy probation effect id retained; no replay');
     const installation=readPlainFile(installationFile),saved=JSON.parse(installation),plist=readPlainFile(file);
     const service=inspectService(saved.target,c.repo,command);if(service.loaded)throw Error('probation successor requires positively stopped service');
     const history=runtimeHistory(events,{...c,installation:saved,cutover:p.original.cutover,root:saved.source});

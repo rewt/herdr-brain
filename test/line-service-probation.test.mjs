@@ -102,6 +102,7 @@ test('probation-record-guard refuses owner fences without a pass outage and perm
     f.control({expectedPlan:preview.plan_sha256,authority:note.seq});f.enter();
     transact(f.org,()=>({add:[{type:'item.added',id:'G-2',kind:'goal',title:'Open ancestor'},
       {type:'item.updated',id:'G-1',fields:{parent:'G-2'}},
+      {type:'item.added',id:'G-3',kind:'goal',title:'Unrelated goal'},
       {type:'item.added',id:'ENG-1',kind:'work',title:'Unrelated work'}]}));
     const cli=args=>spawnSync(process.execPath,[path.join(f.next,'bin/org.mjs'),...args],{cwd:f.cwd,env:f.env,encoding:'utf8'});
     const before=state(f);
@@ -123,11 +124,11 @@ test('probation-record-guard refuses owner fences without a pass outage and perm
     assert.throws(()=>protectRecordMutation({org:f.org,state:fold(events),events,command:'complete-batch',
       completion:{identity:f.identity,org:f.org},mutation:{add:[{type:'report.ingested',id:'R-1'},
         {type:'item.closed',id:'G-1',as:'done'}]}}),/probation write guard REFUSED/);
-    for(const args of [['note','G-1','Trial remains active'],['close','ENG-1'],['set','G-1','meta.hold=false']]){
+    for(const args of [['note','G-1','Trial remains active'],['close','ENG-1'],['close','G-3'],['set','G-1','meta.hold=false']]){
       const result=cli(args);assert.equal(result.status,0,result.stderr);
     }
     // Reparenting under a closed ancestor is the same prospective authority HOLD.
-    const moved=cli(['set','G-1','parent=ENG-1']);assert.equal(moved.status,3,moved.stderr);
+    const moved=cli(['set','G-1','parent=G-3']);assert.equal(moved.status,3,moved.stderr);
     fs.unlinkSync(f.stop);await privatePass(f,f.next);
     f.main([`probation-${finish}`,'--repo',f.cwd,'--org',f.org,'--id','original-trial'],f.args);
     const ended=cli(['close','G-1']);assert.equal(ended.status,0,ended.stderr);

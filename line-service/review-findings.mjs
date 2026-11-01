@@ -143,7 +143,8 @@ export function reviewCorrectionEvents({ state, events, run, review, report, fin
         taken.add(id);
         add.push(intentFirstCreation({ type: 'item.added', id, kind: 'work', role: proposal?.role ?? 'engineer',
           capability: proposal?.capability ?? null,
-          title: proposal?.title ?? `${severity === 'major' ? 'Fix' : 'Follow up'} ${source} at ${target.head.slice(0, 10)}: ${selected[0].text.slice(0, 120)}`,
+          title: proposal?.title ?? (minorBatch && proposals.length === 1 ? proposals[0].title :
+            `${severity === 'major' ? 'Fix' : 'Follow up'} ${source} at ${target.head.slice(0, 10)}: ${selected[0].text.slice(0, 120)}`),
           parent: review.id, from_run: run.id, accept: proposal?.accept ?? selected.map(row => row.text),
           why: proposal?.why ?? selected.map(row => row.text).join('\n'), meta: { ...proposal?.extra, ...meta,
             ...(minorBatch ? { review_minor_batch: 'v1' } : {}), queue_selected: !minorBatch } }));

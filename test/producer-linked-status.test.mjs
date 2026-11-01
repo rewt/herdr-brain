@@ -2,7 +2,7 @@ import test from './helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import {closeoutWaitState,registerCloseoutWait,linkedCloseoutStatuses,nativeCloseoutWait,closeoutProducer,closeoutNextStage,closeoutCommandNotStarted} from '../lib/closeout-status.mjs';
+import {closeoutWaitState,registerCloseoutWait,linkedCloseoutStatuses,nativeCloseoutWait,closeoutProducer,closeoutNextStage,closeoutCommandNotStarted,closeoutWaitId} from '../lib/closeout-status.mjs';
 import {closeoutRevision,bindCloseoutSources,unresolvedCloseoutEffect,closeoutKey} from '../lib/closeout.mjs';
 import {outcomeFailure,uncertainOutcomeDoctrine} from '../lib/uncertain-outcome.mjs';
 import {originalDispatchOutcome} from '../dispatch/outcome.mjs';

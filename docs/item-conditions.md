@@ -78,7 +78,7 @@ correction_discharge:
     - key: review-finding/v1:ORIGINAL_KEY
       result: PASS
       head: FULL_LANDED_CORRECTION_HEAD
-      command: node test/helpers/run.mjs test/affected.test.mjs
+      command: "ACTUAL_COMMAND_FROM_GATE_JSON"
       requirement: Exact original required Major check text
       evidence: /owning/.org/evidence/correction/gate.json
       sha256: SHA256_OF_GATE_JSON_BYTES
@@ -86,7 +86,7 @@ correction_discharge:
         - head: FULL_EARLIER_HEAD
           next_head: FULL_LANDED_CORRECTION_HEAD
           reason: Required rebase onto advanced main
-          command: node test/helpers/run.mjs test/affected.test.mjs
+          command: "ACTUAL_COMMAND_FROM_EARLIER_GATE_JSON"
           evidence: /owning/.org/evidence/correction/earlier-gate.json
           sha256: SHA256_OF_EARLIER_GATE_BYTES
           log:
@@ -95,6 +95,17 @@ correction_discharge:
           execution_receipt:
             evidence: /owning/.org/evidence/correction/earlier.execution.json
             sha256: SHA256_OF_EARLIER_EXECUTION_BYTES
+```
+
+Copy each `command` verbatim from that receipt's `gate.json`, including quoting
+and embedded newlines, rather than from the command typed after `check --cmd`.
+For example, a pinned-source change can append the compatibility runner, and an
+exact gate records its planned compound command. Intake compares the declaration
+with `gate.command` exactly; using the typed command instead leaves discharge
+Unknown. To obtain a YAML-compatible quoted value with newlines preserved:
+
+```sh
+node --input-type=module -e 'import fs from "node:fs"; console.log(JSON.stringify(JSON.parse(fs.readFileSync(process.argv[1], "utf8")).command))' /owning/.org/evidence/correction/gate.json
 ```
 
 Intake checks the original correction/finding/run binding, claim and landed head,

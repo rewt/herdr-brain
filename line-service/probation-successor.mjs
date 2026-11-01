@@ -19,6 +19,7 @@ import {gitProject} from '../lib/project.mjs';
 import {captureProductCheckout} from '../lib/product-files.mjs';
 import {projectEnvironment,releaseHome} from '../lib/releases.mjs';
 import {requireRecordCompatibility} from '../lib/record-compatibility.mjs';
+import {requireSuccessorCapabilities} from './probation-successor-capabilities.mjs';
 import {withRuntimeLocks} from './runtime-locks.mjs';
 const toolRoot=fs.realpathSync(fileURLToPath(new URL('../',import.meta.url)));
 const same=(a,b)=>canonical(a)===canonical(b);
@@ -78,11 +79,10 @@ export function probationSuccessor({repo,org,id,trial,fromRoot,targetRoot,rollba
     if(candidateRoot===original.scope.candidate.release.root||candidateRoot===p.release.root||candidate.common!==c.identity||
         git(c.repo,['rev-parse',`${candidate.release.commit}^{tree}`])!==candidate.tree)throw Error('successor requires a new exact Brain candidate');
     git(c.repo,['merge-base','--is-ancestor',candidate.release.commit,head]);
-    // A future bundle must actually carry this reader; frozen cfc is immutable.
-    for(const name of ['probation-successor.mjs','probation-successor-history.mjs','probation.mjs','development-recovery.mjs','runtime.mjs','launchd.mjs']){
-      const relative='line-service/'+name;
-      if(readPlainFile(path.join(candidateRoot,relative))!==readPlainFile(path.join(c.repo,relative)))throw Error('successor candidate protocol differs from canonical tool');
-    }
+    // Entry/return need a reviewed reader, independent of moving canonical
+    // bytes. Emergency rollback restores the verified original recovery and
+    // does not start the candidate, so candidate reader admission cannot gate it.
+    if(!rollback)requireSuccessorCapabilities(candidateRoot);
     if(rollback?targetRoot!==p.release.root:fromRoot!==p.release.root)throw Error('successor supports recovery entry, deliberate --rollback and exact return only');
     if(rollback&&!extension)throw Error('successor rollback requires completed entry');
     if(extension&&!same(candidate,extension.scope.candidate))throw Error('successor exact authority tuple changed');

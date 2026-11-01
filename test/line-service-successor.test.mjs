@@ -12,6 +12,7 @@ import {freezeReleaseValidation} from '../herdr/validation-admission.mjs';
 import {loadEvents,transact} from '../lib/store.mjs';
 import {requireHomeRelease,selectRelease} from '../lib/releases.mjs';
 import {fixture as dispatchFixture,promptCalls} from '../dispatch/test/dispatch-fixture.mjs';
+import {requireSuccessorCapabilities} from '../line-service/probation-successor-capabilities.mjs';
 
 const originalCommit='d3271f06ef0ceb80a84cb624f4b04f3b5373c57f';
 const product=path.resolve(import.meta.dirname,'..'),sha=b=>createHash('sha256').update(b).digest('hex');
@@ -21,7 +22,7 @@ function legacy(f,id,from,to){
   const p=f.main([...args,'--dry-run'],f.args),authority=decide(f,p.required_decision);
   return f.main([...args,'--expected-plan',p.plan_sha256,'--authority',String(authority)],f.args);
 }
-async function successorFixture(t,{currentRecovery=false}={}){
+async function successorFixture(t,{currentRecovery=false,incompatibleCandidate=false}={}){
   // Default to the complete OLD product revision (actual legacy helper). The
   // second control covers current bytes. Seal BOTH roots before moving only
   // canonical helper bytes, retaining frozen startup code and exact authorities.
@@ -53,6 +54,7 @@ async function successorFixture(t,{currentRecovery=false}={}){
     fs.rmSync(next,{recursive:true});copyProduct(exact,next);fs.writeFileSync(path.join(next,'.release-commit'),commit+'\n');
     assert.equal(sha(fs.readFileSync(path.join(next,'lib/record-compatibility.mjs'))),'be456941bfbfb60e672375c0ad1a3b8e2b07d94c63833dda96e6ab9a3cc01f2a');
   }
+  if(incompatibleCandidate)fs.appendFileSync(path.join(next,'line-service/launchd.mjs'),'\nthrow Error("target protocol must never execute during admission");\n');
   const frozenFile=path.join(next,'.release-validation.json'),frozen=freezeReleaseValidation(f.cwd,'successor',frozenFile,f.env,{commit,mode:'routine'});
   const runtime=productFiles(next).sort();
   fs.writeFileSync(frozenFile,JSON.stringify({...frozen,validation:{cwd:f.cwd,common:f.identity,commit,tree:f.git('rev-parse',`${commit}^{tree}`),
@@ -62,6 +64,10 @@ async function successorFixture(t,{currentRecovery=false}={}){
   // No reseal or authority rewrite: only the canonical implementation moves.
   fs.writeFileSync(path.join(f.cwd,'lib/obligations.mjs'),fs.readFileSync(path.join(product,'lib/obligations.mjs'),'utf8')+'\n// Compatible canonical implementation revision.\n');
   f.git('add','lib/obligations.mjs');f.git('commit','-qm','Move canonical helper after immutable roots sealed');
+  // Every formerly equality-gated file moves AFTER the candidate is sealed.
+  for(const name of ['probation-successor.mjs','probation-successor-history.mjs','probation.mjs','development-recovery.mjs','runtime.mjs','launchd.mjs'])
+    fs.appendFileSync(path.join(f.cwd,'line-service',name),'\n// Compatible canonical protocol revision after sealing.\n');
+  f.git('add','line-service');f.git('commit','-qm','Move canonical protocol after immutable roots sealed');
   assert.deepEqual(fs.readFileSync(path.join(next,'lib/obligations.mjs')),frozenHelper);
   assert.notDeepEqual(fs.readFileSync(path.join(f.cwd,'lib/obligations.mjs')),frozenHelper);
   const run=(options={})=>{
@@ -159,6 +165,37 @@ test('successor cleared rollback return previews completed reports and preserves
   assert.deepEqual(fs.readFileSync(path.join(f.successor,'.release-manifest.json')),f.candidateManifest);
   assert.deepEqual(fs.readFileSync(path.join(f.successor,'lib/obligations.mjs')),f.frozenHelper);
   assert.equal(fs.readFileSync(clearFile,'utf8'),clearBytes);
+});
+
+test('successor rejects an incompatible sealed candidate before effects without executing target code',async t=>{
+  const f=await successorFixture(t,{incompatibleCandidate:true}),before=state(f);
+  assert.throws(()=>f.run({dryRun:true,cli:true}),/successor-incompatible: unrecognized successor-reader\/v1/);
+  assert.deepEqual(state(f),before);
+  assert.equal(fs.existsSync(path.join(f.directory,'probation-successor-effects')),false);
+});
+
+test('successor verifies all six target sources and rollback bypasses reader admission while return refuses and recovers',async t=>{
+  const f=await successorFixture(t,{currentRecovery:true});
+  assert.equal(requireSuccessorCapabilities(f.successor).capability,'successor-reader/v1');
+  for(const name of ['probation-successor.mjs','probation-successor-history.mjs','probation.mjs','development-recovery.mjs','runtime.mjs','launchd.mjs']){
+    const file=path.join(f.successor,'line-service',name),bytes=fs.readFileSync(file);
+    fs.appendFileSync(file,'\n// Unknown target revision.\n');
+    assert.throws(()=>requireSuccessorCapabilities(f.successor),/successor-incompatible/);
+    fs.writeFileSync(file,bytes);
+  }
+  f.apply();
+  // Remove the canonical admission profile, leaving the sealed roots untouched.
+  // Rollback must still restore recovery, while entry/return remain fail closed.
+  const registry=path.join(f.cwd,'line-service/probation-successor-capabilities.mjs'),bytes=fs.readFileSync(registry,'utf8');
+  fs.writeFileSync(registry,bytes.replace(/\['[a-f0-9]{64}', 'successor-g2'\]/,"['"+'0'.repeat(64)+"', 'successor-g2']"));
+  f.git('add','line-service');f.git('commit','-qm','Simulate unrecognized successor reader profile');
+  const back=f.back({cli:true});assert.equal(back.runtime.root,f.recovery);
+  assert.equal(fs.readFileSync(f.installationFile,'utf8'),f.anchor.installation);
+  const before=state(f);
+  assert.throws(()=>f.run({id:'successor-return',dryRun:true,cli:true}),/successor-incompatible/);
+  assert.deepEqual(state(f),before);
+  fs.writeFileSync(registry,bytes);f.git('add','line-service');f.git('commit','-qm','Restore reviewed reader profile');
+  assert.equal(f.returned({cli:true}).runtime.root,f.successor);
 });
 
 test('successor authority source STOP native history record and integrity refusals precede effects',async t=>{

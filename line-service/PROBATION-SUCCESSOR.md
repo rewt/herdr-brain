@@ -177,7 +177,27 @@ helper to matching frozen roots. The focused OLD lifecycle runs actual archived
 ab671e8986 reader/service code after canonical helper bytes move, as well as the
 original OLD recovery's own startup. A second lifecycle covers current profile
 bytes. These synthetic controls do not establish the real live return or soak.
-The separate six-file protocol equality guard is unchanged.
+Successor entry and return now use `probation-successor-capabilities.mjs`'s
+source-verified `successor-reader/v1` profiles instead of comparing six files
+with moving canonical bytes. The frozen ab671e8986 protocol and the G2 repair
+are admitted implementations of the same original-authority/history, UNKNOWN
+fence, stopped-runtime and completed-rollback-clear contract. Unknown target
+source refuses before effects; target code and self-declared versions are never
+used as proof. Compatible revisions require a reviewed fingerprint addition,
+retaining old profiles. This is an admission floor, not new effect authority.
+
+Rollback skips candidate reader capability admission: it restores the verified
+original recovery without starting the candidate. Exact tuples, manifest and
+payload integrity, ancestry, record compatibility, native ownership, STOP/HOLD,
+history and preview/effect CAS still apply. The focused lifecycle controls move
+all six canonical protocol files after sealing both roots, then exercise entry,
+rollback and exact return; a sealed incompatible candidate refuses. A separate
+control removes the reviewed profile after entry: rollback succeeds, return
+refuses without effects, and restoring the profile permits exact return.
+These fixture observations do not prove a live canonical rollback preview.
+That stopped-service witness remains UNRUN here and belongs to supervisor-herdr
+at its separately authorized safe boundary; this repair switches no service,
+pin, offer or runtime.
 
 The exact supervisor handoff remains
 `.org/evidence/DEC-476-R-1799/supervisor-steps.md`. After consuming the engineer's

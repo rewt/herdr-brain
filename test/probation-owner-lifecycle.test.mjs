@@ -70,9 +70,14 @@ test('fixture ancestor and owner closure leave an installed trial line admitted;
   const note=transact(f.org,()=>({add:[{type:'note.added',id:'ENG-1',decision:true,text:preview.required_decision}]}),{actor:f.agent.name}).added[0];
   f.control({expectedPlan:preview.plan_sha256,authority:note.seq});
   f.enter();
+  fs.unlinkSync(f.stop); // Only the private fixture's synthetic stopped entry.
   const {createLineService}=await f.module(f.next,'line-service/line-service.mjs');
   const service=createLineService({repo:f.cwd,org:f.org,to:f.agent.name,runtimeHome:f.installationHome,env:f.env,haltAfter:100,
     command:()=>({status:0,stdout:'{"created":[]}'}),capacity:()=>({count:0,cap:2})});
+  const pass=()=>{
+    const result=service.pass();
+    assert.equal(result.result,'pass-complete',JSON.stringify(result));
+  };
   const before={archive:fs.readFileSync(path.join(f.directory,'probation/original-trial.json'),'utf8'),
     installation:fs.readFileSync(f.installationFile,'utf8'),plist:fs.readFileSync(f.file,'utf8')};
   const close=(id,...extra)=>spawnSync(process.execPath,[path.join(f.next,'bin/org.mjs'),'close',id,...extra],
@@ -82,7 +87,7 @@ test('fixture ancestor and owner closure leave an installed trial line admitted;
     assert.equal(result.status,0,result.stderr);
     assert.match(result.stdout,/warning: active trial original-trial is owned by ENG-1/);
     assert.equal(f.admit().probation.id,'original-trial');
-    assert.equal(service.pass().result,'pass-complete');
+    pass();
   }
   assert.doesNotMatch(close('G-2').stdout,/warning:/,'an unchanged close does not warn again');
   const dropped=close('G-2','--dropped');assert.equal(dropped.status,0,dropped.stderr);
@@ -91,12 +96,12 @@ test('fixture ancestor and owner closure leave an installed trial line admitted;
     for(const flag of ['hold','held','reserved','operator_reserved']) {
       transact(f.org,()=>({add:[{type:'item.updated',id,fields:{meta:{[flag]:true}}}]}));
       assert.throws(f.admit,/authority HOLD/);
-      assert.throws(()=>service.pass(),/authority HOLD/);
+      assert.match(service.pass().held,/authority HOLD/);
       transact(f.org,()=>({add:[{type:'item.updated',id,fields:{meta:{[flag]:false}}}]}));
       assert.equal(f.admit().probation.id,'original-trial');
     }
   }
-  assert.equal(service.pass().result,'pass-complete');
+  pass();
   assert.equal(fs.readFileSync(path.join(f.directory,'probation/original-trial.json'),'utf8'),before.archive);
   assert.equal(fs.readFileSync(f.installationFile,'utf8'),before.installation);
   assert.equal(fs.readFileSync(f.file,'utf8'),before.plist);

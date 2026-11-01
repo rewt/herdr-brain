@@ -32,6 +32,7 @@ function decision(t) {
   };
   const options={project:gitProject(f.repo),org:f.org,env:f.env,guard:()=>{},cli:ingest};
   const capacity=()=>countSessions({state:fold(events(f)),events:events(f),common:f.common,
+    kill:()=>{},readProcess:pid=>({ok:true,value:{pid,identity:'native birth'}}),
     agent:()=>{throw Error('no live lookup needed');}}).filter(s=>s.kind==='decision').length;
   return {...f,file,text,closed,calls,options,capacity};
 }

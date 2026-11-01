@@ -7,6 +7,7 @@ import { setupOrg, BIN } from './helpers.mjs';
 import { fixtureFleet } from './helpers/offline-herdr.mjs';
 import { transact } from '../lib/store.mjs';
 import { measureLifecycle } from '../measurement/lifecycle.mjs';
+import { queueFor, enqueue } from '../promote/promote.mjs';
 
 function fixture(t) {
   const f = setupOrg();
@@ -80,4 +81,57 @@ test('nudge rejects a foreign record even when it contains a matching run projec
   const result = f.org(f.argv, {env: {...f.env, ORG_DIR: other.dir}});
   assert.equal(result.code, 1); assert.match(result.err, /record does not belong/);
   assert.equal(other.events().some(e => e.type === 'lifecycle.manual-nudge'), false);
+});
+
+for (const child of [false, true]) test(`nudge defers while ${child ? 'the parent' : 'its item'} has an open promotion, then recovers with the original occurrence time`, t => {
+  const f = fixture(t);
+  const git = args => {
+    const result = spawnSync('git', ['-C', f.root, ...args], {encoding: 'utf8'});
+    assert.equal(result.status, 0, result.stderr);
+    return result.stdout.trim();
+  };
+  git(['-c', 'user.name=Nudge', '-c', 'user.email=nudge@example.invalid', 'commit', '--allow-empty', '-qm', 'Fixture']);
+  const head = git(['rev-parse', 'HEAD']), argv = [...f.argv];
+  if (child) {
+    transact(f.dir, () => ({add: [
+      {type: 'item.added', id: 'ENG-4', parent: 'ENG-1', title: 'Child'},
+      {type: 'run.started', id: 'R-4', item: 'ENG-4', meta: {dispatch_project: f.project}}
+    ]}), {at: new Date('2026-09-15T08:00:00Z'), actor: 'fixture'});
+    argv[argv.indexOf('--run') + 1] = 'R-4';
+  }
+  const queue = queueFor(f.root);
+  enqueue(queue, ['nudge-fixture'], {org: f.dir, run: 'R-1', expectedHead: head});
+  const before = fs.readFileSync(path.join(f.dir, 'events.jsonl')), throughSeq = f.events().at(-1).seq;
+  const env = {...f.env, ORG_GUARD_OVERRIDE: ''};
+  const refused = () => {
+    const queueBefore = fs.readFileSync(queue.file);
+    const result = f.org(argv, {env});
+    assert.equal(result.code, 3, result.err);
+    assert.match(result.err, /promotion write guard REFUSED/);
+    assert.deepEqual(fs.readFileSync(path.join(f.dir, 'events.jsonl')), before, 'refusal appends nothing');
+    assert.deepEqual(fs.readFileSync(queue.file), queueBefore, 'journaling does not change the promotion');
+  };
+  refused();
+  queue.transaction(data => {
+    data.results.push({...data.pending.shift(), outcome: 'promoted', tip: head, reconciliation: {state: 'pending'}});
+  });
+  refused(); // Green/landed but unreconciled still defers the journal.
+  queue.transaction(data => { data.results[0].reconciliation.state = 'complete'; });
+  assert.deepEqual(f.json(argv, {env, now: '2026-09-15T10:00:00Z'}), {recorded: true, reused: false});
+  const event = f.events().at(-1), after = fs.readFileSync(path.join(f.dir, 'events.jsonl'));
+  assert.equal(event.nudge_id, 'test:one');
+  assert.equal(event.item, child ? 'ENG-4' : 'ENG-1');
+  assert.equal(event.actor, 'helper'); assert.equal(event.by, 'nudge-owner');
+  assert.equal(event.occurred_at, '2026-09-15T08:30:00.000Z');
+  assert.equal(event.at, '2026-09-15T10:00:00.000Z');
+  assert.deepEqual(after.subarray(0, before.length), before);
+  assert.equal(f.json(argv, {env, now: '2026-09-15T10:15:00Z'}).reused, true);
+  assert.deepEqual(fs.readFileSync(path.join(f.dir, 'events.jsonl')), after);
+  const measure = options => measureLifecycle({events: f.events(), project: f.project,
+    from: '2026-09-15T08:00:00Z', cutoff: '2026-09-15T10:00:00Z', ...options});
+  assert.equal(measure({cutoff: '2026-09-15T09:00:00Z'}).hand_nudges.recorded, 0, 'not recorded by the earlier cutoff');
+  assert.equal(measure({throughSeq}).hand_nudges.recorded, 0, 'not recorded by the earlier fence');
+  assert.equal(measure().hand_nudges.recorded, 1);
+  assert.equal(measure().hand_nudges.total, null);
+  assert.equal(measure().hand_nudges.journal[0].occurred_at, event.occurred_at);
 });

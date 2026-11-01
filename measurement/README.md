@@ -86,6 +86,18 @@ Stage, action, reason and evidence are required descriptive text; they are not
 inferred from notes. Run binding, real Git identity and record ownership must
 match; unscoped/foreign runs and times before run start or after recording fail.
 
+The promotion write guard also covers this journal: if the run's item or its
+parent belongs to an open promotion, `record nudge` can refuse with
+`promotion write guard REFUSED` without appending. Save the intervention's exact
+arguments and evidence in your owned evidence directory, then retry after that
+promotion is refused, times out, or completes reconciliation. A green check or
+fast-forward alone may still leave reconciliation pending. Keep the same stable
+ID, actor and original `--occurred-at`; do not use `ORG_GUARD_OVERRIDE` just to
+journal an intervention. The assisting owner remains responsible for recording
+the deferred entry. Its occurrence time can precede recording, but projections
+whose cutoff or sequence fence precedes the append still exclude it. Capture a
+later projection to include the entry; earlier snapshots remain incomplete.
+
 The projection's `hand_nudges.journal` retains each journal event's stable ID,
 project, run, actor, occurrence time, recording receipt, stage, action, reason and
 evidence. Journal events use occurrence time inside the window and must also have

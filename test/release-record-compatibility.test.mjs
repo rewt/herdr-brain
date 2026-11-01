@@ -81,6 +81,7 @@ test('historical switch-only targets refuse delegated obligations, including com
   const events=[
     {type:'report.available',run:'R-1'},
     {type:'report.ingested',run:'R-1'},
+    {type:'report.ingested',run:'R-1',report:{outcome:'done'}},
     {type:'change.landed',run:'R-1'},
     {type:'closeout.binding-kept',run:'R-1'},
     {type:'closeout.evaluated'},
@@ -116,7 +117,7 @@ test('streaming admission recovers the same delegated event capture with a match
   const f=configFixture(t,{custom:true}),state=path.join(f.bundle,'lib/state.mjs'),current=fs.readFileSync(state,'utf8');
   const file=path.join(f.scratch,'obligation-record.jsonl');
   const events=[{type:'line-service.runtime-upgraded',seq:1},{type:'report.available',run:'R-1',seq:5},
-    {type:'report.ingested',run:'R-1',seq:8},{type:'opaque.observation',pending:true,seq:11}];
+    {type:'report.ingested',run:'R-1',report:{outcome:'done'},seq:8},{type:'opaque.observation',pending:true,seq:11}];
   fs.writeFileSync(file,events.map(JSON.stringify).join('\n')+'\n');
   fs.writeFileSync(state,beforeObligations());
   assert.throws(()=>requireRecordFileCompatibility(f.bundle,file),/obligation fold for report.available.*first sequence 5/);

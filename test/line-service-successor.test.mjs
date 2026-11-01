@@ -21,13 +21,16 @@ function legacy(f,id,from,to){
   const p=f.main([...args,'--dry-run'],f.args),authority=decide(f,p.required_decision);
   return f.main([...args,'--expected-plan',p.plan_sha256,'--authority',String(authority)],f.args);
 }
-async function successorFixture(t){
-  // Archive the OLD product revision, not selected current-source readers.
-  // Its complete sealed recovery is built before updating private canonical.
+async function successorFixture(t,{currentRecovery=false}={}){
+  // Default to the complete OLD product revision. The completed-report control
+  // uses a matching current fold; both recoveries seal before canonical updates.
   const old=fs.mkdtempSync(path.join(os.tmpdir(),'successor-old-'));
   t.after(()=>fs.rmSync(old,{recursive:true,force:true}));
-  const tar=spawnSync('git',['archive',originalCommit],{cwd:product,maxBuffer:128*1024*1024});assert.equal(tar.status,0,tar.stderr?.toString());
-  const extracted=spawnSync('/usr/bin/tar',['-xf','-','-C',old],{input:tar.stdout});assert.equal(extracted.status,0,extracted.stderr?.toString());
+  if(currentRecovery)copyProduct(product,old);
+  else{
+    const tar=spawnSync('git',['archive',originalCommit],{cwd:product,maxBuffer:128*1024*1024});assert.equal(tar.status,0,tar.stderr?.toString());
+    const extracted=spawnSync('/usr/bin/tar',['-xf','-','-C',old],{input:tar.stdout});assert.equal(extracted.status,0,extracted.stderr?.toString());
+  }
   const f=await fixture(t,{development:true,productRoot:old});
   const original=f.control({dryRun:true});f.authorize();
   const recovery=original.scope.previous.release.root;
@@ -105,6 +108,30 @@ test('successor CLI preserves the original OLD sealed recovery through executabl
   assert.equal(events.filter(e=>e.type==='line-service.probation-successor-authorized').length,1);
   assert.deepEqual(events.filter(e=>e.type==='line-service.probation-successor-switched').map(e=>e.id),['successor-entry','successor-recovery','successor-return']);
   assert.equal(fs.readFileSync(f.retained,'utf8'),f.jobs);
+});
+
+test('successor cleared rollback return previews completed reports and preserves clear receipt fences',async t=>{
+  // Live R3 had ordinary done reports in its record. A matching immutable fold
+  // isolates that payload from the separate refusal for an older fold helper.
+  const f=await successorFixture(t,{currentRecovery:true});f.apply();f.back();
+  const clearFile=path.join(f.directory,'probation-successor-clears/successor-recovery.json'),clearBytes=fs.readFileSync(clearFile,'utf8');
+  assert.deepEqual(fs.readdirSync(path.join(f.directory,'probation-switches')).filter(n=>n.startsWith('.successor-')),[]);
+  transact(f.org,()=>({add:[{type:'item.added',id:'ENG-1',role:'engineer',title:'Recovery worker'},
+    {type:'run.started',id:'R-1',item:'ENG-1'},
+    {type:'report.ingested',run:'R-1',sha256:'a'.repeat(64),report:{outcome:'done',summary:'Recovery work completed'}}]}));
+  const before=state(f),clear=JSON.parse(clearBytes);
+  fs.chmodSync(clearFile,0o644);fs.writeFileSync(clearFile,JSON.stringify({...clear,completion_seq:clear.completion_seq-1})+'\n');fs.chmodSync(clearFile,0o444);
+  assert.throws(()=>f.run({id:'successor-return',dryRun:true,cli:true}),/rollback clear receipt changed/);
+  assert.deepEqual(state(f),before);
+  fs.chmodSync(clearFile,0o644);fs.writeFileSync(clearFile,clearBytes);fs.chmodSync(clearFile,0o444);
+  const preview=f.run({id:'successor-return',dryRun:true,cli:true});
+  assert.match(preview.plan_sha256,/^[a-f0-9]{64}$/);
+  assert.equal(preview.required_decision,`Brain probation successor authorized: successor-return ${preview.plan_sha256}`);
+  assert.deepEqual(state(f),before);assert.equal(fs.readFileSync(clearFile,'utf8'),clearBytes);
+  const returned=f.returned({cli:true});assert.equal(returned.runtime.root,f.successor);
+  await startPassStop(f,f.successor);
+  assert.deepEqual(fs.readFileSync(f.originalArchive),f.originalBytes);
+  assert.equal(fs.readFileSync(clearFile,'utf8'),clearBytes);
 });
 
 test('successor authority source STOP native history record and integrity refusals precede effects',async t=>{

@@ -192,7 +192,8 @@ test('consumer offer binds canary content, coordinator actor and disposition ite
     assert.notEqual(result.status, 0); assert.match(result.stderr, /recorded coordinator disposition/);
   }
   const original = fs.readFileSync(q.canary);
-  for (const change of [{ status: 'FAIL' }, { status: 'INCOMPLETE' }, { candidateCommit: f.git('rev-parse', 't2').trim() }]) {
+  for (const change of [{ status: 'FAIL' }, { status: 'INCOMPLETE' }, { candidateCommit: f.git('rev-parse', 't2').trim() },
+    { candidate: { commit: f.git('rev-parse', 't2').trim() } }]) {
     fs.writeFileSync(q.canary, JSON.stringify({ ...JSON.parse(original), ...change }));
     const sha256 = createHash('sha256').update(fs.readFileSync(q.canary)).digest('hex');
     const packet = { ...q.packet, canary: { ...q.packet.canary, evidence: q.packet.canary.evidence.map(row => ({ ...row, sha256 })) } };
@@ -203,7 +204,10 @@ test('consumer offer binds canary content, coordinator actor and disposition ite
   f.write('.promote.json', JSON.stringify({ to: 'fixture-coordinator' }));
   f.git('add', '.promote.json'); f.git('commit', '-qm', 'Fixture canonical coordinator');
   assert.match(f.run(['offer', 't1', q.publish()]).stderr, /recorded coordinator disposition/);
-  f.ok(['offer', 't1', q.publish(q.packet, true, 'fixture-coordinator')]);
+  fs.writeFileSync(q.canary, JSON.stringify({ status: 'PASS', candidate: { commit: q.packet.commit } }));
+  const sha256 = createHash('sha256').update(fs.readFileSync(q.canary)).digest('hex');
+  const nested = { ...q.packet, canary: { ...q.packet.canary, evidence: q.packet.canary.evidence.map(row => ({ ...row, sha256 })) } };
+  f.ok(['offer', 't1', q.publish(nested, true, 'fixture-coordinator')]);
 });
 test('consumer offer checks recorded Major obligations and requires a contained verified discharge', t => {
   const f = scratch(t); f.ok(['build', 't1', '--landing-checks']); const q = offerFixture(f);

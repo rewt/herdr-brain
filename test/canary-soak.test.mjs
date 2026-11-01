@@ -7,6 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {copyProduct} from '../lib/product-files.mjs';
+import {validateConsumerCanaryEvidence} from '../lib/consumer-offer.mjs';
 
 import {project, at, fixture} from './helpers/soak-fixture.mjs';
 const evaluate = f => evaluateSoak(f);
@@ -178,13 +179,64 @@ test('copied installed CLI verifies artifacts and consumes original packets inst
   const packet = f.trial.scripted; save('scripted', packet);
   f.trial.probation = {archiveEvidence: 'probation'}; f.trial.scripted = {packetEvidence: 'scripted', status: 'PASS'};
   fs.writeFileSync(path.join(root, 'events.jsonl'), f.events.map(e => JSON.stringify(e)).join('\n'));
+  let attempt = 0;
   const run = () => {
     fs.writeFileSync(path.join(root, 'trial.json'), JSON.stringify(f.trial));
-    return spawnSync(process.execPath, [path.join(installed, 'bin/evaluate-canary-soak.mjs'), '--trial', path.join(root, 'trial.json'), '--events', path.join(root, 'events.jsonl')], {encoding: 'utf8'});
+    const probation = path.join(root, `probation-stage-${++attempt}.json`);
+    return {...spawnSync(process.execPath, [path.join(installed, 'bin/evaluate-canary-soak.mjs'), '--trial', path.join(root, 'trial.json'),
+      '--events', path.join(root, 'events.jsonl'), '--probation-output', probation], {encoding: 'utf8'}), probation};
   };
   const pass = run(); assert.equal(pass.status, 0, pass.stderr); assert.equal(JSON.parse(pass.stdout).status, 'PASS');
+  const stage = JSON.parse(fs.readFileSync(pass.probation));
+  assert.equal(stage.schema, 'brain.probation-stage/v1'); assert.equal(stage.status, 'PASS');
+  assert.equal(stage.archive.sha256, f.trial.evidence.probation.sha256);
+  assert.equal(stage.assessmentSha256, digest(pass.stdout));
+  assert.equal(stage.candidate.commit, packet.candidate.commit);
+  const assessment = path.join(root, 'assessment.json'); fs.writeFileSync(assessment, pass.stdout);
+  const reference = (stage, file) => ({stage, file, sha256: digest(fs.readFileSync(file))});
+  const evidence = () => [reference('installed', path.join(root, 'scripted.json')), reference('probation', pass.probation), reference('soak', assessment)];
+  const validate = () => validateConsumerCanaryEvidence(evidence(), {commit: packet.candidate.commit, manifestSha256: packet.candidate.manifestSha256});
+  validate(); // Unmodified real CLI output, no top-level candidateCommit wrapper.
+  const archiveFile = path.join(root, 'probation.json'), archiveBytes = fs.readFileSync(archiveFile);
+  fs.appendFileSync(archiveFile, ' ');
+  assert.throws(validate, /probation archive changed/);
+  fs.writeFileSync(archiveFile, archiveBytes); validate(); // Restore original provenance.
+  fs.appendFileSync(assessment, ' '); assert.throws(validate, /probation provenance/);
+  fs.writeFileSync(assessment, pass.stdout); validate();
+  for (const mutate of [p => p.candidate.tree = '0'.repeat(40), p => p.candidateCommit = '0'.repeat(40), p => delete p.candidate]) {
+    const changed = structuredClone(packet); mutate(changed); save('scripted', changed);
+    assert.throws(validate, /candidate tuple mismatch|exact candidate/);
+  }
+  save('scripted', packet); validate();
+  assert.throws(() => validateConsumerCanaryEvidence(evidence().filter(r => r.stage !== 'probation'), {commit: packet.candidate.commit}), /requires probation/);
+  const originalStage = fs.readFileSync(pass.probation);
+  const overwrite = spawnSync(process.execPath, [path.join(installed, 'bin/evaluate-canary-soak.mjs'), '--trial', path.join(root, 'trial.json'),
+    '--events', path.join(root, 'events.jsonl'), '--probation-output', pass.probation], {encoding: 'utf8'});
+  assert.equal(overwrite.status, 1); assert.match(overwrite.stderr, /EEXIST/); assert.deepEqual(fs.readFileSync(pass.probation), originalStage);
   packet.status = 'FAIL'; packet.failures = [{case: 'S4'}]; save('scripted', packet);
   const failed = run(); assert.equal(failed.status, 0, failed.stderr); assert.equal(JSON.parse(failed.stdout).status, 'FAIL');
+  assert.equal(JSON.parse(fs.readFileSync(failed.probation)).status, 'FAIL');
+  assert.throws(validate, /exact candidate/);
   fs.appendFileSync(path.join(root, 'scripted.json'), ' ');
   const drift = run(); assert.equal(drift.status, 1); assert.match(drift.stderr, /evidence digest mismatch/);
+  assert.equal(fs.existsSync(drift.probation), false);
+  packet.status = 'PASS'; packet.failures = []; save('scripted', packet);
+  const wrongArchive = JSON.parse(archiveBytes); wrongArchive.scope.candidate.tree = '0'.repeat(40);
+  save('probation', wrongArchive); f.events[1].archive.sha256 = f.trial.evidence.probation.sha256;
+  fs.writeFileSync(path.join(root, 'events.jsonl'), f.events.map(e => JSON.stringify(e)).join('\n'));
+  const wrong = run(); assert.equal(wrong.status, 0, wrong.stderr);
+  assert.equal(JSON.parse(wrong.stdout).status, 'FAIL'); assert.equal(JSON.parse(fs.readFileSync(wrong.probation)).status, 'FAIL');
+  delete f.trial.probation;
+  const missing = run(); assert.equal(missing.status, 1); assert.match(missing.stderr, /verified original trial archive/);
+  assert.equal(fs.existsSync(missing.probation), false);
+});
+
+test('saved-input offer probation output withholds missing authority and wrong archived tuple', () => {
+  for (const mutate of [f => f.events.splice(0, 1), f => f.trial.probation.archive.scope.candidate.tree = '0'.repeat(40),
+    f => f.trial.probation.archive.scope.candidate.release.commit = '0'.repeat(40), f => delete f.trial.probation]) {
+    const f = fixture(); mutate(f);
+    const result = evaluate(f);
+    assert.notEqual(result.status, 'PASS'); assert.equal(result.offerEligible, false);
+    assert.ok(result.issues.some(i => ['authority', 'probation-drift', 'probation-evidence'].includes(i.code)));
+  }
 });

@@ -24,3 +24,16 @@ export function readSoakInput(file, bytes = fs.readFileSync(file, 'utf8')) {
   }
   return {trial, verifiedEvidence: [...saved.keys()]};
 }
+
+// Emit only from the hydrated original archive and the assessment of those
+// same saved inputs. A failed/incomplete soak can never create a passing stage.
+export function probationStage(file, trial, assessment, assessmentBytes) {
+  const probation = trial.probation, archive = probation?.archive;
+  const ref = trial.evidence?.[probation?.evidence?.[0]];
+  if (!archive || !ref) throw Error('probation output requires a verified original trial archive');
+  return {schema: 'brain.probation-stage/v1', status: assessment.status, candidate: assessment.candidate,
+    trial: archive.id, project: archive.project, authority: archive.authority,
+    archive: {file: fs.realpathSync(path.resolve(path.dirname(file), ref.path)), sha256: ref.sha256},
+    assessmentSha256: digest(assessmentBytes), issues: assessment.issues,
+    limits: ['Saved probation evidence only; no trial, offer, READY or runtime effect is performed.']};
+}

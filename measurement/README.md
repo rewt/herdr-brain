@@ -1,5 +1,21 @@
 # Consumer lifecycle baseline
 
+The saved-input soak producer can also emit the offer's probation stage from
+the verified original trial archive, without hand-written status wrappers:
+
+```sh
+node bin/evaluate-canary-soak.mjs --events /own/evidence/events.jsonl \
+  --trial /own/evidence/trial.json --probation-output /own/evidence/probation.json \
+  > /own/evidence/assessment.json
+```
+
+Use a fresh output path; existing probation output is never replaced. The stage
+retains the archive path/hash and binds the exact assessment bytes and candidate
+tuple. FAIL/INCOMPLETE assessments produce the same nonpassing stage status.
+The offer reader accepts the installed canary and soak's native `candidate.commit`
+binding, checks consistent tuples, and verifies the probation archive and assessment
+binding. This command performs no service, trial, offer, activation or release effect.
+
 Supervisor retirement adds a read-only [duty/absence coverage annex](RETIREMENT-COVERAGE.md)
 to the existing installed soak; it creates no second observation service.
 

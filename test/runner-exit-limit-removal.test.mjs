@@ -21,6 +21,13 @@ const unused = () => assert.fail('unselected worker/native interface executed');
 
 async function coordinator({ failedSink } = {}) {
   const trace = [], exits = [], errors = [], signals = [], timers = [], timings = [];
+  // Scratch belongs to a separate native control. Keep this VM's journal and
+  // recovery receipts in memory while exercising the actual coordinator path.
+  const scratchJournal = 'HERDR_TEST_SCRATCH_JOURNAL';
+  const scratchRoot = '/fixture/tmp/test-scratch-controlled';
+  const journal = path.join(scratchRoot, 'owned.jsonl');
+  const filesystem = new Map(), recoveries = [];
+  const recovery = { created: 0, removed: 0, absent: 0, retained: 0, retained_live: 0, retained_unknown: 0 };
   const leader = { pid: 4242, ppid: 202, pgid: 4242, state: 'S', identity: 'birth-1', command: 'suite-worker' };
   const guard = { pid: 4241, ppid: 4242, pgid: 4242, state: 'S', identity: 'guard-birth',
     command: '/fixture-guard --watch /fixture/alive 60 4242' };
@@ -85,6 +92,28 @@ async function coordinator({ failedSink } = {}) {
         : { ok: true, value: new Map([state.current, ...state.survivors].filter(Boolean).map(row => [row.pid, row])) };
     } },
     './offline-herdr.mjs': { offlineHerdr: () => () => trace.push('cleanupHerdr') },
+    'node:fs': { default: { writeFileSync: (file, data, options) => {
+      assert.deepEqual({ ...options }, { flag: 'wx', mode: 0o600 });
+      assert.ok(!filesystem.has(file), 'scratch evidence must be written once');
+      assert.ok([journal, `${journal}.${child.pid}.recovery.json`].includes(file));
+      filesystem.set(file, data);
+    } } },
+    'node:os': { default: { tmpdir: () => '/fixture/tmp' } },
+    './scratch.mjs': { SCRATCH_JOURNAL: scratchJournal,
+      evidenceDirectory: prefix => {
+        assert.equal(prefix, '/fixture/tmp/test-scratch-');
+        return scratchRoot;
+      },
+      recoverScratch: (file, options) => {
+        assert.equal(file, journal);
+        assert.equal(filesystem.get(journal), '');
+        assert.ok(child.exitCode !== null || child.signalCode !== null, 'recover only after actual exit');
+        assert.equal(typeof options.joined, 'boolean');
+        if (options.suite) assert.equal(options.suite.pid, leader.pid);
+        recoveries.push(options);
+        return recovery;
+      } },
+    '../../test-slot/tap-artifacts.mjs': { tapArtifactPrefix: unused },
     './fixture-lifetime.mjs': { lifetimeGuardExitCommand: () => undefined,
       exitedLifetimeGuardCommands: () => new Set(state.drainGuard ? [state.drainGuard.command] : []), ownFixtureLifetime: () => {
       Object.assign(proc.env, { HERDR_FIXTURE_LIFETIME_EXECUTABLE: '/fixture-guard',
@@ -129,6 +158,7 @@ async function coordinator({ failedSink } = {}) {
   const pending = () => {
     assert.deepEqual(timers, [], 'elapsed fallback must not be armed for a pending child');
     assert.deepEqual(exits, []);
+    assert.equal(recoveries.length, 0, 'pending child must retain scratch');
     for (const action of ['cleanupHerdr', 'stdout.destroy', 'stderr.destroy', 'unref']) assert.ok(!trace.includes(action), action);
     assert.equal(child.connected, false);
     assert.equal(child.listenerCount('exit'), 2, 'finish must subscribe to actual child exit');
@@ -144,6 +174,8 @@ async function coordinator({ failedSink } = {}) {
   };
   const finished = code => {
     assert.deepEqual(exits, [code]);
+    assert.equal(recoveries.length, 1, 'scratch recovery must run once');
+    assert.deepEqual(JSON.parse(filesystem.get(`${journal}.${child.pid}.recovery.json`)), recovery);
     assert.deepEqual(trace.slice(-5), ['cleanupHerdr', 'stdout.destroy', 'stderr.destroy', 'unref', 'exit']);
     assert.equal(timings.length, 1);
     assert.equal(timings[0].exit_code, code);

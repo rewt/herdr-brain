@@ -22,6 +22,7 @@ import {requireRecordCompatibility} from '../lib/record-compatibility.mjs';
 import {requireSuccessorCapabilities} from './probation-successor-capabilities.mjs';
 import {withRuntimeLocks} from './runtime-locks.mjs';
 import {requireRecoveryEntry} from './recovery-admission.mjs';
+import {successorRecordDigest} from './probation-successor-record.mjs';
 const toolRoot=fs.realpathSync(fileURLToPath(new URL('../',import.meta.url)));
 const same=(a,b)=>canonical(a)===canonical(b);
 const git=(repo,args)=>execFileSync('git',['--no-optional-locks','-C',repo,...args],{env:projectEnvironment(),encoding:'utf8',stdio:['ignore','pipe','pipe'],timeout:10000}).trim();
@@ -103,7 +104,8 @@ export function probationSuccessor({repo,org,id,trial,fromRoot,targetRoot,rollba
     const anchor=history.successor.anchor;
     const after=rollback?anchor.installation:json({...JSON.parse(anchor.installation),source:targetRoot,runtime:candidate.release});
     const nextPlist=rollback?anchor.plist:replacementPlist(c,saved,command,targetRoot);
-    return{head,source_sha256:sha(canonical(captured)),policies:policies(),record_sha256:sha(canonical(events.filter(e=>e.seq!==Number(authority)))),
+    return{head,source_sha256:sha(canonical(captured)),policies:policies(),
+      record_sha256:successorRecordDigest(events,c,{recoveryAuthority:recoveryContract?.authority}),
       owner_id:originalNote.id,installation,plist,service,stop_sha256:sha(stop),last_seq:history.last.seq,
       extension:extensionRef,successor_scope:successorScope,new_extension:!extension,
       scope_sha256:admitted.probation.scope_sha256,recovery_sha256:sha(canonical(p)),
@@ -172,8 +174,9 @@ export function probationSuccessor({repo,org,id,trial,fromRoot,targetRoot,rollba
       // A crash here remains held; it is never treated as an uncertain replay.
       const event=completed.added.at(-1),fences={...initial.fences,[id]:successorFenceBytes({...a,archive:ref})};
       transact(c.org,events=>{
-        const prior=events.filter(e=>!completed.added.some(a=>a.seq===e.seq)&&e.seq!==Number(authority));
-        if(sha(canonical(prior))!==initial.record_sha256)throw Error('successor record CAS changed before fence clear; retain');
+        const prior=events.filter(e=>!completed.added.some(a=>a.seq===e.seq));
+        if(successorRecordDigest(prior,c,{recoveryAuthority:initial.recoveryContract?.authority})!==initial.record_sha256)
+          throw Error('successor record CAS changed before fence clear; retain');
         effectGuard(events,a.after.installation,a.after.plist);
         immutable(path.join(c.directory,'probation-successor-clears',id+'.json'),json({schema:'brain-probation-successor-clear/v1',trial,id,
           completion_seq:event.seq,archive:ref,fences}));fault('clear-receipt');

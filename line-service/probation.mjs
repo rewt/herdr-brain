@@ -17,8 +17,9 @@ import {withRuntimeLocks} from './runtime-locks.mjs';
 import {noticeLock} from '../supervisor/notice-lock.mjs';
 import {fold} from '../lib/state.mjs';
 import {itemLaunchHold} from '../lib/item-launch-hold.mjs';
-import {prepareDevelopmentRecovery,sealDevelopmentRecovery,verifyDevelopmentRecovery} from './development-recovery.mjs';
+import {prepareDevelopmentRecovery,sealDevelopmentRecovery,verifyDevelopmentRecovery,recoveryNode} from './development-recovery.mjs';
 import {legacyRecipientHistory,recipientChanges} from './recipient-history.mjs';
+import {successorExtension} from './probation-successor-history.mjs';
 
 const toolRoot=fs.realpathSync(fileURLToPath(new URL('../',import.meta.url)));
 const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
@@ -32,7 +33,7 @@ function context(repo,org){
   org=fs.realpathSync(org);
   return{...p,repo:p.canonical,org,directory:path.join(org,'line-service',sha(JSON.stringify(p.identity)).slice(0,20))};
 }
-function tuple(root,home){
+export function probationTuple(root,home){
   if(!path.isAbsolute(root??'')||fs.realpathSync(root)!==root)throw Error('probation requires exact immutable release root');
   const release=checkRelease(home,path.basename(root),{verifyFiles:true});
   if(release.root!==root)throw Error('probation candidate is outside the named release home');
@@ -43,6 +44,7 @@ function tuple(root,home){
   return{release,tree:validation.validation.tree,common:validation.common,manifest_sha256:sha(manifest),validation_sha256:sha(frozen),
     node:{executable:process.execPath,version:process.version,platform:process.platform,arch:process.arch}};
 }
+const tuple=probationTuple;
 function trials(events,c){return events.filter(e=>e.type==='line-service.probation-authorized'&&e.project===c.identity&&e.org===c.org);}
 function ended(events,c,id){return events.some(e=>['line-service.probation-withdrawn','line-service.probation-completed'].includes(e.type)&&e.project===c.identity&&e.org===c.org&&e.id===id);}
 function archived(event,c){
@@ -73,7 +75,8 @@ export function probationRuntime(repo,{root,home=releaseHome(),events,allowEnded
   const loaded=events?{events}:loadEvents(c.org);
   if(loaded.tornTail)throw Error('incomplete record prevents probation admission');
   const found=trials(loaded.events,c).filter(e=>e.scope?.candidate?.release?.root===root||
-    e.scope?.previous?.kind==='development-recovery'&&e.scope.previous.release.root===root);
+    e.scope?.previous?.kind==='development-recovery'&&e.scope.previous.release.root===root||
+    loaded.events.some(s=>s.type==='line-service.probation-successor-authorized'&&s.project===c.identity&&s.org===c.org&&s.trial===e.id&&s.candidate?.release.root===root));
   if(!found.length)return null;
   if(found.length!==1)throw Error('probation candidate authority is ambiguous; no replacement trial');
   const event=found[0],a=archived(event,c),note=loaded.events.find(e=>e.seq===a.authority);
@@ -102,7 +105,13 @@ export function probationRuntime(repo,{root,home=releaseHome(),events,allowEnded
     if(!same(old,previous.release)||sha(readPlainFile(path.join(old.root,'.release-manifest.json')))!==previous.manifest_sha256)throw Error('probation previous runtime changed');
     requireRecordCompatibility(old.root,loaded.events);
   }
-  return{...(root===candidateRoot?a.scope.candidate.release:previous.release),probation:{id:event.id,seq:event.seq,archive:event.archive,scope_sha256:sha(canonical(a.scope)),previous}};
+  const extension=successorExtension(loaded.events,c,event);
+  const successor=extension?.scope.candidate;
+  if(successor&&(!same(tuple(successor.release.root,path.dirname(path.dirname(successor.release.root))),successor)||!same(extension.scope.node,recoveryNode())))throw Error('probation successor tuple/Node drifted');
+  const selected=root===candidateRoot?a.scope.candidate.release:root===previous.release.root?previous.release:successor?.release;
+  if(!selected||selected.root!==root)throw Error('probation successor authority/root differs');
+  return{...selected,probation:{id:event.id,seq:event.seq,archive:event.archive,scope_sha256:sha(canonical(a.scope)),previous,
+    ...(root===successor?.release.root?{successor:{seq:extension.event.seq,archive:extension.event.archive,scope_sha256:sha(canonical(extension.scope))}}:{})}};
 }
 
 export function probationControl({repo,org,id,fromRoot,targetRoot,authority,finish,developmentRecovery=false,dryRun=false,expectedPlan,cwd=process.cwd(),env=process.env,call,command=spawnSync,home=releaseHome(),fault=()=>{}}={}){

@@ -8,6 +8,7 @@ import {canonical} from '../messages/schema.mjs';
 import {requireRecordCompatibility} from '../lib/record-compatibility.mjs';
 import {installationPhaseProof,settledInstallation} from './runtime-phase.mjs';
 import {replacementPlist} from './migrate-runtime.mjs';
+import {successorHistory} from './probation-successor-history.mjs';
 
 export const recoveryDigest=bytes=>createHash('sha256').update(bytes).digest('hex');
 // Normalize only original development path identity, never archived bytes or
@@ -79,7 +80,7 @@ export function developmentSwitchRows(events,{directory,identity,org}){
   const folder=path.join(directory,'probation-switches');
   if(fs.existsSync(folder)){
     plainDirectory(folder,{create:false});
-    if(!same(fs.readdirSync(folder).sort(),rows.map(e=>e.id+'.json').sort()))throw Error('existing/UNKNOWN probation switch retained; no replay or replacement');
+    if(!same(fs.readdirSync(folder).filter(n=>!n.startsWith('.successor-')).sort(),rows.map(e=>e.id+'.json').sort()))throw Error('existing/UNKNOWN probation switch retained; no replay or replacement');
   }else if(rows.length)throw Error('development recovery switch archive missing');
   return rows;
 }
@@ -92,7 +93,7 @@ export function developmentHistory(events,{repo,org,identity,directory,installat
   const folder=path.join(directory,'probation-switches');
   if(!fs.existsSync(folder))throw Error('development recovery switch archive missing');
   plainDirectory(folder,{create:false});
-  if(!same(fs.readdirSync(folder).sort(),rows.map(e=>e.id+'.json').sort()))throw Error('existing/UNKNOWN probation switch retained; no replay or replacement');
+  if(!same(fs.readdirSync(folder).filter(n=>!n.startsWith('.successor-')).sort(),rows.map(e=>e.id+'.json').sort()))throw Error('existing/UNKNOWN probation switch retained; no replay or replacement');
   let saved=JSON.parse(p.original.installation),savedBytes=p.original.installation,plist=p.original.plist,last=cutover;
   const ids=new Set();
   for(const event of rows){
@@ -115,7 +116,9 @@ export function developmentHistory(events,{repo,org,identity,directory,installat
     if(a.after.installation!==json(after))throw Error('development recovery switch installation differs');
     saved={...after,probation_bootstrap:{trial:trial.id,id:event.id,...ref}};savedBytes=json(saved);plist=a.after.plist;last=event;
   }
+  const successor=successorHistory(events,{repo,org,identity,directory},{trial,scope,saved,savedBytes,plist,last});
+  saved=successor.installation;plist=successor.plist;last=successor.last;
   if(!rows.length||saved.source!==root||!same(saved,installation)||readPlainFile(path.join(directory,'service.plist'))!==plist)
     throw Error('development recovery installation/plist drifted');
-  return{last,installation:saved,plist};
+  return{last,installation:saved,plist,successor};
 }

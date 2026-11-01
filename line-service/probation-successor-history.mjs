@@ -1,0 +1,90 @@
+// Append-only successor history. Frozen recovery readers see only the original
+// legacy anchor, plus deliberate extra-file fences until a recorded rollback.
+import fs from 'node:fs';
+import path from 'node:path';
+import {createHash} from 'node:crypto';
+import {readPlainFile,plainDirectory} from '../lib/files.mjs';
+import {canonical} from '../messages/schema.mjs';
+
+export const successorDigest=bytes=>createHash('sha256').update(bytes).digest('hex');
+export const successorJSON=v=>JSON.stringify(v)+'\n';
+const same=(a,b)=>canonical(a)===canonical(b),valid=id=>/^[-a-zA-Z0-9_]{1,80}$/.test(id??'');
+export const successorRows=(events,c)=>events.filter(e=>e.type==='line-service.probation-successor-switched'&&e.project===c.identity&&e.org===c.org);
+export const successorFence=(c,id)=>path.join(c.directory,'probation-switches',`.successor-${id}`);
+export const successorFenceBytes=a=>successorJSON({schema:'brain-probation-successor-fence/v1',trial:a.trial,id:a.id,archive:a.archive,extension:a.extension});
+function archive(ref,file){
+  if(ref?.file!==file)throw Error('successor archive binding differs');
+  const bytes=readPlainFile(file);
+  if(successorDigest(bytes)!==ref.sha256||(fs.statSync(file).mode&0o222))throw Error('successor archive changed/mutable');
+  return JSON.parse(bytes);
+}
+function inventory(folder,names){
+  if(fs.existsSync(folder)){
+    plainDirectory(folder,{create:false});
+    if(!same(fs.readdirSync(folder).sort(),names.sort()))throw Error('existing/UNKNOWN probation successor retained; no replay or replacement');
+  }else if(names.length)throw Error('successor archive missing');
+}
+export function successorExtension(events,c,original){
+  const rows=events.filter(e=>e.type==='line-service.probation-successor-authorized'&&e.project===c.identity&&e.org===c.org);
+  inventory(path.join(c.directory,'probation-successors'),rows.map(e=>e.trial+'.json'));
+  if(!rows.length)return null;
+  if(rows.length!==1||rows[0].trial!==original.id)throw Error('successor authority ambiguous; one original trial only');
+  const event=rows[0],scope=archive(event.archive,path.join(c.directory,'probation-successors',original.id+'.json'));
+  const note=events.find(e=>e.seq===event.authority),originalNote=events.find(e=>e.seq===original.authority);
+  if(scope.schema!=='brain-probation-successor/v1'||scope.trial!==original.id||scope.repo!==c.repo||scope.org!==c.org||scope.identity!==c.identity||
+      scope.original.seq!==original.seq||!same(scope.original.archive,original.archive)||scope.original.scope_sha256!==successorDigest(canonical(original.scope))||
+      scope.original.recovery_sha256!==successorDigest(canonical(original.scope.previous))||!same(scope.candidate,event.candidate)||
+      scope.owner.native.name!==original.owner.native.name||!same(scope.owner.native,event.native_caller)||
+      note?.type!=='note.added'||!note.decision||note.by!==scope.owner.native.name||note.id!==originalNote?.id||
+      note.text!==`Brain probation successor authorized: ${event.id} ${event.plan_sha256}`)
+    throw Error('successor original scope/recovery/authority changed');
+  return{event,scope};
+}
+
+export function successorHistory(events,c,{trial,scope,saved,savedBytes,plist,last}){
+  const original=events.find(e=>e.seq===trial.seq),extension=successorExtension(events,c,original),rows=successorRows(events,c);
+  inventory(path.join(c.directory,'probation-successor-effects'),rows.map(e=>e.id+'.json'));
+  const clears=rows.filter(e=>e.rollback);
+  inventory(path.join(c.directory,'probation-successor-clears'),clears.map(e=>e.id+'.json'));
+  if(rows.length&&!extension)throw Error('successor effect lacks original authority');
+  const anchor={installation:savedBytes,plist,last};
+  const expectedFences=new Map(),ids=new Set();
+  for(const event of rows){
+    const a=archive(event.archive,path.join(c.directory,'probation-successor-effects',event.id+'.json'));
+    const note=events.find(e=>e.seq===event.authority),originalNote=events.find(e=>e.seq===original.authority);
+    const target=event.rollback?scope.previous.release:extension.scope.candidate.release;
+    if(!valid(event.id)||ids.has(event.id)||event.trial!==trial.id||event.repo!==c.repo||event.previous_seq!==last.seq||event.seq<=last.seq||
+        a.schema!=='brain-probation-successor-effect/v1'||a.id!==event.id||a.trial!==trial.id||a.repo!==c.repo||a.org!==c.org||a.identity!==c.identity||
+        !same(a.extension,extension.event.archive)||!same(a.successor_scope,extension.scope)||a.previous_seq!==last.seq||
+        a.previous_source!==saved.source||event.previous_source!==saved.source||a.source!==target.root||event.source!==target.root||
+        a.rollback!==event.rollback||!same(a.runtime,target)||!same(event.runtime,target)||a.before.installation!==savedBytes||a.before.plist!==plist||
+        !same(a.owner.native,event.native_caller)||a.owner.native.name!==original.owner.native.name||
+        note?.type!=='note.added'||!note.decision||note.id!==originalNote?.id||note.by!==a.owner.native.name||
+        note.text!==`Brain probation successor authorized: ${event.id} ${event.archive.sha256}`)
+      throw Error('successor effect history/authority changed');
+    if(!ids.size&&(saved.source!==scope.previous.release.root||last.type!=='line-service.probation-switched'||
+        extension.event.id!==event.id||extension.event.plan_sha256!==event.archive.sha256||extension.event.authority!==event.authority))
+      throw Error('successor requires the original completed recovery anchor');
+    ids.add(event.id);
+    const base=JSON.parse(anchor.installation);
+    const after=event.rollback?base:{...base,source:target.root,runtime:target};
+    if(a.after.installation!==successorJSON(after)||event.rollback&&a.after.plist!==anchor.plist||
+        (event.rollback?saved.source!==extension.scope.candidate.release.root:saved.source!==scope.previous.release.root))
+      throw Error('successor direction/installation differs');
+    saved=event.rollback?after:{...after,probation_successor:{trial:trial.id,id:event.id,...event.archive,extension:event.archive&&a.extension}};
+    savedBytes=successorJSON(saved);plist=a.after.plist;last=event;
+    expectedFences.set(event.id,successorFenceBytes({...a,archive:event.archive}));
+    if(event.rollback){
+      const clearFile=path.join(c.directory,'probation-successor-clears',event.id+'.json'),bytes=readPlainFile(clearFile);
+      const clear=JSON.parse(bytes);
+      if((fs.statSync(clearFile).mode&0o222)||!same(clear,{schema:'brain-probation-successor-clear/v1',trial:trial.id,id:event.id,
+        completion_seq:event.seq,archive:event.archive,fences:Object.fromEntries(expectedFences)}))throw Error('successor rollback clear receipt changed');
+      expectedFences.clear();
+    }
+  }
+  const folder=path.join(c.directory,'probation-switches');
+  const actual=fs.existsSync(folder)?fs.readdirSync(folder).filter(n=>n.startsWith('.successor-')).sort():[];
+  if(!same(actual,[...expectedFences.keys()].map(id=>`.successor-${id}`).sort()))throw Error('incomplete/UNKNOWN successor compatibility fence retained');
+  for(const [id,bytes]of expectedFences)if(readPlainFile(successorFence(c,id))!==bytes)throw Error('successor compatibility fence changed');
+  return{installation:saved,installationBytes:savedBytes,plist,last,anchor,extension,fences:expectedFences};
+}

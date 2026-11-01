@@ -1,5 +1,10 @@
 # Initial Brain A3 recovery
 
+For a later exact candidate under the SAME original trial, use the connected
+[successor protocol](PROBATION-SUCCESSOR.md). It retains this sealed recovery
+unchanged and uses the new canonical tool for successor effects. Frozen trial
+and recovery tools do not acquire the new parser or history reader.
+
 This extends the existing Brain-only probation authority with a typed
 `development-recovery` predecessor. It does not issue READY, a project pin, a
 consumer offer, or a consumer adoption exception. The ordinary installed-root

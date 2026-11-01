@@ -51,6 +51,7 @@ import { VALIDATION_TIERS, resolveValidation, validateValidation, validateTree, 
 import { readReceiptDeclaration, restrictEnvironment, excludedAdditions, requireExactPlan, selectionUnknown } from './exact-validation.mjs';
 import { changedPaths, plannedCommand, quote } from '../promote/test-plan.mjs';
 import { canonicalTestPlan } from '../settle/test-plan.mjs';
+import { successorCapabilityDiagnostic } from '../line-service/probation-successor-capabilities.mjs';
 
 import {
   loadRegistry,
@@ -2543,6 +2544,12 @@ function prepareWorktree(path, { quiet = false, env = validationEnvironment(), p
 
 function check(args) {
   repositoryRoot({ requiredBy: "check" });
+  // Visibility only: preserve consumer checks and the existing landing waiver.
+  // Brain's canonical profile drift must be visible even for unrelated selections.
+  if (existsSync(join(REPO_ROOT, 'line-service/probation-successor-capabilities.mjs'))) {
+    const diagnostic = successorCapabilityDiagnostic(REPO_ROOT);
+    if (diagnostic) process.stderr.write(`lane check: ${diagnostic}\n`);
+  }
   let tier = 'fast', override, exactGate = false, requiredTests;
   for (let index = 0; index < args.length; index += 1) {
     if (args[index] === '--gate') { exactGate = true; continue; }

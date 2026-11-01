@@ -174,6 +174,21 @@ test('successor rejects an incompatible sealed candidate before effects without 
   assert.equal(fs.existsSync(path.join(f.directory,'probation-successor-effects')),false);
 });
 
+test('successor capability requirement changes refuse the frozen reader before entry and recover without resealing',async t=>{
+  const f=await successorFixture(t),registry=path.join(f.cwd,'line-service/probation-successor-capabilities.mjs');
+  const bytes=fs.readFileSync(registry,'utf8'),before=state(f);
+  assert.equal(requireSuccessorCapabilities(f.successor).profile,'ab671e8986');
+  const changed=bytes.replace("export const successorRequirements = () => ['successor-effect/v1'", "export const successorRequirements = () => ['successor-effect/v2'");
+  assert.notEqual(changed,bytes);fs.writeFileSync(registry,changed);
+  f.git('add','line-service');f.git('commit','-qm','Require a new writer contract with unchanged frozen reader');
+  assert.throws(()=>f.run({dryRun:true,cli:true}),/profile ab671e8986 lacks successor-effect\/v2/);
+  assert.deepEqual(state(f),before);
+  assert.equal(fs.existsSync(path.join(f.directory,'probation-successor-effects')),false);
+  fs.writeFileSync(registry,bytes);f.git('add','line-service');f.git('commit','-qm','Restore compatible writer contract');
+  assert.equal(f.run({dryRun:true,cli:true}).runtime.root,f.successor);
+  assert.deepEqual(fs.readFileSync(path.join(f.successor,'.release-manifest.json')),f.candidateManifest);
+});
+
 test('successor verifies all six target sources and rollback bypasses reader admission while return refuses and recovers',async t=>{
   const f=await successorFixture(t,{currentRecovery:true});
   assert.equal(requireSuccessorCapabilities(f.successor).capability,'successor-reader/v1');
@@ -184,18 +199,19 @@ test('successor verifies all six target sources and rollback bypasses reader adm
     fs.writeFileSync(file,bytes);
   }
   f.apply();
-  // Remove the canonical admission profile, leaving the sealed roots untouched.
-  // Rollback must still restore recovery, while entry/return remain fail closed.
+  // A new canonical effect contract must not silently upgrade the sealed reader.
+  // Rollback still restores recovery, while return refuses before effects.
   const registry=path.join(f.cwd,'line-service/probation-successor-capabilities.mjs'),bytes=fs.readFileSync(registry,'utf8');
-  const profile=requireSuccessorCapabilities(f.successor);
-  fs.writeFileSync(registry,bytes.replace(`['${profile.fingerprint}', '${profile.profile}']`, `['${'0'.repeat(64)}', '${profile.profile}']`));
-  f.git('add','line-service');f.git('commit','-qm','Simulate unrecognized successor reader profile');
+  const changed=bytes.replace("export const successorRequirements = () => ['successor-effect/v1'", "export const successorRequirements = () => ['successor-effect/v2'");
+  assert.notEqual(changed,bytes);
+  fs.writeFileSync(registry,changed);
+  f.git('add','line-service');f.git('commit','-qm','Require a new canonical successor effect contract');
   const back=f.back({cli:true});assert.equal(back.runtime.root,f.recovery);
   assert.equal(fs.readFileSync(f.installationFile,'utf8'),f.anchor.installation);
   const before=state(f);
-  assert.throws(()=>f.run({id:'successor-return',dryRun:true,cli:true}),/successor-incompatible/);
+  assert.throws(()=>f.run({id:'successor-return',dryRun:true,cli:true}),/successor-incompatible: profile .* lacks successor-effect\/v2/);
   assert.deepEqual(state(f),before);
-  fs.writeFileSync(registry,bytes);f.git('add','line-service');f.git('commit','-qm','Restore reviewed reader profile');
+  fs.writeFileSync(registry,bytes);f.git('add','line-service');f.git('commit','-qm','Restore compatible canonical writer requirement');
   assert.equal(f.returned({cli:true}).runtime.root,f.successor);
 });
 

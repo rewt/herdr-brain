@@ -185,6 +185,12 @@ fence, stopped-runtime and completed-rollback-clear contract. Unknown target
 source refuses before effects; target code and self-declared versions are never
 used as proof. Compatible revisions require a reviewed fingerprint addition,
 retaining old profiles. This is an admission floor, not new effect authority.
+Profiles carry separate effect, fence and history capabilities, checked against
+canonical writer requirements before entry/return effects. An incompatible
+writer contract must bump its requirement before shipping, without upgrading
+retained profiles; a compatible implementation adds a reviewed fingerprint.
+`lane check` warns with the canonical fingerprint when its profile is missing
+or lacks a writer requirement, independently of the selected tests.
 
 Rollback skips candidate reader capability admission: it restores the verified
 original recovery without starting the candidate. Exact tuples, manifest and
@@ -200,7 +206,10 @@ at its separately authorized safe boundary; this repair switches no service,
 pin, offer or runtime.
 
 The exact supervisor handoff remains
-`.org/evidence/DEC-476-R-1799/supervisor-steps.md`. After consuming the engineer's
+`.org/evidence/DEC-476-R-1799/supervisor-steps.md`; source-verified profile and
+writer-requirement admission supersedes its step 1 condition that all six
+canonical source hashes must match the exact ab671e8986 bundle, while both
+frozen roots remain unchanged. After consuming the engineer's
 landed range/evidence and retaining the single asynchronous record review,
 supervisor-herdr alone continues `dec466-successor-return` under active,
 unheld ENG-1170 and trial `r2-20261031-d3271f06ef`. It owns the separately

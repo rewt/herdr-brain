@@ -108,6 +108,93 @@ test('consumer pin refusal precedes activation effects and recovery retains the 
   assert.match(f.ok(f.run(process.execPath,[path.join(f.bin,'record'),'show','ENG-1'])),/Pinned consumer work/);
 });
 
+function assertInstalledTools(f) {
+  for(const name of ['org','record','lane']) {
+    const launcher=fs.readlinkSync(path.join(f.bin,name));
+    assert.equal(path.dirname(path.dirname(launcher)),path.join(f.installationHome,'routing'));
+    assert.equal(fs.readFileSync(path.join(path.dirname(launcher),'lib/releases.mjs'),'utf8'),
+      fs.readFileSync(path.join(source,'lib/releases.mjs'),'utf8'));
+  }
+}
+
+test('rollback restores the previous release despite a consumer preflight refusal',t=>{
+  const f=fixture(t);
+  fs.appendFileSync(path.join(f.bundle,'lib/releases.mjs'),'\n// Release A differs from the recovery tools.\n');
+  f.seal(f.bundle,'1'.repeat(40));f.pin('compatible');f.ok(f.activate('compatible'));
+  const newer=f.release('newer');f.ok(f.activate('newer'));
+  const current=path.join(f.installationHome,'current'),previous=path.join(f.installationHome,'previous');
+  assert.equal(fs.readlinkSync(previous),f.bundle);
+  const pinFile=path.join(f.cwd,'.herdr-release.json'),pin=fs.readFileSync(pinFile);
+  fs.appendFileSync(f.record,JSON.stringify({type:'item.future-contract',seq:999})+'\n');
+  // Require recovery to reinstall all launchers from the tools in use.
+  for(const name of ['org','record','lane'])fs.unlinkSync(path.join(f.bin,name));
+  f.ok(f.run('bash',[path.join(source,'herdr/release.sh'),'rollback']));
+  assert.equal(fs.readlinkSync(current),f.bundle);
+  assert.equal(fs.readlinkSync(previous),newer);
+  assertInstalledTools(f);
+  assert.deepEqual(fs.readFileSync(pinFile),pin);
+  const links=[current,previous,...['org','record','lane'].map(name=>path.join(f.bin,name))]
+    .map(file=>[file,fs.readlinkSync(file)]);
+  fs.writeFileSync(f.plist,'untouched service');
+  const refused=f.activate('newer');
+  assert.notEqual(refused.status,0);assert.match(refused.stderr,/consumer pin preflight failed.*item.future-contract/);
+  for(const [file,target] of links)assert.equal(fs.readlinkSync(file),target);
+  assert.equal(fs.readFileSync(f.plist,'utf8'),'untouched service');
+  assert.deepEqual(fs.readFileSync(pinFile),pin);
+});
+
+test('ship completes automatic rollback and repairs previous when a consumer fault appears after activation',t=>{
+  const f=fixture(t);
+  fs.appendFileSync(path.join(f.bundle,'lib/releases.mjs'),'\n// Release A differs from the recovery tools.\n');
+  f.seal(f.bundle,'1'.repeat(40));f.pin('compatible');f.ok(f.activate('compatible'));
+  const earlier=f.release('earlier');f.ok(f.activate('earlier'));f.ok(f.activate('compatible'));
+  const newer=f.release('newer');
+  fs.writeFileSync(path.join(newer,'contrib/settle-watch.mjs'),'const broken = ;\n');
+  f.seal(newer,'2'.repeat(40));
+  const pinFile=path.join(f.cwd,'.herdr-release.json'),pin=fs.readFileSync(pinFile);
+  // Exercise the real ship/activate/verify/rollback functions with a prebuilt
+  // scratch candidate. Building a candidate (and its suites) is outside this control.
+  const script=fs.readFileSync(path.join(source,'herdr/release.sh'),'utf8')
+    .split('case "${1:-}" in\n')[0].replace('verify_installed() {','check_installed() {')+`
+build() { [ "$1" = newer ]; }
+verify_installed() {
+  [ "$(readlink "$HOME_DIR/current")" = "$HOME_DIR/releases/newer" ] || exit 90
+  printf '%s\\n' '{"type":"item.future-contract","seq":999}' >> "$ORG_DIR/events.jsonl"
+  check_installed
+}
+ship newer
+`;
+  const shipped=f.run('bash',['-c',script,path.join(source,'herdr/release.sh')]);
+  assert.equal(shipped.status,1,shipped.stdout+shipped.stderr);
+  assert.match(shipped.stderr,/failed its post-activation check; rolled back to compatible/);
+  assert.equal(fs.readlinkSync(path.join(f.installationHome,'current')),f.bundle);
+  assert.equal(fs.readlinkSync(path.join(f.installationHome,'previous')),earlier);
+  assert.match(fs.readFileSync(f.record,'utf8'),/item.future-contract/);
+  assertInstalledTools(f);
+  assert.deepEqual(fs.readFileSync(pinFile),pin);
+});
+
+test('an unpinned stale registration cannot block activation but an unreadable accepted pin does',t=>{
+  const f=fixture(t),fleetFile=path.join(f.env.HERDR_MONITOR_FLEET,'fleet.json');
+  const fleet=JSON.parse(fs.readFileSync(fleetFile));
+  // The checkout still has an explicit accepted unpin, but its registered
+  // identity is stale. No pinned consumer contract needs that identity check.
+  fleet.projects.consumer.identity=path.join(f.scratch,'stale.git');
+  fs.writeFileSync(fleetFile,JSON.stringify(fleet));
+  f.ok(f.activate('compatible'));
+  // A stale non-repository registration likewise has no accepted pin.
+  const stale=path.join(f.scratch,'stale-checkout');fs.mkdirSync(stale);
+  fleet.projects.consumer.checkout=stale;fs.writeFileSync(fleetFile,JSON.stringify(fleet));
+  const newer=f.release('newer');f.ok(f.activate('newer'));
+  assert.equal(fs.readlinkSync(path.join(f.installationHome,'current')),newer);
+  fleet.projects.consumer.checkout=f.cwd;fleet.projects.consumer.identity=path.join(f.cwd,'.git');
+  fs.writeFileSync(fleetFile,JSON.stringify(fleet));
+  f.pin('compatible');fs.unlinkSync(path.join(f.cwd,'.herdr-release.json'));
+  const refused=f.activate('compatible');
+  assert.notEqual(refused.status,0);assert.match(refused.stderr,/consumer pin preflight failed.*committed.*missing/);
+  assert.equal(fs.readlinkSync(path.join(f.installationHome,'current')),newer);
+});
+
 test('a missing or changed listed admission module refuses instead of becoming a legacy bypass',t=>{
   const f=fixture(t);f.pin('compatible');f.ok(f.activate('compatible'));
   const module=path.join(f.bundle,'lib/record-compatibility.mjs'),original=fs.readFileSync(module);

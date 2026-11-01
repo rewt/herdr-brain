@@ -2579,9 +2579,12 @@ function check(args) {
   // for a worker-selected command; other consumer repositories have no reader.
   const compatibilityTest = 'test/release-record-compatibility.test.mjs';
   const compatibilitySources = ['lib/state.mjs', 'lib/obligations.mjs'];
-  const comparisonBase = git(['merge-base', MAIN, head]);
-  const compatibilityRequired = existsSync(join(REPO_ROOT, 'lib/record-compatibility.mjs')) &&
-    changedPaths(REPO, comparisonBase, head).some(file => compatibilitySources.includes(file));
+  let compatibilityRequired = false;
+  if (existsSync(join(REPO_ROOT, 'lib/record-compatibility.mjs'))) {
+    const comparisonBase = git(['merge-base', MAIN, head]);
+    compatibilityRequired = changedPaths(REPO, comparisonBase, head)
+      .some(file => compatibilitySources.includes(file));
+  }
   if (compatibilityRequired && !required.includes(compatibilityTest)) required.push(compatibilityTest);
   required.sort();
 

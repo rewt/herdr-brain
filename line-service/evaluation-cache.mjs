@@ -121,7 +121,7 @@ function physicalInputs(files,workspaces,identity){
   return rows;
 }
 
-export function negativeEvaluationCache({store,identity,org,repo,dirty=()=>{},counts={}}){
+export function negativeEvaluationCache({store,identity,org,repo,dirty=()=>{},counts={},log=()=>{}}){
   let implementation;try{implementation=implementationInputs();}catch{implementation=null;}
   let indexed;
   const index=snapshot=>{
@@ -185,21 +185,38 @@ export function negativeEvaluationCache({store,identity,org,repo,dirty=()=>{},co
       }
       const actions=Object.entries(store().actions??{}).filter(([key])=>key.startsWith(`dispatch:${item}:`));
       for(const [,entry]of actions){files.add(entry.result?.journal);files.add(entry.original_outcome?.journal);}
-      return hash([implementation,record,policy,extra,actions,legacyBoundary,physicalInputs(files,workspaces,identity)]);
+      const physical=physicalInputs(files,workspaces,identity);
+      const components={implementation};
+      for(const row of record)components[`record:${row[0]}`]=hash(row);
+      Object.assign(components,{policy:hash(policy??null),extra:hash(extra??null),actions:hash(actions),legacyBoundary:hash(legacyBoundary)});
+      for(const row of physical)components[`physical:${row[0]==='head'?`head:${row[1]}`:row[0]}`]=hash(row);
+      return {signature:hash([implementation,record,policy,extra,actions,legacyBoundary,physical]),components};
     }catch{return null;} // Unknown/missing inventory is never a cache hit.
   };
   return{
     probe(stage,subject){
-      const key=`${stage}:${subject.run??subject.item}`,signature=fingerprint(subject),prior=entries()[key],{pending}=index(subject.snapshot);
+      const key=`${stage}:${subject.run??subject.item}`,current=fingerprint(subject),signature=current?.signature,prior=entries()[key],{pending}=index(subject.snapshot);
       const obligation=[subject.item,subject.run].some(id=>pending.has(`${stage}:${id}`));
-      if(!obligation&&signature&&prior?.signature===signature&&prior?.negative===true){counts[`${stage}_skipped`]=(counts[`${stage}_skipped`]??0)+1;return{skip:true,reason:prior.reason};}
+      if(!obligation&&signature&&prior?.signature===signature&&prior?.negative===true){
+        // Upgrade a matching older entry without making an otherwise warm
+        // subject cold just to add diagnostic evidence.
+        if(!prior.components){prior.components=current.components;dirty();}
+        counts[`${stage}_skipped`]=(counts[`${stage}_skipped`]??0)+1;return{skip:true,reason:prior.reason};
+      }
       counts[`${stage}_evaluated`]=(counts[`${stage}_evaluated`]??0)+1;
       const miss=obligation?'obligation':!signature?'uncacheable':!prior?'cold':'changed';
       counts[`${stage}_${miss}`]=(counts[`${stage}_${miss}`]??0)+1;
+      if(miss==='changed'){
+        const component=prior.components
+          ? [...new Set([...Object.keys(current.components),...Object.keys(prior.components)])].find(name=>current.components[name]!==prior.components[name])??'signature'
+          : 'legacy-signature';
+        log({action:'evaluation-cache-miss',stage,item:subject.item,...(subject.run?{run:subject.run}:{}),miss,component,
+          previous:prior.components?.[component]??(component.endsWith('signature')?prior.signature:null),current:current.components[component]??(component.endsWith('signature')?signature:null)});
+      }
       // Invalidate before evaluation. Exceptions and positive results leave no
       // reusable entry, even if an old cache document was stale or malformed.
       if(prior){delete entries()[key];dirty();}
-      return{skip:false,retain(reason){if(!signature)return;entries()[key]={signature,negative:true,reason,observed_seq:subject.snapshot.events.at(-1)?.seq??0};dirty();}};
+      return{skip:false,retain(reason){if(!signature)return;entries()[key]={signature,components:current.components,negative:true,reason,observed_seq:subject.snapshot.events.at(-1)?.seq??0};dirty();}};
     }
   };
 }

@@ -128,6 +128,52 @@ test('real pass processes reuse admission and source negatives with linked skill
   const recovered=pass();assert.equal(summary(recovered).evaluations.admission_skipped,1);assert.equal(summary(recovered).evaluations.source_skipped,1);
 });
 
+test('source negatives stay warm across consecutive passes with routine writes and unchanged Git config replacements',t=>{
+  const f=fixture(t),workers=[];
+  for(let n=1;n<=3;n++){
+    const lane=path.join(f.root,`source-worker-${n}`);f.git('worktree','add','-qb',`source-worker-${n}`,lane);workers.push(lane);
+    f.append([work(`ENG-${n}`,{meta:{hold:true}}),{type:'run.started',id:`R-${n}`,item:`ENG-${n}`,workspace:lane},
+      {type:'report.ingested',run:`R-${n}`,file:`runs/R-${n}/report.md`,sha256:'fixture',report:{outcome:'blocked',artifacts:['Commit: '+'a'.repeat(40)]}}]);
+  }
+  const pass=()=>{
+    const before=fs.existsSync(path.join(f.directory,'passes.jsonl'))?fs.statSync(path.join(f.directory,'passes.jsonl')).size:0;
+    const script=`import {createLineService} from ${JSON.stringify(new URL('../line-service/line-service.mjs',import.meta.url).href)};
+      createLineService({repo:${JSON.stringify(f.repo)},org:${JSON.stringify(f.org)},env:process.env,to:'supervisor-test',haltAfter:100,
+      capacity:()=>({count:0,cap:4}),command:()=>{throw Error('unexpected effect');}}).pass({reconcileCloseout:false});`;
+    const result=spawnSync(process.execPath,['--input-type=module','-e',script],{cwd:f.repo,env:f.env,encoding:'utf8'});
+    assert.equal(result.status,0,result.stderr);
+    return fs.readFileSync(path.join(f.directory,'passes.jsonl')).subarray(before).toString().trim().split('\n').map(JSON.parse);
+  };
+  const cacheFile=path.join(f.directory,'effects.json'),entries=()=>JSON.parse(fs.readFileSync(cacheFile)).negative_evaluations.entries;
+  const first=pass(),retained=Object.keys(entries()).filter(k=>k.startsWith('source:')).length;
+  assert.equal(retained,3);assert.equal(summary(first).evaluations.source_evaluated,retained);
+  for(const entry of Object.values(entries())){
+    assert.match(entry.components.implementation,/^[a-f0-9]{64}$/);
+    assert.ok(Object.keys(entry.components).some(k=>k.startsWith('physical:')));
+  }
+  const config=path.join(f.identity,'config'),bytes=fs.readFileSync(config),replace=()=>{
+    const before=fs.statSync(config).ino;fs.writeFileSync(config+'.routine-replacement',bytes);fs.renameSync(config+'.routine-replacement',config);
+    assert.notEqual(fs.statSync(config).ino,before);
+  };
+  // effects.json and passes.jsonl are rewritten/appended by each real process.
+  // Also exercise the already delivered content-based Git config input: its
+  // metadata replacement between early source and late admission is harmless.
+  replace();const second=pass();assert.notEqual(summary(first).pid,summary(second).pid);
+  assert.equal(summary(second).evaluations.source_skipped,retained);assert.equal(summary(second).evaluations.source_changed??0,0);
+  assert.equal(summary(second).evaluations.admission_skipped,3);
+  // A matching legacy entry upgrades its evidence without losing a warm hit.
+  const saved=JSON.parse(fs.readFileSync(cacheFile));delete saved.negative_evaluations.entries['source:R-1'].components;fs.writeFileSync(cacheFile,JSON.stringify(saved));
+  replace();const upgraded=pass();assert.equal(summary(upgraded).evaluations.source_skipped,retained);assert.ok(entries()['source:R-1'].components);
+  fs.writeFileSync(path.join(workers[0],'source'),'genuinely changed source');f.gitAt(workers[0],'add','source');f.gitAt(workers[0],'commit','-qm','Changed source input');
+  const changed=pass(),misses=changed.filter(r=>r.action==='evaluation-cache-miss'&&r.miss==='changed'),sourceMiss=misses.find(r=>r.stage==='source');
+  assert.equal(summary(changed).evaluations.source_changed,1);assert.equal(summary(changed).evaluations.source_skipped,retained-1);
+  assert.equal(sourceMiss.run,'R-1');assert.match(sourceMiss.component,/^physical:head:/);assert.notEqual(sourceMiss.previous,sourceMiss.current);
+  for(const [stage,count]of Object.entries(summary(changed).evaluations).filter(([k])=>k.endsWith('_changed')))
+    assert.equal(misses.filter(r=>r.stage===stage.slice(0,-'_changed'.length)).length,count,'every changed miss has component evidence');
+  const recovered=pass();assert.equal(summary(recovered).evaluations.source_skipped,retained);assert.equal(summary(recovered).evaluations.source_changed??0,0);
+  t.diagnostic(JSON.stringify({first:summary(first),second:summary(second),changed:summary(changed).evaluations,misses}));
+});
+
 test('a different source revision cannot erase other subjects while relevant unknown Git inventories remain fresh',t=>{
   const f=fixture(t),document={actions:{}},counts={};f.append([work('ENG-1'),work('ENG-2')]);
   const snapshot=loadRecord(f.org),cache=revision=>negativeEvaluationCache({store:()=>document,identity:f.identity,repo:f.repo,org:f.org,revision,counts});

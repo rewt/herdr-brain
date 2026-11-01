@@ -1555,7 +1555,15 @@ existing hold diagnostics; hits retain the original diagnosis without repeating
 its hold/eligibility rows. The journal remains under the existing scheduling lock
 and inherits interleaved writes when that lock is yielded. `pass-complete` records
 `evaluations` (evaluated/skipped by stage, with cold/changed/uncacheable/obligation miss
-counts) and the open candidate `backlog`.
+counts) and the open candidate `backlog`. Each retained negative also keeps
+hashes of implementation, policy, source projection, actions, legacy boundary,
+each related record subject and each physical input. Every `changed` miss emits
+an `evaluation-cache-miss` row naming the first differing component and its
+previous/current hashes. A changed pre-tracing entry names `legacy-signature`
+because its original components cannot be reconstructed; a matching older entry
+is upgraded in place without forcing a cold evaluation. The final signature and
+v3 reuse rules are unchanged. This evidence identifies future invalidations;
+it does not retrospectively prove the cause of older installed misses.
 
 Read historical pass counts and duration through the B4 measurement entry:
 

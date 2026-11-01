@@ -415,7 +415,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       if(admission)try{({config}=loadDiscoveredRoutes({cwd:repo,env:childEnv}));}catch(error){holdPolicy(error,'pass-start');}
       const evaluationCounts={admission_evaluated:0,admission_skipped:0,source_evaluated:0,source_skipped:0};
       const evaluationCache=negativeEvaluationCache({store:()=>effects,identity:project.identity,org,repo,
-        counts:evaluationCounts,dirty:()=>{noticesDirty=true;}});
+        counts:evaluationCounts,log,dirty:()=>{noticesDirty=true;}});
       const evaluationPolicy={admissionPolicy,ordinaryPolicy,config,supervisor:childEnv.MONITOR_SUPERVISOR_AGENT??null};
       effects.review_admission.policy=admissionPolicy??null;
       effects.ordinary_admission={schema:'ordinary-admission-pass/v1',policy:ordinaryPolicy,held:[]};save();

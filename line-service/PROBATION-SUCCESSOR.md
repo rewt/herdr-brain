@@ -139,9 +139,16 @@ offending sequence before intent/config/native or selected-command effects.
 Unknown core cases, malformed wiring/layout, missing helpers and torn tails
 retain their refusal; opaque non-fold receipts remain readable. Iterable/file
 admission uses bounded per-event scratch maps including items; it never builds
-a second full record state. The reviewed local delegate is only a coverage
-backstop where its source profile is known, not the capability oracle.
+a second full record state. The local pure delegate remains a coverage backstop
+even before its canonical source digest is registered. An unclassified obligation
+touch refuses at its first sequence; canonical byte changes alone do not revoke
+frozen target profiles. Explicit requirements remain the capability oracle.
 
+The shared capability set is a reviewed admission floor, not verification of
+identical per-contract reconciliation. In particular, legacy `source.state/v1`
+does not reconcile source completion on `item.closed`/`item.reopened`, and legacy
+`closeout.evaluated/v1` does not link parent evaluation to wait completion. These
+are accepted compact-status differences, not capabilities verified in that helper.
 The floor is retained event/payload reading and original claim/source/intent/
 outcome identity, not identical compact inventory status. The legacy helper can
 leave a superseded report draft supported, retain a stale review diagnosis,

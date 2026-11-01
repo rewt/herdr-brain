@@ -250,6 +250,56 @@ test('obligation capability keeps old profiles across canonical changes but refu
   }
 });
 
+test('obligation capability backstop refuses unclassified canonical changes before profile registration and recovers',t=>{
+  const f=configFixture(t,{custom:true}),canonical=path.join(f.scratch,'canonical');
+  copyProduct(path.resolve(import.meta.dirname,'..'),canonical);
+  const helper=path.join(canonical,'lib/obligations.mjs'),target=path.join(f.bundle,'lib/obligations.mjs');
+  const compatible=fs.readFileSync(helper,'utf8')+'\n// Compatible unregistered canonical revision.\n';
+  const changed=compatible.replace('export function applyObligationEvent(s, e) {',
+    "export function applyObligationEvent(s, e) {\n  if (e.type === 'future.obligation' || e.future_obligation === true) s.obligations.get('future');");
+  assert.notEqual(changed,compatible);
+  const file=path.join(f.scratch,'events.jsonl'),marker=path.join(f.scratch,'admitted-effect');
+  const run=(events,mode)=>{
+    fs.writeFileSync(file,events.map(JSON.stringify).join('\n')+'\n');
+    fs.rmSync(marker,{force:true});
+    const script=`import fs from 'node:fs';
+      import {requireRecordCompatibility,requireRecordFileCompatibility} from ${JSON.stringify(pathToFileURL(path.join(canonical,'lib/record-compatibility.mjs')).href)};
+      import {obligationProfile} from ${JSON.stringify(pathToFileURL(path.join(canonical,'lib/obligation-capabilities.mjs')).href)};
+      const canonical_profile=obligationProfile(fs.readFileSync(${JSON.stringify(helper)},'utf8')).name;
+      try {
+        const admitted=${mode === 'file'
+          ? `requireRecordFileCompatibility(${JSON.stringify(f.bundle)},${JSON.stringify(file)})`
+          : `requireRecordCompatibility(${JSON.stringify(f.bundle)},${JSON.stringify(events)})`};
+        fs.writeFileSync(${JSON.stringify(marker)},'admitted');console.log(JSON.stringify({canonical_profile,admitted}));
+      } catch(e) {console.log(JSON.stringify({canonical_profile,error:e.message}));}`;
+    const result=spawnSync(process.execPath,['--input-type=module','-e',script],{env:f.env,encoding:'utf8'});
+    assert.equal(result.status,0,result.stderr);
+    const captured=JSON.parse(result.stdout);assert.equal(captured.canonical_profile,null);
+    return captured;
+  };
+  for(const source of [legacyObligations(),fs.readFileSync(path.resolve('lib/obligations.mjs'),'utf8')]) {
+    fs.writeFileSync(target,source);
+    for(const mode of ['iterable','file']) {
+      fs.writeFileSync(helper,compatible);
+      assert.equal(run([{type:'report.available',run:'R-1',seq:3}],mode).admitted.through,3);
+      fs.writeFileSync(helper,changed);
+      for(const event of [{type:'future.obligation'},{type:'opaque.receipt',future_obligation:true}]) {
+        const events=[{type:'opaque.receipt',seq:1},{...event,seq:41}];
+        const refused=run(events,mode);
+        assert.match(refused.error,/record-incompatible:.*unclassified:.*first sequence 41/);
+        assert.equal(fs.existsSync(marker),false);
+        // Remove only the unclassified canonical behavior; keep its unregistered
+        // compatible bytes and the exact frozen target. The same record recovers.
+        fs.writeFileSync(helper,compatible);
+        assert.equal(run(events,mode).admitted.through,41);
+        assert.equal(fs.readFileSync(marker,'utf8'),'admitted');
+        assert.equal(fs.readFileSync(target,'utf8'),source);
+        fs.writeFileSync(helper,changed);
+      }
+    }
+  }
+});
+
 test('obligation capability file and one-shot iterable admission agree with bounded scratch state and torn-tail refusal',t=>{
   const f=configFixture(t,{custom:true}),file=path.join(f.scratch,'stream.jsonl');
   fs.writeFileSync(path.join(f.bundle,'lib/obligations.mjs'),legacyObligations());

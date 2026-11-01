@@ -20,7 +20,17 @@ export function readSoakInput(file, bytes = fs.readFileSync(file, 'utf8')) {
     const id = trial[field][key];
     if (!saved.has(id)) throw Error(`${field}.${key} must name a verified original packet`);
     const original = JSON.parse(saved.get(id));
+    const historyId = trial[field].historyEvidence;
     trial[field] = field === 'probation' ? {archive: original, evidence: [id]} : {...original, evidence: [id]};
+    if (field === 'probation' && historyId) {
+      if (!saved.has(historyId)) throw Error('probation.historyEvidence must name a verified history packet');
+      const history = JSON.parse(saved.get(historyId));
+      trial.probation.history = {...history, evidence: [historyId], files: (history.files ?? []).map(ref => {
+        const bytes = saved.get(ref.evidence);
+        if (!bytes || digest(bytes) !== ref.sha256) throw Error('history archive must name verified original bytes');
+        return {file: ref.file, sha256: ref.sha256, bytes: bytes.toString('utf8'), evidence: [ref.evidence]};
+      })};
+    }
   }
   return {trial, verifiedEvidence: [...saved.keys()]};
 }

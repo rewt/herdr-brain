@@ -137,3 +137,47 @@ live acceptance belong to the release owner.
 
 Recorded live witnesses use the existing finite line turn and result-only item
 notes; see [live witness specifications and evidence rules](LIVE-WITNESSES.md).
+
+For a successor soak, keep `probation.archiveEvidence` pointing to the untouched
+original `brain-probation/v1` packet. Add `probation.historyEvidence` naming a
+hash-verified JSON history packet with `installation` and `plist` strings and a
+`files` array. Each file has its original absolute `file`, `sha256` and an
+`evidence` ID in the input's evidence map. The CLI reads those saved bytes; inline
+archive/status objects cannot replace them. Capture the full switch, successor,
+effect, rollback-clear and outstanding compatibility-fence inventory, including
+uncompleted intents. Extra, missing or changed bytes withhold the offer. Events
+must retain the original decisions and completed effects in sequence, before the
+window. The reader reconstructs installations and recovery instead of copying a
+new candidate into the original authority. Successors require `recovery.tuple`
+with the original root, commit, source tree, manifest/inventory digests and Node.
+The existing probation stage still references the original archive and binds the
+assessment, whose input digest includes the complete verified history.
+
+The saved reader can model further append-only extensions only from a completed
+recovery anchor, with a fresh immutable authority archive and effect decisions.
+This does not make the current single-extension native producer capable of
+creating another extension. A prospective fixture is reader evidence only;
+SUPE-3 and the protocol producer must bind it to their eventual sealed tuple and
+supported producer history. No original failed assessment is replayed or changed.
+
+Following HUM-45 (1 Nov 2026), new assessments report the 120-second close,
+session-release and folder-removal comparisons in `cleanupTargets` as measured
+planning targets. Raw latency remains in `latency`. Every completion, linked
+retirement effect, physical observation and common finite turn is still required.
+The 60-second report ingestion and 120-second eligible/free-to-input comparisons
+retain their existing offer consequences, including the documented-load policy.
+
+An optional verified `pauses` ledger has `complete: true` and `intervals` with
+`project: "BCH"`, timezone-bearing `from`/`until`, `owner` and `reason`. The reader
+clips intervals to the window and subtracts their union from active exposure;
+`exposure` retains the raw duration, original intervals and excluded union.
+Ninety active minutes are required. Pauses never adjust raw latency. An absent
+ledger denotes no declared pauses; an invalid or unverified ledger withholds.
+Shared mode can supply `runtime.sharedObserver` in place of `runtime.watcher`,
+with verified observer provenance and `shared.perRunWatcherAbsent: true` plus the
+existing zero per-run watcher RSS and positive host RSS/delivery measurements.
+
+Focused evaluator controls: `node test/helpers/run.mjs test/canary-soak.test.mjs
+ test/canary-soak-successor.test.mjs` through the clean committed lane check.
+`SOAK_CONTROL_OUTPUT` preserves control inputs/results and copied-CLI artifacts;
+`SOAK_RETAINED_HISTORY` adds a read-only reconstruction of captured real history.

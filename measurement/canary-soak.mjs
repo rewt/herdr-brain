@@ -2,6 +2,7 @@
 import {createHash} from 'node:crypto';
 import {measureLifecycle, distribution, timestamp} from './lifecycle.mjs';
 import {canonical} from '../messages/schema.mjs';
+import {probationChain} from './probation-chain.mjs';
 
 export const digest = value => createHash('sha256').update(value).digest('hex');
 const equal = (a, b) => canonical(a ?? null) === canonical(b ?? null);
@@ -11,6 +12,32 @@ const same = (a, b) => equal(tuple(a), tuple(b));
 const sha = s => typeof s === 'string' && /^[a-f0-9]{64}$/.test(s);
 const commit = s => typeof s === 'string' && /^[a-f0-9]{40}$/.test(s);
 const requiredCases = [...Array.from({length: 9}, (_, i) => `S${i}`), 'shared-observer'];
+
+function activeExposure(pauses, window, need, missing) {
+  const from = timestamp(window.from), cutoff = timestamp(window.cutoff), clipped = [];
+  if (pauses) {
+    need(pauses, 'pause-evidence');
+    if (pauses.complete !== true || !Array.isArray(pauses.intervals)) missing('pause-coverage', 'complete BCH pause ledger required');
+    for (const p of Array.isArray(pauses.intervals) ? pauses.intervals : []) {
+      const start = timestamp(p.from), end = timestamp(p.until);
+      if (start === null || end === null || end < start || p.project !== 'BCH' || !p.owner || !p.reason) {
+        missing('pause-interval', 'ordered BCH pause with owner and reason required'); continue;
+      }
+      const a = Math.max(from, start), b = Math.min(cutoff, end);
+      if (b > a) clipped.push([a, b]);
+    }
+  }
+  const union = [];
+  for (const [start, end] of clipped.sort((a, b) => a[0] - b[0])) {
+    const last = union.at(-1);
+    if (last && start <= last[1]) last[1] = Math.max(last[1], end);
+    else union.push([start, end]);
+  }
+  const paused = union.reduce((n, [a, b]) => n + b - a, 0), raw = cutoff - from;
+  return {raw_ms: raw, paused_ms: paused, active_ms: raw - paused,
+    excluded: union.map(([a, b]) => ({from: new Date(a).toISOString(), until: new Date(b).toISOString(), ms: b - a})),
+    pauses: pauses?.intervals ?? []};
+}
 
 export function evaluateSoak({events, trial, verifiedEvidence = []}) {
   if (trial?.schema !== 'brain.canary-soak-input/v1') throw Error('unsupported soak input schema');
@@ -70,11 +97,23 @@ export function evaluateSoak({events, trial, verifiedEvidence = []}) {
       note.by !== a?.owner?.native?.name || note.text !== `Brain probation authorized: ${digest(canonical(scope ?? {}))}` ||
       auth.seq > w.start_seq || timestamp(auth.at) === null || timestamp(auth.at) > timestamp(w.from))
     missing('authority', 'exact pre-window canonical-supervisor probation archive, event and decision required');
-  const pc = scope?.candidate;
+  let pc = scope?.candidate, chain = null;
+  if (p?.history) {
+    need(p.history, 'probation-history-evidence');
+    try {
+      chain = probationChain({events: selected, original: a, authority: auth, history: p.history, verified, references: trial.evidence,
+        from: w.from, startSeq: w.start_seq});
+      pc = chain.candidate;
+      if (!pc) fail('probation-drift', 'current history is at recovery, not the installed candidate');
+    } catch (error) { fail('probation-history', error.message); }
+  }
   if (pc && (pc.release?.root !== c?.root || pc.release?.commit !== c?.commit || pc.tree !== c?.tree || pc.manifest_sha256 !== c?.manifestSha256 ||
-      pc.node?.version !== c?.node?.version || pc.node?.executable !== c?.node?.executable)) fail('probation-drift', 'probation tuple differs from installed candidate');
+      pc.node?.version !== c?.node?.version || pc.node?.executable !== c?.node?.executable ||
+      pc.release?.protocol !== undefined && pc.release.protocol !== c?.protocol)) fail('probation-drift', 'probation tuple differs from installed candidate');
   const recovery = trial.recovery;
   need(recovery, 'recovery-evidence');
+  if (chain && (!equal(recovery?.tuple, chain.recovery) || recovery?.root !== chain.recovery.root))
+    fail('rollback-root', 'sealed recovery tuple differs from original authority');
   if (!scope?.previous?.release?.root || recovery?.root !== scope.previous.release.root || recovery?.compatible !== true || recovery?.accepted !== true ||
       !a?.before?.installation || !a?.before?.plist) missing('rollback-root', 'compatible accepted installed previous root and original installation/plist required');
   if (selected.some(e => e.id === a?.id && ['line-service.probation-withdrawn', 'line-service.probation-completed'].includes(e.type) &&
@@ -127,7 +166,10 @@ export function evaluateSoak({events, trial, verifiedEvidence = []}) {
     if (!b || !o || o.startedSeq !== start.seq || o.claimGeneration !== claim?.seq) missing('run-binding', 'exact start/claim observation required', id);
     if (o?.kind !== kind) missing('run-kind', 'ordinary/review classification disagrees with record', id);
     if (claim?.owner?.release?.root && claim.owner.release.root !== c?.root) fail('claim-drift', 'new claim captured another runtime', id);
-    for (const name of ['controller', 'worker', 'watcher']) {
+    const sharedObserver = o?.runtime?.sharedObserver;
+    if (sharedObserver && (o.runtime.watcher || o.shared?.mode !== 'shared' || o.shared?.perRunWatcherAbsent !== true))
+      missing('watcher-mode', 'shared observer requires captured absence of the per-run watcher', id);
+    for (const name of ['controller', 'worker', sharedObserver ? 'sharedObserver' : 'watcher']) {
       const r = o?.runtime?.[name]; need(r, `${name}-evidence`, id);
       if (!r?.candidate) missing(`${name}-tuple`, 'captured full candidate tuple required', id);
       else if (!same(r.candidate, c)) fail(`${name}-drift`, 'captured runtime differs from candidate', id);
@@ -161,7 +203,8 @@ export function evaluateSoak({events, trial, verifiedEvidence = []}) {
     const spans = {...b?.latency, report_to_session_release: {ms: sessionMs}, eligible_free_to_input: {ms: queueMs}};
     for (const [key, span] of Object.entries(spans)) {
       if (span.ms === null) missing('timing-unknown', `${key} unknown`, id);
-      else if (span.ms > (key === 'report_to_ingest' ? 60000 : 120000)) {
+      else if (!['report_to_closed', 'report_to_folder_removed', 'report_to_session_release'].includes(key) &&
+          span.ms > (key === 'report_to_ingest' ? 60000 : 120000)) {
         if (host?.contaminated === true) missing('load-threshold', `${key} misses planning target under documented load`, id);
         else fail('latency', `${key} exceeds planning target`, id);
       }
@@ -191,7 +234,8 @@ export function evaluateSoak({events, trial, verifiedEvidence = []}) {
   const ordinary = rows.filter(r => r.kind === 'ordinary'), counted = ordinary.filter(r => r.counted);
   if (counted.length < 10) missing('sample', `${counted.length}/10 complete useful ordinary units`);
   if (counted.filter(r => r.source).length < 3) missing('source-sample', 'at least three completed source units required');
-  if (timestamp(w.cutoff) - timestamp(w.from) < 90 * 60000) missing('duration', 'at least 90 minutes required');
+  const exposure = activeExposure(trial.pauses, w, need, missing);
+  if (exposure.active_ms < 90 * 60000) missing('duration', 'at least 90 active minutes required');
   const links = new Map();
   for (const row of ordinary) {
     const q = row.observation?.queue, previous = ordinary.find(r => r.run === q?.freedBy);
@@ -214,6 +258,10 @@ export function evaluateSoak({events, trial, verifiedEvidence = []}) {
     layers: {scripted: scriptedStatus, real: realStatus, stable: trial.stable ?? {liveAcceptance: 'UNRUN', fullSuite: 'UNRUN'}},
     counts: {all_started: rows.length, ordinary: ordinary.length, reviews: rows.length - ordinary.length, completed_ordinary: counted.length,
       source_units: counted.filter(r => r.source).length, turnover_links: Object.fromEntries(links)},
+    exposure,
+    cleanupTargets: Object.fromEntries(['report_to_closed', 'report_to_folder_removed', 'report_to_session_release'].map(key =>
+      [key, {policy: 'measured-planning-target', target_ms: 120000, exceeded: timing[key].filter(ms => ms > 120000).length,
+        unknown: timing[key].filter(ms => ms === null).length}])),
     latency: Object.fromEntries(Object.entries(timing).map(([k, values]) => [k, {...distribution(values), max_ms: values.some(v => v !== null) ? Math.max(...values.filter(v => v !== null)) : null}])),
     shared: {covered_runs: shared.filter(s => proof(s)).length, notice_latency: {...distribution(noticeMs), max_ms: noticeMs.some(v => v !== null) ? Math.max(...noticeMs.filter(v => v !== null)) : null},
       memory: shared.map((s, i) => ({run: rows[i].run, host_rss_bytes: s?.hostRssBytes ?? null, per_run_watcher_rss_bytes: s?.perRunWatcherRssBytes ?? null})),

@@ -1246,6 +1246,10 @@ esac`);
 test('failed sign-in delivers one stable supervisor notice, queues a missing recipient and never prompts the worker',async t=>{
   for(const missing of [false,true]){
     const f=watcherFixture(missing?'R-137':'R-136'),run=missing?'R-137':'R-136';
+    // Stop metadata rejects redirected paths; use the physical scratch path.
+    const alias=f.root,physical=fs.realpathSync(alias);
+    for(const [key,value] of Object.entries(f))if(typeof value==='string')f[key]=value.replace(alias,physical);
+    f.args=f.args.map(value=>value.replace(alias,physical));
     const inbox=path.join(f.root,'.org/supervisor/inbox.log'),record=path.join(f.root,'.org/events.jsonl');
     const done=path.join(f.root,'abandoned'),available=path.join(f.root,'recipient-available');
     const worker={...recipientAgent('lane-nine',f.root),pane_id:'worker-pane',agent_status:'idle'};
@@ -1264,9 +1268,9 @@ if(a[0]==='agent'&&a[1]==='get'){
 else if(a[0]==='agent'&&a[1]==='wait'){await new Promise(r=>setTimeout(r,20));console.log('{}');}
 else console.log('{}');\n`,{mode:0o755});
     const before=fs.readFileSync(record),calls=()=>fs.existsSync(f.calls)?fs.readFileSync(f.calls,'utf8').trim().split('\n').map(JSON.parse):[];
-    const until=async predicate=>{const end=Date.now()+loadTimeout(15000);while(!predicate()){if(Date.now()>end)throw Error('sign-in notice fixture timed out');await new Promise(r=>setTimeout(r,20));}};
+    const until=async predicate=>{const end=Date.now()+loadTimeout(15000);while(!predicate()){if(Date.now()>end){t.diagnostic(JSON.stringify({calls:calls().slice(-12),inbox:readInbox(inbox)}));throw Error('sign-in notice fixture timed out');}await new Promise(r=>setTimeout(r,20));}};
     const child=spawnChild(t,process.execPath,[...f.args,'--cwd',f.root,'--start-grace','0','--retry-after','0.05'],{env:{...TEST_ENV,SUPERVISOR_INPUT_WAIT_SECONDS:'0'}});
-    t.after(async()=>{fs.writeFileSync(done,'yes');fs.writeFileSync(available,'yes');await waitForExit(child);await waitForInboxIdle(inbox);fs.rmSync(f.root,{recursive:true,force:true});});
+    t.after(async()=>{fs.writeFileSync(done,'yes');fs.writeFileSync(available,'yes');const result=await waitForExit(child);t.diagnostic(JSON.stringify(result));await waitForInboxIdle(inbox);fs.rmSync(f.root,{recursive:true,force:true});});
     await until(()=>readInbox(inbox).length===1);
     const notice=readInbox(inbox)[0];
     assert.equal(notice.id,`watch:${run}:sign-in-required:0`);assert.equal(notice.to,'supervisor-test');

@@ -22,8 +22,9 @@ function legacy(f,id,from,to){
   return f.main([...args,'--expected-plan',p.plan_sha256,'--authority',String(authority)],f.args);
 }
 async function successorFixture(t,{currentRecovery=false}={}){
-  // Default to the complete OLD product revision. The completed-report control
-  // uses a matching current fold; both recoveries seal before canonical updates.
+  // Default to the complete OLD product revision (actual legacy helper). The
+  // second control covers current bytes. Seal BOTH roots before moving only
+  // canonical helper bytes, retaining frozen startup code and exact authorities.
   const old=fs.mkdtempSync(path.join(os.tmpdir(),'successor-old-'));
   t.after(()=>fs.rmSync(old,{recursive:true,force:true}));
   if(currentRecovery)copyProduct(product,old);
@@ -37,13 +38,32 @@ async function successorFixture(t,{currentRecovery=false}={}){
   legacy(f,'old-entry',f.cwd,f.next);legacy(f,'old-anchor',f.next,recovery);
   const anchor={installation:fs.readFileSync(f.installationFile,'utf8'),plist:fs.readFileSync(f.file,'utf8')};
   const originalArchive=path.join(f.directory,'probation/original-trial.json'),originalBytes=fs.readFileSync(originalArchive);
-  copyProduct(product,f.cwd);f.git('add','.');f.git('commit',...(currentRecovery?['--allow-empty']:[]),'-qm','Install successor protocol in private canonical');
+  copyProduct(product,f.cwd);
+  const frozenHelper=fs.readFileSync(path.join(recovery,'lib/obligations.mjs'));
+  assert.equal(sha(frozenHelper),currentRecovery?'7d96691e48bcb8fbf1096a99a204c4284e6cec89847198646587870af8911b6e':'8f4e3cc3ce09ebf632d5a21b0eda28edf505e556480cb5044cf849e02d2b04f0');
+  fs.writeFileSync(path.join(f.cwd,'lib/obligations.mjs'),frozenHelper);
+  f.git('add','.');f.git('commit',...(currentRecovery?['--allow-empty']:[]),'-qm','Install successor protocol in private canonical');
   const commit=f.git('rev-parse','HEAD'),next=f.release('successor',{commit});fs.unlinkSync(path.join(next,'.release-acceptance.json'));
+  if(!currentRecovery){
+    // Exercise the existing successor's OWN reader/service code as well as the
+    // complete OLD recovery. No modern fold or startup is substituted in it.
+    const exact=path.join(f.scratch,'exact-successor-source');fs.mkdirSync(exact);
+    const tar=spawnSync('git',['archive','ab671e89865ccf85d6d7d6d410688703d019d8ca'],{cwd:product,maxBuffer:128*1024*1024});assert.equal(tar.status,0,tar.stderr?.toString());
+    const extracted=spawnSync('/usr/bin/tar',['-xf','-','-C',exact],{input:tar.stdout});assert.equal(extracted.status,0,extracted.stderr?.toString());
+    fs.rmSync(next,{recursive:true});copyProduct(exact,next);fs.writeFileSync(path.join(next,'.release-commit'),commit+'\n');
+    assert.equal(sha(fs.readFileSync(path.join(next,'lib/record-compatibility.mjs'))),'be456941bfbfb60e672375c0ad1a3b8e2b07d94c63833dda96e6ab9a3cc01f2a');
+  }
   const frozenFile=path.join(next,'.release-validation.json'),frozen=freezeReleaseValidation(f.cwd,'successor',frozenFile,f.env,{commit,mode:'routine'});
   const runtime=productFiles(next).sort();
   fs.writeFileSync(frozenFile,JSON.stringify({...frozen,validation:{cwd:f.cwd,common:f.identity,commit,tree:f.git('rev-parse',`${commit}^{tree}`),
     inventorySha256:'0'.repeat(64),runtimeSha256:sha(JSON.stringify(Object.fromEntries(runtime.map(file=>[file,payloadEntry(next,file)])))),routine:{fullCoverage:'UNRUN'}}}));
   const manifest=spawnSync(process.execPath,[path.join(product,'herdr/releases.mjs'),'manifest',next],{env:f.env,encoding:'utf8'});assert.equal(manifest.status,0,manifest.stderr);
+  const candidateManifest=fs.readFileSync(path.join(next,'.release-manifest.json'));
+  // No reseal or authority rewrite: only the canonical implementation moves.
+  fs.writeFileSync(path.join(f.cwd,'lib/obligations.mjs'),fs.readFileSync(path.join(product,'lib/obligations.mjs'),'utf8')+'\n// Compatible canonical implementation revision.\n');
+  f.git('add','lib/obligations.mjs');f.git('commit','-qm','Move canonical helper after immutable roots sealed');
+  assert.deepEqual(fs.readFileSync(path.join(next,'lib/obligations.mjs')),frozenHelper);
+  assert.notDeepEqual(fs.readFileSync(path.join(f.cwd,'lib/obligations.mjs')),frozenHelper);
   const run=(options={})=>{
     const {faultStage,mutateStage,loaded=false,nativeRefusal,tool=f.cwd,cli=false,...extra}=options;
     const args={...f.args,id:'successor-entry',trial:'original-trial',fromRoot:recovery,targetRoot:next,...extra};
@@ -65,7 +85,7 @@ async function successorFixture(t,{currentRecovery=false}={}){
   };
   const back=(options={})=>apply({id:'successor-recovery',fromRoot:next,targetRoot:recovery,rollback:true,...options});
   const returned=(options={})=>apply({id:'successor-return',...options});
-  return{...f,successor:next,recovery,anchor,original,originalArchive,originalBytes,run,apply,back,returned};
+  return{...f,successor:next,recovery,anchor,original,originalArchive,originalBytes,run,apply,back,returned,frozenHelper,candidateManifest};
 }
 async function startPassStop(f,root){
   const {main}=await f.module(root,'line-service/launchd.mjs');
@@ -99,9 +119,14 @@ test('successor CLI preserves the original OLD sealed recovery through executabl
   assert.throws(()=>selectRelease(f.cwd,f.installationHome,{pin:{release:'successor'}}),/READY/);
   const back=f.back();assert.equal(back.runtime.root,f.recovery);
   assert.equal(fs.readFileSync(f.installationFile,'utf8'),f.anchor.installation);assert.equal(fs.readFileSync(f.file,'utf8'),f.anchor.plist);
+  transact(f.org,()=>({add:[{type:'item.added',id:'ENG-1',role:'engineer',title:'Frozen-reader recovery work'},
+    {type:'run.started',id:'R-1',item:'ENG-1'},
+    {type:'report.ingested',run:'R-1',sha256:'a'.repeat(64),report:{outcome:'done'}}]}));
   await startPassStop(f,f.recovery); // Actual OLD parser, history and service code.
   f.returned({cli:true});await startPassStop(f,f.successor);
   assert.deepEqual(fs.readFileSync(f.originalArchive),f.originalBytes);
+  assert.deepEqual(fs.readFileSync(path.join(f.successor,'.release-manifest.json')),f.candidateManifest);
+  assert.deepEqual(fs.readFileSync(path.join(f.successor,'lib/obligations.mjs')),f.frozenHelper);
   for(const [file,e]of Object.entries(f.original.scope.previous.source.files))assert.deepEqual(payloadEntry(f.recovery,file),e);
   const events=loadEvents(f.org).events;
   assert.equal(events.filter(e=>e.type==='line-service.probation-authorized').length,1);
@@ -111,8 +136,8 @@ test('successor CLI preserves the original OLD sealed recovery through executabl
 });
 
 test('successor cleared rollback return previews completed reports and preserves clear receipt fences',async t=>{
-  // Live R3 had ordinary done reports in its record. A matching immutable fold
-  // isolates that payload from the separate refusal for an older fold helper.
+  // Both immutable helpers retain the current profile; canonical bytes moved
+  // after sealing. The other lifecycle control exercises actual OLD readers.
   const f=await successorFixture(t,{currentRecovery:true});f.apply();f.back();
   const clearFile=path.join(f.directory,'probation-successor-clears/successor-recovery.json'),clearBytes=fs.readFileSync(clearFile,'utf8');
   assert.deepEqual(fs.readdirSync(path.join(f.directory,'probation-switches')).filter(n=>n.startsWith('.successor-')),[]);
@@ -131,6 +156,8 @@ test('successor cleared rollback return previews completed reports and preserves
   const returned=f.returned({cli:true});assert.equal(returned.runtime.root,f.successor);
   await startPassStop(f,f.successor);
   assert.deepEqual(fs.readFileSync(f.originalArchive),f.originalBytes);
+  assert.deepEqual(fs.readFileSync(path.join(f.successor,'.release-manifest.json')),f.candidateManifest);
+  assert.deepEqual(fs.readFileSync(path.join(f.successor,'lib/obligations.mjs')),f.frozenHelper);
   assert.equal(fs.readFileSync(clearFile,'utf8'),clearBytes);
 });
 

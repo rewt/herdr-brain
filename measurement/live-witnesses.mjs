@@ -2,6 +2,7 @@
 import {createHash} from 'node:crypto';
 import {measureLifecycle,timestamp,distribution} from './lifecycle.mjs';
 import {measureLinePasses} from './line-passes.mjs';
+import {measureHoldCloseouts} from './hold-closeout.mjs';
 
 export const SPEC_PREFIX='Live witness spec: ';
 export const RESULT_PREFIX='Live witness result: ';
@@ -25,7 +26,8 @@ export function validateWitness(spec,project){
   if(spec.schema!=='brain.live-witness/v1'||!named(spec.id)||spec.project!==project||!named(spec.owner)||!named(spec.next))throw Error('spec requires schema, id, matching project, owner and next event');
   const from=timestamp(spec.from),cutoff=timestamp(spec.cutoff);
   if(from===null||cutoff===null||from>=cutoff)throw Error('spec requires an explicit ordered window with timezone');
-  if(!['start-within-pass','same-revision-skips','folder-median','unavailable'].includes(spec.kind))throw Error('unsupported witness kind');
+  if(!['start-within-pass','same-revision-skips','folder-median','hold-closeout','unavailable'].includes(spec.kind))throw Error('unsupported witness kind');
+  if(spec.kind==='hold-closeout'&&(!named(spec.run)||!named(spec.org)||!/^[a-f0-9]{64}$/.test(spec.hold_sha256??'')))throw Error('HOLD witness requires run, org and written HOLD sha256');
   if(spec.kind==='start-within-pass'&&(!named(spec.subject)||!['item.reopened','item.added','item.updated'].includes(spec.trigger?.type)||!Number.isSafeInteger(spec.trigger?.after_seq)||spec.trigger.after_seq<0))throw Error('start witness requires subject and explicit trigger type/sequence fence');
   if(spec.required_class!==undefined&&(!named(spec.required_class)||spec.kind!=='start-within-pass'))throw Error('required_class is only supported by start-within-pass');
   if(spec.kind==='folder-median'&&(!Number.isFinite(spec.under_ms)||spec.under_ms<=0))throw Error('folder median requires a positive under_ms target');
@@ -48,6 +50,14 @@ export async function evaluateWitness({spec,events,project,passes,now,readPasses
   // need not be clock order. Check the original snapshot before time selection.
   if(!selected.length||events.some((e,i)=>!Number.isSafeInteger(e.seq)||e.seq!==(i?events[i-1].seq+1:1))||selected.some(e=>timestamp(e.at)===null))return result('UNRUN','record sequence or timestamp coverage is incomplete',{},null,false);
   if(spec.kind==='unavailable')return result('UNRUN',spec.reason);
+  if(spec.kind==='hold-closeout'){
+    const measured=measureHoldCloseouts({file:passes,events,project,org:spec.org,run:spec.run,holdSha256:spec.hold_sha256,from:spec.from,cutoff});
+    // Preserve the first attempted turn. A new spec/window is required to
+    // recover; a later easier turn never silently replaces missing proof.
+    const first=measured.observations[0];
+    return result(first?.status??'UNRUN',first?.reason??'no qualifying durable HOLD closeout turn',
+      {closeout:measured},first?.status==='MET'?first.window.cutoff:null,first?.status==='MET'||first?.status==='NOT MET'||closed);
+  }
   if(spec.kind==='folder-median'){
     const lifecycle=measureLifecycle({events:selected,project,from:spec.from,cutoff,throughSeq:selected.at(-1)?.seq??0});
     const cohort=lifecycle.runs.filter(r=>r.report_in_window),latency=distribution(cohort.map(r=>r.latency.report_to_folder_removed.ms));

@@ -27,7 +27,10 @@ export async function witnessCommand(argv,{openOrg,mutate,out}){
   const readPasses=options=>{const key=JSON.stringify(options);if(!cache.has(key))cache.set(key,measureLinePasses(options));return cache.get(key);};
   for(const item of items)for(const {spec,note} of pendingWitnesses(item)){
     let result;
-    try{result=await evaluateWitness({spec,events:ctx.events,project:project.identity,passes:path.join(directory,'passes.jsonl'),now,readPasses});}
+    try{
+      if(spec.kind==='hold-closeout'&&spec.org!==ctx.dir)throw Error('HOLD witness record binding differs from the owning record');
+      result=await evaluateWitness({spec,events:ctx.events,project:project.identity,passes:path.join(directory,'passes.jsonl'),now,readPasses});
+    }
     catch(error){
       // A failed reader is unknown, never an empty successful window. Preserve
       // the failure as evidence and allow the next existing finite pass to read.

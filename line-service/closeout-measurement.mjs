@@ -16,6 +16,7 @@ import {retirementLock} from '../lib/retire-lock.mjs';
 import {bundleRelease} from '../lib/releases.mjs';
 import {appendPassJournal} from './pass-journal.mjs';
 import {compactMeasurement} from './closeout-measurement-audit.mjs';
+import {evaluateHoldCloseout} from '../measurement/hold-closeout.mjs';
 export {readCloseoutMeasurement} from './closeout-measurement-audit.mjs';
 
 const root=fileURLToPath(new URL('../',import.meta.url)),moduleFile=fileURLToPath(import.meta.url);
@@ -265,7 +266,7 @@ function readHistoricalInventories(){
 // now is a function returning epoch milliseconds. Optional readers are test seams.
 // Failures throw to the caller's existing diagnostic catch; never retry effects.
 export function recordCloseoutTurn({project,org,env=process.env,now=()=>Date.now(),command=spawnSync,
-  collect=collectCloseoutInventory,source:providedSource,historical:providedHistory,window:providedWindow}){
+  collect=collectCloseoutInventory,source:providedSource,historical:providedHistory,window:providedWindow,holdCloseout}){
   const directory=plainDirectory(measurementDirectory(org,project.identity)),release=retirementLock(path.join(directory,'closeout-measurement.lock'));
   try{
     const file=path.join(directory,'closeout-measurement.json'),audit=path.join(directory,'closeout-measurements.jsonl');
@@ -284,11 +285,14 @@ export function recordCloseoutTurn({project,org,env=process.env,now=()=>Date.now
     const index=eventIndex(loaded.events),cohort=closeoutCohort(loaded.events,project,index);
     const inventory=collect({project,org,env,command,events:loaded.events,cohort}),at=now(),doc=measureCloseouts({project,org,events:loaded.events,inventory,source,now:at,previous,historical,window,index,expected:cohort});
     doc.inventory=inventory;
+    doc.hold_closeout=holdCloseout??null;
+    doc.hold_closeout_results=(holdCloseout?.subjects??[]).map(s=>evaluateHoldCloseout({proof:holdCloseout,
+      events:loaded.events,project:project.identity,org,run:s.run,holdSha256:holdCloseout.before?.hold?.sha256}));
     // Keep the immutable census before updating its display-only latest view.
     const frame=compactMeasurement(directory,doc);
     append(audit,frame);
     writeFileAtomic(file,JSON.stringify(frame)+'\n',0o600);
-    appendPassJournal(path.join(directory,'passes.jsonl'),{at:doc.observed_at,action:'closeout-measurement',measurement:{file,cutoff:doc.cutoff,source:doc.source,green:doc.green,counts:doc.aggregate,failures:doc.failures,oldest:doc.cohort.filter(r=>r.failures.length).sort((a,b)=>(b.age_ms??0)-(a.age_ms??0)).slice(0,10).map(r=>({run:r.run,source:r.source,age_ms:r.age_ms,failures:r.failures,condition:r.condition}))}});
+    appendPassJournal(path.join(directory,'passes.jsonl'),{at:doc.observed_at,action:'closeout-measurement',hold_closeout:doc.hold_closeout,measurement:{file,cutoff:doc.cutoff,source:doc.source,green:doc.green,counts:doc.aggregate,failures:doc.failures,oldest:doc.cohort.filter(r=>r.failures.length).sort((a,b)=>(b.age_ms??0)-(a.age_ms??0)).slice(0,10).map(r=>({run:r.run,source:r.source,age_ms:r.age_ms,failures:r.failures,condition:r.condition}))}});
     const fd=fs.openSync(directory,'r');try{fs.fsyncSync(fd);}finally{fs.closeSync(fd);}
     return{file,cutoff:doc.cutoff,green:doc.green,counts:doc.aggregate,failures:doc.failures};
   }finally{release();}

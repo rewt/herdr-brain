@@ -43,6 +43,7 @@ Supported observations:
 | `start-within-pass` with `required_class` | Also checks the subject's recorded queue class and that no lower-class admission precedes it in that pass's recorded policy order. Missing class evidence is UNRUN. The check does not infer available capacity, eligibility, priority exceptions or why a subject was stale. |
 | `same-revision-skips` | Consecutive completed passes with PID-bound starts on the same recorded revision, both started in the window. At least one warm pass must have `admission_skipped > 0` and `source_skipped > 0`. Known zero counts at cutoff are NOT MET; no pair or unknown counts are UNRUN. |
 | `folder-median` | `under_ms` is the strict median target. Reuses the lifecycle reader's whole report cohort and report/claim/effect/receipt joins. The window must finish, the cohort must be nonempty and every latency must be known. Pending folders and missing observations remain UNRUN; they are never dropped to improve a median. |
+| `hold-closeout` | Requires the original `run`, owning absolute `org`, and `hold_sha256` of the written HOLD. Reads the first matching finite closeout turn wholly inside the explicit window from the existing pass journal. Joins record fences, unchanged HOLD identity/content, append-only canonical-main reflog history, original claim/allocation/session and that turn's committed evaluation plus actual session-close, clean-removal preflight and folder-removal receipts. Starts/landings/main movement are NOT MET; incomplete joins stay UNRUN. |
 | `unavailable` | Required `reason` explains why the current readers cannot express the witness. Always UNRUN. This is coverage accounting, not a successful observation. |
 
 Result notes start `Live witness result: ` and retain the spec hash, status,
@@ -64,7 +65,23 @@ For the 31 October coverage set: ENG-1250 maps to the reopen observation,
 ENG-1277 to its class variant, ENG-1201 to same-revision skips, and ENG-1221(a)
 to the full-cohort median. ENG-1241 requires more than closeout counters: a
 durable HOLD interval, unchanged-main evidence and native/folder release in the
-same finite turn. The currently listed readers do not join that complete proof;
-record it as `unavailable` rather than copying the supervisor's PASS note. The
-existing witness/runtime owners retain that missing evidence and all acceptance,
-Major-correction, review and release decisions.
+same finite turn. Prospective turns capture `brain.hold-closeout/v1` in their
+existing checkpoint, immutable census and pass journal. The measurement reader
+also exposes `hold_closeout_results`; its aggregate green flag is independent of
+this witness. No service, watcher, authority or record event type is added.
+
+Capture never creates HOLD. The interval is the bounded cleanup turn, after
+report intake and before completion acknowledgement. Its record sequence fences
+enclose filesystem reads; transaction wall clocks do not select absence proof.
+Main's loose ref identity and append-only reflog fence detect moves restored to
+the original tip. Missing/rotated/rewritten Git history, changed HOLD identity,
+packed-only main or capture errors stay UNRUN. These are ordinary Git/filesystem
+observations, not protection against external tampering with retained evidence.
+The census source and evaluation code receipts identify the producer build.
+
+Historical gaps and the original terminal `unavailable` spec stay UNRUN. An
+existing owner must register a new explicit observation after a build reaches
+the line; this source change runs no live HOLD. The first matching attempted
+turn remains the result even if a later turn succeeds. A new spec/window can
+observe recovery while preserving the earlier result. Existing witness/runtime
+owners retain live acceptance, correction, review and release decisions.

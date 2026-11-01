@@ -9,7 +9,8 @@ import {brainOwner} from '../../lib/run-owner.mjs';
 import {bundleRelease} from '../../lib/releases.mjs';
 import {sharedDirectory,registrationFile,stepFile,nativeBinding} from '../shared.mjs';
 
-const watch=path.resolve(import.meta.dirname,'../watch.mjs'),source=path.resolve(import.meta.dirname,'../..');
+const watch=path.resolve(import.meta.dirname,'../watch.mjs');
+export const source=path.resolve(import.meta.dirname,'../..');
 export const reportText=(run='R-1')=>`---\nrun: ${run}\noutcome: done\nsummary: Finished the isolated task.\nheadline: The task is complete\nblockers: []\nproposals: []\nlearnings: []\nartifacts: []\n---\n`;
 export function fixture(t,{startGrace='0',idleGrace='0',longAfter='3600',lateSession=false}={}){
   const root=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'watch-step-'))),repo=path.join(root,'project'),org=path.join(repo,'.org'),report=path.join(root,'report.md');fs.mkdirSync(repo);

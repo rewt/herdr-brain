@@ -10,7 +10,7 @@ import {gitProject} from '../../lib/project.mjs';
 import {outstandingEffects,readOwnedRun} from '../../lib/run-owner.mjs';
 import {registrationFile,stepFile,readWatchSubject} from '../shared.mjs';
 
-import {fixture,reportText} from './step-fixture.mjs';
+import {fixture,reportText,source} from './step-fixture.mjs';
 import {EventEmitter} from 'node:events';
 import {createObserver} from '../observer.mjs';
 import {enqueueSupervisor,readInbox} from '../../supervisor/prompt-supervisor.mjs';
@@ -112,4 +112,13 @@ test('correction genuine native binding error stays failed and held with one own
   const original=fs.readFileSync(held);await observer.reconcile('hint');await observer.idle();
   assert.deepEqual(fs.readFileSync(held),original);assert.equal(observer.counters.consumer_starts,1);
   assert.equal(readInbox(path.join(f.org,'supervisor/inbox.log')).length,1);assert.equal(f.notices().length,0);
+});
+
+for(const invalid of [false,true])test('correction checkpoint recovery completes vanished '+(invalid?'invalid':'missing')+' report once',t=>{
+  const f=fixture(t);ok(f);const waiting=fs.readFileSync(stepFile(f.org,'R-1'));
+  f.setNative(null);if(invalid)fs.writeFileSync(f.report,'---\nrun: R-1\noutcome: invalid\n---');ok(f);
+  assert.equal(f.state().phase,'complete');assert.equal(f.notices().length,1);
+  fs.writeFileSync(stepFile(f.org,'R-1'),waiting);ok(f);
+  assert.equal(f.state().phase,'complete');assert.equal(f.notices().length,1);
+  assert.ok(!outstandingEffects(f.org,{...readOwnedRun(f.org,'R-1'),abandoned:{}},gitProject(f.repo).identity).includes('watch:shared-pending'));
 });

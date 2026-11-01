@@ -57,7 +57,7 @@ if(type==='org') {
  fs.appendFileSync(path.join(root,'pids'),child.pid+'\\n');
  const { ownerIdentity } = await import(${JSON.stringify(new URL('../../lib/process-owner.mjs', import.meta.url).href)});
  const host={pid:child.pid,identity:ownerIdentity(child.pid),log:path.join(root,a[0]+'.log')};
- result(a.includes('--shared')?{run:a[0],shared:path.join(org,'watch/shared',a[0]+'.json'),host}:{run:a[0],...host});
+ result(a.includes('--shared')?{run:a[0],shared:path.join(a[a.indexOf('--org')+1],'watch/shared',a[0]+'.json'),host}:{run:a[0],...host});
 } else {
  if(a[0]==='pane' && a[1]==='process-info') {
   const prompted=Object.values(workers).some(w=>w.agent_status==='working');

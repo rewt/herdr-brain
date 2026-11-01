@@ -765,3 +765,12 @@ for(const invalid of [false,true])test('correction vanished '+(invalid?'invalid'
   ok(record(...transferArgs('R-1',f.ownership)));assert.equal(readOwnedRun(f.org,'R-1').owner.controller,'other');
   assert.equal(f.notices().length,1);
 });
+
+for(const invalid of [false,true])test('correction checkpoint recovery drains vanished '+(invalid?'invalid':'missing')+' report before claim transfer',t=>{
+  const f=stepFixture(t);ok(f.step());const file=path.join(f.org,'watch/steps/R-1.json'),waiting=fs.readFileSync(file);
+  f.setNative(null);if(invalid)fs.writeFileSync(f.report,'---\nrun: R-1\noutcome: invalid\n---');ok(f.step());
+  fs.writeFileSync(file,waiting);ok(f.step());assert.equal(f.state().phase,'complete');assert.equal(f.notices().length,1);
+  const record=(...args)=>spawnSync(process.execPath,[path.join(source,'bin/org.mjs'),...args],{cwd:f.repo,env:{...process.env,ORG_DIR:f.org,ORG_ACTOR:'ownership-recovery'},encoding:'utf8'});
+  ok(record('abandon','R-1'));assert.deepEqual(outstandingEffects(f.org,readOwnedRun(f.org,'R-1')),[]);
+  ok(record(...transferArgs('R-1',f.ownership)));assert.equal(readOwnedRun(f.org,'R-1').owner.controller,'other');
+});

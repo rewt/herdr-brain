@@ -7,6 +7,9 @@ import {spawnSync} from 'node:child_process';
 import {EventEmitter} from 'node:events';
 import {enqueueSupervisor,readInbox} from '../../supervisor/prompt-supervisor.mjs';
 import {digest} from '../shared.mjs';
+import {fixture as workerFixture} from './step-fixture.mjs';
+import {transact,loadRecord} from '../../lib/store.mjs';
+import {sessionBindFact} from '../../test/helpers/session-bind.mjs';
 import {createObserver,SAFETY_RECONCILIATION_MS} from '../observer.mjs';
 import {sharedDirectory,stepFile,nativeBinding,observerReceipt} from '../shared.mjs';
 import {gitProject} from '../../lib/project.mjs';
@@ -164,4 +167,39 @@ test('correction deadline wait arms one earliest timer and re-arms on hints with
   assert.equal(await waiting,'changed');assert.equal(timers.pending.size,0);
   const second=f.observer.wait();assert.equal(timers.pending.size,1);f.observer.interrupt();assert.equal(await second,'stop');assert.equal(timers.pending.size,0);
   const row=f.rows.findLast(r=>r.action==='reconciled');assert.ok(row.cpu_usage_us.user>=0);assert.ok(row.reconciliations_per_second>0);
+});
+
+for(const changed of [false,true])test('correction original finite consumer survives '+(changed?'changed held digest':'foreign source')+' through host startup and restart',async t=>{
+  const f=workerFixture(t),directory=path.join(f.org,'watch/observer'),bad=path.join(sharedDirectory(f.org),'R-2.json'),held=path.join(directory,'held/R-2.json');
+  fs.mkdirSync(path.dirname(held),{recursive:true});
+  const good=JSON.parse(fs.readFileSync(path.join(sharedDirectory(f.org),'R-1.json'))),d={...good,run:'R-2',argv:['R-2',...good.argv.slice(1)]};
+  if(changed){
+    fs.writeFileSync(held,JSON.stringify({run:'R-2',registration:digest(d),reason:'original failure',stuck_owner:d.stuck_owner}));
+    d.to='changed';
+  }else d.source+='/foreign-release';
+  fs.writeFileSync(bad,JSON.stringify(d));const original=fs.readFileSync(bad);
+  class Client extends EventEmitter{async snapshot(){return {protocol:22,agents:[f.native],panes:[{pane_id:f.native.pane_id}]};}subscribe(){}close(){}}
+  const build=()=>createObserver({repo:f.repo,org:f.org,client:new Client(),
+    notify:(to,message,options)=>({...enqueueSupervisor(to,message,options),queued:true,delivered:false})});
+  let observer=build();t.after(()=>observer.close());
+  await observer.start();await observer.idle();assert.equal(f.state().phase,'waiting');assert.equal(observer.counters.consumer_starts,1);assert.equal(observer.counters.consumer_failures,0);
+  const savedHeld=fs.readFileSync(held);assert.equal(fs.existsSync(path.join(directory,'held/R-1.json')),false);
+  const inbox=path.join(f.org,'supervisor/inbox.log');assert.equal(readInbox(inbox).length,1);assert.equal(readInbox(inbox)[0].to,d.stuck_owner);
+  await observer.close();observer=build();await observer.start();await observer.idle();
+  assert.equal(observer.counters.consumer_starts,1);assert.deepEqual(fs.readFileSync(bad),original);assert.deepEqual(fs.readFileSync(held),savedHeld);
+  assert.equal(readInbox(inbox).length,1);
+});
+
+test('correction original finite consumer preserves a real native-binding failure and one durable exception',async t=>{
+  const f=workerFixture(t,{lateSession:true}),state=loadRecord(f.org).state;
+  const fact=sessionBindFact(state.runs.get('R-1'),state,{session:f.native.agent_session.value});
+  transact(f.org,()=>({add:[fact,{...fact,session:'replacement-session'}]}));
+  class Client extends EventEmitter{async snapshot(){return {protocol:22,agents:[f.native],panes:[{pane_id:f.native.pane_id}]};}subscribe(){}close(){}}
+  const observer=createObserver({repo:f.repo,org:f.org,client:new Client(),
+    notify:(to,message,options)=>({...enqueueSupervisor(to,message,options),queued:true,delivered:false})});
+  t.after(()=>observer.close());await observer.start();await observer.idle();
+  assert.equal(f.state().phase,'failed');assert.equal(observer.counters.consumer_failures,1);
+  const held=path.join(observer.directory,'held/R-1.json'),original=fs.readFileSync(held);
+  await observer.reconcile('hint');await observer.idle();assert.deepEqual(fs.readFileSync(held),original);
+  assert.equal(observer.counters.consumer_starts,1);assert.equal(readInbox(path.join(f.org,'supervisor/inbox.log')).length,1);
 });

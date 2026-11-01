@@ -927,7 +927,10 @@ async function ingestFile(ctx, file, runHint, currentRun, selfClosedSeq) {
       requireCurrentRun(s, run.item, currentRun);
     }
     if (run.report) {
-      if (run.report.sha256 === sha256) return { add: [], result: { already: true, runId } };
+      if (run.report.sha256 === sha256) {
+        const add = reviewResultEvents({ state:s, events:committedEvents, run, report:parsed.report, sha256, body:parsed.body, minorBackfillOnly:true });
+        return { add, result: { already: true, runId, minorBatches: add.filter(e=>e.type==='item.added').map(e=>e.id) } };
+      }
       throw new UserError(`${runId} already has a report (recorded ${run.report.at}); start a new run to report again`);
     }
     if (run.abandoned) {
@@ -992,6 +995,7 @@ function printIngest(res) {
   }
   if (res.already) {
     safeOut(`${res.runId}: report already recorded\n`);
+    for (const id of res.minorBatches ?? []) safeOut(`  + ${id} unselected Minor batch from the immutable report\n`);
     return true;
   }
   safeOut(`${res.runId} → ${res.outcome} on ${res.item}${res.late ? ' (late: a newer run already has a report)' : ''}: ${truncate(res.summary, 100)}\n`);

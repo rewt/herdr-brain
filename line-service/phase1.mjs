@@ -24,6 +24,7 @@ import {producerRanges} from './producer-ranges.mjs';
 import {additionalTarget,supplementalTarget,canonicalTarget,canonicalSelector,validateAdditionalTarget} from './review-targets.mjs';
 import {reviewCorrectionEvents} from './review-findings.mjs';
 import {conditionalMinorDeferrals} from '../lib/review-live-trigger.mjs';
+import {batchedMinorSection,batchedMinorKey} from '../lib/batched-minors.mjs';
 
 export function reviewCompletionPlan({events,state,runId}){
   const run=state.runs.get(runId),item=state.items.get(run?.item),key=item?.meta.review_key;
@@ -372,11 +373,16 @@ export function dispatchInput({events,state,item,org,identity}) {
   return finalizedDispatchInput({events,org,common:identity,item:item.id,input:resolvedDispatchInput({events,org,common:identity,item:item.id,input:value})});
 }
 
-export function reviewResultEvents({state,events,run,report,sha256,body=report.body??'',usedIds=[]}) {
+export function reviewResultEvents({state,events,run,report,sha256,body=report.body??'',usedIds=[],minorBackfillOnly=false}) {
   const review=state.items.get(run.item),target=review?.meta.review_target,source=review?.meta.review_source_item;
   if(!roleIs(review,'REV')||!target||!source)return [];
   const key=`${source}:${target.head}`;
-  if(events.some(e=>e.type==='change.reviewed'&&e.review_run===run.id&&e.review_key===key))return [];
+  const previous=events.find(e=>e.type==='change.reviewed'&&e.review_run===run.id&&e.review_key===key);
+  const plain=batchedMinorSection(body);
+  if(minorBackfillOnly&&!previous)return [];
+  // Ordinary repeated intake is unchanged. Only immutable, previously untyped
+  // Part 1 reports can gain links; the original judgment is never rewritten.
+  if(previous&&(!plain.sections||previous.report_sha256!==sha256||previous.verdict!=='PASS'||previous.findings?.length))return [];
   const declarations=[],bodyLines=[];
   if(report.extra?.verdict!==undefined)declarations.push(String(report.extra.verdict).trim().toUpperCase());
   let fence=null;
@@ -410,7 +416,31 @@ export function reviewResultEvents({state,events,run,report,sha256,body=report.b
   // a structured severity must not create another set of typed finding keys.
   const structuredSeverities=new Set(findings.map(f=>f.severity));
   for(const line of String(body).split('\n')){const m=/^\s*[-*]\s*\[(Major|Minor)\]\s*(.+)$/i.exec(line);if(m&&!structuredSeverities.has(m[1].toLowerCase()))findings.push({severity:m[1].toLowerCase(),text:m[2].trim()});}
+  // Transition reports from the sealed Part 1 intake retain their plain section.
+  // Prefer existing canonical Minor declarations, just as for tagged summaries.
+  if(!findings.some(f=>f.severity==='major')&&!structuredSeverities.has('minor')&&
+      !findings.some(f=>f.severity==='minor')){
+    if(plain.sections){
+      if(plain.sections!==1||plain.malformed.length||!plain.rows.length||verdict!=='PASS'||report.outcome!=='done'||
+          (report.proposals??[]).some(p=>roleIs(p,'ENG')))throw Error('Batched Minors requires one nonempty plain section, done/PASS and no engineer proposal');
+      for(const row of plain.rows){
+        const alias=batchedMinorKey(review.id,run.id,sha256,row);
+        // The Part 1 pilot may already own or have disposed this finding.
+        // Respect its existing, concrete disposition instead of refiling it.
+        const disposed=previous&&(review.notes??[]).some(note=>{
+          if(!note.text?.startsWith('minor-batch: '))return false;
+          let d;try{d=JSON.parse(note.text.slice('minor-batch: '.length));}catch{return false;}
+          return d.schema==='brain.minor-batch/v1'&&d.finding===alias&&['batched','fixed','stale','dismissed'].includes(d.status)&&
+            typeof d.reason==='string'&&d.reason.trim()&&typeof d.evidence==='string'&&d.evidence.trim()&&
+            (!['batched','fixed'].includes(d.status)||roleIs(state.items.get(d.batch),'ENG'));
+        });
+        if(!disposed)findings.push({severity:'minor',text:`${row.location} - ${row.text}`,batched_minor_keys:[alias]});
+      }
+    }
+  }
+  if(previous&&(!findings.length||findings.some(f=>!f.batched_minor_keys)))return [];
   const corrections=reviewCorrectionEvents({state,events,run,review,report,findings,verdict,sha256,usedIds});
+  if(previous)return corrections.add;
   const acceptance=report.extra?.acceptance,author=state.runs.get(review.acceptance_capture?.source_run);
   const fulfilled=acceptance?.fulfilled===true&&acceptance.source_run===author?.id&&
     acceptance.source_report_sha256===author?.report?.sha256&&acceptance.head===target.head&&

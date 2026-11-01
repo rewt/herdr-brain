@@ -34,6 +34,10 @@ function fixture({ findings, proposals = [], body = `- [Minor] ${text}`, legacy 
   const added = intake(); events = stamp([...events, ...added]);
   const id = added.find(e => e.type === 'review.finding-linked' && conditionalMinorTrigger(e.finding))?.correction_item ??
     added.find(e => e.type === 'item.added')?.id;
+  // These controls isolate live-trigger admission after an owner selects work.
+  // Fresh Minor-only batching/deselection is covered by minor-batch-intake.
+  if (!legacy && added.some(e => e.type === 'item.added' && e.id === id && e.meta.queue_selected === false))
+    events = stamp([...events, { type: 'item.updated', id, fields: { meta: { queue_selected: true } } }]);
   const state = () => fold(events), item = () => state().items.get(id);
   const add = event => { events = stamp([...events, event]); };
   const note = witness => add({ type: 'note.added', id, text: REVIEW_LIVE_WITNESS_PREFIX + JSON.stringify(witness) });
@@ -97,7 +101,7 @@ test('one proposal separates conditional Minors from immediate Major and ordinar
   assert.deepEqual(f.intake(), []);
 });
 
-test('ordinary Minor and Major findings retain automatic correction eligibility', () => {
+test('selected ordinary Minor and Major findings retain automatic correction eligibility', () => {
   for (const finding of [{ severity: 'minor', text: 'Improve diagnostic context' }, { severity: 'major', text }]) {
     const f = fixture({ findings: [finding], body: '' });
     assert.equal(queueSelected(f.item(), f.state()), true); assert.ok(f.input());

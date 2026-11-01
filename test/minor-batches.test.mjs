@@ -25,19 +25,24 @@ function fixture(reportText = text(plain)) {
   return { events, add, collect, parsed };
 }
 
-test('plain Minor-only report passes existing intake without a fix and retains every immutable finding', () => {
+test('plain Minor-only report enters one waiting batch and retains every immutable inventory finding', () => {
   const f = fixture(), state = fold(f.events), run = state.runs.get('R-2');
   const result = reviewResultEvents({ state, events: f.events, run, report: f.parsed.report, body: f.parsed.body, sha256: sha(text(plain)) });
-  assert.equal(result.length, 1);
+  assert.equal(result.filter(e=>e.type==='item.added').length, 1);
+  assert.equal(result.find(e=>e.type==='item.added').meta.queue_selected, false);
   assert.equal(result[0].type, 'change.reviewed');
   assert.equal(result[0].verdict, 'PASS');
-  assert.deepEqual(result[0].findings, []);
+  assert.equal(result[0].findings.length, 2);
   assert.equal(result[0].intent_fulfilled, false); // batching cannot assert missing acceptance
+  const original = f.collect();
+  for (const event of result) f.add(event);
   const inventory = f.collect();
   assert.deepEqual(inventory.issues, []);
   assert.equal(inventory.findings.length, 2);
-  assert.equal(inventory.pending.length, 2);
-  assert.equal(inventory.groups.length, 1);
+  assert.equal(inventory.pending.length, 0);
+  assert.equal(inventory.groups.length, 0);
+  assert.deepEqual(inventory.findings.map(f=>f.key), original.findings.map(f=>f.key));
+  assert.ok(inventory.findings.every(f=>f.disposition.status==='batched'));
   assert.deepEqual(inventory.reviews[0].fix_sessions, []);
   assert.deepEqual(inventory.findings.map(r => r.key), f.collect().findings.map(r => r.key));
   assert.equal(inventory.findings[0].report_sha256, sha(text(plain)));

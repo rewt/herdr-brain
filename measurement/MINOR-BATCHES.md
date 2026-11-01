@@ -64,6 +64,41 @@ Unbatched findings remain pending until a related batch or concrete disposition
 exists; do not silently discard them. No new event type or required capability
 is involved.
 
+## Intake after the next installed build
+
+Part 2 accepts ordinary structured/tagged Minor findings as well as the temporary
+`## Batched Minors` section. With no Major it creates one unselected linked
+correction containing all new Minors, including conditional ones. Explicit
+selection remains with the owning line; this change does not start related
+batches automatically. A waiting new batch does not hold a fulfilled PASS's
+acceptance. Selection or any recorded attempt restores the ordinary correction
+discharge requirement. Negative judgments, Major checks, old selected corrections
+and retained attempts keep their meaning.
+
+Keep the temporary reviewer instructions while intake still runs in the sealed
+Part 1 build. The release/soak owner may remove them after the installed-build
+witness proves that ordinary Minor reports produce an unselected batch and no
+fix session. No instruction removal or source landing substitutes for that witness.
+
+For Part 1 reports already ingested by the sealed build, the owning record writer
+can use the existing intake entry **after the new intake reaches its runtime**:
+
+```sh
+record ingest /absolute/owning/record/reports/R-N.md
+```
+
+Use the hash-verified immutable copy listed by the collector. An unchanged report
+with its original PASS judgment and plain section gains only missing finding
+links and an unselected batch; intake does not rewrite the report or judgment,
+and skips findings with an existing valid manual disposition.
+Repeated intake adds nothing once every finding is linked. Other historical
+reports remain unchanged. This is report intake, never dispatch/launch replay.
+The collector preserves the original `batched-minor/v1` keys and reports their
+formal `review-finding/v1` links as batched dispositions. Existing manual
+dispositions remain in sequence order. Review their evidence before selecting
+work; already batched, stale or dismissed findings need no backfill merely to
+change their representation. Preserve their disposition instead.
+
 File the hand pilot as ordinary engineering through the owning record, carrying
 the exact keys, report hashes, related problem, proposed check and existing fix
 owners/held attempts. It gets one independent review of its diff through the

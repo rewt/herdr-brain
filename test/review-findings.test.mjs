@@ -69,13 +69,14 @@ test('finding intake: quoting only the Major never narrows a sole unbound whole-
   assert.notEqual(bindings(narrow)[0].correction_item, bindings(narrow)[1].correction_item);
 });
 
-test('finding intake: separate findings at the same location keep separate corrections', () => {
+test('finding intake: separate Minors at the same location keep separate keys in one waiting correction', () => {
   const events = stamped(seed()), body = `- [Minor] ${minor}\n- [Minor] codec.mjs:50 - Preserve native claims`;
   const add = intake(events, report(), body);
-  assert.equal(items(add).length, 2);
+  assert.equal(items(add).length, 1);
   assert.equal(bindings(add).length, 2);
   assert.equal(new Set(bindings(add).map(event => event.finding_key)).size, 2);
-  assert.equal(new Set(bindings(add).map(event => event.correction_item)).size, 2);
+  assert.equal(new Set(bindings(add).map(event => event.correction_item)).size, 1);
+  assert.equal(items(add)[0].meta.queue_selected, false);
   assert.equal(items(add).some(event => event.meta.severity === 'major'), false, 'FAIL with Minor findings does not invent a Major');
 });
 
@@ -94,7 +95,7 @@ test('finding intake: structured findings and paraphrased body summaries file on
     const events = stamped(seed()), bytes = JSON.stringify(data), add = intake(events, data, body);
     const reviewItem = fold(events).items.get('REV-1');
     const keys = findings.map(f => reviewFindingKey(reviewItem, f));
-    assert.equal(items(add).length, count, 'one item per declared finding, with or without proposals');
+    assert.equal(items(add).length, count === 5 ? count : 1, 'Major reports retain individual corrections; Minor-only reports batch');
     assert.deepEqual(add[0].findings.map(f => f.key), keys);
     assert.deepEqual(bindings(add).map(e => e.finding_key), keys);
     if (count === 5) assert.equal(items(add)[0].meta.review_correction_checks[keys[0]], findings[0].correction_check);

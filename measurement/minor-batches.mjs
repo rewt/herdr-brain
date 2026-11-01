@@ -8,6 +8,7 @@ import { loadEvents } from '../lib/store.mjs';
 import { fold } from '../lib/state.mjs';
 import { readReport } from '../lib/report.mjs';
 import { roleIs } from '../lib/roles.mjs';
+import { batchedMinorSection, batchedMinorKey } from '../lib/batched-minors.mjs';
 
 const digest = value => createHash('sha256').update(value).digest('hex');
 export const DISPOSITION_PREFIX = 'minor-batch: ';
@@ -15,26 +16,14 @@ export const DISPOSITION_PREFIX = 'minor-batch: ';
 export function reportMinors(text) {
   const parsed = readReport(text);
   if (parsed.errors.length) throw Error(parsed.errors.join('; '));
-  const { report, body } = parsed, rows = [], malformed = [];
+  const { report, body } = parsed;
+  const { rows, malformed, sections } = batchedMinorSection(body);
   const typed = (report.extra?.findings ?? []).filter(f => ['major', 'minor'].includes(String(f?.severity).toLowerCase()));
-  let section = false, sections = 0, fence;
   const tagged = [];
-  for (const [index, line] of body.split('\n').entries()) {
+  for (const line of body.split('\n')) {
     // Intake scans tagged bullets even in fences; retain that actual behavior.
     const tag = /^\s*[-*]\s*\[(Major|Minor)\]\s*(.+)$/i.exec(line);
     if (tag) tagged.push({ severity: tag[1].toLowerCase(), text: tag[2] });
-    const marker = /^\s*(`{3,}|~{3,})/.exec(line);
-    if (marker) { if (!fence) fence = marker[1]; else if (marker[1][0] === fence[0] && marker[1].length >= fence.length) fence = null; continue; }
-    if (fence) continue;
-    if (/^#{1,6}\s/.test(line)) {
-      section = line.trim() === '## Batched Minors';
-      if (section) sections++;
-      continue;
-    }
-    if (!section || !line.trim()) continue;
-    const row = /^- `?([^\s`]+:\d+(?::\d+)?(?:-\d+)?)`? - (\S.*)$/.exec(line);
-    if (row) rows.push({ location: row[1], text: row[2], body_line: index + 1 });
-    else malformed.push({ body_line: index + 1, text: line });
   }
   const hasMajor = [...typed, ...tagged].some(f => String(f.severity).toLowerCase() === 'major');
   const oldMinors = [...typed, ...tagged].filter(f => String(f.severity).toLowerCase() === 'minor');
@@ -74,10 +63,23 @@ export function collectMinors({ events, read = file => fs.readFileSync(file, 'ut
       }
       reviews.push(context);
       for (const row of extracted.rows) findings.push({ ...context, ...row,
-        key: `batched-minor/v1:${digest(JSON.stringify([review.id, run.id, run.report.sha256, row.body_line, row.location, row.text]))}` });
+        key: batchedMinorKey(review.id, run.id, run.report.sha256, row) });
     } catch (error) { issues.push({ review: review.id, run: run.id, error: error.message }); }
   }
   const byKey = new Map(findings.map(f => [f.key, f]));
+  for (const event of events) {
+    if (event.type !== 'review.finding-linked') continue;
+    for (const key of event.finding?.batched_minor_keys ?? []) {
+      const finding = byKey.get(key), correction = state.items.get(event.correction_item);
+      if (!finding || !roleIs(correction, 'ENG') || event.review_item !== finding.review || event.review_run !== finding.run ||
+          event.report_sha256 !== finding.report_sha256 || event.head !== finding.head || event.base !== finding.base) continue;
+      const disposition = { status: 'batched', batch: correction.id, finding: finding.key,
+        reason: 'Immutable Part 1 finding linked by intake to its correction', evidence: `review.finding-linked:${event.seq}`,
+        finding_key: event.finding_key, seq: event.seq, at: event.at };
+      finding.dispositions = [...(finding.dispositions ?? []), disposition];
+      finding.disposition = disposition;
+    }
+  }
   for (const review of state.items.values()) for (const note of review.notes ?? []) {
     if (!note.text?.startsWith(DISPOSITION_PREFIX)) continue;
     try {
@@ -89,6 +91,7 @@ export function collectMinors({ events, read = file => fs.readFileSync(file, 'ut
         throw Error('disposition must bind an immutable finding on its review, a reason/evidence and an existing engineer batch for batched/fixed');
       finding.dispositions ??= [];
       finding.dispositions.push({ ...d, seq: note.seq, at: note.at });
+      finding.dispositions.sort((a,b)=>a.seq-b.seq);
       finding.disposition = finding.dispositions.at(-1);
     } catch (error) { issues.push({ review: review.id, note_seq: note.seq, error: error.message }); }
   }

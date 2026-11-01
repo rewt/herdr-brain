@@ -47,7 +47,9 @@ export function reviewCorrectionEvents({ state, events, run, review, report, fin
   for (const finding of findings) {
     const key = reviewFindingKey(review, finding);
     if (!rows.has(key)) rows.set(key, { ...finding, key });
-    else for (const field of ['correction_check', 'live_trigger']) if (finding[field]) {
+    else if (finding.batched_minor_keys) rows.get(key).batched_minor_keys =
+      [...new Set([...(rows.get(key).batched_minor_keys ?? []), ...finding.batched_minor_keys])];
+    for (const field of ['correction_check', 'live_trigger']) if (finding[field]) {
       const row = rows.get(key);
       if (row[field] && row[field] !== finding[field])
         throw Error(`one immutable finding has contradictory ${field === 'correction_check' ? 'correction checks' : 'live triggers'}`);
@@ -94,19 +96,21 @@ export function reviewCorrectionEvents({ state, events, run, review, report, fin
     bind(row.key, id);
     add.push({ type: 'review.finding-linked', item: id, correction_item: id, finding_key: row.key,
       finding: { severity: row.severity, text: row.text,
+        ...(row.batched_minor_keys ? { batched_minor_keys: row.batched_minor_keys } : {}),
         ...(conditionalMinorTrigger(row) ? { live_trigger: conditionalMinorTrigger(row) } : {}) }, source_item: source,
       head: target.head, base: target.base, review_item: review.id, review_run: run.id, report_sha256: sha256 });
   };
-  const create = (keys, proposal) => {
+  const legacyCreations = proposal => events.filter(event => event.type === 'item.added' && roleIs(event, 'ENG') &&
+    event.from_run === run.id && event.parent === review.id && event.title === proposal.title &&
+    (event.why ?? null) === (proposal.why ?? null) &&
+    JSON.stringify(event.accept ?? []) === JSON.stringify(proposal.accept ?? []) &&
+    Object.entries(proposal.extra ?? {}).every(([key, value]) => JSON.stringify(event.meta?.[key]) === JSON.stringify(value)));
+  const create = (keys, proposal, minorBatch = false) => {
     const missing = keys.filter(key => !linked.has(key));
     if (missing.length) {
       // Old consumers created ordinary proposals before finding intake. Match
       // their immutable creation, never mutable display, parent or metadata.
-      const creations = proposal ? events.filter(event => event.type === 'item.added' && roleIs(event, 'ENG') &&
-        event.from_run === run.id && event.parent === review.id && event.title === proposal.title &&
-        (event.why ?? null) === (proposal.why ?? null) &&
-        JSON.stringify(event.accept ?? []) === JSON.stringify(proposal.accept ?? []) &&
-        Object.entries(proposal.extra ?? {}).every(([key, value]) => JSON.stringify(event.meta?.[key]) === JSON.stringify(value))) : [];
+      const creations = proposal ? legacyCreations(proposal) : [];
       for (const event of creations) {
         const item = state.items.get(event.id);
         requireCorrection({ ...event, meta: event.meta ?? {} });
@@ -141,7 +145,8 @@ export function reviewCorrectionEvents({ state, events, run, review, report, fin
           capability: proposal?.capability ?? null,
           title: proposal?.title ?? `${severity === 'major' ? 'Fix' : 'Follow up'} ${source} at ${target.head.slice(0, 10)}: ${selected[0].text.slice(0, 120)}`,
           parent: review.id, from_run: run.id, accept: proposal?.accept ?? selected.map(row => row.text),
-          why: proposal?.why ?? selected.map(row => row.text).join('\n'), meta: { ...proposal?.extra, ...meta, queue_selected:true } }));
+          why: proposal?.why ?? selected.map(row => row.text).join('\n'), meta: { ...proposal?.extra, ...meta,
+            ...(minorBatch ? { review_minor_batch: 'v1' } : {}), queue_selected: !minorBatch } }));
       } else if (!historical.meta.review_fix_of) {
         // Several groups can resolve to the same pre-intake proposal. The fold
         // replaces each meta value shallowly, so carry the whole planned set.
@@ -162,6 +167,12 @@ export function reviewCorrectionEvents({ state, events, run, review, report, fin
       }
     }
   };
+  // One waiting correction owns a fresh Minor-only report, regardless of how
+  // many proposals or conditional Minors it contains. Existing owners and their
+  // attempts are never regrouped, deselected or replaced. Legacy proposal
+  // recovery still runs through its original immutable-creation matching below.
+  const minorBatch = rows.size && [...rows.values()].every(row => row.severity === 'minor') &&
+    !proposals.some(proposal => legacyCreations(proposal).length);
   const createGroups = (keys, proposal) => {
     const immediate = keys.filter(key => !conditionalMinorTrigger(rows.get(key)));
     if (immediate.length) create(immediate, proposal);
@@ -180,11 +191,17 @@ export function reviewCorrectionEvents({ state, events, run, review, report, fin
     if (!keys) {
       // The established single formal correction covers the report's findings,
       // even if its prose quotes only one. Narrower coverage needs explicit refs.
-      keys = proposals.length === 1 || rows.size === 1 ? [...rows.keys()] : [];
+      keys = minorBatch || proposals.length === 1 || rows.size === 1 ? [...rows.keys()] : [];
     }
     if (!keys.length) throw Error('multiple correction proposals need explicit review_findings links to their immutable findings');
-    createGroups([...new Set(keys)], proposal);
+    if (!minorBatch) createGroups([...new Set(keys)], proposal);
   }
-  for (const key of rows.keys()) create([key]);
+  if (minorBatch) create([...rows.keys()], undefined, true);
+  else for (const key of rows.keys()) create([key]);
+  // A later plain report can quote the same canonical finding. Retain each
+  // Part 1 report/line identity as an alias to the original correction owner.
+  for (const row of rows.values()) if (row.batched_minor_keys?.length && linked.has(row.key) &&
+      ![...events, ...add].some(e => e.type === 'review.finding-linked' && e.finding_key === row.key &&
+        row.batched_minor_keys.every(key => e.finding?.batched_minor_keys?.includes(key)))) link(row, linked.get(row.key));
   return { add, findings: [...rows.values()].filter(row => declared.has(row.key)) };
 }

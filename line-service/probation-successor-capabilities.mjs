@@ -12,6 +12,7 @@ const files = ["line-service/probation-successor.mjs", "line-service/probation-s
 const profiles = new Map([
   ['d5f0d5c88ba565b7e5b6896c2c4a5893d0b0fc73c1068eb3c7e163c7ae19c31b', 'ab671e8986'],
   ['49d9a296a02c4551328f684801e537a031f1b554be4725f08a39447fa0c38c81', 'successor-g2'],
+  ['aa3c553b23399a6b73ad2338ae1856836b0e29f17cbdd586dc17eaabaecce207', 'successor-recovery-admission'],
 ]);
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 export function requireSuccessorCapabilities(root) {

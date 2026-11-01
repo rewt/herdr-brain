@@ -187,7 +187,8 @@ test('successor verifies all six target sources and rollback bypasses reader adm
   // Remove the canonical admission profile, leaving the sealed roots untouched.
   // Rollback must still restore recovery, while entry/return remain fail closed.
   const registry=path.join(f.cwd,'line-service/probation-successor-capabilities.mjs'),bytes=fs.readFileSync(registry,'utf8');
-  fs.writeFileSync(registry,bytes.replace(/\['[a-f0-9]{64}', 'successor-g2'\]/,"['"+'0'.repeat(64)+"', 'successor-g2']"));
+  const profile=requireSuccessorCapabilities(f.successor);
+  fs.writeFileSync(registry,bytes.replace(`['${profile.fingerprint}', '${profile.profile}']`, `['${'0'.repeat(64)}', '${profile.profile}']`));
   f.git('add','line-service');f.git('commit','-qm','Simulate unrecognized successor reader profile');
   const back=f.back({cli:true});assert.equal(back.runtime.root,f.recovery);
   assert.equal(fs.readFileSync(f.installationFile,'utf8'),f.anchor.installation);

@@ -10,6 +10,7 @@ import {serviceRecordBinding} from './record-inbox.mjs';
 import {uncertainOutcomeDoctrine} from '../lib/uncertain-outcome.mjs';
 import {closeoutNextStage,closeoutWait,closeoutWaitState} from '../lib/closeout-status.mjs';
 import {readCloseoutEntries,closeoutEvaluations} from '../lib/closeout.mjs';
+import {recordOnlyJudgment} from './decision-policy.mjs';
 const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
 export const outcomeDecisionKey=(identity,org,key)=>createHash('sha256').update(JSON.stringify([identity,org,key])).digest('hex');
 
@@ -61,11 +62,23 @@ export function queueOutcomeDecision({repo,org,env,check,owner='pass'}) {
     guard();
     const existing=find(state);
     if(existing)return {add:[],result:{item:existing.id,key}};
+    // Keep the captured proposal and deduplication owner, but never select work
+    // that admission already knows cannot run. Close the exact proposal using
+    // existing record events: later policy changes, source requeues or reopened
+    // ancestors must not revive it. A fresh, current defect remains ordinary work.
+    const reason=recordOnlyJudgment({meta:{uncertain_outcome:{check}}})
+      ? 'automatic review/dispatch outcome judgments are retired'
+      : !check.key.startsWith('closeout:')?null:obsoleteOutcomeDecision({meta:{uncertain_outcome:{check}}},{events,
+        entries:readCloseoutEntries(binding.identity),
+        evaluations:new Map(closeoutEvaluations(binding.identity,org,events).map(e=>[e.key,e]))});
     const id=nextItemId(state,{kind:'work',role:'decision'});
     const mutation={add:[intentFirstCreation({type:'item.added',id,kind:'work',role:'decision',title:'Resolve a missing completion producer or recorded refusal',
       ...(state.items.has(check.subject.item)?{parent:check.subject.item}:{}),
       accept:['Inspect the captured subject, actual producer and recorded status. Return one normal decision report with a concrete next step; zero suites, source edits, native effects or authority to clear a refusal. '+uncertainOutcomeDoctrine],
-      meta:{route:'unblock',queue_selected:true,uncertain_outcome:{key,check:structuredClone(check)},purpose:'Resolve this exact completion defect; independent subjects continue.',scope:JSON.stringify(check.subject),evidence:JSON.stringify(check)}})],result:{item:id,key}};
+      meta:{route:'unblock',queue_selected:!reason,uncertain_outcome:{key,check:structuredClone(check)},
+        ...(reason?{outcome_disposition:{status:'retired',reason,owner:check.subject.run??check.subject.item??'line-service'}}:{}),
+        purpose:'Resolve this exact completion defect; independent subjects continue.',scope:JSON.stringify(check.subject),evidence:JSON.stringify(check)}}),
+      ...(reason?[{type:'item.closed',id,as:'dropped',note:`Retired exact outcome proposal: ${reason}. Original subject, evidence and effect owner remain authoritative; no completion or refusal clearance is attested.`}]:[])],result:{item:id,key}};
     return protectRecordMutation({org,state,events,command:'queue outcome decision',mutation});
   },{actor:'line-service',strictTail:true,lockOptions:{recover:false}}).result;
 }

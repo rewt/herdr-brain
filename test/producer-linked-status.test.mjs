@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import {closeoutWaitState,registerCloseoutWait,linkedCloseoutStatuses,nativeCloseoutWait,closeoutProducer,closeoutNextStage,closeoutCommandNotStarted} from '../lib/closeout-status.mjs';
-import {closeoutRevision,bindCloseoutSources,unresolvedCloseoutEffect} from '../lib/closeout.mjs';
+import {closeoutRevision,bindCloseoutSources,unresolvedCloseoutEffect,closeoutKey} from '../lib/closeout.mjs';
 import {outcomeFailure,uncertainOutcomeDoctrine} from '../lib/uncertain-outcome.mjs';
 import {originalDispatchOutcome} from '../dispatch/outcome.mjs';
 import {recordDispatchCompletion} from '../dispatch/completion.mjs';
@@ -130,6 +130,63 @@ test('producer linked missing-producer decision deduplicates through normal owne
       assert.deepEqual(fs.readFileSync(path.join(org,'events.jsonl')),original);
     }finally{fs.rmSync(lock,{recursive:true});}
   }finally{release();}
+});
+
+test('outcome retirement records dead keys without selection and preserves exact ownership through policy and source changes',t=>{
+  const f=configFixture(t,{custom:true}),repo=f.cwd,org=f.env.ORG_DIR,identity=gitProject(repo).identity,directory=serviceDirectory(org,identity);
+  fs.mkdirSync(directory,{recursive:true});fs.writeFileSync(path.join(directory,'installation.json'),JSON.stringify({repo,org,source:sourceRoot,node:process.execPath,file:path.join(directory,'service.plist'),target:`gui/${process.getuid()}/dev.herdr.line.${path.basename(directory)}`}));
+  transact(org,()=>({add:[{type:'item.added',id:'ENG-1',role:'engineer',title:'Original owner'}]}));
+  const env={...f.env};delete env.HERDR_ENV;delete env.HERDR_PANE_ID;
+  const release=noticeLock(path.join(directory,'pass.lock'));t.after(release);
+  const cases=['review:original','dispatch:original','closeout:unqueued'];
+  for(const key of cases){
+    const check={key,subject:{item:'ENG-1',run:'R-1',key:'unqueued',source:{seq:1,type:'item.closed'}},defect:'Original evidence'},options={repo,org,env,check};
+    const result=queueOutcomeDecision(options),before=loadEvents(org).events,item=fold(before).items.get(result.item);
+    assert.equal(item.meta.queue_selected,false);assert.equal(item.closed.as,'dropped');
+    assert.deepEqual(item.meta.uncertain_outcome.check,check);assert.equal(item.meta.outcome_disposition.owner,'R-1');
+    assert.equal(item.meta.outcome_disposition.status,'retired');assert.match(item.closed.note,/no completion or refusal clearance/);
+    assert.deepEqual(before.slice(-2).map(e=>e.type),['item.added','item.closed'],'no new event contract');
+    assert.equal(before.at(-2).meta.queue_selected,false,'never briefly selected');
+    // Removing the policy metadata and reopening the ancestor cannot revive a
+    // terminal proposal, even when all read-only admission filters change.
+    transact(org,()=>({add:[{type:'item.updated',id:item.id,fields:{meta:{uncertain_outcome:{key:result.key,check:{...check,key:'ordinary'}}}}},
+      {type:'item.closed',id:'ENG-1',as:'done'},{type:'item.reopened',id:'ENG-1'}]}));
+    const prior=loadEvents(org).events;
+    assert.deepEqual(queueOutcomeDecision(options),result);assert.deepEqual(loadEvents(org).events,prior,'original id owns deduplication without a new append');
+    assert.equal(fold(prior).items.get(item.id).closed.as,'dropped');
+  }
+});
+
+test('outcome retirement preserves current closeout refusals and retires only obsolete exact proposals',t=>{
+  const f=configFixture(t,{custom:true}),repo=f.cwd,org=f.env.ORG_DIR,identity=gitProject(repo).identity,directory=serviceDirectory(org,identity);
+  fs.mkdirSync(directory,{recursive:true});fs.writeFileSync(path.join(directory,'installation.json'),JSON.stringify({repo,org,source:sourceRoot,node:process.execPath,file:path.join(directory,'service.plist'),target:`gui/${process.getuid()}/dev.herdr.line.${path.basename(directory)}`}));
+  const env={...f.env};delete env.HERDR_ENV;delete env.HERDR_PANE_ID;
+  const release=noticeLock(path.join(directory,'pass.lock'));t.after(release);
+  const entries=path.join(identity,'closeout/entries');fs.mkdirSync(entries,{recursive:true});
+  for(const [n,name] of ['changed-source','completed','owned-stage','no-defect','current-defect'].entries()){
+    const run=`R-${n+1}`,key=closeoutKey(repo,run,'landed'),source={seq:1,type:'item.closed'};
+    const entry={schema:'closeout-entry/v2',common:identity,signal:'landed',run,branch:'lane/cleanup',key,cwd:repo,gitDirectory:identity,
+      org,project:repo,source,head:f.git('rev-parse','HEAD'),worktreeIdentity:{},gitIdentity:{},panes:[]};
+    fs.writeFileSync(path.join(entries,key+'.json'),JSON.stringify(entry));
+    const prior={type:'closeout.evaluated',identity,key,source,run,revision:1,completed:name==='completed',
+      reason:name==='owned-stage'?'no bound session target; physical cleanup remains separate':'EPERM native refusal',failure:{kind:'fence',code:'EPERM'}};
+    if(name==='owned-stage')delete prior.failure;
+    if(name!=='no-defect')transact(org,()=>({add:[prior,...(name==='current-defect'?[{type:'closeout.waiting',identity,key,source,run,revision:1,
+      wait_id:closeoutWaitId(entry,prior),waiting:{owner:'line-service',defect:'Original native refusal needs its owner',producers:[]}}]:[])]}));
+    const check={key:`closeout:${key}`,subject:{run,key,source:name==='changed-source'?{...source,seq:2}:source}},options={repo,org,env,check};
+    const result=queueOutcomeDecision(options),item=fold(loadEvents(org).events).items.get(result.item);
+    assert.equal(item.meta.queue_selected,name==='current-defect',name);assert.equal(Boolean(item.closed),name!=='current-defect',name);
+    if(name==='current-defect'){
+      assert.equal(item.meta.outcome_disposition,undefined);assert.deepEqual(queueOutcomeDecision(options),result);
+    }else{
+      // Even a requeued matching source with a current refusal cannot revive
+      // the original retired key. Its captured evidence and id stay durable.
+      fs.writeFileSync(path.join(entries,key+'.json'),JSON.stringify({...entry,source:check.subject.source}));
+      assert.deepEqual(queueOutcomeDecision(options),result);assert.equal(fold(loadEvents(org).events).items.get(item.id).closed.as,'dropped');
+    }
+  }
+  fs.writeFileSync(path.join(entries,'damaged.json'),'{');
+  assert.throws(()=>queueOutcomeDecision({repo,org,env,check:{key:'closeout:unknown',subject:{key:'unknown',source:{seq:1}}}}),/JSON|position|property/i,'corrupt queue is not proof of obsolescence');
 });
 
 test('producer linked completed pass health remains diagnostic with no bulk record telemetry',t=>{

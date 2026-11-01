@@ -17,6 +17,7 @@ import {haltObservation,completeHaltPass} from '../line-service/halt-repair.mjs'
 import {dispatchInput} from '../line-service/phase1.mjs';
 import {closeoutKey} from '../lib/closeout.mjs';
 import {closeoutWaitId} from '../lib/closeout-status.mjs';
+import {queueOutcomeDecision} from '../line-service/outcome-decision.mjs';
 import {commandIntent,finishCommand,forgetActiveCommand} from '../lib/command-receipt.mjs';
 import {stoppedDispatchReadmission} from '../dispatch/stopped-readmission.mjs';
 import {setup as closeoutFixture,events as closeoutEvents,evaluations as closeoutEvaluations} from './helpers/closeout-fixture.mjs';
@@ -363,6 +364,34 @@ test('engineering-idle keeps only exact saved judgment inputs and rechecks them 
   assert.deepEqual(f.calls.map(c=>c.args[1]),[repairs[0].id],'retained judgment is never replayed');
   const retained=JSON.parse(fs.readFileSync(journal)).actions;
   assert.deepEqual(retained[key],original);assert.deepEqual(retained['dispatch:DEC-2:stale-input'],original);
+});
+
+test('outcome retirement line pass never evaluates terminal proposals and still queues a current defect',t=>{
+  const f=fixture(t),service=f.service(),identity=gitProject(f.repo).identity,retired=[];
+  const config=JSON.parse(fs.readFileSync(path.join(f.repo,'.lane.json')));config.routes.unblock={kind:'codex',model:'fixture',effort:'high'};
+  fs.writeFileSync(path.join(f.repo,'.lane.json'),JSON.stringify(config));
+  const release=noticeLock(path.join(service.directory,'pass.lock'));
+  try{
+    for(const key of ['review:old','dispatch:old','closeout:unqueued'])retired.push(queueOutcomeDecision({repo:f.repo,org:f.org,env:f.env,
+      check:{key,subject:{run:'R-1',key:'unqueued',source:{seq:1,type:'item.closed'}}}}).item);
+    const source={seq:1,type:'item.closed'},key=closeoutKey(f.repo,'R-2','landed'),entry={schema:'closeout-entry/v2',common:identity,
+      signal:'landed',run:'R-2',branch:'lane/cleanup',key,cwd:f.repo,gitDirectory:identity,org:f.org,project:f.repo,source,
+      head:f.git(['rev-parse','HEAD']),worktreeIdentity:{},gitIdentity:{},panes:[]};
+    const directory=path.join(identity,'closeout/entries');fs.mkdirSync(directory,{recursive:true});fs.writeFileSync(path.join(directory,key+'.json'),JSON.stringify(entry));
+    const prior={type:'closeout.evaluated',identity,key,source,run:'R-2',revision:1,completed:false,reason:'EPERM native refusal',failure:{kind:'fence',code:'EPERM'}};
+    transact(f.org,()=>({add:[prior,{type:'closeout.waiting',identity,key,source,run:'R-2',revision:1,wait_id:closeoutWaitId(entry,prior),
+      waiting:{owner:'line-service',defect:'Original native refusal needs its owner',producers:[]}}]}));
+    const live=queueOutcomeDecision({repo:f.repo,org:f.org,env:f.env,check:{key:`closeout:${key}`,subject:{run:'R-2',key,source}}});
+    assert.equal(f.show(live.item).meta.queue_selected,true);assert.equal(f.show(live.item).closed,null);
+  }finally{release();}
+  service.pass();
+  const rows=fs.readFileSync(path.join(service.directory,'passes.jsonl'),'utf8').trim().split('\n').map(JSON.parse);
+  assert.ok(rows.some(r=>r.action==='pass-complete'));
+  assert.ok(!rows.some(r=>retired.includes(r.item)),'no admission probe, policy hold or dispatch for terminal proposals');
+  const effects=JSON.parse(fs.readFileSync(path.join(service.directory,'effects.json')));
+  for(const id of retired)assert.equal(effects.negative_evaluations.entries[`admission:${id}`],undefined,'not even a cached admission evaluation');
+  assert.ok(f.calls.some(c=>c.args[1]==='DEC-4'),'the real current defect keeps ordinary decision dispatch');
+  assert.equal(loadEvents(f.org).events.some(e=>e.type==='closeout.effect'),false,'fixture never executes or clears the refused cleanup');
 });
 
 test('engineering-idle ignores obsolete closeout decisions across completed passes without replay and admits independent engineering',t=>{

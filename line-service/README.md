@@ -1525,6 +1525,17 @@ or clear a refusal. The existing finite closer owns the next guarded observation
 the release coordinator owns installation and the still-unrun live witness.
 `obsoleteOutcomeDecision` remains a read-only admission filter, not a closer.
 
+New outcome proposals are checked before selection. Retired review/dispatch
+keys and obsolete exact closeout inputs are recorded unselected and dropped in
+the same transaction, using existing `item.added`/`item.closed` events. Their
+original checks, evidence, IDs and effect owners remain the deduplication owners;
+later policy changes, ancestor reopening or request requeues do not revive them.
+A current closeout defect or refusal still creates a selected decision. Damaged
+queue evidence refuses creation rather than attesting obsolescence. Existing
+open proposals require an explicit recorded disposition; admission never closes
+them automatically or clears their original effects. ENG-1351 records that
+one-time disposition, with individual judgment for the five ancestry-held cases.
+
 The exact historical pre-journal release-source override refusal can be admitted
 once when an accepted release no longer supplies that override. The original
 terminal receipt survives, and `line-service.dispatch-readmitted` binds the new

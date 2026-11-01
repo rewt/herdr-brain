@@ -101,6 +101,16 @@ root/pin edit, automatic repair, native replay or replacement authority is used.
 
 ## Withdrawal, preservation and handoff
 
+The trial's authority-owning item stays open until `probation-complete`, even
+after its implementation report or live witness is done. Authority recorded on
+a run belongs to that run's item. Record close/drop and hold/reserved changes
+that fence this owner (including its ancestors) are refused while the trial is
+active; the refusal names the trial and the supported `probation-withdraw` /
+`probation-complete` commands. This leaves the item and trial admission intact.
+Do not close the item to end a trial: withdrawal/completion is a separate action
+of the recorded native supervisor. Withdrawal is the failure-containment path;
+completion is the normal end after accounting for the trial.
+
 ```sh
 "$BRAIN_NODE" "$CANDIDATE_ROOT/line-service/launchd.mjs" probation-withdraw --repo "$BRAIN_SOURCE" --org "$BRAIN_RECORD" --id "$TRIAL_ID"
 ```

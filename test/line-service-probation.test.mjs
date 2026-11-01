@@ -91,6 +91,51 @@ async function fixture(t,{development=false,phase='installed',sourceSuffix=''}={
 }
 const state=f=>({installation:fs.readFileSync(f.installationFile,'utf8'),plist:fs.readFileSync(f.file,'utf8'),events:fs.readFileSync(path.join(f.org,'events.jsonl'),'utf8'),jobs:fs.readFileSync(f.retained,'utf8')});
 
+test('probation-record-guard refuses owner fences without a pass outage and permits close after the supported trial ending',async t=>{
+  for(const finish of ['withdraw','complete'])await t.test(finish,async st=>{
+    const f=await fixture(st);
+    // Cover both supported authority-note subjects: an item and its run.
+    const subject=finish==='withdraw'?'G-1':'R-1';
+    if(subject==='R-1')transact(f.org,()=>({add:[{type:'run.started',id:subject,item:'G-1',meta:{}}]}));
+    const preview=f.control({dryRun:true});
+    const note=transact(f.org,()=>({add:[{type:'note.added',id:subject,decision:true,text:preview.required_decision}]}),{actor:f.agent.name}).added[0];
+    f.control({expectedPlan:preview.plan_sha256,authority:note.seq});f.enter();
+    transact(f.org,()=>({add:[{type:'item.added',id:'G-2',kind:'goal',title:'Open ancestor'},
+      {type:'item.updated',id:'G-1',fields:{parent:'G-2'}},
+      {type:'item.added',id:'ENG-1',kind:'work',title:'Unrelated work'}]}));
+    const cli=args=>spawnSync(process.execPath,[path.join(f.next,'bin/org.mjs'),...args],{cwd:f.cwd,env:f.env,encoding:'utf8'});
+    const before=state(f);
+    for(const args of [['close','G-1'],['close','G-1','--dropped'],['close','G-2'],
+      ...['hold','held','reserved','operator_reserved'].map(key=>['set','G-1',`meta.${key}=true`]),
+      ['set','G-2','meta.hold=true']]){
+      const result=cli(args);
+      assert.equal(result.status,3,result.stderr);
+      assert.match(result.stderr,/probation write guard REFUSED.*original-trial/);
+      assert.match(result.stderr,/probation-withdraw.*probation-complete/);
+      assert.deepEqual(state(f),before,'refused close/hold appends nothing and preserves installation and callbacks');
+      assert.equal(f.admit().probation.id,'original-trial');
+    }
+    // Report and completion exemptions, and the promotion override, cannot
+    // exempt an owner close. Reject the complete transaction before any append.
+    const {protectRecordMutation}=await f.module(f.next,'lib/record-guard.mjs');
+    const {fold}=await f.module(f.next,'lib/state.mjs');
+    const events=loadEvents(f.org).events;
+    assert.throws(()=>protectRecordMutation({org:f.org,state:fold(events),events,command:'complete-batch',
+      completion:{identity:f.identity,org:f.org},mutation:{add:[{type:'report.ingested',id:'R-1'},
+        {type:'item.closed',id:'G-1',as:'done'}]}}),/probation write guard REFUSED/);
+    for(const args of [['note','G-1','Trial remains active'],['close','ENG-1'],['set','G-1','meta.hold=false']]){
+      const result=cli(args);assert.equal(result.status,0,result.stderr);
+    }
+    // Reparenting under a closed ancestor is the same prospective authority HOLD.
+    const moved=cli(['set','G-1','parent=ENG-1']);assert.equal(moved.status,3,moved.stderr);
+    fs.unlinkSync(f.stop);await privatePass(f,f.next);
+    f.main([`probation-${finish}`,'--repo',f.cwd,'--org',f.org,'--id','original-trial'],f.args);
+    const ended=cli(['close','G-1']);assert.equal(ended.status,0,ended.stderr);
+    assert.throws(()=>f.admit(),/withdrawn\/completed/);
+    assert.equal(fs.readFileSync(f.retained,'utf8'),f.jobs);
+  });
+});
+
 test('Brain probation admits exactly one sealed non-READY tuple while ordinary pin and home-policy admission still refuse',async t=>{
   const f=await fixture(t),before=state(f),preview=f.control({dryRun:true});
   assert.deepEqual(state(f),before);assert.equal(preview.scope.stable_ready,false);

@@ -310,8 +310,12 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       };
       const yieldWork=(exe,args,operation)=>{
         const ref=commandIntent(directory,{exe,args,cwd:repo,...binding()});
-        if(activeKey&&effects.actions[activeKey]){effects.actions[activeKey].commands??=[];effects.actions[activeKey].commands.push(ref);}
-        checkpointNotices();save();heartbeat('executing');
+        // The command intent is already durable in its own receipt. Snapshot
+        // only a changed journal, including an action's new command reference,
+        // before yielding; observation-only commands need no identical rewrite.
+        if(activeKey&&effects.actions[activeKey]){effects.actions[activeKey].commands??=[];effects.actions[activeKey].commands.push(ref);save();}
+        else checkpointNotices();
+        heartbeat('executing');
         const pausedAt=performance.now(),pausedWork=workClock(),previous=parentCommand;parentCommand=ref;
         unlockSchedule();
         try{return operation(ref);}

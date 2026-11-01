@@ -30,7 +30,7 @@ function fixture(t,{cutoff=true,before=[]}={}) {
   const boundary=cutoff?cut():null;
   if(boundary)transact(org,()=>({add:[{...boundary.cutover,type:'line-service.phase0'}]}));
   fs.unlinkSync(path.join(directory,'STOP'));
-  const env={...f.env,HERDR_BRAIN_ROOT:developmentRoot};for(const key of ['HERDR_ENV','HERDR_PANE_ID','HERDR_WORKSPACE_ID','CODEX_THREAD_ID'])delete env[key];
+  const env={...f.env,HERDR_BRAIN_ROOT:developmentRoot,MONITOR_SUPERVISOR_AGENT:'supervisor-fixture'};for(const key of ['HERDR_ENV','HERDR_PANE_ID','HERDR_WORKSPACE_ID','CODEX_THREAD_ID'])delete env[key];
   const git=(args,cwd=f.cwd)=>{const r=spawnSync('git',['-C',cwd,...args],{env,encoding:'utf8'});assert.equal(r.status,0,r.stderr);return r.stdout.trim();};
   const events=()=>loadEvents(org).events, state=()=>fold(events()), messages=()=>recordMessages(events());
   const add=(items)=>transact(org,()=>({add:items}));
@@ -114,7 +114,7 @@ test('producer routine failures collapse in diagnostics with stable counts acros
     f.service({capacity}).pass();
     counts.push(Object.values(JSON.parse(fs.readFileSync(path.join(f.directory,'effects.json'))).record_notices)[0].count);
   }
-  assert.deepEqual(counts,[1,2,4],JSON.stringify({expected:'the threshold pass also admits the independent halt repair',diagnostics:f.diagnostics().filter(r=>/halt|engineering-idle/.test(r.action))}));
+  assert.deepEqual(counts,[1,2,4],'the threshold pass also admits the independent halt repair');
   assert.equal(n,7,'three admission checks, three halt observations and one repair admission');
   assert.equal(f.diagnostics().filter(e=>e.action==='halt-capacity-held').length,3);
   assert.equal([...f.state().items.values()].filter(i=>i.meta.halt_repair===1).length,1);
@@ -138,8 +138,8 @@ test('useful error persistence keeps first errors and repeat counters off the re
   const open=fs.openSync,close=fs.closeSync,flush=fs.fsyncSync,rename=fs.renameSync,handles=new Map();let fullWrites=0,recordCommits=0;
   fs.openSync=(file,...args)=>{const fd=open(file,...args);handles.set(fd,path.resolve(String(file)));return fd;};fs.closeSync=fd=>{handles.delete(fd);return close(fd);};fs.fsyncSync=fd=>{if(handles.get(fd)===path.join(f.org,'events.jsonl'))recordCommits++;return flush(fd);};fs.renameSync=(from,to)=>{if(path.resolve(String(to))===journal)fullWrites++;return rename(from,to);};
   try{
-    f.service().pass();assert.ok(fullWrites<=5,`first pass used ${fullWrites} full writes for ${number} holds`);assert.equal(recordCommits,0,'first observations perform no record append');assert.equal(f.events().filter(e=>e.type==='line-service.review-error').length,0);assert.equal(f.messages().length,0);
-    fullWrites=0;recordCommits=0;f.service().pass();assert.ok(fullWrites<=5,`repeat pass used ${fullWrites} full writes`);assert.equal(recordCommits,0,'no-change repeats perform no record append');assert.equal(f.messages().length,0);assert.equal(morningDigest({events:f.events(),diagnostics:f.diagnostics()}).review_errors.occurrences,number*2);
+    f.service().pass();t.diagnostic(JSON.stringify({stage:'first',fullWrites,recordCommits}));assert.ok(fullWrites<=5,`first pass used ${fullWrites} full writes for ${number} holds`);assert.equal(recordCommits,0,'first observations perform no record append');assert.equal(f.events().filter(e=>e.type==='line-service.review-error').length,0);assert.equal(f.messages().length,0);
+    fullWrites=0;recordCommits=0;f.service().pass();t.diagnostic(JSON.stringify({stage:'repeat',fullWrites,recordCommits}));assert.ok(fullWrites<=5,`repeat pass used ${fullWrites} full writes`);assert.equal(recordCommits,0,'no-change repeats perform no record append');assert.equal(f.messages().length,0);assert.equal(morningDigest({events:f.events(),diagnostics:f.diagnostics()}).review_errors.occurrences,number*2);
   }finally{fs.openSync=open;fs.closeSync=close;fs.fsyncSync=flush;fs.renameSync=rename;}
   assert.equal(f.calls.length,0);assert.equal(fs.existsSync(inboxPath({org:f.org})),false);assert.ok(Object.values(JSON.parse(fs.readFileSync(journal)).record_notices).every(n=>n.count===2&&n.state==='diagnostic-only'));
 });

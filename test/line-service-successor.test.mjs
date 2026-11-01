@@ -37,7 +37,7 @@ async function successorFixture(t,{currentRecovery=false}={}){
   legacy(f,'old-entry',f.cwd,f.next);legacy(f,'old-anchor',f.next,recovery);
   const anchor={installation:fs.readFileSync(f.installationFile,'utf8'),plist:fs.readFileSync(f.file,'utf8')};
   const originalArchive=path.join(f.directory,'probation/original-trial.json'),originalBytes=fs.readFileSync(originalArchive);
-  copyProduct(product,f.cwd);f.git('add','.');f.git('commit','-qm','Install successor protocol in private canonical');
+  copyProduct(product,f.cwd);f.git('add','.');f.git('commit',...(currentRecovery?['--allow-empty']:[]),'-qm','Install successor protocol in private canonical');
   const commit=f.git('rev-parse','HEAD'),next=f.release('successor',{commit});fs.unlinkSync(path.join(next,'.release-acceptance.json'));
   const frozenFile=path.join(next,'.release-validation.json'),frozen=freezeReleaseValidation(f.cwd,'successor',frozenFile,f.env,{commit,mode:'routine'});
   const runtime=productFiles(next).sort();

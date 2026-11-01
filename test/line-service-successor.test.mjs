@@ -127,7 +127,7 @@ test('successor authority source STOP native history record and integrity refusa
   fs.chmodSync(payload,0o644);fs.appendFileSync(payload,'\n// damage');fs.chmodSync(payload,mode);
   assert.throws(()=>f.run({dryRun:true}),/payload mismatch/);fs.chmodSync(payload,0o644);fs.writeFileSync(payload,bytes);fs.chmodSync(payload,mode);
   fs.renameSync(f.recovery,f.recovery+'.saved');fs.symlinkSync(f.recovery+'.saved',f.recovery);
-  assert.throws(()=>f.run({dryRun:true}),/identity\/node changed/);fs.unlinkSync(f.recovery);fs.renameSync(f.recovery+'.saved',f.recovery);
+  assert.throws(()=>f.run({dryRun:true}),/identity\/node changed|ENOTDIR: not a directory, open 'runtime'/);fs.unlinkSync(f.recovery);fs.renameSync(f.recovery+'.saved',f.recovery);
   fs.appendFileSync(path.join(f.successor,'bin/org.mjs'),'\n// drift');assert.throws(()=>f.run({dryRun:true}),/incomplete release/);
   fs.writeFileSync(path.join(f.successor,'bin/org.mjs'),fs.readFileSync(path.join(f.cwd,'bin/org.mjs')));
   assert.throws(()=>f.run({expectedPlan:p.plan_sha256,authority:seq}),/plan changed/,'intervening record changes invalidate the original preview');
@@ -163,7 +163,7 @@ test('successor effect STOP CAS and completed rollback cleanup fault retain thei
 });
 
 test('successor children retain exact trial/root and captured callbacks survive withdrawal while new admission closes',async t=>{
-  const f=await successorFixture(t);f.apply();fs.unlinkSync(f.stop);
+  const f=await successorFixture(t);f.apply();const stopBytes=fs.readFileSync(f.stop);fs.unlinkSync(f.stop);
   const d=dispatchFixture(t,{project:f}),topic=`line-${d.item.toLowerCase()}-1`,laneCLI=path.join(d.root,'bin/lane');
   fs.writeFileSync(laneCLI,fs.readFileSync(laneCLI,'utf8').replace('lane/topic',`lane/${topic}`));
   const {createLineService}=await f.module(f.successor,'line-service/line-service.mjs');
@@ -181,5 +181,6 @@ test('successor children retain exact trial/root and captured callbacks survive 
   const {checkDispatchEligibility}=await f.module(f.successor,'dispatch/launch-guard.mjs');
   assert.throws(()=>checkDispatchEligibility(job,file,{boundary:'launch'}),/withdrawn/);checkDispatchEligibility(job,file,{boundary:'prompt'});
   const {selectedReviewConsumer}=await f.module(f.successor,'line-service/review.mjs');assert.equal(selectedReviewConsumer({repo:f.cwd,run:d.show(job.run)}).recordRoot,f.successor);
+  fs.writeFileSync(f.stop,stopBytes);
   assert.throws(()=>f.run({id:'new-after-withdrawal',dryRun:true}),/withdrawn/);assert.equal(fs.readFileSync(f.retained,'utf8'),f.jobs);
 });

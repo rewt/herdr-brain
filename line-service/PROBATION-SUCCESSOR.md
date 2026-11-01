@@ -198,8 +198,9 @@ payload integrity, ancestry, record compatibility, native ownership, STOP/HOLD,
 history and preview/effect CAS still apply. The focused lifecycle controls move
 all six canonical protocol files after sealing both roots, then exercise entry,
 rollback and exact return; a sealed incompatible candidate refuses. A separate
-control removes the reviewed profile after entry: rollback succeeds, return
-refuses without effects, and restoring the profile permits exact return.
+control changes the writer's required effect contract after entry: rollback
+succeeds, return refuses without effects, and restoring the compatible writer
+requirement permits exact return.
 These fixture observations do not prove a live canonical rollback preview.
 That stopped-service witness remains UNRUN here and belongs to supervisor-herdr
 at its separately authorized safe boundary; this repair switches no service,

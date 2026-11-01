@@ -12,7 +12,7 @@ import {setup,events,evaluations,effects,selectCurrentCleanup} from './helpers/c
 
 const reason='preservation claim inputs changed; prepare again; lane kept';
 
-function changingClaim(t,{changes=1}={}) {
+function changingClaim(t,{changes=1,claim}={}) {
   const f=setup(t,{direct:true,bound:true,merged:true});selectCurrentCleanup(f);f.report();
   const command=f.options.command,log=f.options.log;
   let prepared=false,reads=0,changed=0;
@@ -28,7 +28,7 @@ function changingClaim(t,{changes=1}={}) {
     if(prepared&&exe==='/usr/sbin/lsof'&&++reads===2&&changed<changes){
       const evidence=path.join(f.scratch,`late-claim-${++changed}.txt`);
       fs.writeFileSync(evidence,'late preservation input');
-      f.append([{type:'note.added',id:'ENG-1',text:'late evidence',evidence:[evidence]}]);
+      f.append(claim?claim(f,evidence):[{type:'note.added',id:'ENG-1',text:'late evidence',evidence:[evidence]}]);
     }
     return result;
   };
@@ -40,6 +40,37 @@ function changingClaim(t,{changes=1}={}) {
       sessionsOnly:argv.includes('--sessions-only')}))});
   return{f,entry,turn,preparations,changed:()=>changed};
 }
+
+const auditRow=f=>({type:'supervisor.exception-disposition',
+  evidence:{audit:path.join(f.org,'line-service/passes.jsonl'),
+    incident:{boundary:'dispatch:ENG-unrelated',scope:{subject:'ENG-unrelated'},reason:'held ready item'}}});
+
+test('unrelated supervisor audit batches do not waste a preservation preparation',t=>{
+  const {f,turn,preparations,changed}=changingClaim(t,{claim:f=>Array.from({length:8},()=>auditRow(f))});
+  turn();assert.equal(changed(),1);assert.equal(preparations.length,1);
+  assert.equal(evaluations(f).at(-1).completed,true);
+  assert.equal(fs.existsSync(f.lane),false);
+  assert.equal(effects(f).filter(e=>e.action==='worktree-removed').length,1);
+});
+
+for(const kind of ['lane-path','item','run','extra-claim','unknown','unknown-evidence'])
+test(`a real ${kind} claim still refuses removal and recovers on fresh preparation`,t=>{
+  const {f,turn,preparations}=changingClaim(t,{claim:(f,evidence)=>{
+    const row=auditRow(f);
+    if(kind==='lane-path')row.evidence.audit=path.join(f.lane,'output.txt');
+    if(kind==='item')row.item='ENG-1';
+    if(kind==='run')row.run='R-1';
+    if(kind==='extra-claim')row.artifacts=['./output.txt'];
+    if(kind==='unknown')row.type='future.claim';
+    if(kind==='unknown-evidence')row.evidence.path='./output.txt';
+    return[row];
+  }});
+  turn();assert.equal(evaluations(f).at(-1).reason,reason);
+  assert.equal(fs.existsSync(f.lane),true);
+  assert.equal(effects(f).some(e=>e.action==='git-removal-started'),false);
+  turn();assert.equal(evaluations(f).at(-1).completed,true);
+  assert.equal(preparations.length,2);assert.equal(fs.existsSync(f.lane),false);
+});
 
 for(const historical of [false,true])test(`${historical?'historical':'current'} preservation claim change is prepared again by the finite owning closer`,t=>{
   const {f,entry,turn,preparations,changed}=changingClaim(t);

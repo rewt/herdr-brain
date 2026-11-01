@@ -1493,6 +1493,21 @@ rewriting their hold or wait receipts. Record-prefix changes, damaged preservati
 proofs, original refusals and uncertain native/Git commands retain their guards.
 Unsaved work still keeps its folder and branch.
 
+Unscoped `supervisor.exception-disposition` rows containing only audit/incident
+evidence do not invalidate the claim seal unless their claims name this lane,
+its preservation bundle or scratch manifest. Explicit run/item matches still
+invalidate it, as do unknown unscoped claim rows and additional claim fields.
+These audit diagnostics caused the ten historical holds; they were not evidence
+of a relevant lane claim. Genuine claim changes still require fresh preparation.
+
+ENG-1334 owns the one-time disposition of the obsolete missing-writer decisions
+DEC-457, DEC-460, DEC-465, DEC-468, DEC-473, DEC-474, DEC-479, DEC-482, DEC-483 and
+DEC-485 through normal record close with a supersession note. Dropping those
+proposals preserves their original waits and does not attest that a lane retired
+or clear a refusal. The existing finite closer owns the next guarded observation;
+the release coordinator owns installation and the still-unrun live witness.
+`obsoleteOutcomeDecision` remains a read-only admission filter, not a closer.
+
 The exact historical pre-journal release-source override refusal can be admitted
 once when an accepted release no longer supplies that override. The original
 terminal receipt survives, and `line-service.dispatch-readmitted` binds the new

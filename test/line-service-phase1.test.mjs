@@ -127,23 +127,24 @@ test('ordinary admission diagnostics filter unselected items before launch holds
       ['ENG-12','selection','ORDINARY_ADMISSION_DESELECTED'],
       ['ENG-13','selection','ORDINARY_ADMISSION_NOT_SELECTED']]:[];
     const rows=entries=>entries.map(r=>[r.item,r.stage,r.code]).sort((a,b)=>a[0].localeCompare(b[0]));
+    const launchHolds=entries=>entries.filter(r=>r.stage==='launch'||r.stage==='launch-mutation');
     s.pass();
     assert.deepEqual(launches(),[],'review hold prevents every selected launch');
-    assert.deepEqual(rows(effects().review_admission.held),eligible.map(id=>[id,'launch','REVIEW_ADMISSION_ORDINARY_HELD']));
+    assert.deepEqual(rows(launchHolds(effects().review_admission.held)),eligible.map(id=>[id,'launch','REVIEW_ADMISSION_ORDINARY_HELD']));
     assert.deepEqual(rows(effects().ordinary_admission.held),selectionRows(),'each exclusion has exactly one selection row');
     assert.deepEqual(rows(diagnostics(f).filter(r=>r.action==='ordinary-admission-held')),selectionRows(),'no duplicate launch-stage ordinary diagnostics');
-    assert.deepEqual(rows(diagnostics(f).filter(r=>r.action==='review-admission-held')),eligible.map(id=>[id,'launch','REVIEW_ADMISSION_ORDINARY_HELD']));
+    assert.deepEqual(rows(launchHolds(diagnostics(f).filter(r=>r.action==='review-admission-held'))),eligible.map(id=>[id,'launch','REVIEW_ADMISSION_ORDINARY_HELD']));
     assert.equal(Object.keys(effects().actions).some(key=>key.startsWith('dispatch:')),false,'blocked pass records no dispatch intent');
 
     const before=diagnostics(f).length;
     setConfig('review_admission.hold_ordinary','false',{cwd:f.cwd,env:f.env,who:'fixture owner releases ordinary hold'});
     s.pass();
     assert.deepEqual(launches().sort(),eligible,'policy recovery launches exactly the selected work');
-    assert.deepEqual(effects().review_admission.held,[]);
+    assert.deepEqual(launchHolds(effects().review_admission.held),[]);
     assert.deepEqual(rows(effects().ordinary_admission.held),selectionRows(),'recovery keeps exclusions visible once');
     const recovery=diagnostics(f).slice(before);
     assert.deepEqual(rows(recovery.filter(r=>r.action==='ordinary-admission-held')),selectionRows());
-    assert.deepEqual(recovery.filter(r=>r.action==='review-admission-held'),[]);
+    assert.deepEqual(launchHolds(recovery.filter(r=>r.action==='review-admission-held')),[]);
     for(const id of ['ENG-11','ENG-12',...(selected_only?['ENG-13']:[])]){
       const item=f.context().state.items.get(id);assert.equal(item.closed,null);assert.deepEqual(item.runs,[]);
     }

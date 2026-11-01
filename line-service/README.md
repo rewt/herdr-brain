@@ -1484,6 +1484,15 @@ pane for a missing owner proof. Continued token churn stays a typed
 `pre-effect-change` for the existing finite owner; it does not proceed to Git
 removal. An original native refusal or unresolved intent stops this replan path.
 
+The exact `preservation claim inputs changed; prepare again; lane kept` seal
+rejection is also an owned `pre-effect-change`. The next finite closeout turn
+prepares a fresh preservation bundle and observes the original allocation again;
+continued claim churn yields another bounded turn instead of a missing-writer
+decision. Historical copies of this exact diagnostic can be reconsidered without
+rewriting their hold or wait receipts. Record-prefix changes, damaged preservation
+proofs, original refusals and uncertain native/Git commands retain their guards.
+Unsaved work still keeps its folder and branch.
+
 The exact historical pre-journal release-source override refusal can be admitted
 once when an accepted release no longer supplies that override. The original
 terminal receipt survives, and `line-service.dispatch-readmitted` binds the new

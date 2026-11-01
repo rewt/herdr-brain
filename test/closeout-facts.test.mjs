@@ -44,7 +44,7 @@ test('named pre-effect formats preserve real fences uncertainty and historical s
   const target={run:'R-1',common:'/git',key:'target',source:{seq:1,type:'cleanup.bound'}};
   for(const reason of [
     'STOP/HOLD prevents queued retirement effect',
-    'preservation claim inputs changed; prepare again; lane kept',
+    'preservation source record changed; prepare again; lane kept',
     'original report allocation/current run/claim changed; keep',
     'occupant or shell identity changed during agent exit',
     'source binding changed: locked Git metadata refs/heads/lane/topic.lock',

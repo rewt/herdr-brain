@@ -60,6 +60,9 @@ test('host recovery preserves unknown watcher identity and excludes reported, ab
   const f=fixture(t);f.options.alive=()=>{throw Error('native process source refused');};
   assert.ok(f.notices().some(n=>n.boundary==='watcher-unknown'));
   assert.equal(f.notices().some(n=>n.boundary==='watcher-stopped'),false);
+  const meta=f.options.state.runs.get('R-1').meta;
+  delete meta.watcher_pid;f.options.alive=()=>assert.fail('missing receipts grant no liveness probe');
+  assert.match(f.notices().find(n=>n.boundary==='watcher-unknown').reason,/receipt is missing/);
   const run=f.options.state.runs.get('R-1');run.report={};assert.equal(f.notices().some(n=>n.run),false);
   delete run.report;run.abandoned={};assert.equal(f.notices().some(n=>n.run),false);
   delete run.abandoned;run.meta.dispatch_project='/foreign';assert.equal(f.notices().some(n=>n.run),false);

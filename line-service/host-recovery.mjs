@@ -38,7 +38,10 @@ export function hostRecoveryNotices({repo,org,identity,directory,installation,st
     if(run.report||run.abandoned||!item||item.closed||item.runs.findLast(id=>!state.runs.get(id)?.abandoned)!==run.id||m.dispatch_project!==identity)continue;
     let watched=false;
     const watcher=m.watcher_host??(m.watcher_pid?{pid:Number(m.watcher_pid),identity:m.watcher_identity}:null);
-    try{watched=watcher?alive(watcher):false;}
+    try{
+      if(!watcher)throw Error('original watcher process receipt is missing; liveness is UNKNOWN');
+      watched=alive(watcher);
+    }
     catch(error){add('watcher-unknown',error.message,`Inspect the original watcher receipt for ${run.id}; unknown liveness never permits replacement.`,run.id);continue;}
     if(!watched)add('watcher-stopped','original watcher is absent or its recorded process birth no longer matches',
       `Project supervisor: inspect ${m.dispatch_journal??'the original dispatch journal'} and its saved release/recipient/claim. Use the original dispatch --retry ${run.id} --org ${JSON.stringify(org)} recovery, which first records a dead watcher and on a later explicit retry rearms it without replaying an acknowledged prompt. Shared duties also need their original observer owner restored. Preserve run, claim, folder, evidence, pending notices and any native refusal; never create a replacement run.`,run.id);

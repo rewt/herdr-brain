@@ -14,6 +14,7 @@ import {requireHomeRelease,selectRelease} from '../lib/releases.mjs';
 import {fixture as dispatchFixture,promptCalls} from '../dispatch/test/dispatch-fixture.mjs';
 import {requireSuccessorCapabilities} from '../line-service/probation-successor-capabilities.mjs';
 import {probationChain} from '../measurement/probation-chain.mjs';
+import {successorRecordDigest} from '../line-service/probation-successor-record.mjs';
 
 const originalCommit='d3271f06ef0ceb80a84cb624f4b04f3b5373c57f';
 const product=path.resolve(import.meta.dirname,'..'),sha=b=>createHash('sha256').update(b).digest('hex');
@@ -48,9 +49,12 @@ async function successorFixture(t,{currentRecovery=false,incompatibleCandidate=f
   const commit=f.git('rev-parse','HEAD');
   function candidate(name,{legacy=false,incompatible=false}={}){
     const next=f.release(name,{commit});copyProduct(product,next);fs.unlinkSync(path.join(next,'.release-acceptance.json'));
-    if(legacy){
+    {
+      // Retain exact admitted readers; changing the canonical writer does not
+      // self-register a new reader profile in this fixture or in production.
+      const reader=legacy?'ab671e89865ccf85d6d7d6d410688703d019d8ca':'726ba8b8f42056be25e839a7da31c13aee26d66d';
       const exact=path.join(f.scratch,'exact-'+name);fs.mkdirSync(exact);
-      const tar=spawnSync('git',['archive','ab671e89865ccf85d6d7d6d410688703d019d8ca'],{cwd:product,maxBuffer:128*1024*1024});assert.equal(tar.status,0,tar.stderr?.toString());
+      const tar=spawnSync('git',['archive',reader],{cwd:product,maxBuffer:128*1024*1024});assert.equal(tar.status,0,tar.stderr?.toString());
       const extracted=spawnSync('/usr/bin/tar',['-xf','-','-C',exact],{input:tar.stdout});assert.equal(extracted.status,0,extracted.stderr?.toString());
       fs.rmSync(next,{recursive:true});copyProduct(exact,next);fs.writeFileSync(path.join(next,'.release-commit'),commit+'\n');
     }
@@ -75,14 +79,16 @@ async function successorFixture(t,{currentRecovery=false,incompatibleCandidate=f
   assert.deepEqual(fs.readFileSync(path.join(next,'lib/obligations.mjs')),frozenHelper);
   assert.notDeepEqual(fs.readFileSync(path.join(f.cwd,'lib/obligations.mjs')),frozenHelper);
   const run=(options={})=>{
-    const {faultStage,mutateStage,loaded=false,nativeRefusal,tool=f.cwd,cli=false,...extra}=options;
+    const {faultStage,mutateStage,appendStage,appendEvents=[],loaded=false,nativeRefusal,tool=f.cwd,cli=false,...extra}=options;
     const args={...f.args,id:'successor-entry',trial:'original-trial',fromRoot:recovery,targetRoot:next,...extra};
     // Fresh process: no cached old canonical imports can supply new readers.
     const script=`import {spawnSync} from 'node:child_process';import fs from 'node:fs';
+      import {transact} from ${JSON.stringify(pathToFileURL(path.join(f.cwd,'lib/store.mjs')).href)};
       const args=${JSON.stringify(args)};
       args.call=()=>JSON.stringify({result:{agent:${JSON.stringify(f.agent)}}});
       args.command=(exe,argv,opts)=>exe==='/usr/bin/plutil'?spawnSync(exe,argv,opts):${nativeRefusal?JSON.stringify({status:1,stderr:nativeRefusal}):loaded?JSON.stringify({status:0,stdout:'loaded'}):JSON.stringify({status:113,stderr:'Could not find service in domain'})};
-      args.fault=stage=>{if(stage===${JSON.stringify(faultStage)})throw Error('injected '+stage);if(stage===${JSON.stringify(mutateStage)})fs.appendFileSync(${JSON.stringify(f.stop)},'STOP drift');};
+      args.fault=stage=>{if(stage===${JSON.stringify(faultStage)})throw Error('injected '+stage);if(stage===${JSON.stringify(mutateStage)})fs.appendFileSync(${JSON.stringify(f.stop)},'STOP drift');
+        if(stage===${JSON.stringify(appendStage)})transact(args.org,()=>({add:${JSON.stringify(appendEvents)}}));};
       try{const m=await import(${JSON.stringify(pathToFileURL(path.join(tool,cli?'line-service/launchd.mjs':'line-service/probation-successor.mjs')).href)});
         const result=${cli?`m.main(['probation-successor','--repo',args.repo,'--org',args.org,'--trial',args.trial,'--id',args.id,'--from-root',args.fromRoot,'--target-root',args.targetRoot,...(args.rollback?['--rollback']:[]),...(args.dryRun?['--dry-run']:[]),...(args.expectedPlan?['--expected-plan',args.expectedPlan]:[]),...(args.authority?['--authority',String(args.authority)]:[])],args)`:'m.probationSuccessor(args)'};console.log(JSON.stringify({result}));
       }catch(error){console.log(JSON.stringify({error:error.message}));}`;
@@ -113,6 +119,72 @@ async function oldRefuses(f){
     assert.throws(()=>main(['restart','--repo',f.cwd,'--org',f.org],f.args),/UNKNOWN probation switch|binding differs|drifted/);
   }
 }
+
+test('successor record binding includes lifecycle authorities and owner holds while excluding worker progress',()=>{
+  const c={identity:'/private/brain/.git',org:'/private/record'},events=[
+    {type:'item.added',seq:1,id:'G-1',kind:'goal'},
+    {type:'item.added',seq:2,id:'ENG-1',parent:'G-1'},
+    {type:'run.started',seq:3,id:'R-1',item:'ENG-1'},
+    {type:'note.added',seq:4,id:'R-1',decision:true,text:'exact authority'},
+    {type:'line-service.probation-authorized',seq:5,project:c.identity,org:c.org,authority:4}];
+  const digest=extra=>successorRecordDigest([...events,...extra],c),initial=digest([]);
+  assert.equal(digest([{type:'note.added',seq:6,id:'R-1',text:'progress'},
+    {type:'item.updated',seq:7,id:'ENG-1',fields:{title:'done',meta:{unrelated:true}}},
+    {type:'report.ingested',seq:8,run:'R-1',report:{outcome:'done'}},
+    {type:'item.closed',seq:9,id:'G-1',as:'done'}]),initial);
+  for(const type of ['line-service.cutover','line-service.phase0','line-service.runtime-migrated','line-service.runtime-upgraded',
+    'line-service.probation-authorized','line-service.probation-withdrawn','line-service.probation-completed',
+    'line-service.probation-switched','line-service.probation-successor-authorized','line-service.probation-successor-switched',
+    'line-service.recipient-retargeted','line-service.login-registered']){
+    const event={type,seq:6,project:c.identity,org:c.org};
+    assert.notEqual(digest([event]),initial,type);
+    assert.equal(digest([{...event,project:'foreign'}]),initial,type+' foreign project');
+    assert.equal(digest([{...event,org:'foreign'}]),initial,type+' foreign record');
+  }
+  for(const flag of ['hold','held','operator_reserved','reserved'])
+    assert.notEqual(digest([{type:'item.updated',seq:6,id:'G-1',fields:{meta:{[flag]:true}}}]),initial,flag);
+  for(const fields of [{parent:'missing'},{parent:'ENG-1'},{role:'human'}])
+    assert.notEqual(digest([{type:'item.updated',seq:6,id:'G-1',fields}]),initial);
+  assert.notEqual(digest([{type:'run.abandoned',seq:6,id:'R-1'}]),initial);
+  assert.notEqual(successorRecordDigest(events.map(e=>e.seq===4?{...e,text:'changed'}:e),c),initial);
+  const recoveryNote={type:'note.added',seq:6,id:'G-1',decision:true,text:'recovery excess'};
+  assert.equal(digest([recoveryNote]),initial);
+  assert.notEqual(successorRecordDigest([...events,recoveryNote],c,{recoveryAuthority:6}),initial);
+});
+
+test('successor rollback preview survives worker events through fence clear and refuses a fresh relevant hold before recovery',async t=>{
+  const f=await successorFixture(t);f.apply();
+  const options={id:'successor-recovery',fromRoot:f.successor,targetRoot:f.recovery,rollback:true};
+  const plan=f.run({...options,dryRun:true}),authority=decide(f,plan.required_decision);
+  transact(f.org,()=>({add:[{type:'item.added',id:'ENG-1',title:'Worker continues'},
+    {type:'run.started',id:'R-1',item:'ENG-1'},
+    {type:'note.added',id:'G-1',text:'Unrelated owner progress'},
+    {type:'item.updated',id:'G-1',fields:{title:'Owner progress',meta:{unrelated:true}}}]}));
+  assert.equal(f.run({...options,dryRun:true}).plan_sha256,plan.plan_sha256);
+  transact(f.org,()=>({add:[{type:'item.updated',id:'G-1',fields:{meta:{hold:true}}}]}));
+  const held=state(f);
+  assert.throws(()=>f.run({...options,expectedPlan:plan.plan_sha256,authority}),/HOLD/);
+  assert.deepEqual(state(f),held);
+  transact(f.org,()=>({add:[{type:'item.updated',id:'G-1',fields:{meta:{hold:false}}}]}));
+  const back=f.run({...options,expectedPlan:plan.plan_sha256,authority,appendStage:'completion',
+    appendEvents:[{type:'report.ingested',run:'R-1',sha256:'a'.repeat(64),report:{outcome:'done'}}]});
+  assert.equal(back.runtime.root,f.recovery);
+  assert.equal(fs.readFileSync(f.installationFile,'utf8'),f.anchor.installation);
+  assert.equal(fs.readFileSync(f.file,'utf8'),f.anchor.plist);
+  assert.deepEqual(fs.readdirSync(path.join(f.directory,'probation-switches')).filter(n=>n.startsWith('.successor-')),[]);
+  assert.ok(fs.existsSync(path.join(f.directory,'probation-successor-clears/successor-recovery.json')));
+  assert.deepEqual(fs.readFileSync(f.originalArchive),f.originalBytes);
+  await startPassStop(f,f.recovery);
+});
+
+test('successor rollback retains fences when relevant lifecycle history changes before clear',async t=>{
+  const f=await successorFixture(t);f.apply();
+  assert.throws(()=>f.back({appendStage:'completion',appendEvents:[{type:'line-service.probation-withdrawn',
+    id:'original-trial',project:f.identity,org:f.org}]}),/record CAS changed before fence clear/);
+  assert.equal(fs.readFileSync(f.installationFile,'utf8'),f.anchor.installation);
+  assert.ok(fs.existsSync(path.join(f.directory,'probation-switches/.successor-successor-recovery')));
+  assert.equal(fs.existsSync(path.join(f.directory,'probation-successor-clears/successor-recovery.json')),false);
+});
 
 test('successor CLI preserves the original OLD sealed recovery through executable entry rollback and exact return',async t=>{
   const f=await successorFixture(t),before=state(f),p=f.run({dryRun:true,cli:true});
@@ -146,7 +218,7 @@ test('successor CLI preserves the original OLD sealed recovery through executabl
 });
 
 test('successor cleared rollback return previews completed reports and preserves clear receipt fences',async t=>{
-  // Both immutable helpers retain the current profile; canonical bytes moved
+  // Both immutable helpers retain the existing record contract; canonical bytes moved
   // after sealing. The other lifecycle control exercises actual OLD readers.
   const f=await successorFixture(t,{currentRecovery:true});f.apply();f.back();
   const clearFile=path.join(f.directory,'probation-successor-clears/successor-recovery.json'),clearBytes=fs.readFileSync(clearFile,'utf8');
@@ -302,9 +374,13 @@ test('successor authority source STOP native history record and integrity refusa
   assert.throws(()=>f.run({dryRun:true}),/payload mismatch/);fs.chmodSync(payload,0o644);fs.writeFileSync(payload,bytes);fs.chmodSync(payload,mode);
   fs.renameSync(f.recovery,f.recovery+'.saved');fs.symlinkSync(f.recovery+'.saved',f.recovery);
   assert.throws(()=>f.run({dryRun:true}),/identity\/node changed|ENOTDIR: not a directory, open 'runtime'/);fs.unlinkSync(f.recovery);fs.renameSync(f.recovery+'.saved',f.recovery);
-  fs.appendFileSync(path.join(f.successor,'bin/org.mjs'),'\n// drift');assert.throws(()=>f.run({dryRun:true}),/incomplete release/);
-  fs.writeFileSync(path.join(f.successor,'bin/org.mjs'),fs.readFileSync(path.join(f.cwd,'bin/org.mjs')));
-  assert.throws(()=>f.run({expectedPlan:p.plan_sha256,authority:seq}),/plan changed/,'intervening record changes invalidate the original preview');
+  const candidateCLI=path.join(f.successor,'bin/org.mjs'),candidateBytes=fs.readFileSync(candidateCLI);
+  fs.appendFileSync(candidateCLI,'\n// drift');assert.throws(()=>f.run({dryRun:true}),/incomplete release/);
+  fs.writeFileSync(candidateCLI,candidateBytes);
+  assert.equal(f.run({dryRun:true}).plan_sha256,p.plan_sha256,'restored owner hold and unrelated record traffic preserve the preview');
+  fs.appendFileSync(path.join(f.cwd,'bin/org.mjs'),'\n// Canonical source moved after preview.\n');
+  f.git('add','bin/org.mjs');f.git('commit','-qm','Move source after successor preview');
+  assert.throws(()=>f.run({expectedPlan:p.plan_sha256,authority:seq}),/plan changed/,'fresh source identity still invalidates a stale preview');
   assert.equal(fs.readFileSync(f.installationFile,'utf8'),before.installation);assert.equal(fs.readFileSync(f.file,'utf8'),before.plist);
   assert.equal(fs.existsSync(path.join(f.directory,'probation-successor-effects')),false);
   transact(f.org,()=>({add:[{type:'item.future',id:'ENG-1'}]}));assert.throws(()=>f.run({dryRun:true}),/record-incompatible/);

@@ -11,6 +11,14 @@ import {tidyFinishedTabs} from '../housekeeping/housekeeping.mjs';
 import {finishCleanup,drain,queueFor} from '../promote/promote.mjs';
 
 const pause=ms=>Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,ms);
+const assertNeverSent=f=>{
+  assert.deepEqual(f.read().actions,[]);
+  assert.deepEqual(effects(f).map(e=>e.action),['report-evidence','agent-exit-requested']);
+  const unsent=events(f).filter(e=>e.type==='closeout.command-not-started');
+  assert.equal(unsent.length,1);assert.equal(unsent[0].native_started,false);
+  assert.equal(unsent[0].action,'agent-exit-requested');
+  assert.ok(fs.existsSync(f.lane));
+};
 
 for(const kind of ['live','unknown','deadline'])test(`bounded admission preserves ${kind} owner refusal`,t=>{
   const f=setup(t,{occupied:false}),lock=retirementOwnerLock(f.common);let release;
@@ -68,7 +76,7 @@ test('a mid-batch guard waits for a different process holding owner.lock and fin
   assert.equal(fs.existsSync(f.lane),false);
 });
 
-test('sustained mid-batch owner contention defers without effects and recovers after release',t=>{
+test('sustained mid-batch owner contention preserves never-sent intent and recovers after release',t=>{
   const f=setup(t,{direct:true,bound:true,merged:true});f.report();
   const command=f.options.command;let release,entered=false;
   f.options.command=(exe,args,options)=>{
@@ -80,7 +88,7 @@ test('sustained mid-batch owner contention defers without effects and recovers a
   let result;
   try{result=f.drain();}finally{release?.();}
   assert.ok(result.evaluated.some(e=>/locked:.*owner.lock/.test(e.reason??'')),JSON.stringify(result));
-  assert.deepEqual(f.read().actions,[]);assert.deepEqual(effects(f),[]);assert.ok(fs.existsSync(f.lane));
+  assertNeverSent(f);
   const recovered=f.drain({retrySafe:true});
   assert.ok(recovered.evaluated.some(e=>e.completed),JSON.stringify(recovered));
   assert.equal(fs.existsSync(f.lane),false);
@@ -108,7 +116,7 @@ test('rollback during a queue effect excludes legacy tidy and promotion until th
   };
   const result=f.drain();assert.equal(rolledBack,true);
   assert.ok(result.evaluated.some(e=>/queue retirement policy disabled; keep original allocation/.test(e.reason??'')),JSON.stringify(result));
-  assert.deepEqual(f.read().actions,[]);assert.deepEqual(effects(f),[]);assert.ok(fs.existsSync(f.lane));
+  assertNeverSent(f);
   assert.equal(fs.existsSync(path.join(closeoutDirectory(f.common),'consumer.lock')),false);
   const after=finishCleanup(f.job,{outcome:'promoted',tip:f.head,workspace:f.lane},queue);
   assert.equal(after.cleanup.state,'complete',JSON.stringify(after));assert.equal(fs.existsSync(f.lane),false);

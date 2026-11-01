@@ -41,7 +41,7 @@ import {createWorkerBrief,projectExceptionAddress} from '../lib/worker-brief.mjs
 import {observeReviewProgress,recoverServiceReview} from './review-recovery.mjs';
 import {haltObservation,completeHaltPass} from './halt-repair.mjs';
 import {itemLaunchHold} from '../lib/item-launch-hold.mjs';
-import {queuePolicy,queueClass,queueSelected,orderQueue} from './priority-order.mjs';
+import {queuePolicy,queueClassifier,queueSelected,orderQueue} from './priority-order.mjs';
 import {isDecision,decisionActivation,decisionRoute,decisionBrief,applyDecision,observeDecisionConsequences} from './decisions.mjs';
 import {judgmentDispatchAllowed} from './decision-policy.mjs';
 import {outcomeFailure} from '../lib/uncertain-outcome.mjs';
@@ -710,9 +710,9 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       const countCapacity = kind => (capacity??(()=>checkSessionCap({config,org,kind,common:project.identity,
         agent:name=>native(['agent','get',name]).agent,processInfo:pane=>native(['pane','process-info','--pane',pane]).process_info})))(kind);
       const queueSelection = state => {
-        const policy=queuePolicy(state);
-        return JSON.stringify({policy,candidates:orderQueue(state,[...state.items.values()].filter(i=>!i.closed&&i.kind!=='goal'),policy)
-          .map(i=>[i.id,queueClass(state,i,policy),queueSelected(i,state,ordinaryPolicy)])});
+        const policy=queuePolicy(state),classify=queueClassifier(state,policy);
+        return JSON.stringify({policy,candidates:orderQueue(state,[...state.items.values()].filter(i=>!i.closed&&i.kind!=='goal'),policy,classify)
+          .map(i=>[i.id,classify(i),queueSelected(i,state,ordinaryPolicy)])});
       };
       const obsoleteDecision=observeOutcomeDecisions({identity:project.identity,org});
       const capacityHeld=(item,input,error,observed_at)=>{
@@ -837,8 +837,9 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
           note(`dispatch:${item.id}`, e.message);
         }
       }};
-      const ordered=orderQueue(snapshot.state,[...snapshot.state.items.values()].filter(item=>!item.closed&&item.kind!=='goal'),standing);
-      log({action:'queue-order',policy:standing,candidates:ordered.map(item=>({item:item.id,class:queueClass(snapshot.state,item,standing)}))});
+      const classify=queueClassifier(snapshot.state,standing);
+      const ordered=orderQueue(snapshot.state,[...snapshot.state.items.values()].filter(item=>!item.closed&&item.kind!=='goal'),standing,classify);
+      log({action:'queue-order',policy:standing,candidates:ordered.map(item=>({item:item.id,class:classify(item)}))});
       if(config&&!policyHold)admitItems(ordered);
       // Detached acknowledgements and review activity are not engineering
       // progress. This is the end of a completed pass, under the same lock.

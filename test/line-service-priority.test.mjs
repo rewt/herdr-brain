@@ -1,7 +1,7 @@
 import test from './helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import {fold,itemStatus} from '../lib/state.mjs';
-import {queuePolicy,queueClass,queueSelected,orderQueue} from '../line-service/priority-order.mjs';
+import {queuePolicy,queueClass,queueClassifier,queueSelected,orderQueue} from '../line-service/priority-order.mjs';
 import {priorityOnlyReason,priorityMigrationPlan,priorityMigrationMutation} from '../line-service/priority-migration.mjs';
 import {haltObservation} from '../line-service/halt-repair.mjs';
 
@@ -127,4 +127,38 @@ test('removing a link or closing its target removes inherited urgency and reopen
   f.add({type:'item.closed',id:'ENG-release',as:'done'});assert.equal(group(),'historical-backlog');
   f.add({type:'item.reopened',id:'ENG-release'});assert.equal(group(),'stable-Brain-release');
   f.add({type:'link.removed',blocker:'ENG-blocker',blocked:'ENG-release'});assert.equal(group(),'historical-backlog');
+});
+
+test('snapshot classifier shares one link scan and cached walks across ordering and per-item consumers',()=>{
+  const f=fixture();
+  f.item('ENG-blocker',{queue_class:'historical-backlog'});
+  f.item('ENG-middle',{queue_class:'rehearsal-publication'});
+  f.item('ENG-release',{queue_class:'stable-Brain-release'});
+  f.item('REV-blocker',{review_source_item:'ENG-blocker',review_target:{head:'captured'},review_round_cap:1},{role:'reviewer'});
+  for(const [blocker,blocked] of [['ENG-blocker','ENG-middle'],['ENG-middle','ENG-release'],['ENG-middle','ENG-blocker']])
+    f.add({type:'link.added',blocker,blocked});
+  const s=f.state(),policy=queuePolicy(s),links=s.links;
+  let scans=0,reads=0;
+  s.links={*[Symbol.iterator](){scans++;yield* links;}};
+  const release=s.items.get('ENG-release');
+  Object.defineProperty(release.meta,'queue_class',{get(){reads++;return 'stable-Brain-release';}});
+  const classify=queueClassifier(s,policy),items=[...s.items.values()].filter(i=>i.kind!=='goal');
+  const ordered=orderQueue(s,items,policy,classify);
+  assert.deepEqual(ordered.map(i=>[i.id,classify(i)]),[
+    ['REV-blocker','stable-Brain-release'],['ENG-blocker','stable-Brain-release'],
+    ['ENG-middle','stable-Brain-release'],['ENG-release','stable-Brain-release']
+  ]);
+  assert.equal(scans,1,'ordering and per-item reporting share the dependency index');
+  const afterWalks=reads;assert.ok(afterWalks>0,'the transitive target was visited');
+  for(let n=0;n<3;n++)for(const item of items)assert.equal(classify(item),'stable-Brain-release');
+  assert.equal(reads,afterWalks,'repeated candidates and source reviews reuse cached walks');
+  assert.equal(scans,1);
+  // A later snapshot must drop inherited urgency and recover when the link returns.
+  f.add({type:'link.removed',blocker:'ENG-middle',blocked:'ENG-release'});
+  const removed=f.state();
+  assert.equal(queueClassifier(removed)(removed.items.get('ENG-blocker')),'rehearsal-publication');
+  f.add({type:'link.added',blocker:'ENG-middle',blocked:'ENG-release'});
+  const restored=f.state();
+  assert.equal(queueClassifier(restored)(restored.items.get('ENG-blocker')),'stable-Brain-release');
+  assert.equal(queueClassifier({...restored,items:new Map()})(restored.items.get('ENG-blocker')),null,'no standing policy remains unclassified');
 });

@@ -429,7 +429,9 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         counts:evaluationCounts,log,dirty:()=>{noticesDirty=true;}});
       const evaluationPolicy={admissionPolicy,ordinaryPolicy,config,supervisor:childEnv.MONITOR_SUPERVISOR_AGENT??null};
       effects.review_admission.policy=admissionPolicy??null;
-      effects.ordinary_admission={schema:'ordinary-admission-pass/v1',policy:ordinaryPolicy,held:[]};save();
+      // Observations share the next stage/pre-effect checkpoint. They grant no
+      // effect and need no separate full snapshot before that boundary.
+      effects.ordinary_admission={schema:'ordinary-admission-pass/v1',policy:ordinaryPolicy,held:[]};noticesDirty=true;
       const ordinaryHold=(item,state,stage,policy=ordinaryPolicy)=>{
         const hold=ordinaryAdmissionHold(policy,{item,state});
         if(hold){const row={stage,item:item.id,...hold};effects.ordinary_admission.held.push(row);noticesDirty=true;log({action:'ordinary-admission-held',...row});}
@@ -485,7 +487,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       }
       snapshot=current();
       try{
-        const observed=observeReviewProgress({state:snapshot.state,org,identity:project.identity,pass:effects.pass_number,previous:effects.review_progress});effects.review_progress=observed.progress;save();let recoveries=0;
+        const observed=observeReviewProgress({state:snapshot.state,org,identity:project.identity,pass:effects.pass_number,previous:effects.review_progress});effects.review_progress=observed.progress;noticesDirty=true;let recoveries=0;
         for(const id of observed.candidates){
           if(expired()||recoveries>=maxStepsPerStage)break;const q=snapshot.state.items.get(id),target=q.meta.review_target;
           if(!admit({item:q},'recovery',true))continue;

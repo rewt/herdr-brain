@@ -114,7 +114,7 @@ test('producer routine failures collapse in diagnostics with stable counts acros
     f.service({capacity}).pass();
     counts.push(Object.values(JSON.parse(fs.readFileSync(path.join(f.directory,'effects.json'))).record_notices)[0].count);
   }
-  assert.deepEqual(counts,[1,2,4],'the threshold pass also admits the independent halt repair');
+  assert.deepEqual(counts,[1,2,4],JSON.stringify({expected:'the threshold pass also admits the independent halt repair',diagnostics:f.diagnostics().filter(r=>/halt|engineering-idle/.test(r.action))}));
   assert.equal(n,7,'three admission checks, three halt observations and one repair admission');
   assert.equal(f.diagnostics().filter(e=>e.action==='halt-capacity-held').length,3);
   assert.equal([...f.state().items.values()].filter(i=>i.meta.halt_repair===1).length,1);

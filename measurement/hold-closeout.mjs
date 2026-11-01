@@ -57,7 +57,7 @@ export function evaluateHoldCloseout({proof,events,project,org,run,holdSha256}){
   if(!evaluation)return unknown('same-turn completed evaluation missing');
   const receipts=name=>[...(evaluation.resources?.[name]?.receipts??[]),...(evaluation.resources?.[name]?.receipt?[evaluation.resources[name].receipt]:[])],
     effects=name=>receipts(name).map(r=>interval.find(e=>e.type==='closeout.effect'&&owns(e)&&e.seq===r.seq&&e.effect===r.effect&&e.seq<evaluation.seq)).filter(Boolean),
-    closed=effects('session').find(e=>e.outcome?.action==='closed'&&(e.outcome.sessions??[e.outcome]).some(s=>s.run===run&&s.session===worker.agent_session_id)),
+    closed=effects('session').find(e=>e.outcome?.action==='closed'&&(e.outcome.sessions??[e.outcome]).some(s=>s.run===run&&(s.agent_session_id??s.session)===worker.agent_session_id)),
     removed=effects('folder').find(e=>e.outcome?.action==='worktree-removed'&&e.outcome.cwd===target.cwd&&e.outcome.branch===target.branch&&e.outcome.tip===target.head),
     preflight=interval.find(e=>e.type==='closeout.effect'&&owns(e)&&e.outcome?.action==='lane-preflight'&&e.outcome.cwd===target.cwd&&e.outcome.tip===target.head&&e.seq<(removed?.seq??0));
   // The guarded non-force removal and its preflight are the clean-folder proof;

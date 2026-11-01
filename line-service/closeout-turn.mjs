@@ -269,11 +269,11 @@ function closeoutTurn({project,org,cli,guard,env=process.env,maxSteps=8,budgetMs
         const receipts=loadEvents(org);
         subjects.push({key:entry.key,run:entry.run,source:entry.source,
           status:result.restart?'source-handoff':result.already_running?'owned':result.evaluated?.length?'evaluated':'not-evaluated',
-          evaluations:(result.evaluated??[]).map(({key,source,completed,reason,resources})=>({
-            seq:receipts.tornTail?undefined:receipts.events.findLast(e=>e.type==='closeout.evaluated'&&e.identity===project.identity&&e.run===entry.run&&
-              e.key===key&&JSON.stringify(e.source)===JSON.stringify(source)&&e.completed===completed&&JSON.stringify(e.resources)===JSON.stringify(resources))?.seq,
-            key,source,completed,
-            ...(reason!==undefined?{reason}:{}),...(resources!==undefined?{resources}:{})}))});
+          evaluations:(result.evaluated??[]).map(({key,source,completed,reason,resources})=>{
+            const seq=receipts.tornTail?undefined:receipts.events.findLast(e=>e.type==='closeout.evaluated'&&e.identity===project.identity&&e.run===entry.run&&
+              e.key===key&&JSON.stringify(e.source)===JSON.stringify(source)&&e.completed===completed&&JSON.stringify(e.resources)===JSON.stringify(resources))?.seq;
+            return{...(seq!==undefined?{seq}:{}),key,source,completed,
+              ...(reason!==undefined?{reason}:{}),...(resources!==undefined?{resources}:{})};})});
         if(result.restart){save();throw Object.assign(Error('closer returned a guarded code handoff'),{code:'CLOSEOUT_CODE_CHANGED',binding:result.restart.old,current:result.restart.current});}
         state.last_result={key:entry.key,result};fault('after-closeout');
       }catch(error){if(error.code==='CLOSEOUT_CODE_CHANGED')throw error;errors.push({key:entry.key,stage:'closeout',reason:error.message});

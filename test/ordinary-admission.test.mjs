@@ -24,14 +24,17 @@ test('ordinary admission is opt-in and selects exact own flags or a named item/a
   const events=[{type:'item.added',id:'G-9',kind:'goal',title:'Selected wave'},
     {type:'item.added',id:'ENG-1',role:'engineer',title:'Legacy backlog'},
     {type:'item.added',id:'ENG-2',role:'engineer',title:'Flag',meta:{queue_selected:true}},
-    {type:'item.added',id:'ENG-3',role:'engineer',title:'Descendant proposal',parent:'G-9',from_run:'R-1'},
+    {type:'item.added',id:'ENG-3',role:'engineer',title:'Descendant proposal',parent:'G-9',from_run:'R-1',meta:{proposal_intake:'report-proposal/v1',queue_selected:false}},
     {type:'item.added',id:'ENG-4',role:'engineer',title:'Explicit veto',parent:'G-9',meta:{queue_selected:false}},
-    {type:'item.added',id:'ENG-5',role:'engineer',title:'Named proposal',from_run:'R-1'},
+    {type:'item.added',id:'ENG-5',role:'engineer',title:'Named work'},
     {type:'item.added',id:'ENG-6',role:'engineer',title:'Unselected proposal',from_run:'R-1'},
+    {type:'item.added',id:'ENG-7',role:'engineer',title:'Descendant work',parent:'G-9'},
     {type:'item.added',id:'REV-1',role:'reviewer',title:'Existing review'}];
   const state=fold(events),policy={selected_only:true,items:['G-9','ENG-5']};
-  for(const id of ['ENG-2','ENG-3','ENG-5','REV-1'])assert.equal(queueSelected(state.items.get(id),state,policy),true,id);
-  for(const id of ['ENG-1','ENG-4','ENG-6'])assert.equal(queueSelected(state.items.get(id),state,policy),false,id);
+  for(const id of ['ENG-2','ENG-5','ENG-7','REV-1'])assert.equal(queueSelected(state.items.get(id),state,policy),true,id);
+  for(const id of ['ENG-1','ENG-3','ENG-4','ENG-6'])assert.equal(queueSelected(state.items.get(id),state,policy),false,id);
+  assert.equal(ordinaryAdmissionHold(policy,{item:state.items.get('ENG-3'),state}).code,'ORDINARY_ADMISSION_DESELECTED');
+  assert.equal(queueSelected(state.items.get('ENG-3'),state,{selected_only:true,items:['ENG-3']}),false,'naming a report proposal directly does not override intake deselection');
   assert.equal(ordinaryAdmissionHold(policy,{item:state.items.get('ENG-1'),state}).code,'ORDINARY_ADMISSION_NOT_SELECTED');
   assert.equal(ordinaryAdmissionHold(policy,{item:state.items.get('ENG-4'),state}).code,'ORDINARY_ADMISSION_DESELECTED');
   for(const disabled of [undefined,{selected_only:false,items:['G-9']}])for(const item of state.items.values()){
@@ -41,6 +44,9 @@ test('ordinary admission is opt-in and selects exact own flags or a named item/a
   const historical=oldFold(events);
   for(const item of state.items.values())assert.equal(queueSelected(historical.items.get(item.id),historical,policy),queueSelected(item,state,policy));
   assert.equal(queueSelected(state.items.get('ENG-3')),false,'default keeps proposal own-selection rule');
+  const selected=fold([...events,{type:'item.updated',id:'ENG-3',fields:{meta:{queue_selected:true}}}]);
+  assert.equal(queueSelected(selected.items.get('ENG-3'),selected,policy),true,'explicit own-item selection releases the report proposal');
+  assert.equal(queueSelected(selected.items.get('ENG-3')),true,'own-item selection also releases the proposal under the default policy');
 });
 
 for(const adopted of [false,true])test(`ordinary admission supported writer preserves project provenance and default-off restore (${adopted?'home':'repository'})`,async t=>{

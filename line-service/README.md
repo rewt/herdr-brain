@@ -80,9 +80,11 @@ record config set ordinary_admission '{"selected_only":true,"items":["G-9","ENG-
 With `selected_only:true`, an ordinary item needs its own
 `meta.queue_selected===true`, or an exact ID in `items` naming itself or an
 ancestor. The optional array is a named set; no globs or ID prefixes apply.
-Naming an ancestor deliberately selects its descendants, including future
-proposals; an ancestor's metadata flag alone does not. An item's explicit
-`queue_selected:false` vetoes the named set. Other readiness, ancestry holds,
+Naming an ancestor selects descendants unless an item's explicit
+`queue_selected:false` vetoes the named set; an ancestor's metadata flag alone
+does not select descendants. Report-proposal intake sets `queue_selected:false`,
+so those proposals await separate own-item selection even under a named ancestor
+or when named directly. Other readiness, ancestry holds,
 reserved decisions, STOP/HOLD, pools, native identity and original-attempt guards
 still apply. Selection does not serialize a wave: the existing detached starts
 fill the build pool using item-named lanes and normal report/cleanup paths.

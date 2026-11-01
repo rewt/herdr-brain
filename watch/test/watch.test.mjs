@@ -1250,6 +1250,14 @@ test('failed sign-in delivers one stable supervisor notice, queues a missing rec
     const alias=f.root,physical=fs.realpathSync(alias);
     for(const [key,value] of Object.entries(f))if(typeof value==='string')f[key]=value.replace(alias,physical);
     f.args=f.args.map(value=>value.replace(alias,physical));
+    // Missing supervisors survive recycle; absent worker recipients retire.
+    // Record the real role, as the existing supervisor-recycle control does.
+    const git=args=>execFileSync('git',['-C',f.root,...args],{stdio:'pipe'});
+    git(['init','-q']);
+    fs.writeFileSync(path.join(f.root,'.promote.json'),JSON.stringify({to:'supervisor-test'}));
+    git(['add','.promote.json']);
+    git(['-c','user.name=Fixture','-c','user.email=fixture@example.test','commit','-qm','Name supervisor']);
+    seedOwnedRun(path.join(f.root,'.org'),run,{workspace:f.root});
     const inbox=path.join(f.root,'.org/supervisor/inbox.log'),record=path.join(f.root,'.org/events.jsonl');
     const done=path.join(f.root,'abandoned'),available=path.join(f.root,'recipient-available');
     const worker={...recipientAgent('lane-nine',f.root),pane_id:'worker-pane',agent_status:'idle'};

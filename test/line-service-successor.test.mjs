@@ -13,6 +13,7 @@ import {loadEvents,transact} from '../lib/store.mjs';
 import {requireHomeRelease,selectRelease} from '../lib/releases.mjs';
 import {fixture as dispatchFixture,promptCalls} from '../dispatch/test/dispatch-fixture.mjs';
 import {requireSuccessorCapabilities} from '../line-service/probation-successor-capabilities.mjs';
+import {probationChain} from '../measurement/probation-chain.mjs';
 
 const originalCommit='d3271f06ef0ceb80a84cb624f4b04f3b5373c57f';
 const product=path.resolve(import.meta.dirname,'..'),sha=b=>createHash('sha256').update(b).digest('hex');
@@ -22,7 +23,7 @@ function legacy(f,id,from,to){
   const p=f.main([...args,'--dry-run'],f.args),authority=decide(f,p.required_decision);
   return f.main([...args,'--expected-plan',p.plan_sha256,'--authority',String(authority)],f.args);
 }
-async function successorFixture(t,{currentRecovery=false,incompatibleCandidate=false}={}){
+async function successorFixture(t,{currentRecovery=false,incompatibleCandidate=false,legacyCandidate=false}={}){
   // Default to the complete OLD product revision (actual legacy helper). The
   // second control covers current bytes. Seal BOTH roots before moving only
   // canonical helper bytes, retaining frozen startup code and exact authorities.
@@ -44,22 +45,25 @@ async function successorFixture(t,{currentRecovery=false,incompatibleCandidate=f
   assert.equal(sha(frozenHelper),currentRecovery?'7d96691e48bcb8fbf1096a99a204c4284e6cec89847198646587870af8911b6e':'8f4e3cc3ce09ebf632d5a21b0eda28edf505e556480cb5044cf849e02d2b04f0');
   fs.writeFileSync(path.join(f.cwd,'lib/obligations.mjs'),frozenHelper);
   f.git('add','.');f.git('commit',...(currentRecovery?['--allow-empty']:[]),'-qm','Install successor protocol in private canonical');
-  const commit=f.git('rev-parse','HEAD'),next=f.release('successor',{commit});fs.unlinkSync(path.join(next,'.release-acceptance.json'));
-  if(!currentRecovery){
-    // Exercise the existing successor's OWN reader/service code as well as the
-    // complete OLD recovery. No modern fold or startup is substituted in it.
-    const exact=path.join(f.scratch,'exact-successor-source');fs.mkdirSync(exact);
-    const tar=spawnSync('git',['archive','ab671e89865ccf85d6d7d6d410688703d019d8ca'],{cwd:product,maxBuffer:128*1024*1024});assert.equal(tar.status,0,tar.stderr?.toString());
-    const extracted=spawnSync('/usr/bin/tar',['-xf','-','-C',exact],{input:tar.stdout});assert.equal(extracted.status,0,extracted.stderr?.toString());
-    fs.rmSync(next,{recursive:true});copyProduct(exact,next);fs.writeFileSync(path.join(next,'.release-commit'),commit+'\n');
-    assert.equal(sha(fs.readFileSync(path.join(next,'lib/record-compatibility.mjs'))),'be456941bfbfb60e672375c0ad1a3b8e2b07d94c63833dda96e6ab9a3cc01f2a');
+  const commit=f.git('rev-parse','HEAD');
+  function candidate(name,{legacy=false,incompatible=false}={}){
+    const next=f.release(name,{commit});copyProduct(product,next);fs.unlinkSync(path.join(next,'.release-acceptance.json'));
+    if(legacy){
+      const exact=path.join(f.scratch,'exact-'+name);fs.mkdirSync(exact);
+      const tar=spawnSync('git',['archive','ab671e89865ccf85d6d7d6d410688703d019d8ca'],{cwd:product,maxBuffer:128*1024*1024});assert.equal(tar.status,0,tar.stderr?.toString());
+      const extracted=spawnSync('/usr/bin/tar',['-xf','-','-C',exact],{input:tar.stdout});assert.equal(extracted.status,0,extracted.stderr?.toString());
+      fs.rmSync(next,{recursive:true});copyProduct(exact,next);fs.writeFileSync(path.join(next,'.release-commit'),commit+'\n');
+    }
+    fs.writeFileSync(path.join(next,'lib/obligations.mjs'),frozenHelper);
+    if(incompatible)fs.appendFileSync(path.join(next,'line-service/launchd.mjs'),'\nthrow Error("target protocol must never execute during admission");\n');
+    const frozenFile=path.join(next,'.release-validation.json'),frozen=freezeReleaseValidation(f.cwd,name,frozenFile,f.env,{commit,mode:'routine'});
+    const runtime=productFiles(next).sort();
+    fs.writeFileSync(frozenFile,JSON.stringify({...frozen,validation:{cwd:f.cwd,common:f.identity,commit,tree:f.git('rev-parse',`${commit}^{tree}`),
+      inventorySha256:'0'.repeat(64),runtimeSha256:sha(JSON.stringify(Object.fromEntries(runtime.map(file=>[file,payloadEntry(next,file)])))),routine:{fullCoverage:'UNRUN'}}}));
+    const manifest=spawnSync(process.execPath,[path.join(product,'herdr/releases.mjs'),'manifest',next],{env:f.env,encoding:'utf8'});assert.equal(manifest.status,0,manifest.stderr);
+    return next;
   }
-  if(incompatibleCandidate)fs.appendFileSync(path.join(next,'line-service/launchd.mjs'),'\nthrow Error("target protocol must never execute during admission");\n');
-  const frozenFile=path.join(next,'.release-validation.json'),frozen=freezeReleaseValidation(f.cwd,'successor',frozenFile,f.env,{commit,mode:'routine'});
-  const runtime=productFiles(next).sort();
-  fs.writeFileSync(frozenFile,JSON.stringify({...frozen,validation:{cwd:f.cwd,common:f.identity,commit,tree:f.git('rev-parse',`${commit}^{tree}`),
-    inventorySha256:'0'.repeat(64),runtimeSha256:sha(JSON.stringify(Object.fromEntries(runtime.map(file=>[file,payloadEntry(next,file)])))),routine:{fullCoverage:'UNRUN'}}}));
-  const manifest=spawnSync(process.execPath,[path.join(product,'herdr/releases.mjs'),'manifest',next],{env:f.env,encoding:'utf8'});assert.equal(manifest.status,0,manifest.stderr);
+  const next=candidate('successor',{legacy:legacyCandidate,incompatible:incompatibleCandidate});
   const candidateManifest=fs.readFileSync(path.join(next,'.release-manifest.json'));
   // No reseal or authority rewrite: only the canonical implementation moves.
   fs.writeFileSync(path.join(f.cwd,'lib/obligations.mjs'),fs.readFileSync(path.join(product,'lib/obligations.mjs'),'utf8')+'\n// Compatible canonical implementation revision.\n');
@@ -91,7 +95,7 @@ async function successorFixture(t,{currentRecovery=false,incompatibleCandidate=f
   };
   const back=(options={})=>apply({id:'successor-recovery',fromRoot:next,targetRoot:recovery,rollback:true,...options});
   const returned=(options={})=>apply({id:'successor-return',...options});
-  return{...f,successor:next,recovery,anchor,original,originalArchive,originalBytes,run,apply,back,returned,frozenHelper,candidateManifest};
+  return{...f,candidate,successor:next,recovery,anchor,original,originalArchive,originalBytes,run,apply,back,returned,frozenHelper,candidateManifest};
 }
 async function startPassStop(f,root){
   const {main}=await f.module(root,'line-service/launchd.mjs');
@@ -167,6 +171,75 @@ test('successor cleared rollback return previews completed reports and preserves
   assert.equal(fs.readFileSync(clearFile,'utf8'),clearBytes);
 });
 
+function savedChain(f){
+  // Feed the independently shipped evaluator the SAME immutable archives and
+  // completed event history, rather than a second hand-authored model.
+  const events=loadEvents(f.org).events;
+  const original=JSON.parse(fs.readFileSync(f.originalArchive,'utf8'));
+  const history={installation:fs.readFileSync(f.installationFile,'utf8'),plist:fs.readFileSync(f.file,'utf8'),files:[]};
+  const references={},verified=new Set();
+  for(const folder of ['probation-switches','probation-successors','probation-successor-effects','probation-successor-clears']){
+    const dir=path.join(f.directory,folder);if(!fs.existsSync(dir))continue;
+    for(const name of fs.readdirSync(dir)){
+      const file=path.join(dir,name),bytes=fs.readFileSync(file,'utf8'),id='archive-'+history.files.length;
+      history.files.push({file,bytes,sha256:sha(bytes),evidence:[id]});
+      references[id]={sha256:sha(bytes)};verified.add(id);
+    }
+  }
+  return{events,original,authority:events.find(e=>e.type==='line-service.probation-authorized'),
+    history,verified,references,from:new Date(Date.now()+1000).toISOString(),startSeq:events.at(-1).seq};
+}
+
+test('append-only extensions preserve the actual legacy first archive and sealed recovery, and return to an earlier compatible extension',async t=>{
+  const f=await successorFixture(t),legacy=f.candidate('legacy',{legacy:true}),second=f.candidate('successor-two');
+  const names=['probation-successor.mjs','probation-successor-history.mjs','probation.mjs','development-recovery.mjs','runtime.mjs','launchd.mjs'];
+  const canonical=new Map(names.map(n=>[n,fs.readFileSync(path.join(f.cwd,'line-service',n))]));
+  for(const name of names)fs.copyFileSync(path.join(legacy,'line-service',name),path.join(f.cwd,'line-service',name));
+  f.git('add','line-service');f.git('commit','-qm','Establish the retained legacy successor with its actual writer');
+  f.apply({id:'legacy-entry',targetRoot:legacy});f.back({id:'legacy-back',fromRoot:legacy});
+  const firstFile=path.join(f.directory,'probation-successors/original-trial.json'),firstBytes=fs.readFileSync(firstFile);
+  for(const [name,bytes]of canonical)fs.writeFileSync(path.join(f.cwd,'line-service',name),bytes);
+  f.git('add','line-service');f.git('commit','-qm','Restore collection writer without rewriting retained history');
+  f.apply();await startPassStop(f,f.successor);f.back();await startPassStop(f,f.recovery);
+  f.apply({id:'two-entry',targetRoot:second});await startPassStop(f,second);
+  assert.throws(()=>f.run({id:'direct-switch',fromRoot:second,targetRoot:f.successor,dryRun:true}),/recovery entry/);
+  assert.throws(()=>f.run({id:'wrong-rollback',fromRoot:f.successor,targetRoot:f.recovery,rollback:true,dryRun:true}),/current root differs/);
+  f.back({id:'two-back',fromRoot:second});await startPassStop(f,f.recovery);
+  const recovered=state(f);
+  assert.throws(()=>f.run({id:'legacy-return',targetRoot:legacy,dryRun:true}),/profile ab671e8986 lacks successor-history\/v2/);
+  assert.deepEqual(state(f),recovered);
+  assert.equal(fs.readFileSync(f.installationFile,'utf8'),f.anchor.installation);assert.equal(fs.readFileSync(f.file,'utf8'),f.anchor.plist);
+  f.returned();await startPassStop(f,f.successor);
+  const {acceptedRuntime}=await f.module(f.successor,'line-service/runtime.mjs');
+  assert.equal(acceptedRuntime(f.cwd,{root:f.successor,home:f.installationHome}).probation.successor.archive.file,
+    path.join(f.directory,'probation-successors/original-trial--successor-entry.json'));
+  assert.deepEqual(fs.readFileSync(firstFile),firstBytes);assert.deepEqual(fs.readFileSync(f.originalArchive),f.originalBytes);
+  for(const [file,e]of Object.entries(f.original.scope.previous.source.files))assert.deepEqual(payloadEntry(f.recovery,file),e);
+  assert.equal(loadEvents(f.org).events.filter(e=>e.type==='line-service.probation-authorized').length,1);
+  assert.equal(loadEvents(f.org).events.filter(e=>e.type==='line-service.probation-successor-authorized').length,3);
+  assert.equal(fs.readFileSync(f.retained,'utf8'),f.jobs);
+  const chain=savedChain(f);
+  assert.equal(probationChain(chain).candidate.release.root,f.successor);
+  assert.equal(probationChain(chain).lastSeq,loadEvents(f.org).events.at(-1).seq);
+
+  const record=path.join(f.org,'events.jsonl'),recordBytes=fs.readFileSync(record,'utf8');
+  for(const change of [
+    rows=>{rows.find(e=>e.type==='line-service.probation-successor-authorized').trial='other-trial';},
+    rows=>{rows.find(e=>e.type==='line-service.probation-successor-authorized').native_caller.name='foreign';},
+    rows=>{rows.find(e=>e.id==='two-entry'&&e.type==='line-service.probation-successor-authorized').candidate=rows.find(e=>e.id==='successor-entry'&&e.type==='line-service.probation-successor-authorized').candidate;},
+    rows=>{rows.find(e=>e.id==='two-entry'&&e.type==='line-service.probation-successor-switched').previous_seq=1;},
+    rows=>{rows.find(e=>e.id==='two-entry'&&e.type==='line-service.probation-successor-switched').archive=rows.find(e=>e.id==='successor-entry'&&e.type==='line-service.probation-successor-switched').archive;},
+  ]){
+    const rows=recordBytes.trim().split('\n').map(JSON.parse);change(rows);fs.writeFileSync(record,rows.map(e=>JSON.stringify(e)).join('\n')+'\n');
+    assert.throws(()=>f.run({id:'bad-history',fromRoot:f.successor,targetRoot:f.recovery,rollback:true,dryRun:true}),/successor|authority/);
+    fs.writeFileSync(record,recordBytes);
+  }
+  fs.chmodSync(firstFile,0o644);assert.throws(()=>f.run({dryRun:true}),/mutable/);fs.chmodSync(firstFile,0o444);
+  const orphan=path.join(f.directory,'probation-successors/orphan.json');fs.writeFileSync(orphan,'{}');
+  assert.throws(()=>f.run({dryRun:true}),/UNKNOWN/);fs.unlinkSync(orphan);
+  assert.deepEqual(fs.readFileSync(firstFile),firstBytes);
+});
+
 test('successor rejects an incompatible sealed candidate before effects without executing target code',async t=>{
   const f=await successorFixture(t,{incompatibleCandidate:true}),before=state(f);
   assert.throws(()=>f.run({dryRun:true,cli:true}),/successor-incompatible: unrecognized successor-reader\/v1/);
@@ -174,19 +247,12 @@ test('successor rejects an incompatible sealed candidate before effects without 
   assert.equal(fs.existsSync(path.join(f.directory,'probation-successor-effects')),false);
 });
 
-test('successor capability requirement changes refuse the frozen reader before entry and recover without resealing',async t=>{
-  const f=await successorFixture(t),registry=path.join(f.cwd,'line-service/probation-successor-capabilities.mjs');
-  const bytes=fs.readFileSync(registry,'utf8'),before=state(f);
-  assert.equal(requireSuccessorCapabilities(f.successor).profile,'ab671e8986');
-  const changed=bytes.replace("export const successorRequirements = () => ['successor-effect/v1'", "export const successorRequirements = () => ['successor-effect/v2'");
-  assert.notEqual(changed,bytes);fs.writeFileSync(registry,changed);
-  f.git('add','line-service');f.git('commit','-qm','Require a new writer contract with unchanged frozen reader');
-  assert.throws(()=>f.run({dryRun:true,cli:true}),/profile ab671e8986 lacks successor-effect\/v2/);
+test('successor history v2 refuses the actual frozen v1 reader without rewriting its profile',async t=>{
+  const f=await successorFixture(t,{legacyCandidate:true}),before=state(f);
+  assert.throws(()=>requireSuccessorCapabilities(f.successor),/profile ab671e8986 lacks successor-history\/v2/);
+  assert.throws(()=>f.run({dryRun:true,cli:true}),/profile ab671e8986 lacks successor-history\/v2/);
   assert.deepEqual(state(f),before);
   assert.equal(fs.existsSync(path.join(f.directory,'probation-successor-effects')),false);
-  fs.writeFileSync(registry,bytes);f.git('add','line-service');f.git('commit','-qm','Restore compatible writer contract');
-  assert.equal(f.run({dryRun:true,cli:true}).runtime.root,f.successor);
-  assert.deepEqual(fs.readFileSync(path.join(f.successor,'.release-manifest.json')),f.candidateManifest);
 });
 
 test('successor verifies all six target sources and rollback bypasses reader admission while return refuses and recovers',async t=>{
@@ -254,6 +320,26 @@ test('successor UNKNOWN intents fence OLD and new startup and every replacement 
     const {main}=await f.module(f.successor,'line-service/launchd.mjs');
     assert.throws(()=>main(['restart','--repo',f.cwd,'--org',f.org],f.args),/UNKNOWN|accepted project pin|binding differs|drifted/);
     assert.deepEqual(fs.readFileSync(marker),bytes);assert.equal(fs.readFileSync(f.retained,'utf8'),f.jobs);
+  });
+});
+
+test('partial later extensions and completed later rollback clears retain startup and replacement fences',async t=>{
+  for(const stage of ['fence','authority','intent','plist','installation','clear-receipt'])await t.test(stage,async st=>{
+    const f=await successorFixture(st);f.apply();f.back();
+    const firstFile=path.join(f.directory,'probation-successors/original-trial.json'),firstBytes=fs.readFileSync(firstFile);
+    const second=f.candidate('second-unknown');
+    const options=stage==='clear-receipt'
+      ?(f.apply({id:'second-entry',targetRoot:second}),{id:'second-back',fromRoot:second,targetRoot:f.recovery,rollback:true})
+      :{id:'second-entry',targetRoot:second};
+    const preview=f.run({...options,dryRun:true}),authority=decide(f,preview.required_decision);
+    assert.throws(()=>f.run({...options,expectedPlan:preview.plan_sha256,authority,faultStage:stage}),new RegExp('injected '+stage));
+    const retained=state(f);
+    for(const id of [options.id,'replacement'])assert.throws(()=>f.run({id,dryRun:true}),/UNKNOWN|completed successor|fence retained/);
+    await oldRefuses(f);
+    const {main}=await f.module(second,'line-service/launchd.mjs');
+    assert.throws(()=>main(['restart','--repo',f.cwd,'--org',f.org],f.args),/UNKNOWN|fence retained|binding differs|drifted/);
+    assert.deepEqual(state(f),retained);assert.deepEqual(fs.readFileSync(firstFile),firstBytes);
+    assert.equal(fs.readFileSync(f.retained,'utf8'),f.jobs);
   });
 });
 

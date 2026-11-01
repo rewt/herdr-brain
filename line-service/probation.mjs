@@ -19,7 +19,7 @@ import {fold} from '../lib/state.mjs';
 import {trialOwnerHold} from '../lib/item-launch-hold.mjs';
 import {prepareDevelopmentRecovery,sealDevelopmentRecovery,verifyDevelopmentRecovery,recoveryNode} from './development-recovery.mjs';
 import {legacyRecipientHistory,recipientChanges} from './recipient-history.mjs';
-import {successorExtension} from './probation-successor-history.mjs';
+import {successorExtensions} from './probation-successor-history.mjs';
 import {requireRecoveryEntry} from './recovery-admission.mjs';
 
 const toolRoot=fs.realpathSync(fileURLToPath(new URL('../',import.meta.url)));
@@ -106,9 +106,13 @@ export function probationRuntime(repo,{root,home=releaseHome(),events,allowEnded
     if(!same(old,previous.release)||sha(readPlainFile(path.join(old.root,'.release-manifest.json')))!==previous.manifest_sha256)throw Error('probation previous runtime changed');
     requireRecordCompatibility(old.root,loaded.events);
   }
-  const extension=successorExtension(loaded.events,c,event);
+  const extensions=successorExtensions(loaded.events,c,event);
+  for(const extension of extensions){
+    const successor=extension.scope.candidate;
+    if(!same(tuple(successor.release.root,path.dirname(path.dirname(successor.release.root))),successor)||!same(extension.scope.node,recoveryNode()))throw Error('probation successor tuple/Node drifted');
+  }
+  const extension=extensions.find(e=>e.scope.candidate.release.root===root);
   const successor=extension?.scope.candidate;
-  if(successor&&(!same(tuple(successor.release.root,path.dirname(path.dirname(successor.release.root))),successor)||!same(extension.scope.node,recoveryNode())))throw Error('probation successor tuple/Node drifted');
   const selected=root===candidateRoot?a.scope.candidate.release:root===previous.release.root?previous.release:successor?.release;
   if(!selected||selected.root!==root)throw Error('probation successor authority/root differs');
   return{...selected,probation:{id:event.id,seq:event.seq,archive:event.archive,scope_sha256:sha(canonical(a.scope)),previous,

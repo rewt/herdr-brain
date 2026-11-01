@@ -1,10 +1,57 @@
-# One successor under the original Brain trial
+# Exact extensions under the original Brain trial
 
-This implements DEC-466's `probation-successor` preview/apply interface. Only the
+This implements DEC-466's `probation-successor` preview/apply interface, extended
+by DEC-501 decision 70107 to append-only exact candidates under the SAME trial. Only the
 actual recorded canonical native supervisor can execute it, from clean canonical
 Brain main. It performs stopped configuration handoffs; every result declares
 `runtime_started:false`, `stable_ready:false`. No trial, pin, READY, consumer
 offer, shared mode, saved job, watcher or review callback is replaced.
+
+## Current collection contract (DEC-501)
+
+Every new entry starts at the original completed recovery anchor, either the
+legacy rollback or a durably completed successor rollback whose recorded fences
+have cleared. Each leg still needs a fresh exact preview and the original
+owning supervisor's verbatim decision. A new candidate gets an immutable
+`probation-successors/TRIAL--FIRST_ENTRY_ID.json` archive; the first extension
+stays at `probation-successors/TRIAL.json` byte-for-byte. Existing exact tuples
+reuse their original archive. Each extension pairs with its first authorizing
+entry, and every effect resolves its own exact archive/candidate in the complete
+ordered history. Rollback must name the installed extension and restores the
+same original recovery installation/plist bytes. Candidate-to-candidate switching
+and a replacement trial remain unsupported.
+
+The writer now requires `successor-history/v2`, independently of the aggregate
+record-fold floor. Reviewed collection readers have that capability. Retained
+v1 profiles, including the actual frozen ab671e8986 successor, keep their actual
+old capabilities and refuse entry/return through this writer, including after
+completed recovery and even if they were historically authorized. Return to an
+earlier collection-capable exact extension is supported. Unknown fingerprints
+and self-declared versions cannot establish compatibility; no target code runs
+in reader admission. Emergency rollback is exempt from candidate-reader
+admission and retains all exact integrity, authority and recovery guards.
+
+The original sealed recovery acquires no new requirement or event type. Its
+old inventory check remains deliberately fenced before every intent/config
+write; only completed rollback plus its immutable clear receipt can clear exactly
+those recorded fences. Partial later extensions/effects/clears remain UNKNOWN,
+holding startup and replacement attempts under any ID. Do not hand-delete,
+rewrite, replay, use an old writer as a workaround, or change saved jobs and
+callbacks. The live owner must drain incompatible in-flight work at the existing
+safe boundary before changing installed history. ENG-1343 retains the separate
+preview/record CAS seam; this change does not alter that policy.
+
+The commands and exact IDs below are **historical DEC-466/DEC-476 evidence**.
+They are not instructions to replay an entry, rollback or return. In particular,
+the old ab671e8986 return is incompatible with this collection writer. SUPE-3
+owns separately authorized real preview/apply/restart/rollback for a new exact
+collection-capable candidate, with unchanged recovery, existing runtime locks,
+native/source/ownership/STOP/HOLD and exact per-leg authority. The engineer runs
+only isolated producer fixtures; live canary/soak and final release remain UNRUN
+until their owners record them. No service, release, activation, pin or READY
+change follows from landing this source.
+
+## Historical single-successor handoff
 
 Supervisor-herdr owns all real activation and R2 evidence. The release/canary
 owners sealed the exact candidate `rc-20261101-ab671e8986` containing this protocol and ENG-1307.

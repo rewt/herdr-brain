@@ -1,4 +1,4 @@
-// One exact successor of the original Brain trial. No service/native inputs,
+// Append-only exact successors of the original Brain trial. No service/native inputs,
 // release acceptance or replacement trial are performed here.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -8,7 +8,7 @@ import {lineContext} from './cutoff.mjs';
 import {runtimeHistory} from './runtime.mjs';
 import {probationRuntime,probationTuple,authorityOwner} from './probation.mjs';
 import {verifyDevelopmentRecovery,recoveryNode} from './development-recovery.mjs';
-import {successorExtension,successorRows,successorFence,successorFenceBytes,successorDigest as sha,successorJSON as json} from './probation-successor-history.mjs';
+import {successorExtensions,successorExtensionFile,successorRows,successorFence,successorFenceBytes,successorDigest as sha,successorJSON as json} from './probation-successor-history.mjs';
 import {inspectService,replacementPlist} from './migrate-runtime.mjs';
 import {readPlainFile,plainDirectory,writeFileAtomic} from '../lib/files.mjs';
 import {loadEvents,transact} from '../lib/store.mjs';
@@ -40,7 +40,6 @@ export function probationSuccessor({repo,org,id,trial,fromRoot,targetRoot,rollba
   if(source.checkout!==toolRoot||source.canonical!==toolRoot||source.identity!==c.identity||toolRoot!==c.repo)
     throw Error('probation successor requires clean canonical Brain tool root');
   const file=path.join(c.directory,'service.plist'),installationFile=path.join(c.directory,'installation.json');
-  const extensionFile=path.join(c.directory,'probation-successors',trial+'.json');
   const ref={file:path.join(c.directory,'probation-successor-effects',id+'.json')};
   const bind=()=>{
     const b=nativeSender(c.org,{cwd,env,...(call?{call}:{})}),policy=readProjectPolicy(c.repo,'promote',env,{canonical:c.repo}).config;
@@ -70,13 +69,14 @@ export function probationSuccessor({repo,org,id,trial,fromRoot,targetRoot,rollba
     verifyDevelopmentRecovery(c,p,events);
     git(c.repo,['merge-base','--is-ancestor',p.original.cutover.canonical_head,head]);
     git(c.repo,['merge-base','--is-ancestor',p.source.commit,head]);
-    const extension=successorExtension(events,c,original),rows=successorRows(events,c);
+    const extensions=successorExtensions(events,c,original),rows=successorRows(events,c);
     if(rows.some(e=>e.id===id))throw Error('completed successor id retained; no replay');
     const installation=readPlainFile(installationFile),saved=JSON.parse(installation),plist=readPlainFile(file);
     const service=inspectService(saved.target,c.repo,command);if(service.loaded)throw Error('probation successor requires positively stopped service');
     const history=runtimeHistory(events,{...c,installation:saved,cutover:p.original.cutover,root:saved.source});
     if(saved.source!==fromRoot)throw Error('successor current root differs from saved installation');
     const candidateRoot=rollback?fromRoot:targetRoot,candidate=probationTuple(candidateRoot,home);
+    const extension=extensions.find(e=>e.scope.candidate.release.root===candidateRoot);
     if(candidateRoot===original.scope.candidate.release.root||candidateRoot===p.release.root||candidate.common!==c.identity||
         git(c.repo,['rev-parse',`${candidate.release.commit}^{tree}`])!==candidate.tree)throw Error('successor requires a new exact Brain candidate');
     git(c.repo,['merge-base','--is-ancestor',candidate.release.commit,head]);
@@ -85,9 +85,11 @@ export function probationSuccessor({repo,org,id,trial,fromRoot,targetRoot,rollba
     // does not start the candidate, so candidate reader admission cannot gate it.
     if(!rollback)requireSuccessorCapabilities(candidateRoot);
     if(rollback?targetRoot!==p.release.root:fromRoot!==p.release.root)throw Error('successor supports recovery entry, deliberate --rollback and exact return only');
-    if(rollback&&!extension)throw Error('successor rollback requires completed entry');
+    if(rollback&&(!extension||!same(history.successor.installed?.event.archive,extension.event.archive)))throw Error('successor rollback requires the actually installed extension');
     if(extension&&!same(candidate,extension.scope.candidate))throw Error('successor exact authority tuple changed');
-    if(!extension&&(history.last.type!=='line-service.probation-switched'||saved.source!==p.release.root))throw Error('successor requires completed legacy recovery anchor');
+    if(!rollback&&(saved.source!==p.release.root||history.successor.installed||history.successor.fences.size||
+        (rows.length?history.last.rollback!==true:history.last.type!=='line-service.probation-switched')))
+      throw Error('successor requires completed cleared original recovery anchor');
     requireRecordCompatibility(candidateRoot,events);requireRecordCompatibility(p.release.root,events);
     const recoveryContract = rollback ? null : requireRecoveryEntry({candidate:candidateRoot,recovery:p.release.root,events,
       authority:recoveryAuthority,owner:owner.native.name,validateOwner:authorityOwner});
@@ -95,7 +97,7 @@ export function probationSuccessor({repo,org,id,trial,fromRoot,targetRoot,rollba
       original:{seq:original.seq,archive:original.archive,scope_sha256:admitted.probation.scope_sha256,recovery_sha256:sha(canonical(p))},
       candidate,node:recoveryNode()};
     if(!same(successorScope.node,recoveryNode()))throw Error('successor Node integrity changed');
-    const extensionRef=extension?.event.archive??{file:extensionFile,sha256:sha(json(successorScope))};
+    const extensionRef=extension?.event.archive??{file:successorExtensionFile(c,trial,id,extensions.length===0),sha256:sha(json(successorScope))};
     const anchor=history.successor.anchor;
     const after=rollback?anchor.installation:json({...JSON.parse(anchor.installation),source:targetRoot,runtime:candidate.release});
     const nextPlist=rollback?anchor.plist:replacementPlist(c,saved,command,targetRoot);
@@ -147,7 +149,7 @@ export function probationSuccessor({repo,org,id,trial,fromRoot,targetRoot,rollba
       // The OLD reader's extra-file fence must exist before ANY intent/config.
       immutable(successorFence(c,id),successorFenceBytes({...a,archive:ref}));fault('fence');
       effectGuard(events,initial.installation,initial.plist);
-      if(initial.new_extension)immutable(extensionFile,json(initial.successor_scope));fault('authority');
+      if(initial.new_extension)immutable(initial.extension.file,json(initial.successor_scope));fault('authority');
       effectGuard(events,initial.installation,initial.plist);
       immutable(ref.file,bytes);fault('intent');
       effectGuard(events,initial.installation,initial.plist);

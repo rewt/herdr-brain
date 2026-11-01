@@ -11,7 +11,7 @@ const sources=['probation-successor.mjs','probation-successor-history.mjs','prob
 test('successor capability profiles cover the current writer requirements',()=>{
   const profile=requireSuccessorCapabilities(product);
   assert.deepEqual(profile.required,successorRequirements());
-  assert.deepEqual(profile.capabilities,['successor-effect/v1','successor-fence/v1','successor-history/v1']);
+  assert.deepEqual(profile.capabilities,['successor-effect/v1','successor-fence/v1','successor-history/v2']);
   assert.equal(successorCapabilityDiagnostic(product),null);
 });
 

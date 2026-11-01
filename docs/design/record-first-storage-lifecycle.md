@@ -3,8 +3,10 @@
 Proposed design, 30 October 2026. Producer: ENG-1141 / R-1546,
 `lane-eng-1141-9aa54e-998e56` (Sol max). This is documentation, scanning and
 unselected planning only. It changes no storage, runtime, brief, policy or pin.
-The one Opus review belongs to the existing report queue after delivery; its
-verdict and any slice amendments remain pending at this producer handoff.
+The original Opus review, REV-288 / R-1760, recorded FAIL (one Major, four
+Minors). ENG-1303 / R-1804 applies its single planning correction below; the
+original verdict remains. This authorizes no implementation or second review.
+The operator's recorded wait on storage/archive cleanup still governs selection.
 
 ## Decision requested
 
@@ -56,12 +58,19 @@ root separate from all live working roots. Existing `archive.dirs` is a legacy
 display declaration, not permission to classify, sweep or adopt those paths.
 Resolve actual Git common-directory and record identity through existing
 guards. A display label or configured path alone confers no authority.
+Slice B (ENG-1154) owns declaring and validating COLD; A only displays its
+resolved configuration. B rejects overlap in either direction with the record,
+worktrees, source, build/cache, scratch and live operational/key roots, and with
+any resolved legacy `archive.dirs` path (including the default). Validate actual
+project-owned paths and aliases, including symlink escapes and not-yet-created
+destinations, before publication; unknown separation fails closed. A legacy
+archive declaration never silently becomes COLD.
 
 | Material | Active write location and owner | Historical treatment |
 | --- | --- | --- |
 | Exact dispatched brief and final producer report | `ORG/runs/<R>/brief.md`, `report.md`; dispatch/worker and existing ingestion | One immutable run bundle after terminal obligations clear; retain the ingested report hash and any compatibility copy |
-| Run-specific evidence, scans and logs | `ORG/runs/<R>/evidence/` (existing run-local artifacts remain valid); producer | Typed artifact manifest, relative names, provenance, bytes and digest; archive only ordinary non-sensitive artifacts |
-| Evidence shared between runs/items | `ORG/evidence/<ITEM>/<R>/` or an existing explicitly referenced per-item location; owning producer | Separate bundle with explicit consumers/leases; a closed producer does not retire open consumers |
+| Run-specific evidence, scans and logs | `ORG/runs/<R>/evidence/` is the single default for new runs; producer | Typed artifact manifest, relative names, provenance, bytes and digest; archive only ordinary non-sensitive artifacts |
+| Evidence shared between runs/items | An explicitly referenced item-owned location such as `ORG/evidence/<ITEM>/shared/<ARTIFACT>/`; owning producer | Separate bundle with explicit consumers/leases; sharing adds references to the owning artifact rather than another per-run default or bulk copy |
 | Item brief/index | A small item-to-run/artifact projection in the record; record renderer | Stays searchable while bodies can be cold; no extra bulk copy in events |
 | Ingested report compatibility copy | Existing `ORG/reports/<R>.md`; ingestion | Migrate every direct reader before retiring a replica; keep exact immutable report bytes/hash |
 | Pass journal | Existing line partition and F1-owned live tail/checkpoints; line | F1 seals/rotates; lifecycle handles only sealed segments with stable coordinates |
@@ -80,6 +89,11 @@ Proposed replacement for both archive-first brief lines:
 > transfers eligible closed material to cold storage later.
 
 This text, associated configuration/docs and brief tests belong to slice A.
+Slice A also names the one new-run evidence default above and retains legacy
+run-local artifacts, `ORG/evidence/<ITEM>/<R>/` and the flat
+`ORG/evidence/<ITEM>-<R>/` form. A's reference contract and B's pointers/catalogs
+preserve each original relative path, item/run ownership and literal search
+alias; they do not rename old evidence or manufacture duplicate copies.
 Do not edit active saved briefs, jobs, runtimes or pins to apply it retroactively.
 Existing preservation archives, release bundles and UNKNOWN attempts remain
 protected under their original owner and exact receipt. Inventory them; do not
@@ -108,7 +122,7 @@ a new quiet period; timestamps on files never advance eligibility by themselves.
 | Store | Additional eligibility and handling |
 | --- | --- |
 | Closed run/item folders | No open producer, review, correction, dependent item, reserved decision, lease or preservation/closeout obligation requiring their bytes. Shared artifacts are independently protected. Run/item identity and original report hashes survive |
-| Legacy consumer archives | Owner first maps every candidate to record/run/source and live readers. Live keys, repo/build/scratch candidates and unmapped entries are held for an owner action; do not sweep or bulk-import them into record evidence |
+| Legacy consumer archives | E (ENG-1157) owns the import adapter. An owner-supplied mapping binds each legacy entry to item/run/source, ordinary non-sensitive classification and live readers. With C's eligibility/lease protection, E seals only mapped ordinary history into B's segments and publishes record pointers plus original literal-path search aliases. Keys, live proving material, repository/build/scratch and unmapped/unknown entries stay in place, reported held for owner action; never read key contents or bulk-import into record evidence |
 | Pass journal | F1 alone rotates and maintains notice-audit/halt checkpoints. Preserve row bytes, segment ID, absolute logical byte range, generation and hashes. All active replay/recovery checkpoints must resolve before a sealed segment can become cold |
 | Closeout frames/objects | Build roots from current measurement frames, every retained historical frame, diagnostic/review/correction evidence, unresolved effect/preservation receipts and external references. Traverse object-to-object references. Unknown/corrupt roots hold the complete affected closure |
 | Other growing bookkeeping | Inventory `closeout.log`, measurement history, dispatch/settle/watch receipts and report replicas. Add typed adapters; keep live effects, callbacks, claim/native history and original UNKNOWN/refused attempts hot unless their readers explicitly support cold resolution |
@@ -116,7 +130,16 @@ a new quiet period; timestamps on files never advance eligibility by themselves.
 
 An open descendant protects the artifacts it consumes; a parent's done label
 does not declare a whole subtree collectible. Missing explicit dependency
-tracking fails closed. A future reader that needs historical evidence for active
+tracking fails closed. C (ENG-1155) builds the reference source from literal path
+mentions in record events and open items' acceptance/notes, run briefs/reports,
+and transitive evidence-to-evidence references in known ordinary text. Normalize
+record-relative and absolute owned paths and directory-prefix mentions while
+retaining their original spellings and source coordinates. Any open-item
+mention protects the path and referenced descendants, including closed-producer
+evidence. Missing, unreadable, ambiguous or sensitive reference sources hold the
+affected material; absence of grep matches does not prove eligibility. The initial index
+must establish coverage rather than assume an evidence-consumer index exists.
+A future reader that needs historical evidence for active
 work acquires a lease and materializes the required ordinary artifact into the
 record before treating it as working input. On-demand historical reading/search
 can stream from COLD without making COLD a proving/build working directory.
@@ -205,6 +228,13 @@ existing outer maintenance/pass/promotion lock order. A new consumer either
 pins the old hot generation before retirement or resolves/pins the committed
 cold generation; it cannot race between the eligibility observation and unlink.
 Prove this ordering in the adapter's affected concurrency controls before use.
+C owns this admission change on ordinary `record reopen`, `record start` when
+it admits work on a closed item, and correction/new-consumer commands. Their
+hot paths acquire the storage guard before the record lock, capture/protect the
+generation in a bounded critical section, and release locks before slow I/O.
+This serialization has a real command-latency cost: C records guard wait/hold
+behavior and covers start/reopen/correction racing copy, pointer publication
+and replica retirement, including unknown-reference holds and deadlock freedom.
 
 | Interruption point | Authoritative bytes and resumption |
 | --- | --- |
@@ -281,20 +311,34 @@ mtime, age, duplicate names and missing Git grep matches are insufficient.
 
 ## Build slices and ownership
 
-Standalone prompts and the exact filed IDs live in `ORG/runs/R-1546/slices/`
-and `build-slices-final.json` (original receipts in `build-slices.json`). All
-are filed under **ENG-1024, unselected**; filing
-is no implementation/adoption authority. The reviewer partners by assessing
-these boundaries and recording specific amendments/follow-ups in the same
-single review. No parallel review or pre-code concurrence is required.
+Original prompts and filing receipts remain in `ORG/runs/R-1546/slices/`
+and `build-slices-final.json` (original receipts in `build-slices.json`). The
+effective A/B/C/E amendments and record readbacks are preserved under
+`ORG/evidence/ENG-1303-R-1804/`; D is unchanged. All five remain under
+**ENG-1024, unselected**, with `plan_source=ENG-1141`. The single REV-288
+review supplied these corrections. Filing/amendment grants no implementation,
+cleanup or adoption authority and starts no second review.
 
 | Slice | Owned result and seam | Prerequisite/interface |
 | --- | --- | --- |
-| A — ENG-1153: record-first contract | Brief/report durable-path guidance, compatible artifact references and documentation; `lib/render.mjs`, archive/config display, brief controls | Can start independently after selection; does not move existing files |
-| B — ENG-1154: sealed segments and resolution | Immutable ordinary-evidence manifest, catalog, pointer, bounded lookup and resumable publication; one storage module owner | Supplies schema/resolution before C/D can retire any replica; migrate existing raw readers |
-| C — ENG-1155: closed record lifecycle | Eligibility/reference leases, run/item adapter, finite close/daily nomination and recoverable replica retirement | Uses A/B; no cleanup of current archives or irreversible expiry |
+| A — ENG-1153: record-first contract | Brief/report durable-path guidance, one default `runs/<R>/evidence/`, legacy flat/nested evidence reference/search contract and documentation; config display, brief controls | Can start independently after selection; does not move existing files; B owns COLD validation |
+| B — ENG-1154: sealed segments and resolution | COLD declaration/separation validation; immutable ordinary-evidence manifest, catalog, pointer, bounded lookup and resumable publication; one storage module owner | Supplies schema/resolution before C/D/E can retire any replica; migrate existing raw readers and preserve A's legacy literal paths |
+| C — ENG-1155: closed record lifecycle | Literal event/open-item/text and transitive evidence reference coverage, eligibility/leases, run/item adapter, finite nomination and recoverable retirement; storage-before-record guards on reopen/start/correction admission | Uses A/B; supplies E's eligibility/lease contract; E owns legacy-archive import; no irreversible expiry |
 | D — ENG-1156: line-history adapter | Measurement-frame/transitive-object reachability and other typed bookkeeping retention; resolve F1's sealed segments | Uses B and ENG-1149/F1's actual contract. F1 alone owns journal rotation/checkpoints; no second rotator |
-| E — ENG-1157: archive guard and consumer proof | Working-state guard, metadata classifier, isolated lifecycle/recovery/soak evidence and owner action/offer plan | Uses A-D where applicable; reuses ENG-1127's canary/offer owner; no BCH cleanup or adoption |
+| E — ENG-1157: legacy archive import, guard and consumer proof | Owner-mapped legacy consumer-archive import into B's segments with record pointers/literal search; working-state guard, classifier, held-entry report and isolated import/recovery/soak evidence | Uses A/B and C's eligibility/leases, D for typed line history; reuses ENG-1127's canary/offer owner; no real BCH cleanup or adoption |
+
+E accepts an owner-supplied mapping for `archive/<ID>/...` and equivalent
+`docs/reports` / `docs/archive` entries; it never guesses ownership from a name.
+Its stable import intent binds the mapping, source generation and manifest.
+Only mapped, ordinary, non-sensitive history whose live obligations clear can
+enter B's segments with record pointers. Reuse B's publication/recovery and C's
+quiet-period/reference/lease guards, retaining raw replicas until all readers
+migrate. The selected E implementer must witness an isolated `archive/<ID>/`
+fixture: a mapped ordinary entry resolves exact bytes through its pointer and
+literal item/path search; key-named, live-proving, repository/build/scratch and
+unmapped entries stay in place with held reasons and no key-content reads; an
+interrupted import resumes the same intent without a duplicate segment. Real
+consumer actions remain with that consumer's owner after separate selection.
 
 Brain source owners implement only selected slices. BCH's project supervisor
 **supervisor-opus** owns its post-M2 storage/security/cleanup proposals. The
@@ -318,12 +362,14 @@ or corrupt segments, unknown references, symlink/path escape rejection and
 legacy raw-reader compatibility. D additionally proves historical measurement
 reconstruction with shared objects and F1 checkpoint/window replay across cold
 segments. E measures bytes by class with >=90% accounted, no secret-content
-reads, bounded hot metadata, active archives receiving no new working output,
+reads, the mapped/held/interrupted legacy-import fixture above, bounded hot
+metadata, active archives receiving no new working output,
 and separate Brain soak/installed consumer evidence under the exact candidate.
 
 Report bytes retained/moved, duplicated hot replicas, unresolved dependencies,
 unknown classification and actual retrieval results separately. A reduced
 folder size without valid pointers, reproducible original evidence and owner
-receipts is not success. The sole post-delivery review may produce linked
-correction/fix-forward work; original verdicts and Majors remain obligations
-before stable adoption, without holding finished producer source for a verdict.
+receipts is not success. The sole post-delivery review produced this linked
+formal correction; later findings fix forward without a re-review chain.
+Original verdicts and Major correction evidence remain obligations before
+stable adoption, without holding finished producer source for a verdict.

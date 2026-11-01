@@ -87,7 +87,7 @@ test('one proposal separates conditional Minors from immediate Major and ordinar
 
 test('ordinary Minor and Major findings retain automatic correction eligibility', () => {
   for (const finding of [{ severity: 'minor', text: 'Improve diagnostic context' }, { severity: 'major', text }]) {
-    const f = fixture({ findings: [finding] });
+    const f = fixture({ findings: [finding], body: '' });
     assert.equal(queueSelected(f.item(), f.state()), true); assert.ok(f.input());
   }
 });

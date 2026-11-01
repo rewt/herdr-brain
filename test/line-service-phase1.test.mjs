@@ -1030,9 +1030,9 @@ test('landing-before-report actual source queue command is reached by the instal
 
 test('landing-before-report defers a report arriving during selection before queue intent and queues once on the next pass',t=>{
   const f=fixture(t,{reported:false});unreportedNativeLandings(f);
-  const env=installedService(f),mkdir=fs.mkdirSync;let arrived=false,calls=0;
-  t.mock.method(fs,'mkdirSync',function(file,...args){
-    const result=Reflect.apply(mkdir,fs,[file,...args]);
+  const env=installedService(f),rename=fs.renameSync;let arrived=false,calls=0;
+  t.mock.method(fs,'renameSync',function(from,file,...args){
+    const result=Reflect.apply(rename,fs,[from,file,...args]);
     if(!arrived&&typeof file==='string'&&path.dirname(file)===f.directory&&/^review-change-.*\.lock$/.test(path.basename(file))){
       arrived=true;
       f.add([{type:'report.ingested',run:'R-1',file:'reports/R-1.md',sha256:hash(f.report),

@@ -20,6 +20,7 @@ import { requestRetirement } from '../lib/retire-trigger.mjs';
 import { bindCloseoutSources, publishCloseoutEvents } from '../lib/closeout.mjs';
 import { lessonProposal, lessonsJson } from '../lib/lessons.mjs';
 import { readReport } from '../lib/report.mjs';
+import { selfClosedDecision } from '../lib/self-closed-decision.mjs';
 import { isReservedItem, proposalIntakeEvents, proposalSelection } from '../lib/proposal-intake.mjs';
 import { completionSession } from '../lib/completion-session.mjs';
 import { approvalPolicy, CATEGORY_CHECKLIST, categoryFlag, categoryFlagText, reportCategoryFlags } from '../lib/discernment.mjs';
@@ -120,7 +121,7 @@ Runs and reports
                                           launcher receipt; use dispatch/record-worker.mjs at launch
   record session-bind --journal FILE      dispatch's one-time late native session fact
   record check <report.md>                validate a report without recording anything
-  record ingest <report.md> [--run R-n] [--if-current-run R-n]
+  record ingest <report.md> [--run R-n] [--if-current-run R-n] [--if-self-closed SEQ]
                                           record a report; optional guard checked under the log lock
   record sync                             record every report waiting at an open run's report path
   record handoff R-old --to R-new --confirm --why TEXT
@@ -895,7 +896,7 @@ function worker(argv) {
   return 0;
 }
 
-async function ingestFile(ctx, file, runHint, currentRun) {
+async function ingestFile(ctx, file, runHint, currentRun, selfClosedSeq) {
   const abs = path.resolve(file);
   let text;
   try {
@@ -929,13 +930,17 @@ async function ingestFile(ctx, file, runHint, currentRun) {
     if (run.abandoned) {
       return { add: [], result: { skipped: true, runId, item: run.item } };
     }
+    const already_closed_by_run=selfClosedDecision(run,s,committedEvents);
+    if(selfClosedSeq!==undefined&&(!already_closed_by_run||String(already_closed_by_run.seq)!==selfClosedSeq))
+      throw new UserError('original self-closed decision changed before report intake');
     const stored = path.join('reports', `${runId}.md`);
     const report = { ...parsed.report, run: runId };
     const late = laterRuns(s, runId).some((r) => r.report);
     let brief_sha256;
     try{if(run.brief_path&&fs.lstatSync(run.brief_path).isFile())brief_sha256=crypto.createHash('sha256').update(fs.readFileSync(run.brief_path)).digest('hex');}catch{/* Unknown brief does not fabricate a revision. */}
     const events = [{ type: 'report.ingested', run: runId, item: run.item, file: stored, source: abs, sha256, late, report,
-      ...completionSession(run, s), ...(brief_sha256?{brief_sha256}:{}) }];
+      ...completionSession(run, s), ...(brief_sha256?{brief_sha256}:{}),
+      ...(already_closed_by_run?{already_closed_by_run}:{}) }];
     const categoryFlags = reportCategoryFlags(ctx.config, report);
     for (const flag of categoryFlags) events.push({ type: 'category.flagged', id: run.item, run: runId, ...flag });
     const taken = new Set();
@@ -1009,8 +1014,8 @@ function printIngest(res) {
 }
 
 async function ingest(argv) {
-  const { values, positionals } = args(argv, { run: { type: 'string' }, 'if-current-run': { type: 'string' } }, { min: 1, max: 1, usage: 'record ingest <report.md> [--run R-n] [--if-current-run R-n]' });
-  return printIngest(await ingestFile(openOrg(), positionals[0], values.run, values['if-current-run'])) ? 0 : 1;
+  const { values, positionals } = args(argv, { run: { type: 'string' }, 'if-current-run': { type: 'string' }, 'if-self-closed': { type: 'string' } }, { min: 1, max: 1, usage: 'record ingest <report.md> [--run R-n] [--if-current-run R-n] [--if-self-closed SEQ]' });
+  return printIngest(await ingestFile(openOrg(), positionals[0], values.run, values['if-current-run'], values['if-self-closed'])) ? 0 : 1;
 }
 
 async function sync(argv) {

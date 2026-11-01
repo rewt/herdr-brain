@@ -1273,6 +1273,14 @@ Starts, source completion, landings and promotions remain held, including the
 unchanged `PROMOTION_HELD` result. This exception neither clears the HOLD nor
 changes an installed runtime or service owner.
 
+Report intake also accepts the current decision run when its recorded worker
+already closed its own item as done. It rechecks that exact closure sequence
+under the ingestion transaction and records `already_closed_by_run` on
+`report.ingested`. The item stays closed; intake does not replay the judgment.
+Foreign closures, superseded runs and abandoned runs retain their original
+disposition. The normal report closer still owns allocation release and all
+native, claim, preservation and Git checks.
+
 Finite selection alternates current report allocations and legacy continuations,
 with fair attempt order inside each group and a rotating first group across
 turns. A checkpointed admission failure cannot bury a finished report behind

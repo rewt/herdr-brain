@@ -19,6 +19,7 @@ import {missingCloseoutBinding} from '../lib/closeout-facts.mjs';
 import {reconcileCloseoutBacklog} from '../lib/closeout-backlog.mjs';
 import {vacantAllocation} from '../lib/closeout-vacancy.mjs';
 import {pendingEndedAllocation} from '../lib/closeout-allocations.mjs';
+import {selfClosedDecision} from '../lib/self-closed-decision.mjs';
 
 export const closeoutServiceDirectory=(org,common)=>path.join(org,'line-service',createHash('sha256').update(JSON.stringify(common)).digest('hex').slice(0,20));
 // Git removal alone may need its existing 600s inventory-sized allowance.
@@ -28,7 +29,7 @@ export const CLOSEOUT_TURN_BUDGET_MS=720000;
 export const CLOSEOUT_MIN_STEP_BUDGET_MS=120000;
 function ingestEligible(run,state,identity,events) {
   const item=state.items.get(run?.item);
-  if(!item||item.closed||run.report||run.abandoned||!run.report_path||
+  if(!item||(item.closed&&!selfClosedDecision(run,state,events))||run.report||run.abandoned||!run.report_path||
       !run.owner||run.owner.legacy||run.owner.controller!=='brain')return false;
   if(run.meta?.dispatch_project!==identity&&!events.some(e=>e.type==='run.started'&&e.id===run.id&&e.meta?.dispatch_project===identity))return false;
   // An earlier report is still useful while the current successor is unreported.
@@ -101,7 +102,9 @@ export function runReportIntake({project,org,cli,guard,maxSteps=8,budgetMs=CLOSE
         const start=current.events.find(e=>e.type==='run.started'&&e.id===r.id);
         if(r.owner?.legacy||r.meta.dispatch_project!==project.identity&&start?.meta?.dispatch_project!==project.identity)
           throw Error('original ingest project/claim is missing or foreign');
-        cli('bin/org.mjs',['ingest',r.report_path,'--run',r.id,...(item.runs.at(-1)===r.id?['--if-current-run',r.id]:[])]);
+        const closed=selfClosedDecision(r,current.state,current.events);
+        cli('bin/org.mjs',['ingest',r.report_path,'--run',r.id,...(item.runs.at(-1)===r.id?['--if-current-run',r.id]:[]),
+          ...(closed?['--if-self-closed',String(closed.seq)]:[])]);
         fault('after-ingest');
         delete state.failures[run.id];
       }catch(error){

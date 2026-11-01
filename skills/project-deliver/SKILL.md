@@ -18,6 +18,15 @@ Inherit its actual command, exit, TAP totals, runtime and receipt. Preserve fail
 after a fix run only failing, affected or unrun controls. Never substitute a
 default suite, manufacture a gate or describe unrun checks as PASS.
 
+Narrow exception: for a formal correction with assigned findings, a required
+rebase that moves the committed head makes the selected final-head control
+unrun. Preserve earlier gate/log/execution receipts in the owning record evidence
+directory and record old/new heads, rebase reason and command; then run that same
+control once on the clean committed new head without supervisor action. Reuse an
+existing green final-head receipt; no same-head replay or broader suite. See
+[the correction rebase contract](../../docs/item-conditions.md#required-rebase-after-a-correction-check).
+Native/claim/source/STOP/HOLD and exact-head intake remain in force.
+
 Under the current land-first waiver, self-land finished OWN source through the
 project's existing guarded lane command before reporting. For Brain:
 

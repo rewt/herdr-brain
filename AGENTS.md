@@ -34,6 +34,14 @@ do not grant authority or replace the guarded project tools.
   check. No baseline/default/full suite or green replay. Preserve failures; after
   a fix run only failing, affected or unrun controls. Unrun is never PASS.
   Line limits are planning advice. Real errors remain real errors.
+  Narrow exception: for a formal correction with assigned findings, a required
+  rebase that moves the committed head makes the selected final-head control
+  unrun. After preserving earlier gate/log/execution receipts and recording
+  old/new heads, rebase reason and command, run that same control once on the
+  clean committed new head without supervisor action. Reuse an existing green
+  final-head receipt; no same-head replay or broader suite. See
+  [the correction rebase contract](docs/item-conditions.md#required-rebase-after-a-correction-check);
+  native/claim/source/STOP/HOLD and exact-head intake remain in force.
 
 ## Review and handback
 

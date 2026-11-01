@@ -21,6 +21,7 @@ import { bindCloseoutSources, publishCloseoutEvents } from '../lib/closeout.mjs'
 import { lessonProposal, lessonsJson } from '../lib/lessons.mjs';
 import { readReport } from '../lib/report.mjs';
 import { selfClosedDecision } from '../lib/self-closed-decision.mjs';
+import { trialsAffectedByClose } from '../lib/trial-close-warning.mjs';
 import { isReservedItem, proposalIntakeEvents, proposalSelection } from '../lib/proposal-intake.mjs';
 import { completionSession } from '../lib/completion-session.mjs';
 import { approvalPolicy, CATEGORY_CHECKLIST, categoryFlag, categoryFlagText, reportCategoryFlags } from '../lib/discernment.mjs';
@@ -741,14 +742,16 @@ function close(argv) {
       }
     }
     if (item.closed?.as === as) return { add: [], result: [] };
-    return { add: [{ type: 'item.closed', id, as, note: values.note ?? null,...(values['if-current-run']?{completed_run:values['if-current-run']}:{}) }], result: openRuns(s, id).map((r) => r.id) };
+    return { add: [{ type: 'item.closed', id, as, note: values.note ?? null,...(values['if-current-run']?{completed_run:values['if-current-run']}:{}) }],
+      result: { open: openRuns(s, id).map((r) => r.id), trials: trialsAffectedByClose(s, events, id) } };
   }, { closeRun: values['if-current-run'] });
   if (!added.length) {
     out(`${id} is already ${as}\n`);
     return 0;
   }
   out(`${id} closed as ${as}\n`);
-  if (result.length) out(`note: ${result.join(', ')} still open; a report from it will still be recorded\n`);
+  if (result.open.length) out(`note: ${result.open.join(', ')} still open; a report from it will still be recorded\n`);
+  for (const trial of result.trials) out(`warning: active trial ${trial.id} is owned by ${trial.owner}; closing ${id} does not complete or withdraw it. Trial-owner admission must be installed to ignore ordinary closure; explicit holds and reservations still refuse admission.\n`);
   return 0;
 }
 

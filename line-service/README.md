@@ -675,6 +675,14 @@ canonical native pane/session, can issue it **from canonical Brain product
 source in that same real Git common directory**. A consumer project cannot
 nominate itself through a label, environment override or configuration.
 
+Trial ownership uses a separate ancestry check: ordinary closure of the owning
+item or any ancestor does not end trial admission. Explicit `hold`, `held`,
+`reserved`, `operator_reserved`, human ownership, abandoned authority runs, missing
+ancestors and cycles still refuse. `record close` warns when the item owns an
+active trial or contains its owner; closure does not withdraw or complete it.
+These semantics require a runtime containing the trial-owner check. Landing the
+source does not update sealed installed roots or authorize their replacement.
+
 The service must already have a compatible, accepted **installed** previous
 runtime, retained under its exact release home. A development-source installation
 does not qualify: first establish that recovery root through the existing
@@ -761,6 +769,8 @@ to the canonical supervisor under separate recorded operational authority.
 
 Focused probation controls are `test/line-service-probation.test.mjs`; affected
 existing runtime, launch and review controls remain separate file groups.
+Owner closure, warning, explicit-hold refusal and recovery controls are in
+`test/probation-owner-lifecycle.test.mjs`.
 
 Focused upgrade selection: the runtime migration/upgrade controls in
 `test/line-service-runtime.test.mjs`, `producer cutoff` in

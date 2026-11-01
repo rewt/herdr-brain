@@ -16,7 +16,7 @@ import {canonical} from '../messages/schema.mjs';
 import {withRuntimeLocks} from './runtime-locks.mjs';
 import {noticeLock} from '../supervisor/notice-lock.mjs';
 import {fold} from '../lib/state.mjs';
-import {itemLaunchHold} from '../lib/item-launch-hold.mjs';
+import {trialOwnerHold} from '../lib/item-launch-hold.mjs';
 import {prepareDevelopmentRecovery,sealDevelopmentRecovery,verifyDevelopmentRecovery,recoveryNode} from './development-recovery.mjs';
 import {legacyRecipientHistory,recipientChanges} from './recipient-history.mjs';
 import {successorExtension} from './probation-successor-history.mjs';
@@ -62,7 +62,7 @@ function archived(event,c){
 export function authorityOwner(note,events){
   const state=fold(events),run=state.runs.get(note.id),item=state.items.get(run?.item??note.id);
   if(!item||run?.abandoned)throw Error('probation authority owning item/run is unavailable');
-  const hold=itemLaunchHold(state,item.id,events);
+  const hold=trialOwnerHold(state,item.id);
   if(hold)throw Error(`probation authority HOLD: ${hold.reason}`);
 }
 

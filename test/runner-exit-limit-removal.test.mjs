@@ -20,7 +20,7 @@ const limits = readFileSync(new URL('./helpers/runner-limits.mjs', import.meta.u
 const unused = () => assert.fail('unselected worker/native interface executed');
 
 async function coordinator({ failedSink } = {}) {
-  const trace = [], exits = [], errors = [], signals = [], timers = [], timings = [];
+  const trace = [], exits = [], errors = [], signals = [], timers = [], timings = [], members = [];
   // Scratch belongs to a separate native control. Keep this VM's journal and
   // recovery receipts in memory while exercising the actual coordinator path.
   const scratchJournal = 'HERDR_TEST_SCRATCH_JOURNAL';
@@ -78,8 +78,12 @@ async function coordinator({ failedSink } = {}) {
     } },
     'node:test': { run: unused }, 'node:test/reporters': { tap: unused },
     'node:stream/promises': { pipeline: unused }, 'node:url': { fileURLToPath },
-    '../../lib/processes.mjs': { parseProcessLookup: unused, lookupProcess: pid => {
+    '../../lib/processes.mjs': { parseProcessLookup: unused, lookupProcess: (pid, options) => {
       if (pid !== undefined) {
+        // The inventory admits one audit read per group member. Later reads are
+        // a guard drain's, or the fresh leader confirmation traced as 'lookup'.
+        const member = state.inventory?.get(pid);
+        if (member) { state.inventory.delete(pid); members.push(pid); return { ok: true, value: member }; }
         if (pid === guard.pid) return { ok: true, value: guard };
         if (pid === state.drainGuard?.pid) return state.drainFailure
           ? { ok: false, error: 'injected drain failure' } : { ok: true, value: null };
@@ -87,9 +91,12 @@ async function coordinator({ failedSink } = {}) {
         trace.push('lookup');
         return { ok: true, value: state.current };
       }
+      assert.equal(options?.identityOnly, true);
       trace.push('audit');
-      return state.auditError ? { ok: false, error: 'injected audit failure' }
-        : { ok: true, value: new Map([state.current, ...state.survivors].filter(Boolean).map(row => [row.pid, row])) };
+      if (state.auditError) return { ok: false, error: 'injected audit failure' };
+      const rows = [state.current, guard, ...state.survivors].filter(Boolean);
+      state.inventory = new Map(rows.filter(row => row.pgid === leader.pid).map(row => [row.pid, row]));
+      return { ok: true, value: new Map(rows.map(row => [row.pid, { ...row, command: '[kernel]' }])) };
     } },
     './offline-herdr.mjs': { offlineHerdr: () => () => trace.push('cleanupHerdr') },
     'node:fs': { default: { writeFileSync: (file, data, options) => {
@@ -181,7 +188,7 @@ async function coordinator({ failedSink } = {}) {
     assert.equal(timings[0].exit_code, code);
     assert.deepEqual(timers, []);
   };
-  return { child, proc, state, trace, exits, errors, signals, timers, writes, timings, ready, complete, pending, exit, closePipe, finished, watch: () => watch };
+  return { child, proc, state, trace, members, exits, errors, signals, timers, writes, timings, ready, complete, pending, exit, closePipe, finished, watch: () => watch };
 }
 
 if (typeof SourceTextModule !== 'function') {
@@ -212,6 +219,7 @@ test('successful completion remains pending until child exit and finishes exactl
   h.complete(); h.pending();
   assert.deepEqual(h.trace.slice(-5), ['watch.stop', 'audit', 'lookup', 'signal', 'disconnect']);
   assert.deepEqual(h.signals, [[-4242, 'SIGKILL']]);
+  assert.deepEqual(h.members, [4242, 4241]);
   h.complete(9); h.child.emit('error', Error('late child error')); h.proc.emit('SIGTERM');
   h.pending();
   h.exit(); h.finished(0);
@@ -264,6 +272,7 @@ test('failed audit and reported survivors still use freshly confirmed owned tear
     assert.deepEqual(h.trace.slice(-teardown.length), teardown);
     assert.deepEqual(h.signals, [[-4242, 'SIGKILL']]);
     assert.match(h.errors.join('\n'), kind === 'audit error' ? /injected audit failure/ : /Surviving fixture: PID 4243, command controlled-descendant\. Files: controlled\.test\.mjs/);
+    assert.deepEqual(h.members, kind === 'audit error' ? [] : [4242, 4241, 4243]);
     h.exit(); h.finished(1);
   }
 });
@@ -284,6 +293,7 @@ test('first-audit fixture failures survive guard drain completion and failure', 
     assert.equal(h.errors.filter(value => String(value).includes('Surviving fixture: PID 4243,')).length, 1,
       `${outcome}: the first-audit fixture must be reported exactly once`);
     assert.deepEqual(h.signals, [[-4242, 'SIGKILL']]);
+    assert.deepEqual(h.members, [4242, 4241, 4244, 4243, ...{ gone: [4242, 4241], present: [4242, 4241, 4243], 'audit failure': [], 'drain failure': [4242, 4241] }[outcome]]);
     h.exit(); h.finished(1);
   }
 });
@@ -294,6 +304,7 @@ test('changed or absent ownership never authorizes a signal or successful comple
     h.state.current = replacement && { ...h.state.current, ...replacement };
     h.complete(); h.pending(); assert.deepEqual(h.signals, []);
     assert.deepEqual(h.trace.slice(-4), ['watch.stop', 'audit', 'lookup', 'disconnect']);
+    assert.deepEqual(h.members, replacement && replacement.pgid === undefined ? [4242, 4241] : [4241]);
     h.exit(); h.finished(1);
   }
 });

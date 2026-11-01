@@ -71,6 +71,27 @@ test('usage stop recognizes native wording variants and holds ambiguous reset ti
   assert.match(noReportNotice({run:'R-1',state:'done'}),/stop=unclassified reset=unknown/);
 });
 
+test('failed native sign-in is distinct, held without input, and preserves the original run through observed recovery',async t=>{
+  const f=fixture(t),record=fs.readFileSync(path.join(f.org,'events.jsonl'));
+  const failure='  ⎿  Not logged in · Please run /login\n\n✻ Cooked for 0s · done 11:23 AM\n\n──────────\n❯';
+  for(const text of [failure,'■ Not logged in. Please sign in.','! Authentication failed.','■ Session expired.']){
+    assert.equal(classifyUsageStop(text).kind,'sign-in-required',text);
+  }
+  for(const text of ['Quoted Not logged in · Please run /login','  ⎿ Not logged in\n\n• A later assistant turn completed\n\n❯'])
+    assert.equal(classifyUsageStop(text).kind,'unclassified-stop');
+  f.setScreen(failure);
+  let result=await f.reconcile();assert.equal(result.handled,true);
+  assert.equal(f.saved().kind,'sign-in-required');assert.equal(f.saved().phase,'held');
+  assert.match(f.saved().reason,/supervisor.*original worker/);
+  f.setClock(Date.parse(reset)+1000);await f.reconcile();assert.equal(f.prompts(),0);
+  assert.deepEqual(fs.readFileSync(path.join(f.org,'events.jsonl')),record);
+  assert.equal(f.git(['rev-parse','HEAD']),f.head);assert.equal(fs.readFileSync(path.join(f.root,'unsaved.txt'),'utf8'),'preserve me');
+  f.native.agent_status='working';await f.reconcile();assert.equal(f.saved().phase,'working');
+  f.native.agent_status='done';f.setScreen('All done.');
+  result=await f.reconcile();assert.equal(result.handled,false);assert.equal(f.saved().kind,'unclassified-stop');
+  assert.equal(f.prompts(),0);assert.equal(f.saved().ownership.generation,3);assert.equal(f.saved().binding.session,'original-session');
+});
+
 test('usage stop waits for reset then resumes exactly once across watcher restarts preserving source',async t=>{
   const f=fixture(t);
   let result=await f.reconcile();

@@ -17,6 +17,7 @@ import {noticeLock} from '../supervisor/notice-lock.mjs';
 import {acquireLock} from '../lanes/promotion-lock.mjs';
 import {loadDiscoveredRoutes} from '../lanes/routes.mjs';
 import {requireRecordCompatibility} from '../lib/record-compatibility.mjs';
+import {loginRegistration,inspectLoginRegistration,createLoginRegistration} from './login-registration.mjs';
 
 const git=(repo,args)=>execFileSync('git',['--no-optional-locks','-C',repo,...args],{encoding:'utf8',stdio:['ignore','pipe','pipe'],timeout:10000}).trim();
 const same=(a,b)=>canonical(a)===canonical(b);
@@ -52,7 +53,9 @@ export function installRelease({repo,org,id,to,herdr,socket,interval=30,dryRun=f
     const head=git(c.repo,['rev-parse','HEAD']),runtime=acceptedRuntime(c.repo,{home});
     const recipient=liveRecipient(to??owner.name,c.identity,{herdr,env:{...env,HERDR_SOCKET_PATH:socket},...(call?{call}:{})});
     if(inspectService(target,c.repo,command).loaded)throw Error('service already loaded; no fresh initialization');
-    const installation={target,repo:c.repo,org:c.org,source:runtimeRoot,node:process.execPath,file,recipient:recipient.name,runtime};
+    const login=loginRegistration(label,file,env.HOME);
+    if(inspectLoginRegistration(login).registered)throw Error('existing service login registration; retain original installation');
+    const installation={target,repo:c.repo,org:c.org,source:runtimeRoot,node:process.execPath,file,recipient:recipient.name,runtime,login};
     const plist=launchPlist({label,repo:c.repo,org:c.org,to:recipient.name,herdr,socket,directory:c.directory,interval:Number(interval),source:runtimeRoot,searchPath:env.PATH});
     return {schema:'line-release-install/v1',id,repo:c.repo,org:c.org,identity:c.identity,owner,recipient,
       record_sha256:digest(canonical(events)),cutover:{id,main,canonical_head:head,source:runtimeRoot,source_head:runtime.commit,mode:'accepted-release-install'},installation,plist};
@@ -93,9 +96,10 @@ export function installRelease({repo,org,id,to,herdr,socket,interval=30,dryRun=f
           ['STOP','HOLD'].some(name=>fs.existsSync(path.join(c.repo,'.lane/supervisor',name)))||fs.existsSync(stop)||
           readPlainFile(file)!==plan.plist||readPlainFile(receiptFile)!==startingBytes||readPlainFile(archiveFile)!==bytes)
         throw Error('install source/record/native CAS changed before bootstrap');
+      createLoginRegistration(plan.installation.login);fault('login');
       const r=command('/bin/launchctl',['bootstrap',`gui/${process.getuid()}`,file],{cwd:c.repo,encoding:'utf8',maxBuffer:4*1024*1024});
       if(r.error||r.status!==0)throw Error((r.stderr||r.stdout||r.error?.message||`launchctl bootstrap exit ${r.status}`).trim());
-      if(readPlainFile(file)!==plan.plist||readPlainFile(receiptFile)!==startingBytes||fs.existsSync(stop))throw Error('install completion configuration changed; original attempt retained');
+      if(readPlainFile(file)!==plan.plist||readPlainFile(receiptFile)!==startingBytes||!inspectLoginRegistration(plan.installation.login).registered||fs.existsSync(stop))throw Error('install completion configuration changed; original attempt retained');
       receipt.phase='installed';writeFileAtomic(receiptFile,json(receipt),0o600);
       return {add:[],result:{installed:true,id,target,directory:c.directory,archive,cutover,installation:receipt}};
       },{actor:plan.owner.name,strictTail:true,lockOptions:{recover:false}}).result;

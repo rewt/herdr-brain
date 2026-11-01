@@ -33,7 +33,8 @@ import { enqueueNamedDecision } from './decision-wake.mjs';
 import { canonical } from '../messages/schema.mjs';
 import {bundleRelease} from '../lib/releases.mjs';
 import {serviceSource,acceptedRuntime} from './runtime.mjs';
-import {installedContext} from './cutoff.mjs';
+import {installedContext,regularJSON} from './cutoff.mjs';
+import {hostRecoveryNotices,hostRecoveryOwner} from './host-recovery.mjs';
 import { discoverChanges,dispatchInput,phase0Boundary,morningDigest,recordReviewResults,reviewCompletionPlan,recordReviewCompletion,ensureReviewBoundary,canonicalReviewIndex,observeReviewHealth } from './phase1.mjs';
 import {preflightContinuation,initialCapacityRefusal,initialBriefRefusal,initialSourceRootRefusal} from '../dispatch/preflight.mjs';
 import {stoppedDispatchReadmission} from '../dispatch/stopped-readmission.mjs';
@@ -210,6 +211,20 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
     if (live.identity !== project.identity || live.canonical !== repo) throw Error('project identity changed');
     const recoveryRecord = loadEvents(org);
     return observeRecoveryAdmission({...recoveryRecord,identity:project.identity,org,log});
+  }
+  function observeHostRecovery() {
+    const record=loadRecord(org);
+    if(record.tornTail)throw Error('incomplete record prevents host recovery diagnosis');
+    const notices=hostRecoveryNotices({repo,org,identity:project.identity,directory,to:hostRecoveryOwner(repo,childEnv),
+      installation:regularJSON(path.join(directory,'installation.json')),state:record.state});
+    const file=path.join(directory,'host-recovery.latest.json'),prior=regularJSON(file);
+    if(JSON.stringify(prior?.notices)!==JSON.stringify(notices)){
+      // Diagnostic delta only, before runtime admission. It never changes a
+      // run, dispatch journal, watcher, pin, native identity or STOP/HOLD.
+      log({action:'host-recovery-notice',schema:'line-host-recovery/v1',notices});
+      writeFileAtomic(file,JSON.stringify({notices,at:now()})+'\n',0o600);
+    }
+    return notices;
   }
   function pass(options) {
     observeRecovery();
@@ -1022,7 +1037,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       log({action:'schedule-unlocked',pass:passAt,pid:process.pid,duration_ms:performance.now()-lockedAt});release();release=null;
     }}} }
   }
-  return { pass, closeout, intake, directory, log, acquirePass, observeRecovery };
+  return { pass, closeout, intake, directory, log, acquirePass, observeRecovery, observeHostRecovery };
 }
 
 // The existing launchd schedule stays finite while the general pass runs in
@@ -1062,6 +1077,7 @@ export async function main(argv = process.argv.slice(2), {home}={}) {
   }
   if (!values.once || !values.repo) throw Error('use --once --repo CANONICAL; launchd owns the schedule');
   const service = createLineService({...values,runtimeHome:home});
+  if(!values['general-pass']&&!values['closeout-pass'])service.observeHostRecovery();
   try {
     serviceSource(values.repo,{home});
     installedContext(values.repo,values.org??findOrgDir({cwd:values.repo,env:{...process.env,ORG_DIR:''}}));

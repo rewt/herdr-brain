@@ -22,14 +22,21 @@ const bindingFor = current => ({agent:current.meta?.agent,pane:current.meta?.pan
 // prose above it. Other native layouts fall back to an explicit unclassified stop.
 export function classifyUsageStop(screen) {
   const text = plain(screen), lines = text.split('\n');
-  const start = lines.findLastIndex(line => /^\s*[■!]/.test(line));
+  const start = lines.findLastIndex(line => /^\s*[■!]/.test(line) || /^\s*⎿\s+Not logged in\b/i.test(line));
   const tail = start < 0 ? [] : lines.slice(start);
   const prompt = tail.findIndex(line=>/^\s*[›❯](?:\s|$)/.test(line));
-  const body = prompt < 0 ? tail : tail.slice(0,prompt);
+  let body = prompt < 0 ? tail : tail.slice(0,prompt);
+  const completion = body.findIndex(line => /^\s*[✻✽✶✳✢·]\s+(?:Cooked|Worked|Churned|Baked|Sautéed|Brewed)\s+for\b/.test(line));
+  if (completion >= 0) body = body.slice(0,completion);
   const blank = body.findIndex(line=>!line.trim());
   // A stale error above a later assistant turn is not this turn's stop.
   const stale = blank>=0 && body.slice(blank).some(line=>line.trim());
   const error = stale ? '' : body.join(' ');
+  // Claude's zero-second failed turn uses a tool-result marker, not the
+  // Codex error marker. Never infer restored credentials from a quiet prompt.
+  if (/^\s*(?:[■!]|⎿)\s*(?:Not logged in\b|Authentication failed\b|Session expired\b)/i.test(error))
+    return {kind:'sign-in-required',reset_at:null,
+      reason:'native sign-in failed; supervisor must restore sign-in in the original worker, verify its run/claim/native binding, then continue that same run; no automatic input'};
   const limited = /(?:usage|rate|account|request|message|weekly|credit|quota).{0,50}(?:limit|quota|exhaust|exceed|reached)|(?:hit|reached|exceeded).{0,40}(?:limit|quota)|(?:out of|insufficient|not enough)\s+credits/i.test(error);
   if (!limited) return {kind:'unclassified-stop',reset_at:null,reason:'terminal worker without a valid report; native stop reason/reset unknown'};
   const resetText = /(?:try again at|resets? (?:at|on))\s+(.+?)(?:\.(?:\s|$)|$)/i.exec(error)?.[1]?.trim();
@@ -99,6 +106,7 @@ export async function reconcileUsageStop({org,current,ownership,canonical,native
   const observation=classifyUsageStop(screen);
   if (!saved || saved.screen_sha256!==hash(screen) || saved.phase==='working')
     save({attempt:saved?.attempt??0,observed_at:new Date(now()).toISOString(),screen_sha256:hash(screen),...observation,phase:'held'});
+  if(observation.kind==='sign-in-required')return {handled:true,wait_ms:30000,receipt:saved};
   if(observation.kind!=='usage-limit')return {handled:false,receipt:saved};
   if(!observation.reset_at)return {handled:true,wait_ms:30000,receipt:saved};
   const remaining=Date.parse(observation.reset_at)-now();

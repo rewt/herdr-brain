@@ -23,6 +23,9 @@ import {probationSwitch} from './probation-switch.mjs';
 import {probationSuccessor} from './probation-successor.mjs';
 
 import {launchPlist} from './plist.mjs';
+import {hostRecoveryNotices,hostRecoveryOwner} from './host-recovery.mjs';
+import {regularJSON} from './cutoff.mjs';
+import {loadRecord} from '../lib/store.mjs';
 export {launchPlist} from './plist.mjs';
 
 export function main(argv = process.argv.slice(2), { command = spawnSync,call:nativeCall,home,cwd=process.cwd(),env=process.env } = {}) {
@@ -101,7 +104,13 @@ export function main(argv = process.argv.slice(2), { command = spawnSync,call:na
     if (!r.error && /could not find service/i.test(r.stderr ?? '')) return { loaded: false, native: r.stderr.trim() };
     throw Error((r.stderr || r.stdout || r.error?.message || `launchctl print exit ${r.status}`).trim());
   };
-  if (action === 'status') return { target, directory, stopped: fs.existsSync(stopped), ...inspect() };
+  if (action === 'status') {
+    const status=inspect(),record=loadRecord(org);
+    if(record.tornTail)throw Error('incomplete record prevents recovery inspection');
+    return {target,directory,stopped:fs.existsSync(stopped),...status,
+      recovery:hostRecoveryNotices({repo,org,identity:project.identity,directory,to:hostRecoveryOwner(repo,env),
+        installation:regularJSON(path.join(directory,'installation.json')),state:record.state,loaded:status.loaded})};
+  }
   fs.mkdirSync(directory, { recursive: true });
   const releaseControl=noticeLock(path.join(directory,'control.lock'),{recover:false});
   let releasePass,releasePromotion;

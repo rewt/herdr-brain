@@ -181,6 +181,18 @@ test('native replacements, changed claim/source, duplicate identity and inactive
   }
 });
 
+test('terminal-only drift names the original evidence and supervisor without granting readiness or rewriting it',t=>{
+  const f=fixture(t);f.bind();f.native.terminal_id='after-reboot';
+  const journal=fs.readFileSync(f.journal),events=fs.readFileSync(path.join(f.org,'events.jsonl'));
+  assert.throws(f.read,error=>{
+    assert.match(error.message,/held: original terminal terminal differs from native terminal after-reboot/);
+    assert.match(error.message,/project supervisor.*R-1/);assert.ok(error.message.includes(f.journal));
+    assert.match(error.message,/cannot rebind/);return true;
+  });
+  assert.deepEqual(fs.readFileSync(f.journal),journal);
+  assert.deepEqual(fs.readFileSync(path.join(f.org,'events.jsonl')),events);
+});
+
 test('original binding refusals and malformed record tails are retained rather than waited or repaired', async t => {
   const f = fixture(t);
   for (const refusal of [{ status: 'unbound', reason: 'native process changed' }, { status: 'observing', record_refusal: true }]) {

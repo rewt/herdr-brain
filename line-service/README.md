@@ -355,6 +355,42 @@ node line-service/launchd.mjs stop --repo /OWN/CANONICAL
 node line-service/launchd.mjs restart --repo /OWN/CANONICAL
 ```
 
+Fresh accepted-release installations also retain an exclusive login entry at
+`~/Library/LaunchAgents/dev.herdr.line.PROJECT.plist`, pointing to their own
+`service.plist`. Login after a reboot therefore reloads the same finite schedule;
+atomic upgrade/rollback plist replacements retain that entry. This is a user
+login agent, not a system boot daemon. It transports no native caller identity.
+The service's own STOP, project STOP/HOLD, runtime admission and every native/run
+guard still apply. Failed installations retain their intent, login entry if
+already created, and STOP; they are not replayed or replaced.
+
+Existing installations are not silently registered or restarted. `status` now
+includes `recovery` notices naming the project supervisor from `promote.to`, the
+exact saved-source status/stop/restart controls, missing login registration and
+open runs with absent or unknown watcher owners. Scheduled startup records changed
+notices in `passes.jsonl` and `host-recovery.latest.json`, even before runtime
+admission, without changing runs, claims, folders, dispatch journals or watchers.
+No process started means no startup observer can execute: for an older installation
+without a login entry, its supervisor must pull status after login and use its
+original controls. Automatic login registration of an existing installation is
+not provided by status or a runtime upgrade; it remains a separately guarded
+installation change. Never edit its saved receipt to claim registration.
+
+A failed native sign-in (`Not logged in`, including Claude's zero-second `/login`
+failure) is saved distinctly as `sign-in-required` by the original watcher. It
+stays held without automated input: the supervisor restores sign-in in the
+original worker and verifies its original claim/source/native binding before
+continuing that run. Observed work resolves the hold; an idle prompt alone does
+not prove sign-in. Terminal-ID drift, even with the same pane/session and a
+committed session binding, remains a refusal naming the evidence for supervisor
+inspection. This change grants no terminal rebind authority. Queued, refused and
+uncertain notices retain their original inbox owner and IDs; restoring a
+supervisor's native name does not authorize a relay or replay.
+
+Source fixtures are not a live reboot or credential witness. Activation and the
+next real reboot/sign-in failure remain with the project's release/supervisor
+owners; an unarranged live witness is explicitly unrun.
+
 For a new install, omitting `--to` selects the actual canonical native supervisor
 performing the install. An explicit recipient must also resolve to a live named
 agent in that project through the selected Herdr executable and socket.

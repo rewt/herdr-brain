@@ -55,6 +55,8 @@ test('fresh accepted release previews without effects, records actual cutoff and
   assert.equal(fs.existsSync(f.directory),false);assert.equal(boots(f).length,0);untouched(f);
   assert.throws(()=>f.main(f.argv,f.options),/expected-plan/);assert.equal(fs.existsSync(f.directory),false);
   const result=f.apply(preview.expected_plan);assert.equal(result.installed,true);assert.equal(boots(f).length,1);
+  assert.equal(result.installation.login.file,path.join(f.home,'Library/LaunchAgents','dev.herdr.line.'+path.basename(f.directory)+'.plist'));
+  assert.equal(fs.readlinkSync(result.installation.login.file),f.file);
   const events=loadEvents(f.org).events,cutovers=events.filter(e=>e.type==='line-service.cutover');
   assert.equal(cutovers.length,1);assert.equal(cutovers[0].canonical_head,head);assert.equal(cutovers[0].source,f.bundle);
   assert.equal(events.some(e=>e.type==='line-service.runtime-migrated'),false);
@@ -129,7 +131,7 @@ test('apply respects live locks and rechecks controls and configuration before b
 });
 
 test('partial installs retain the original intent and never replay under either id or restart',async t=>{
-  for(const phase of ['intent','plist','installation']){
+  for(const phase of ['intent','plist','installation','login']){
     const f=await fixture(t),preview=f.plan();
     assert.throws(()=>f.installRelease({...f.options,expectedPlan:preview.expected_plan,fault:point=>{if(point===phase)throw Error('interrupted at '+phase);}}),/interrupted/);
     const retained=fs.readFileSync(preview.archive.file,'utf8');
@@ -165,6 +167,7 @@ test('fresh release history supports stopped retarget, restart, upgrade and roll
   f.pin('compatible');const rollback=['upgrade',...controls,'--id','fresh-rollback','--from-root',next,'--target-root',f.bundle,'--rollback'];
   const back=main([...rollback,'--dry-run'],f.options);assert.equal(main([...rollback,'--expected-plan',back.archive.sha256],f.options).upgraded,true);
   const {installedContext:original}=await f.module('line-service/cutoff.mjs');assert.equal(original(f.cwd,f.org).installation.source,f.bundle);
+  assert.equal(fs.readlinkSync(original(f.cwd,f.org).installation.login.file),f.file,'one login entry follows upgrade/rollback plist replacements');
   assert.equal(loadEvents(f.org).events.some(e=>e.type==='line-service.runtime-migrated'),false);
   assert.equal(fs.readFileSync(f.jobs,'utf8'),f.before.jobs);
 });

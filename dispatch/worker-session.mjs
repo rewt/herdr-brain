@@ -29,6 +29,10 @@ export function workerSessionState({ id, journal, org, job, binding, events, sta
   for (const marker of ['STOP', 'HOLD'])
     if (fs.existsSync(path.join(project.canonical, '.lane/supervisor', marker))) throw Error(`worker session wait ${marker}`);
   const receipt = workerReceipt(run, state), worker = effectiveWorkerIdentity(run, state);
+  if (!worker.identity_conflict && worker.agent === native.name && worker.pane === native.pane_id &&
+      worker.worker_workspace === native.workspace_id && worker.agent_session_id === native.agent_session?.value &&
+      worker.terminal_id !== native.terminal_id)
+    throw Error(`worker session wait held: original terminal ${worker.terminal_id} differs from native terminal ${native.terminal_id}; project supervisor must inspect the original run ${id}, dispatch journal ${journal} and committed run.session_bound evidence; retain the original claim, folder and refusal; terminal continuity is not proven and this read-only wait cannot rebind it`);
   if (!receipt || WORKER_KEYS.some(k => (receipt[k] ?? null) !== (run.meta[k] ?? null)) || worker.identity_conflict ||
       !native.agent_session?.value ||
       worker.agent !== native.name || worker.agent !== job.worker?.agentName ||

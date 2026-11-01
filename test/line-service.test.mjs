@@ -944,6 +944,18 @@ test('existing uncertain native review on any item run holds a second review', t
   fs.writeFileSync(path.join(directory, 'native.json'), JSON.stringify({ kind: 'settle', common: identity, run }));
   assert.equal(reviewAttempt(current, { org: f.org, identity, events }), 'existing native reviewer');
 });
+test('host recovery diagnostic deltas survive a fresh service object without changing record or fences',t=>{
+  const f=fixture(t),service=f.service(),record=fs.readFileSync(path.join(f.org,'events.jsonl'));
+  assert.ok(service.observeHostRecovery().some(n=>n.boundary==='login-registration'));
+  service.observeHostRecovery();f.service().observeHostRecovery();
+  const rows=()=>fs.readFileSync(path.join(service.directory,'passes.jsonl'),'utf8').trim().split('\n').map(JSON.parse).filter(r=>r.action==='host-recovery-notice');
+  assert.equal(rows().length,1);
+  fs.writeFileSync(path.join(service.directory,'STOP'),'keep stopped');
+  assert.ok(f.service().observeHostRecovery().some(n=>n.boundary==='fence'));
+  assert.equal(rows().length,2);assert.equal(fs.readFileSync(path.join(service.directory,'STOP'),'utf8'),'keep stopped');
+  assert.deepEqual(fs.readFileSync(path.join(f.org,'events.jsonl')),record);
+});
+
 test('launchd uses only actual transport paths, an explicit project and no caller identity', () => {
   const plist = launchPlist({ label: 'fixture', repo: '/project', org: '/record', to: 'supervisor-test', herdr: '/bin/herdr', socket: '/actual/socket', directory: '/record/service', node: '/node20', searchPath: '/bin', interval: 30 });
   assert.match(plist, /--once/); assert.match(plist, /StartInterval.*30/); assert.match(plist, /HERDR_SOCKET_PATH/);

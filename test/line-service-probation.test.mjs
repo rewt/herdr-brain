@@ -160,13 +160,14 @@ test('completed probation leaves separately qualified ordinary pin admission ava
   const manifest=fs.readFileSync(path.join(f.next,'.release-manifest.json')),release={root:f.next,id:'trial',commit:JSON.parse(manifest).commit,protocol:1};
   // Synthetic coordinator evidence in private scratch, through the production
   // offer publisher. No real canary, check, READY flag or activation is claimed.
-  const evidence=path.join(f.scratch,'synthetic-landing.json');
+  const evidence=path.join(f.scratch,'synthetic-landing.json'),canary=path.join(f.scratch,'synthetic-canary.json');
   fs.writeFileSync(evidence,JSON.stringify({schema:'lane-validation/v1',executed:true,exit_code:0,node_version:'v20.19.4',command:'synthetic fixture only',
     started_at:'2026-10-30T00:00:00Z',finished_at:'2026-10-30T00:00:01Z',head:release.commit}));
-  const ref={file:evidence,sha256:sha(fs.readFileSync(evidence))};
-  const packet={schema:'consumer-release-offer/v1',commit:release.commit,manifestSha256:sha(manifest),
-    canary:{status:'PASS',scope:'Synthetic isolated coordinator acceptance, not a real canary.',evidence:['installed','probation','soak'].map(stage=>({...ref,stage}))},
-    landing:{status:'PASS',scope:'Synthetic isolated producer receipt, not a real check.',evidence:[{...ref,changedFiles:[],reconciliation:'Identical fixture source commit.'}]},
+  fs.writeFileSync(canary,JSON.stringify({fixture:true,status:'PASS',candidateCommit:release.commit}));
+  const ref=file=>({file,sha256:sha(fs.readFileSync(file))});
+  const packet={schema:'consumer-release-offer/v1',commit:release.commit,coordinatorItem:'G-1',manifestSha256:sha(manifest),
+    canary:{status:'PASS',scope:'Synthetic isolated coordinator acceptance, not a real canary.',evidence:['installed','probation','soak'].map(stage=>({...ref(canary),stage}))},
+    landing:{status:'PASS',scope:'Synthetic isolated producer receipt, not a real check.',evidence:[{...ref(evidence),changedFiles:[],reconciliation:'Identical fixture source commit.'}]},
     majors:{unresolved:[],corrections:[],scope:'Synthetic fixture has no Major findings.'}};
   const attestationDigest=sha(JSON.stringify(packet)),note=transact(f.org,()=>({add:[{type:'note.added',id:'G-1',decision:true,text:`Consumer release offer reconciled: ${attestationDigest}`}]}),{actor:f.agent.name}).added[0];
   const packetFile=path.join(f.scratch,'synthetic-offer.json');fs.writeFileSync(packetFile,JSON.stringify({...packet,attestationDigest,attestationSeq:note.seq}));

@@ -1030,15 +1030,15 @@ test('landing-before-report actual source queue command is reached by the instal
 
 test('landing-before-report defers a report arriving during selection before queue intent and queues once on the next pass',t=>{
   const f=fixture(t,{reported:false});unreportedNativeLandings(f);
-  const env=installedService(f),read=fs.readFileSync;let arrived=false,calls=0;
-  t.mock.method(fs,'readFileSync',function(file,...args){
-    const bytes=Reflect.apply(read,fs,[file,...args]);
-    if(!arrived&&file===path.join(f.org,'dispatch/source.json')){
+  const env=installedService(f),mkdir=fs.mkdirSync;let arrived=false,calls=0;
+  t.mock.method(fs,'mkdirSync',function(file,...args){
+    const result=Reflect.apply(mkdir,fs,[file,...args]);
+    if(!arrived&&typeof file==='string'&&path.dirname(file)===f.directory&&/^review-change-.*\.lock$/.test(path.basename(file))){
       arrived=true;
       f.add([{type:'report.ingested',run:'R-1',file:'reports/R-1.md',sha256:hash(f.report),
         report:{outcome:'done',artifacts:f.heads.map(h=>`Commit: ${h}`),extra:{},blockers:[],proposals:[]}}]);
     }
-    return bytes;
+    return result;
   });
   const options={repo:f.cwd,org:f.org,to:'supervisor-test',env,capacity:()=>{throw Error('occupied');},command:(exe,args,options)=>{
     if(args[1]==='queue-review'){calls++;return spawnSync(exe,args,options);}

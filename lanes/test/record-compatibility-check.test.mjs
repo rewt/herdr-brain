@@ -18,6 +18,10 @@ function brainFixture({ exact = false } = {}) {
     copyProduct(product, f.repo);
     fs.cpSync(path.join(product, 'test/helpers'), path.join(f.repo, 'test/helpers'), { recursive: true });
     fs.copyFileSync(path.join(product, compatibilityTest), path.join(f.repo, compatibilityTest));
+    // The inherited containment policy recognizes this original runner path
+    // when giving nested suites their own process group. Keep that entrypoint.
+    fs.writeFileSync(path.join(f.repo, 'test/helpers/run.mjs'),
+      `import ${JSON.stringify(new URL('../../test/helpers/run.mjs', import.meta.url).href)};\n`);
     // The unmodified real file reads historical source objects with git show.
     // Only immutable objects are shared; refs, index and worktrees stay scratch.
     const common = git(product, ['rev-parse', '--path-format=absolute', '--git-common-dir']);

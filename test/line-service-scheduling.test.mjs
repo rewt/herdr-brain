@@ -40,6 +40,7 @@ function fixture(t,cap=2,{detached=false,fence=false}={}){
   fs.writeFileSync(helper,`
 import fs from 'node:fs';import path from 'node:path';
 import {transact} from ${JSON.stringify(pathToFileURL(path.join(sourceRoot,'lib/store.mjs')).href)};
+if(process.argv[1]?.endsWith('/dispatch/dispatch.mjs')){
 const root=${JSON.stringify(root)},repo=${JSON.stringify(repo)},org=${JSON.stringify(org)},common=${JSON.stringify(project.identity)};
 const item=process.argv[2],token=item,brief=process.argv[process.argv.indexOf('--brief')+1],journal=path.join(org,'dispatch',token+'.json');
 fs.mkdirSync(path.dirname(journal),{recursive:true});
@@ -49,6 +50,7 @@ fs.writeFileSync(path.join(root,'blocked'),'helper entered');
 while(!fs.existsSync(path.join(root,'release')))Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,15);
 if(${fence})transact(org,()=>({add:[{type:'dispatch.completed',project:common,journal,attempt:token,item,run:null,failure:{kind:'fence',code:'NATIVE_REFUSAL'}}]}));
 process.stdout.write(JSON.stringify({result:'detached',journal,item}));process.exit(0);
+}
 `);
   fs.writeFileSync(driver,`
 import fs from 'node:fs';import path from 'node:path';

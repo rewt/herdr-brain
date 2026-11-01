@@ -40,6 +40,7 @@ import {haltObservation,completeHaltPass} from '../line-service/halt-repair.mjs'
 import {inspectReviewAdmission} from '../line-service/review-admission.mjs';
 import {queueSelected} from '../line-service/priority-order.mjs';
 import {negativeEvaluationCache} from '../line-service/evaluation-cache.mjs';
+import {ordinaryAdmissionHold} from '../lib/ordinary-admission.mjs';
 
 const hash=b=>createHash('sha256').update(b).digest('hex');
 function fixture(t,{reported=true,role='engineer'}={}){
@@ -109,6 +110,57 @@ function admissionQueue(f){
 }
 
 const ordinaryPolicy=(f,policy)=>setConfig('ordinary_admission',JSON.stringify({selected_only:true,...policy}),{cwd:f.cwd,env:f.env,who:'explicit ordinary fixture wave'});
+const ordinaryExclusions=f=>{
+  const view=inspectReviewAdmission({repo:f.cwd,org:f.org,env:f.env}),{state}=f.context();
+  return view.candidates.filter(row=>row.kind==='ordinary'&&!row.selected)
+    .map(row=>({item:row.item,stage:'selection',...ordinaryAdmissionHold(view.ordinary_admission,{item:state.items.get(row.item),state})}));
+};
+
+test('ordinary admission exclusion digest bounds backlog writes across unchanged passes and checkpoint recovery',t=>{
+  const f=fixture(t,{reported:false}),size=300;
+  f.add([{type:'item.closed',id:'ENG-1',as:'done'},
+    ...Array.from({length:size},(_,n)=>({type:'item.added',id:`ENG-${n+10}`,role:'engineer',title:'Excluded backlog',
+      meta:n%2?{queue_selected:false}:{} })),
+    {type:'link.added',blocked:'ENG-12',blocker:'ENG-13'}]);
+  ordinaryPolicy(f,{});admissionPolicy(f,{});
+  const file=path.join(f.directory,'effects.json'),audit=path.join(f.directory,'passes.jsonl');
+  const summary=()=>JSON.parse(fs.readFileSync(file)).ordinary_admission;
+  admissionService(f,{haltAfter:100}).pass();
+  const original=summary();
+  assert.equal(original.exclusions.count,size);
+  assert.deepEqual(original.exclusions.by_code,{ORDINARY_ADMISSION_NOT_SELECTED:150,ORDINARY_ADMISSION_DESELECTED:150});
+  assert.deepEqual(original.held,[]);
+  assert.equal(original.exclusions.digest,hash(JSON.stringify(Array.from({length:size},(_,n)=>[
+    `ENG-${n+10}`,n%2?'ORDINARY_ADMISSION_DESELECTED':'ORDINARY_ADMISSION_NOT_SELECTED']).sort(([a],[b])=>a.localeCompare(b)))));
+  assert.ok(JSON.stringify(original).length<512,'effects selection diagnostics have constant size');
+  admissionService(f,{haltAfter:100}).pass();
+  assert.deepEqual(summary(),original,'a fresh service keeps the same digest without per-item rows');
+  assert.equal(diagnostics(f).filter(r=>r.action==='ordinary-admission-exclusions').length,2);
+  assert.equal(diagnostics(f).filter(r=>r.action==='ordinary-admission-held'||r.stage==='selection').length,0);
+  assert.equal(ordinaryExclusions(f).length,size,'inspection still includes blocked and ready exclusions');
+
+  f.add([{type:'item.updated',id:'ENG-10',fields:{meta:{queue_selected:true}}}]);
+  const write=fs.writeFileSync;let interrupted=false;
+  fs.writeFileSync=function(target,...args){
+    if(String(target).startsWith(file+'.')&&fs.readFileSync(audit,'utf8').includes('"count":299')){
+      interrupted=true;throw Error('injected exclusion checkpoint failure');
+    }
+    return write.call(this,target,...args);
+  };
+  try{assert.throws(()=>admissionService(f,{haltAfter:100}).pass(),/injected exclusion checkpoint failure/);}
+  finally{fs.writeFileSync=write;}
+  assert.equal(interrupted,true);
+  admissionPolicy(f,{hold_ordinary:false});
+  const recovered=admissionService(f,{haltAfter:100});recovered.pass();
+  assert.equal(summary().exclusions.count,size-1);
+  assert.notEqual(summary().exclusions.digest,original.exclusions.digest);
+  assert.deepEqual(summary().held,[]);
+  assert.deepEqual(recovered.calls.filter(a=>a[0].endsWith('/dispatch/dispatch.mjs')).map(a=>a[1]),['ENG-10']);
+  assert.equal(ordinaryExclusions(f).length,size-1);
+  assert.equal(diagnostics(f).filter(r=>r.action==='ordinary-admission-exclusions').length,4,'one summary for each pass, including the interrupted pass');
+  assert.equal(diagnostics(f).filter(r=>r.action==='ordinary-admission-held'||r.stage==='selection').length,0);
+  t.diagnostic(JSON.stringify({backlog:size,passes:4,selection_rows:4,per_item_rows:0,checkpoint_failure:'recovered',launched:'ENG-10'}));
+});
 
 test('ordinary admission diagnostics filter unselected items before launch holds',t=>{
   for(const selected_only of [false,true]){
@@ -131,8 +183,11 @@ test('ordinary admission diagnostics filter unselected items before launch holds
     s.pass();
     assert.deepEqual(launches(),[],'review hold prevents every selected launch');
     assert.deepEqual(rows(launchHolds(effects().review_admission.held)),eligible.map(id=>[id,'launch','REVIEW_ADMISSION_ORDINARY_HELD']));
-    assert.deepEqual(rows(effects().ordinary_admission.held),selectionRows(),'each exclusion has exactly one selection row');
-    assert.deepEqual(rows(diagnostics(f).filter(r=>r.action==='ordinary-admission-held')),selectionRows(),'no duplicate launch-stage ordinary diagnostics');
+    const summary=effects().ordinary_admission.exclusions;
+    assert.equal(summary.count,selectionRows().length);
+    assert.deepEqual(rows(ordinaryExclusions(f)),selectionRows(),'item-level reasons remain visible in inspection');
+    assert.deepEqual(effects().ordinary_admission.held,[]);
+    assert.deepEqual(diagnostics(f).filter(r=>r.action==='ordinary-admission-held'),[],'no per-item selection or duplicate launch diagnostics');
     assert.deepEqual(rows(launchHolds(diagnostics(f).filter(r=>r.action==='review-admission-held'))),eligible.map(id=>[id,'launch','REVIEW_ADMISSION_ORDINARY_HELD']));
     assert.equal(Object.keys(effects().actions).some(key=>key.startsWith('dispatch:')),false,'blocked pass records no dispatch intent');
 
@@ -141,9 +196,10 @@ test('ordinary admission diagnostics filter unselected items before launch holds
     s.pass();
     assert.deepEqual(launches().sort(),eligible,'policy recovery launches exactly the selected work');
     assert.deepEqual(launchHolds(effects().review_admission.held),[]);
-    assert.deepEqual(rows(effects().ordinary_admission.held),selectionRows(),'recovery keeps exclusions visible once');
+    assert.deepEqual(effects().ordinary_admission.exclusions,summary,'recovery retains the exclusion digest');
+    assert.deepEqual(rows(ordinaryExclusions(f)),selectionRows());
     const recovery=diagnostics(f).slice(before);
-    assert.deepEqual(rows(recovery.filter(r=>r.action==='ordinary-admission-held')),selectionRows());
+    assert.deepEqual(recovery.filter(r=>r.action==='ordinary-admission-held'),[]);
     assert.deepEqual(launchHolds(recovery.filter(r=>r.action==='review-admission-held')),[]);
     for(const id of ['ENG-11','ENG-12',...(selected_only?['ENG-13']:[])]){
       const item=f.context().state.items.get(id);assert.equal(item.closed,null);assert.deepEqual(item.runs,[]);
@@ -221,8 +277,10 @@ test('ordinary admission selected wave starts concurrently up to the build pool 
   assert.throws(()=>capacity('build'),e=>e.code==='DISPATCH_SESSION_CAP'&&e.sessions.count===2);
   assert.equal(capacity('review').count,0,'review slots remain separate');
   const effects=JSON.parse(fs.readFileSync(path.join(f.directory,'effects.json')));
+  assert.equal(effects.ordinary_admission.exclusions.count,2);
+  const exclusions=ordinaryExclusions(f);
   for(const [item,code]of [['ENG-90','ORDINARY_ADMISSION_NOT_SELECTED'],['ENG-91','ORDINARY_ADMISSION_DESELECTED']])
-    assert.ok(effects.ordinary_admission.held.some(h=>h.item===item&&h.code===code));
+    assert.ok(exclusions.some(h=>h.item===item&&h.code===code));
   const original=fs.readFileSync(journals.get('ENG-10'));
   f.add([{type:'report.ingested',run:'R-10',file:'reports/wave.md',report:{outcome:'done',artifacts:[],blockers:[],proposals:[],extra:{}}},
     {type:'item.closed',id:'ENG-10',as:'done',completed_run:'R-10'}]);
@@ -265,7 +323,8 @@ test('ordinary admission recovery starts the next selected item as the line whil
     const item=state.items.get(id);assert.equal(item.closed,null,id);assert.deepEqual(item.runs,[],id);
     assert.ok(after.candidates.some(row=>row.item===id),`${id} remains visible in inspection`);
   }
-  const held=JSON.parse(fs.readFileSync(path.join(f.directory,'effects.json'))).ordinary_admission.held;
+  assert.equal(JSON.parse(fs.readFileSync(path.join(f.directory,'effects.json'))).ordinary_admission.exclusions.count,2);
+  const held=ordinaryExclusions(f);
   assert.ok(held.some(row=>row.item==='ENG-90'&&row.code==='ORDINARY_ADMISSION_NOT_SELECTED'));
   assert.ok(held.some(row=>row.item==='ENG-91'&&row.code==='ORDINARY_ADMISSION_DESELECTED'));
   t.diagnostic(JSON.stringify({witness:'ordinary-admission-recovery',starts:starts.map(({id,item,by})=>({id,item,by})),

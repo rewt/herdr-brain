@@ -424,12 +424,16 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         if(hold){const row={stage,item:item.id,...hold};effects.ordinary_admission.held.push(row);noticesDirty=true;log({action:'ordinary-admission-held',...row});}
         return hold;
       };
-      // Retain every excluded open ordinary row, even beyond the start/cap limit.
+      // Summarize the entire excluded backlog once, including non-ready items
+      // and rows beyond the start/cap limit. Item-level reasons remain available
+      // in the read-only admission view; do not fsync a diagnostic per item.
+      const exclusions=[],by_code={};
       for(const item of snapshot.state.items.values())if(ordinaryPolicy?.selected_only&&!item.closed&&item.kind!=='goal'){
-        const selection=evaluationCache.probe('selection',{snapshot,item:item.id,policy:evaluationPolicy});
-        if(selection.skip){effects.ordinary_admission.held.push({stage:'selection',item:item.id,...selection.reason,cached:true});noticesDirty=true;continue;}
-        const held=ordinaryHold(item,snapshot.state,'selection');if(held)selection.retain(held);
+        const held=ordinaryAdmissionHold(ordinaryPolicy,{item,state:snapshot.state});
+        if(held){exclusions.push([item.id,held.code]);by_code[held.code]=(by_code[held.code]??0)+1;}
       }
+      effects.ordinary_admission.exclusions={count:exclusions.length,by_code,digest:digest(exclusions.sort(([a],[b])=>a.localeCompare(b)))};
+      noticesDirty=true;log({action:'ordinary-admission-exclusions',...effects.ordinary_admission.exclusions});
       const admit=(subject,stage,fresh=false)=>{
         const policies=fresh?readAdmission(stage):admission;
         const hold=policyHold??reviewAdmissionHold(policies.review,reviewAdmissionSubject(subject));

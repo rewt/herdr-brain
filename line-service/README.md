@@ -106,10 +106,15 @@ shows both policies, each ordinary item's record status and `selected` flag,
 and the effective `hold`. A null hold is selection permission, not a readiness
 or native launch guarantee.
 
-Every unselected open ordinary item remains in the record. Pass diagnostics and
-`effects.json.ordinary_admission.held` show typed
-`ORDINARY_ADMISSION_NOT_SELECTED` or `ORDINARY_ADMISSION_DESELECTED` reasons,
-including exclusions beyond the pass's start/cap limit. Admission rereads policy
+Every unselected open ordinary item remains in the record. One
+`ordinary-admission-exclusions` diagnostic per pass and
+`effects.json.ordinary_admission.exclusions` give the count, counts by typed reason
+and SHA256 digest of sorted `[item ID, reason code]` pairs, including non-ready
+exclusions beyond the pass's start/cap limit. Use the read-only admission view
+above to enumerate current items with `ORDINARY_ADMISSION_NOT_SELECTED` or
+`ORDINARY_ADMISSION_DESELECTED` reasons. `ordinary_admission.held` retains only
+individual launch-time holds, such as a selection changed after capacity.
+Admission rereads policy
 and current ancestry/flags after capacity observation before recording an effect.
 Intentional exclusions do not count as stalled ready work for idle repair.
 Reviews retain their independent exact allowlists; running workers, report intake,

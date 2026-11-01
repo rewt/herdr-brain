@@ -110,6 +110,47 @@ function admissionQueue(f){
 
 const ordinaryPolicy=(f,policy)=>setConfig('ordinary_admission',JSON.stringify({selected_only:true,...policy}),{cwd:f.cwd,env:f.env,who:'explicit ordinary fixture wave'});
 
+test('ordinary admission diagnostics filter unselected items before launch holds',t=>{
+  for(const selected_only of [false,true]){
+    const f=fixture(t,{reported:false});
+    f.add([{type:'item.closed',id:'ENG-1',as:'done'},
+      {type:'item.added',id:'ENG-10',role:'engineer',title:'Explicitly selected',meta:{queue_selected:true}},
+      {type:'item.added',id:'ENG-11',role:'engineer',title:'Unselected report proposal',from_run:'R-1'},
+      {type:'item.added',id:'ENG-12',role:'engineer',title:'Explicitly deselected report proposal',from_run:'R-1',meta:{queue_selected:false}},
+      {type:'item.added',id:'ENG-13',role:'engineer',title:'Unflagged ordinary work'}]);
+    ordinaryPolicy(f,{selected_only});admissionPolicy(f,{});
+    const s=admissionService(f,{haltAfter:100}),eligible=selected_only?['ENG-10']:['ENG-10','ENG-13'];
+    const effects=()=>JSON.parse(fs.readFileSync(path.join(f.directory,'effects.json')));
+    const launches=()=>s.calls.filter(a=>a[0].endsWith('/dispatch/dispatch.mjs')).map(a=>a[1]);
+    const selectionRows=()=>selected_only?[
+      ['ENG-11','selection','ORDINARY_ADMISSION_NOT_SELECTED'],
+      ['ENG-12','selection','ORDINARY_ADMISSION_DESELECTED'],
+      ['ENG-13','selection','ORDINARY_ADMISSION_NOT_SELECTED']]:[];
+    const rows=entries=>entries.map(r=>[r.item,r.stage,r.code]).sort((a,b)=>a[0].localeCompare(b[0]));
+    s.pass();
+    assert.deepEqual(launches(),[],'review hold prevents every selected launch');
+    assert.deepEqual(rows(effects().review_admission.held),eligible.map(id=>[id,'launch','REVIEW_ADMISSION_ORDINARY_HELD']));
+    assert.deepEqual(rows(effects().ordinary_admission.held),selectionRows(),'each exclusion has exactly one selection row');
+    assert.deepEqual(rows(diagnostics(f).filter(r=>r.action==='ordinary-admission-held')),selectionRows(),'no duplicate launch-stage ordinary diagnostics');
+    assert.deepEqual(rows(diagnostics(f).filter(r=>r.action==='review-admission-held')),eligible.map(id=>[id,'launch','REVIEW_ADMISSION_ORDINARY_HELD']));
+    assert.equal(Object.keys(effects().actions).some(key=>key.startsWith('dispatch:')),false,'blocked pass records no dispatch intent');
+
+    const before=diagnostics(f).length;
+    setConfig('review_admission.hold_ordinary','false',{cwd:f.cwd,env:f.env,who:'fixture owner releases ordinary hold'});
+    s.pass();
+    assert.deepEqual(launches().sort(),eligible,'policy recovery launches exactly the selected work');
+    assert.deepEqual(effects().review_admission.held,[]);
+    assert.deepEqual(rows(effects().ordinary_admission.held),selectionRows(),'recovery keeps exclusions visible once');
+    const recovery=diagnostics(f).slice(before);
+    assert.deepEqual(rows(recovery.filter(r=>r.action==='ordinary-admission-held')),selectionRows());
+    assert.deepEqual(recovery.filter(r=>r.action==='review-admission-held'),[]);
+    for(const id of ['ENG-11','ENG-12',...(selected_only?['ENG-13']:[])]){
+      const item=f.context().state.items.get(id);assert.equal(item.closed,null);assert.deepEqual(item.runs,[]);
+    }
+    t.diagnostic(JSON.stringify({witness:'selection-before-launch-holds',selected_only,blocked:eligible,recovered:launches(),exclusions:selectionRows()}));
+  }
+});
+
 test('pending source discovery caches covered producers across journal reloads but keeps targets and changed evidence fresh',t=>{
   const f=fixture(t),counts={};let document={actions:{}};
   const scan=()=>{

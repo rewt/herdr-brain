@@ -5,6 +5,7 @@ import path from 'node:path';
 import {createHash} from 'node:crypto';
 import {notificationFixture} from './helpers/operational-notification-fixture.mjs';
 import {validateQueuedReview} from '../line-service/review-queue.mjs';
+import {readPassJournal} from '../line-service/pass-journal.mjs';
 import {enqueueSupervisor,drainInbox,readInbox} from '../supervisor/prompt-supervisor.mjs';
 
 const digest=bytes=>createHash('sha256').update(bytes).digest('hex');
@@ -75,7 +76,18 @@ for(const priorHistory of [false,true])test('operational review launch with no a
   f.rec(['abandon',job.run]);
   const context={events:f.events(),state:f.state(),org:f.org,repo:f.repo,item:f.state().items.get(review)};
   assert.throws(()=>validateQueuedReview(context),/already has a run/,'abandonment does not silently grant a second review');
-  f.pass();assert.deepEqual(fs.readFileSync(job.journal),bytes);assert.equal(f.jobs().length,1);
+  // Two real passes let the line observe the unchanged abandoned request and
+  // surface its recovery refusal for inspection, without granting another run.
+  f.pass();f.pass();
+  const held=readPassJournal(path.join(f.directory,'passes.jsonl')).findLast(row=>
+    row.action==='hold'&&row.boundary===`review-progress:${review}`);
+  assert.ok(held,'the capped abandoned review must leave an owner-visible line reason');
+  assert.match(held.reason,/review progressed\/completed or is not an owned normal queue attempt/);
+  assert.deepEqual(held.scope,{item:review,review:true});
+  assert.equal(held.inspection_due,true,'the original review needs owner inspection');
+  const shown=f.execute('bin/org.mjs',['show',review]);assert.equal(shown.status,0,shown.stderr);
+  assert.match(shown.stdout,new RegExp(`${job.run} .*abandoned`),'the owner can identify the retained abandoned run');
+  assert.deepEqual(fs.readFileSync(job.journal),bytes);assert.equal(f.jobs().length,1);
   assert.deepEqual(f.state().items.get(review).runs,[job.run]);
 });
 

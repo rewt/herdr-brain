@@ -17,6 +17,7 @@ import { retirementHold, RETIREMENT_HOLD_REASON } from '../lib/retire-hold.mjs';
 import { bundleRelease, continueRelease, forwardRelease } from '../lib/releases.mjs';
 
 import { acquireWatcherLock } from './lock.mjs';
+import { reconcileUsageStop } from './usage-stop.mjs';
 import { createRunEventTail } from './record-tail.mjs';
 import {registrationFile, stepFile, readJson, nativeBinding, sameNative, observerReceipt, digest, readWatchSubject} from './shared.mjs';
 import {herdrSocketPath} from '../lanes/board/herdr-client.mjs';
@@ -503,6 +504,21 @@ async function watch() {
     run: runId, item, outcome: report.outcome, headline: report.headline ?? report.summary,
     report: reportPath, check: 'pass',
   }), 'done', `watch:${runId}:final`, {allowQueued:true});
+  let lastUsageLog;
+  const usageStop = async native => {
+    const result = await reconcileUsageStop({org:opt.org,current,ownership,canonical,native,herdr:opt.herdr,
+      call:(command,args)=>{
+        const reply=run(command,args);
+        if(reply.error || reply.status!==0)throw Error(reply.error?.message || reply.stderr || 'native observation/input failed');
+        return reply.stdout;
+      }});
+    if(result.receipt){
+      const message=`[watch-worker-stop] run=${runId} kind=${result.receipt.kind} phase=${result.receipt.phase} reset=${result.receipt.reset_at??'unknown'} reason=${JSON.stringify(result.receipt.reason)}`;
+      if(message!==lastUsageLog)log(message);
+      lastUsageLog=message;
+    }
+    return result;
+  };
 
   if (dry) {
     const status = agentStatus(agent);
@@ -589,6 +605,7 @@ async function watch() {
     lastUnavailableLog = undefined;
     if (state === 'working' || state === 'unknown') {
       if (state === 'working') { observedWorking = true; lastWorkingAt = observedAt; }
+      if (state === 'working') await usageStop(status.native);
       idleGraceUntil = undefined;
       // A resumed worker starts a new attempt. Its next identical stop must be
       // reported again rather than deduped against the previous attempt.
@@ -607,6 +624,16 @@ async function watch() {
       const signal = await waitForSignal(agent, ['working'], reportPath, startupGraceRemaining, beforeStamp, recordChanged, stopFile);
       if (signal === 'wait-failed') await delay(Math.min(retryAfterMs, startupGraceRemaining));
       continue;
+    }
+    if (report.kind === 'missing' && (state === 'idle' || state === 'done')) {
+      const recovery=await usageStop(status.native);
+      if(recovery.handled){
+        // A reset deadline is a wake-up fact, never permission to replay input.
+        // Both resident and finite/shared watches keep the same durable offer.
+        const signal=await waitForSignal(agent,['working'],reportPath,recovery.wait_ms,beforeStamp,recordChanged,stopFile);
+        if(signal==='wait-failed')await delay(Math.min(retryAfterMs,recovery.wait_ms));
+        continue;
+      }
     }
     if (observedWorking && report.kind === 'missing' && (state === 'idle' || state === 'done') && idleGraceMs > 0) {
       if (idleGraceUntil === undefined) {

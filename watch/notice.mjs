@@ -14,7 +14,7 @@ export function invalidReportNotice({ run, item, agent, report, error }) {
 }
 
 export function noReportNotice({ run, item, agent, state, report }) {
-  return `[watch-no-report] run=${run} item=${item} worker=${agent} state=${state} report=${report}`;
+  return `[watch-no-report] run=${run} item=${item} worker=${agent} state=${state} report=${report} stop=unclassified reset=unknown`;
 }
 
 export function blockedNotice({ run, item, agent, report }) {

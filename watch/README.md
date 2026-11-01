@@ -32,6 +32,37 @@ decision supersede the earlier timestamp. Monitor dispatches also retain the eve
 dispatch journal. The [run timing view](../dispatch/README.md#run-timing) reports
 these clocks and dispatch waits with explicit missing counts.
 
+For new watchers in a candidate containing usage-limit recovery, an idle/done
+worker without a report is also inspected through its original native pane.
+The last native error is matched against several usage/quota/credit-limit forms;
+an unfamiliar stop or unreadable screen stays explicitly unclassified, with
+`reset=unknown` in the ordinary no-report notice. Recognition does not treat
+quoted earlier errors above later assistant output as a current limit stop.
+Recognized usage limits do not produce a clean `process_end` decision. The
+watcher keeps its existing run, claim, session, worktree and unlanded source.
+
+`ORG/watch/usage-stops/R-n.json` retains the exact owner/native binding, screen
+hash (no screen contents), classification, native absolute reset time or an
+explicit unknown-time hold, and recovery phase/reason. Absolute native dates
+without a timezone use the host's local timezone; relative or incomplete clocks
+remain held. A reset deadline wakes the same watcher within a 30-second safety
+interval, plus native/record lookup and quiet-confirmation time. No service or
+supervisor turn is required. The existing finite/shared watcher checkpoints that
+same deadline; resident watchers retain their own timers and receipts.
+
+After reset, the existing `offerQuiet` adapter confirms the original idle/done
+occupant and empty composer before one continuation message. Fresh checks retain
+the original claim, dispatch source/Git identity, open current run, ancestor
+HOLD, pending question, report-file and STOP/HOLD boundaries. A busy, changed or
+unreadable worker receives no input. An intent saved before input survives a
+watcher crash: offering, acknowledged, refused and uncertain receipts cannot
+offer again until the same worker has actually been observed working. Acknowledged
+input is not proof of model consumption; a worker that never resumes stays held
+with that reason. The native read-to-input race remains the existing adapter's
+boundary. No old watcher, saved runtime, callback or recipient is migrated.
+Candidate installation and a real account-limit/reset witness remain with the
+line's authorized candidate/soak owner; offline controls do not prove live recovery.
+
 From a Herdr-managed supervisor pane, arm a visible watcher tab with:
 
 ```sh

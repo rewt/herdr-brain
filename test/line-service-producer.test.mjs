@@ -129,8 +129,8 @@ test('producer old reported source skips cheaply while an unresolved manual revi
   const diagnostics=f.diagnostics(),notices=diagnostics.filter(r=>r.notice_record);
   assert.equal(f.calls.length,0);assert.equal(f.messages().length,0);
   assert.equal(notices.filter(r=>/legacy\/manual.*UNKNOWN/.test(r.reason)).length,1,'warm cache retains the original manual-review diagnosis');
-  assert.equal(notices.filter(r=>/unknown delivered source/.test(r.reason)).length,2,'the closeout binding changes the source input once; the next warm pass retains its diagnosis');
-  assert.ok(diagnostics.filter(e=>e.action==='review-health').every(e=>e.health.owed===0));assert.equal(morningDigest({events:f.events(),diagnostics}).review_errors.occurrences,3);
+  assert.equal(notices.filter(r=>/unknown delivered source/.test(r.reason)).length,1,'warm source cache retains the unproven historical diagnosis too');
+  assert.ok(diagnostics.filter(e=>e.action==='review-health').every(e=>e.health.owed===0));assert.equal(morningDigest({events:f.events(),diagnostics}).review_errors.occurrences,2);
   assert.equal(fs.existsSync(inboxPath({org:f.org})),false);
 });
 

@@ -1,5 +1,8 @@
 # Consumer lifecycle baseline
 
+The running-line [Minor batch inventory](MINOR-BATCHES.md) reads immutable review
+reports and existing disposition notes without dispatching work or changing intake.
+
 The saved-input soak producer can also emit the offer's probation stage from
 the verified original trial archive, without hand-written status wrappers:
 

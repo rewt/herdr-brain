@@ -36,6 +36,23 @@ claim that you ran tests. Make findings actionable: concrete trigger, changed co
 observable consequence, severity and the evidence or correction needed. Preserve
 known failures and historical verdicts. Do not edit or fix the producer's source.
 
+For Brain's running-line Minor batching (ENG-1352), when there is at least one
+Minor and no Major, set `verdict: PASS` and record every Minor under exactly
+`## Batched Minors`, one `- path:line - explanation` bullet per finding. Keep each
+finding on one physical line, with its trigger and consequence. Omit frontmatter
+severity findings, tagged `[Minor]` bullets and engineer proposals in this case:
+the sealed intake interprets those as immediate corrections. This project rule
+overrides the older generated brief's Minor format. Keep inherited checks and
+acceptance declarations accurate; unproven outcome evidence stays unproven.
+When a Major exists, use the original schema for all findings and retain Major
+correction checks. Other projects keep their own review format.
+
+The immutable report is the finding source. Brain's
+`measurement/minor-batches.mjs` lists these Minors and recorded dispositions; see
+`measurement/MINOR-BATCHES.md`. Do not file an individual engineer proposal for
+these batched Minors. An owner-chosen related batch uses ordinary engineering and
+its one independent diff review, rather than a linked correction with no review.
+
 Return through the existing assigned report/prompt delivery and exit. The record
 links at most one formal correction round; later findings fix forward without a
 second full review. Majors need actual specific correction checks before final

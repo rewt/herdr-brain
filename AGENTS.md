@@ -45,6 +45,18 @@ do not grant authority or replace the guarded project tools.
 
 ## Review and handback
 
+- For a review with Minors and **no Major**, use `verdict: PASS` and put every
+  Minor under `## Batched Minors` as `- path:line - explanation`. In this case
+  omit severity-bearing frontmatter findings, `[Minor]` bullets and engineer
+  proposals: the running intake otherwise starts individual fix sessions.
+  This overrides the older generated brief's Minor bullet format only for
+  Minor-only reviews. Keep acceptance evidence truthful; PASS does not assert
+  unrun live proof. Reviews with a Major retain their existing findings,
+  verdict and correction checks, including their Minors.
+  [The read-only collector](measurement/MINOR-BATCHES.md) preserves report hashes,
+  lists pending Minors and recorded batch/disposition notes. A later batch is
+  ordinary engineering with one independent diff review, not a linked correction
+  that skips review. Do not combine unrelated findings or dismiss without a reason.
 - Hand immutable landed base/head and evidence through the report to the existing
   record queue-review path. ONE async post-code diff/evidence review, cap1,
   about30-minute planning target, zero reviewer suites. When a worker report is in,

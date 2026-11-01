@@ -32,7 +32,9 @@ export function probationSuccessor({repo,org,id,trial,fromRoot,targetRoot,rollba
   command=spawnSync,call,home=releaseHome(),fault=()=>{}}={}){
   if(process.platform!=='darwin'||process.version!=='v20.19.4')throw Error('probation successor requires macOS and pinned Node 20.19.4');
   if(![id,trial].every(v=>/^[-a-zA-Z0-9_]{1,80}$/.test(v??''))||fromRoot===targetRoot)throw Error('probation successor needs original --trial, distinct exact roots and unique --id');
-  const c=lineContext(repo,org),source=gitProject(toolRoot,{env:projectEnvironment()});
+  const c=lineContext(repo,org);let source;
+  try{source=gitProject(toolRoot,{env:projectEnvironment()});}
+  catch(cause){throw Error('probation successor requires clean canonical Brain tool root',{cause});}
   if(source.checkout!==toolRoot||source.canonical!==toolRoot||source.identity!==c.identity||toolRoot!==c.repo)
     throw Error('probation successor requires clean canonical Brain tool root');
   const file=path.join(c.directory,'service.plist'),installationFile=path.join(c.directory,'installation.json');
@@ -141,7 +143,9 @@ export function probationSuccessor({repo,org,id,trial,fromRoot,targetRoot,rollba
       authorityOwner(note,events);
       // The OLD reader's extra-file fence must exist before ANY intent/config.
       immutable(successorFence(c,id),successorFenceBytes({...a,archive:ref}));fault('fence');
+      effectGuard(events,initial.installation,initial.plist);
       if(initial.new_extension)immutable(extensionFile,json(initial.successor_scope));fault('authority');
+      effectGuard(events,initial.installation,initial.plist);
       immutable(ref.file,bytes);fault('intent');
       effectGuard(events,initial.installation,initial.plist);
       writeFileAtomic(file,a.after.plist,0o600);fault('plist');
@@ -168,7 +172,7 @@ export function probationSuccessor({repo,org,id,trial,fromRoot,targetRoot,rollba
           completion_seq:event.seq,archive:ref,fences}));fault('clear-receipt');
         for(const [effect,expected]of Object.entries(fences)){
           effectGuard(events,a.after.installation,a.after.plist);
-          if(readPlainFile(successorFence(c,effect))!==expected)throw Error('completed rollback fence changed; retain');
+          if(readPlainFile(successorFence(c,effect))!==expected||(fs.statSync(successorFence(c,effect)).mode&0o222))throw Error('completed rollback fence changed; retain');
           fs.unlinkSync(successorFence(c,effect));
         }
         fault('clear');return{add:[]};

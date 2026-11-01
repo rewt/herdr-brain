@@ -85,6 +85,6 @@ export function successorHistory(events,c,{trial,scope,saved,savedBytes,plist,la
   const folder=path.join(c.directory,'probation-switches');
   const actual=fs.existsSync(folder)?fs.readdirSync(folder).filter(n=>n.startsWith('.successor-')).sort():[];
   if(!same(actual,[...expectedFences.keys()].map(id=>`.successor-${id}`).sort()))throw Error('incomplete/UNKNOWN successor compatibility fence retained');
-  for(const [id,bytes]of expectedFences)if(readPlainFile(successorFence(c,id))!==bytes)throw Error('successor compatibility fence changed');
+  for(const [id,bytes]of expectedFences)if(readPlainFile(successorFence(c,id))!==bytes||(fs.statSync(successorFence(c,id)).mode&0o222))throw Error('successor compatibility fence changed/mutable');
   return{installation:saved,installationBytes:savedBytes,plist,last,anchor,extension,fences:expectedFences};
 }

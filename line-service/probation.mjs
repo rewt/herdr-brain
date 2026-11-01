@@ -142,7 +142,12 @@ export function probationControl({repo,org,id,fromRoot,targetRoot,authority,fini
       if(found.length!==1)throw Error('original probation authority is missing/ambiguous');
       const a=archived(found[0],c);
       let ownSource=false;try{const source=gitProject(toolRoot,{env:projectEnvironment()});ownSource=source.identity===c.identity&&source.checkout===toolRoot&&source.canonical===toolRoot;}catch{}
-      if(!ownSource&&toolRoot!==a.scope.candidate.release.root)throw Error('probation withdrawal tool is outside its original Brain source/candidate');
+      let successorTool=false;
+      if(!ownSource&&toolRoot!==a.scope.candidate.release.root){
+        const runtime=probationRuntime(c.repo,{root:toolRoot,events,home,allowEnded:true});
+        successorTool=runtime?.probation.id===id&&Boolean(runtime.probation.successor);
+      }
+      if(!ownSource&&toolRoot!==a.scope.candidate.release.root&&!successorTool)throw Error('probation withdrawal tool is outside its original Brain source/candidate/successor');
       if(ended(events,c,id))return{add:[],result:{existing:true,id,admissions:false}};
       return{add:[{type:`line-service.probation-${finish}`,id,project:c.identity,repo:c.repo,org:c.org,authority_seq:found[0].seq,archive:found[0].archive,native_caller:owner.native}],result:{id,admissions:false,captured_work_preserved:true,runtime_started:false}};
     },{actor:owner.native.name,strictTail:true,lockOptions:{recover:false}}).result;}finally{unlock();}

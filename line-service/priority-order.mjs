@@ -48,7 +48,8 @@ function classRank(group,policy) {
   return n>=0?n:(policy?.order.length??0)+(group==='historical-backlog'?1:0);
 }
 
-function classifier(state,policy) {
+// Reuse only within this state snapshot; a changed state needs a new classifier.
+export function queueClassifier(state,policy=queuePolicy(state)) {
   if(!policy)return ()=>null;
   // Dependency urgency is a snapshot view, never a stored class change. Walk
   // open dependents with a per-root seen set so cycles cannot invent urgency.
@@ -80,11 +81,11 @@ function classifier(state,policy) {
 }
 
 export function queueClass(state,item,policy=queuePolicy(state)) {
-  return classifier(state,policy)(item);
+  return queueClassifier(state,policy)(item);
 }
 
-export function orderQueue(state,items,policy=queuePolicy(state)) {
-  const classify=classifier(state,policy),rank=item=>classRank(classify(item),policy);
+export function orderQueue(state,items,policy=queuePolicy(state),classify=queueClassifier(state,policy)) {
+  const rank=item=>classRank(classify(item),policy);
   // Numeric item priority and review preference remain tie breakers within an
   // outcome. A held high outcome never gates independent lower ready work.
   return sortItems(items).sort((a,b)=>rank(a)-rank(b)||Number(isQueueReview(b))-Number(isQueueReview(a)));

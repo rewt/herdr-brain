@@ -21,6 +21,7 @@ import {projectEnvironment,releaseHome} from '../lib/releases.mjs';
 import {requireRecordCompatibility} from '../lib/record-compatibility.mjs';
 import {requireSuccessorCapabilities} from './probation-successor-capabilities.mjs';
 import {withRuntimeLocks} from './runtime-locks.mjs';
+import {requireRecoveryEntry} from './recovery-admission.mjs';
 const toolRoot=fs.realpathSync(fileURLToPath(new URL('../',import.meta.url)));
 const same=(a,b)=>canonical(a)===canonical(b);
 const git=(repo,args)=>execFileSync('git',['--no-optional-locks','-C',repo,...args],{env:projectEnvironment(),encoding:'utf8',stdio:['ignore','pipe','pipe'],timeout:10000}).trim();
@@ -29,7 +30,7 @@ function immutable(file,bytes){
   try{fs.writeFileSync(fd,bytes);fs.fsyncSync(fd);}finally{fs.closeSync(fd);}
 }
 
-export function probationSuccessor({repo,org,id,trial,fromRoot,targetRoot,rollback=false,authority,dryRun=false,expectedPlan,cwd=process.cwd(),env=process.env,
+export function probationSuccessor({repo,org,id,trial,fromRoot,targetRoot,rollback=false,authority,recoveryAuthority,dryRun=false,expectedPlan,cwd=process.cwd(),env=process.env,
   command=spawnSync,call,home=releaseHome(),fault=()=>{}}={}){
   if(process.platform!=='darwin'||process.version!=='v20.19.4')throw Error('probation successor requires macOS and pinned Node 20.19.4');
   if(![id,trial].every(v=>/^[-a-zA-Z0-9_]{1,80}$/.test(v??''))||fromRoot===targetRoot)throw Error('probation successor needs original --trial, distinct exact roots and unique --id');
@@ -88,6 +89,8 @@ export function probationSuccessor({repo,org,id,trial,fromRoot,targetRoot,rollba
     if(extension&&!same(candidate,extension.scope.candidate))throw Error('successor exact authority tuple changed');
     if(!extension&&(history.last.type!=='line-service.probation-switched'||saved.source!==p.release.root))throw Error('successor requires completed legacy recovery anchor');
     requireRecordCompatibility(candidateRoot,events);requireRecordCompatibility(p.release.root,events);
+    const recoveryContract = rollback ? null : requireRecoveryEntry({candidate:candidateRoot,recovery:p.release.root,events,
+      authority:recoveryAuthority,owner:owner.native.name,validateOwner:authorityOwner});
     const successorScope=extension?.scope??{schema:'brain-probation-successor/v1',trial,repo:c.repo,org:c.org,identity:c.identity,owner,
       original:{seq:original.seq,archive:original.archive,scope_sha256:admitted.probation.scope_sha256,recovery_sha256:sha(canonical(p))},
       candidate,node:recoveryNode()};
@@ -100,7 +103,7 @@ export function probationSuccessor({repo,org,id,trial,fromRoot,targetRoot,rollba
       owner_id:originalNote.id,installation,plist,service,stop_sha256:sha(stop),last_seq:history.last.seq,
       extension:extensionRef,successor_scope:successorScope,new_extension:!extension,
       scope_sha256:admitted.probation.scope_sha256,recovery_sha256:sha(canonical(p)),
-      after:{installation:after,plist:nextPlist},runtime:rollback?p.release:candidate.release,
+      after:{installation:after,plist:nextPlist},runtime:rollback?p.release:candidate.release,recoveryContract,
       fences:Object.fromEntries(history.successor.fences)};
   };
   const loaded=loadEvents(c.org);if(loaded.tornTail)throw Error('incomplete record prevents probation successor');
@@ -109,7 +112,7 @@ export function probationSuccessor({repo,org,id,trial,fromRoot,targetRoot,rollba
     canonical_head:initial.head,source_sha256:initial.source_sha256,policies:initial.policies,record_sha256:initial.record_sha256,
     source:targetRoot,previous_source:fromRoot,previous_seq:initial.last_seq,rollback,
     extension:initial.extension,successor_scope:initial.successor_scope,scope_sha256:initial.scope_sha256,recovery_sha256:initial.recovery_sha256,
-    stop_sha256:initial.stop_sha256,service:initial.service,runtime:initial.runtime,
+    stop_sha256:initial.stop_sha256,service:initial.service,runtime:initial.runtime,recovery_contract:initial.recoveryContract,
     before:{installation:initial.installation,plist:initial.plist},after:initial.after};
   const bytes=json(a);ref.sha256=sha(bytes);
   const required_decision=`Brain probation successor authorized: ${id} ${ref.sha256}`;

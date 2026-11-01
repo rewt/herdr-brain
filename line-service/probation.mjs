@@ -20,6 +20,7 @@ import {itemLaunchHold} from '../lib/item-launch-hold.mjs';
 import {prepareDevelopmentRecovery,sealDevelopmentRecovery,verifyDevelopmentRecovery,recoveryNode} from './development-recovery.mjs';
 import {legacyRecipientHistory,recipientChanges} from './recipient-history.mjs';
 import {successorExtension} from './probation-successor-history.mjs';
+import {requireRecoveryEntry} from './recovery-admission.mjs';
 
 const toolRoot=fs.realpathSync(fileURLToPath(new URL('../',import.meta.url)));
 const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
@@ -114,7 +115,7 @@ export function probationRuntime(repo,{root,home=releaseHome(),events,allowEnded
     ...(root===successor?.release.root?{successor:{seq:extension.event.seq,archive:extension.event.archive,scope_sha256:sha(canonical(extension.scope))}}:{})}};
 }
 
-export function probationControl({repo,org,id,fromRoot,targetRoot,authority,finish,developmentRecovery=false,dryRun=false,expectedPlan,cwd=process.cwd(),env=process.env,call,command=spawnSync,home=releaseHome(),fault=()=>{}}={}){
+export function probationControl({repo,org,id,fromRoot,targetRoot,authority,recoveryAuthority,finish,developmentRecovery=false,dryRun=false,expectedPlan,cwd=process.cwd(),env=process.env,call,command=spawnSync,home=releaseHome(),fault=()=>{}}={}){
   if(process.platform!=='darwin'||process.version!=='v20.19.4')throw Error('probation requires macOS and pinned Node 20.19.4');
   if(!/^[-a-zA-Z0-9_]{1,80}$/.test(id??''))throw Error('probation needs a stable --id');
   const c=context(repo,org);
@@ -133,7 +134,7 @@ export function probationControl({repo,org,id,fromRoot,targetRoot,authority,fini
     return git(c.repo,['rev-parse','HEAD']);
   };
   if(finish){
-    if(!['withdrawn','completed'].includes(finish)||dryRun||expectedPlan||fromRoot||targetRoot||authority||developmentRecovery)throw Error('withdraw/complete takes only the original trial id');
+    if(!['withdrawn','completed'].includes(finish)||dryRun||expectedPlan||fromRoot||targetRoot||authority||recoveryAuthority||developmentRecovery)throw Error('withdraw/complete takes only the original trial id');
     // Revocation may contain a running line even during STOP/HOLD. It performs
     // no native input, stop, cancellation, restart or installation mutation.
     const unlock=noticeLock(path.join(c.directory,'control.lock'),{recover:false});
@@ -201,9 +202,11 @@ export function probationControl({repo,org,id,fromRoot,targetRoot,authority,fini
     }
     if(developmentRecovery&&fs.existsSync(path.dirname(initial.scope.previous.release.root)))throw Error('existing/UNKNOWN development recovery retained; no replacement');
     requireRecordCompatibility(targetRoot,events);requireRecordCompatibility(fromRoot,events);
+    return requireRecoveryEntry({candidate:targetRoot,recovery:fromRoot,events,authority:recoveryAuthority,
+      owner:owner.native.name,validateOwner:authorityOwner});
   };
-  inspect(loaded.events);
-  const scopeSha=sha(canonical(initial.scope)),planSha=sha(canonical({id,owner,...initial}));
+  const recoveryContract=inspect(loaded.events);
+  const scopeSha=sha(canonical(initial.scope)),planSha=sha(canonical({id,owner,...initial,recovery_contract:recoveryContract}));
   const validate=()=>{if(!same(snapshot(),initial))throw Error('probation source/native CAS changed');};
   return withRuntimeLocks(c,{id,operation:'probation-authorize',dryRun,owner,validate},()=>{
     validate();
@@ -215,7 +218,7 @@ export function probationControl({repo,org,id,fromRoot,targetRoot,authority,fini
       if(note?.type!=='note.added'||note.decision!==true||note.by!==owner.native.name||note.text!==`Brain probation authorized: ${scopeSha}`)throw Error('probation needs exact recorded supervisor trial authority');
       authorityOwner(note,events);
       const archive={schema:'brain-probation/v1',id,repo:c.repo,org:c.org,project:c.identity,scope:initial.scope,owner,authority:note.seq,
-        canonical_head:initial.head,stop_sha256:initial.stop_sha256,before:{installation:initial.installation,plist:initial.plist}};
+        canonical_head:initial.head,stop_sha256:initial.stop_sha256,recovery_contract:recoveryContract,before:{installation:initial.installation,plist:initial.plist}};
       const bytes=JSON.stringify(archive)+'\n';plainDirectory(path.dirname(archiveFile));
       const fd=fs.openSync(archiveFile,'wx',0o444);try{fs.writeFileSync(fd,bytes);fs.fsyncSync(fd);}finally{fs.closeSync(fd);}
       fault('intent');

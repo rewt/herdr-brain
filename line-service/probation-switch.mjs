@@ -16,10 +16,11 @@ import {gitProject} from '../lib/project.mjs';
 import {projectEnvironment,releaseHome} from '../lib/releases.mjs';
 import {requireRecordCompatibility} from '../lib/record-compatibility.mjs';
 import {withRuntimeLocks} from './runtime-locks.mjs';
+import {requireRecoveryEntry} from './recovery-admission.mjs';
 const same=(a,b)=>canonical(a)===canonical(b),json=v=>JSON.stringify(v)+'\n';
 const git=(repo,args)=>execFileSync('git',['--no-optional-locks','-C',repo,...args],{env:projectEnvironment(),encoding:'utf8',stdio:['ignore','pipe','pipe'],timeout:10000}).trim();
 
-export function probationSwitch({repo,org,id,trial,fromRoot,targetRoot,authority,dryRun=false,expectedPlan,cwd=process.cwd(),env=process.env,
+export function probationSwitch({repo,org,id,trial,fromRoot,targetRoot,authority,recoveryAuthority,dryRun=false,expectedPlan,cwd=process.cwd(),env=process.env,
   command=spawnSync,call,home=releaseHome(),fault=()=>{}}={}){
   if(process.platform!=='darwin'||process.version!=='v20.19.4')throw Error('probation switch requires macOS and pinned Node 20.19.4');
   if(![id,trial].every(v=>/^[-a-zA-Z0-9_]{1,80}$/.test(v??''))||fromRoot===targetRoot)throw Error('probation switch needs original --trial, distinct roots and stable effect --id');
@@ -55,6 +56,8 @@ export function probationSwitch({repo,org,id,trial,fromRoot,targetRoot,authority
       if(source.checkout!==runtimeRoot||source.canonical!==c.repo||source.identity!==c.identity)throw Error('probation switch tool is outside original Brain source/trial');
     }
     requireRecordCompatibility(targetRoot,events);
+    const recoveryContract = targetRoot===previous.release.root ? null : requireRecoveryEntry({candidate:targetRoot,recovery:previous.release.root,
+      events,authority:recoveryAuthority,owner:owner.native.name,validateOwner:authorityOwner});
     const installation=readPlainFile(installationFile),saved=JSON.parse(installation),plist=readPlainFile(file);
     const service=inspectService(saved.target,c.repo,command);if(service.loaded)throw Error('probation switch requires positively stopped service');
     const rows=events.filter(e=>e.type==='line-service.probation-switched'&&e.project===c.identity&&e.org===c.org);
@@ -75,7 +78,7 @@ export function probationSwitch({repo,org,id,trial,fromRoot,targetRoot,authority
     }else last=runtimeHistory(events,{...c,installation:saved,cutover,root:saved.source}).last;
     if(rows.length?saved.source!==fromRoot:!developmentSourceMatches(saved.source,fromRoot))throw Error('probation switch current root differs from saved installation');
     return{head:git(c.repo,['rev-parse','HEAD']),installation,plist,last_seq:last.seq,scope_sha256:runtime.probation.scope_sha256,
-      recovery_sha256:sha(canonical(previous)),stop_sha256:sha(stop),service,previous,
+      recovery_sha256:sha(canonical(previous)),stop_sha256:sha(stop),service,previous,recoveryContract,
       runtime:targetRoot===scope.candidate.release.root?scope.candidate.release:previous.release};
   };
   const loaded=loadEvents(c.org);if(loaded.tornTail)throw Error('incomplete record prevents probation switch');
@@ -85,7 +88,7 @@ export function probationSwitch({repo,org,id,trial,fromRoot,targetRoot,authority
   const archive={schema:'brain-probation-switch/v1',id,trial,repo:c.repo,org:c.org,identity:c.identity,owner,
     canonical_head:initial.head,source:targetRoot,previous_source:fromRoot,previous_seq:initial.last_seq,
     scope_sha256:initial.scope_sha256,recovery_sha256:initial.recovery_sha256,stop_sha256:initial.stop_sha256,runtime:initial.runtime,
-    before:{installation:initial.installation,plist:initial.plist},after:{installation:json(after),plist:nextPlist}};
+    recovery_contract:initial.recoveryContract,before:{installation:initial.installation,plist:initial.plist},after:{installation:json(after),plist:nextPlist}};
   const bytes=json(archive),ref={file:archiveFile,sha256:sha(bytes)},required_decision=`Brain probation switch authorized: ${id} ${ref.sha256}`;
   const validate=events=>{const loaded=events?{events}:loadEvents(c.org);if(loaded.tornTail||!same(snapshot(loaded.events),initial))throw Error('probation switch source/record/native CAS changed');};
   return withRuntimeLocks(c,{id,operation:'probation-switch',dryRun,owner,validate},()=>{

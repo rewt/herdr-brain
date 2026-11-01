@@ -58,6 +58,7 @@ import {refreshJournal,effectSubject} from './scheduling.mjs';
 import {appendPassJournal,withPassJournal,passJournalSize,readPassJournal} from './pass-journal.mjs';
 import {negativeEvaluationCache,sourceEvaluationInputs} from './evaluation-cache.mjs';
 import {observeGeneralOwners} from './general-owner-alarm.mjs';
+import {observeRecoveryAdmission} from './recovery-admission.mjs';
 import {consumeExceptions,returnExceptionReports,checkExceptionTriage} from './exception-triage.mjs';
 import {pendingWitnesses} from '../measurement/live-witnesses.mjs';
 export { reviewAttempt } from './review.mjs';
@@ -201,7 +202,16 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
     if(!resume)observe();
     log({action:'general-pass-lock-recovery',schema:'line-pass-lock-recovery/v1',project:project.identity,org,resume,...recovery});
   }});
+  function observeRecovery() {
+    // Observe before closeout/runtime guards: a now-inadmissible installed root
+    // must leave the alarm even when the subsequent pass correctly refuses.
+    const live = identify(repo);
+    if (live.identity !== project.identity || live.canonical !== repo) throw Error('project identity changed');
+    const recoveryRecord = loadEvents(org);
+    return observeRecoveryAdmission({...recoveryRecord,identity:project.identity,org,log});
+  }
   function pass(options) {
+    observeRecovery();
     // pass.lock serializes scans, but is deliberately yielded for foreground
     // effects. Keep at most two whole passes (one slow owner plus independent
     // admission) instead of retaining a full record for every scheduled wake.
@@ -997,7 +1007,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       log({action:'schedule-unlocked',pass:passAt,pid:process.pid,duration_ms:performance.now()-lockedAt});release();release=null;
     }}} }
   }
-  return { pass, closeout, intake, directory, log, acquirePass };
+  return { pass, closeout, intake, directory, log, acquirePass, observeRecovery };
 }
 
 // The existing launchd schedule stays finite while the general pass runs in
@@ -1036,9 +1046,14 @@ export async function main(argv = process.argv.slice(2), {home}={}) {
     process.stdout.write(JSON.stringify(morningDigest({events:loadEvents(values.org).events,diagnostics,since:values.since}),null,2)+'\n');return;
   }
   if (!values.once || !values.repo) throw Error('use --once --repo CANONICAL; launchd owns the schedule');
-  serviceSource(values.repo,{home});
-  installedContext(values.repo,values.org??findOrgDir({cwd:values.repo,env:{...process.env,ORG_DIR:''}}));
   const service = createLineService({...values,runtimeHome:home});
+  try {
+    serviceSource(values.repo,{home});
+    installedContext(values.repo,values.org??findOrgDir({cwd:values.repo,env:{...process.env,ORG_DIR:''}}));
+  } catch (error) {
+    service.observeRecovery();
+    throw error;
+  }
   const launchFinite=flag=>{
     const output=fs.openSync(path.join(service.directory,'launchd.log'),'a',0o600);
     try{

@@ -33,6 +33,7 @@ export function main(argv = process.argv.slice(2), { command = spawnSync,call:na
       id:{type:'string'},'dry-run':{type:'boolean'},
       'expected-plan':{type:'string'},
       authority:{type:'string'},
+      'recovery-authority':{type:'string'},
       trial:{type:'string'},'development-recovery':{type:'boolean'},
       'from-root':{type:'string'},'target-root':{type:'string'},rollback:{type:'boolean'},
     } });
@@ -40,19 +41,20 @@ export function main(argv = process.argv.slice(2), { command = spawnSync,call:na
   if(action==='probation-successor'){
     if(positionals.length!==1||!v.repo||v.to||v.herdr||v.socket||v.interval||v.commit||v['development-recovery'])throw Error('probation successor preserves saved bindings and original trial');
     return probationSuccessor({repo:v.repo,org:v.org??findOrgDir({cwd:v.repo,env:{...env,ORG_DIR:''}}),id:v.id,trial:v.trial,fromRoot:v['from-root'],targetRoot:v['target-root'],rollback:v.rollback,authority:v.authority,
-      dryRun:v['dry-run'],expectedPlan:v['expected-plan'],command,call:nativeCall,home,cwd,env});
+      recoveryAuthority:v['recovery-authority'],dryRun:v['dry-run'],expectedPlan:v['expected-plan'],command,call:nativeCall,home,cwd,env});
   }
   if(action==='probation-switch'){
     if(positionals.length!==1||!v.repo||v.to||v.herdr||v.socket||v.interval||v.commit||v.rollback||v['development-recovery'])throw Error('probation switch preserves saved bindings and original trial');
     return probationSwitch({repo:v.repo,org:v.org??findOrgDir({cwd:v.repo,env:{...env,ORG_DIR:''}}),id:v.id,trial:v.trial,fromRoot:v['from-root'],targetRoot:v['target-root'],authority:v.authority,
-      dryRun:v['dry-run'],expectedPlan:v['expected-plan'],command,call:nativeCall,home,cwd,env});
+      recoveryAuthority:v['recovery-authority'],dryRun:v['dry-run'],expectedPlan:v['expected-plan'],command,call:nativeCall,home,cwd,env});
   }
   if(v.trial||v['development-recovery']&&action!=='probation-authorize')throw Error('--trial applies only to probation-switch; --development-recovery only to probation-authorize');
   if(['probation-authorize','probation-withdraw','probation-complete'].includes(action)){
     if(positionals.length!==1||!v.repo||v.to||v.herdr||v.socket||v.interval||v.commit||v.rollback)throw Error('probation preserves installation, transport, pins and native services');
     return probationControl({repo:v.repo,org:v.org??findOrgDir({cwd:v.repo,env:{...env,ORG_DIR:''}}),id:v.id,fromRoot:v['from-root'],targetRoot:v['target-root'],authority:v.authority,
-      developmentRecovery:v['development-recovery'],finish:action==='probation-authorize'?undefined:action==='probation-withdraw'?'withdrawn':'completed',dryRun:v['dry-run'],expectedPlan:v['expected-plan'],command,call:nativeCall,home,cwd,env});
+      recoveryAuthority:v['recovery-authority'],developmentRecovery:v['development-recovery'],finish:action==='probation-authorize'?undefined:action==='probation-withdraw'?'withdrawn':'completed',dryRun:v['dry-run'],expectedPlan:v['expected-plan'],command,call:nativeCall,home,cwd,env});
   }
+  if(v['recovery-authority'])throw Error('--recovery-authority applies only to probation entry commands');
   if(v.authority)throw Error('--authority applies only to probation-authorize');
   if (positionals.length !== 1 || !['install','migrate','upgrade','retarget', 'restart', 'status', 'stop', 'revert'].includes(action) || !v.repo) throw Error('name install|migrate|upgrade|retarget|restart|status|stop|revert and --repo CANONICAL');
   if(!['install','migrate','upgrade'].includes(action)&&(v.id||v['expected-plan']))throw Error('--id/--expected-plan apply only to install/migrate/upgrade');

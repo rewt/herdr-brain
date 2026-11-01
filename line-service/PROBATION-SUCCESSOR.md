@@ -244,3 +244,34 @@ Supervisor/A4 retain the new exact-candidate R3 window (at least 90 minutes and
 after cutoff). Shared mode remains OFF/UNRUN. Major corrections, installed
 canary, final coverage and offers/adoption retain their existing owners. No
 live preview/apply, candidate pass or soak is implied by this implementation.
+# Recovery admission visibility and candidate ceiling
+
+Each general pass records `recovery-admission` in its existing `passes.jsonl`
+for active probation recovery roots. A refusal records
+`recovery-admission-supervisor-alarm` with the root, trial and original reason
+before runtime/STOP/HOLD guards can refuse the pass. This is visibility only;
+it does not restart, switch, repair a root, send native input or waive a guard.
+Ended and foreign trials are excluded. A later compatible observation records
+admission again. Frozen installed roots acquire this observation only in a
+later separately installed candidate; landing source alone does not install it.
+
+Probation authorization, development entry/return and successor entry/return
+compare the entire candidate fold contract with recovery, even when no current
+event exercises an extra case. Reviewed obligation profiles retain their fixed
+capability floor. Unknown helper bytes or requirement selectors require review;
+candidate code is never executed to infer its contract. The selector digest in
+`recoveryContract` identifies the reviewed DEC-476 requirement floor, not an
+automatically growing grant to old roots. This conservative reader comparison
+cannot prove every producer write; the per-pass record observation remains needed.
+
+Excess refuses before an intent is written. The error supplies an exact
+`Brain recovery contract excess accepted: DIGEST` decision text. Any exception
+requires a separate `note.added` decision by the recorded native supervisor,
+with its owning item/run still admissible, passed as `--recovery-authority SEQ`
+to the existing probation command. Ordinary effect authority is still required;
+it cannot acknowledge excess implicitly. The extra decision and excess are
+captured in the immutable effect archive. Existing record incompatibility still
+refuses even with this acknowledgment. Rollback never requires this candidate
+ceiling acknowledgment, and all original native/source/STOP/HOLD/CAS guards stay.
+No new event type, required capability, service or release authority is introduced.
+

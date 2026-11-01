@@ -180,7 +180,8 @@ test('finite project HOLD defers allocations and new decisions quietly, then res
   const [entry]=currentCloseoutEntries(f.common,f.org,events(f));
   f.append([{type:'closeout.evaluated',identity:f.common,key:entry.key,source:entry.source,
     run:entry.run,item:entry.item,revision:closeoutRevision(entry,events(f)),completed:false,reason:'EPERM native refusal'}]);
-  const original=events(f),hold=path.join(f.repo,'.lane/supervisor/HOLD');fs.writeFileSync(hold,'proving');
+  const original=events(f),hold=path.join(f.repo,'.lane/supervisor/HOLD');
+  fs.mkdirSync(path.dirname(hold),{recursive:true});fs.writeFileSync(hold,'proving');
   let allocations=0;
   const args={...f.args,cli:(file,argv)=>{
     if(argv[0]==='allocations'){allocations++;return '{}';}

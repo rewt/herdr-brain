@@ -52,7 +52,7 @@ import {transact} from '../lib/store.mjs';
 import {readReviewAdmission,readOrdinaryAdmission,reviewAdmissionSubject} from './review-admission.mjs';
 import {reviewAdmissionHold} from '../lib/review-admission.mjs';
 import {ordinaryAdmissionHold} from '../lib/ordinary-admission.mjs';
-import {commandIntent,finishCommand,forgetActiveCommand,pendingSubjectCommand} from '../lib/command-receipt.mjs';
+import {commandIntent,finishCommand,forgetActiveCommand,pendingSubjectCommand,readCommandResult,commandCallerActive} from '../lib/command-receipt.mjs';
 import {refreshJournal,effectSubject} from './scheduling.mjs';
 import {appendPassJournal,withPassJournal,passJournalSize,readPassJournal} from './pass-journal.mjs';
 import {negativeEvaluationCache,sourceEvaluationInputs} from './evaluation-cache.mjs';
@@ -192,9 +192,11 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
   const intake=()=>runReportIntake({project,org,cli,guard:observeCloseout,maxSteps:maxStepsPerStage,clock:workClock});
   const closeout=(options={})=>runCloseoutTurn({project,org,env:childEnv,cli,guard:observeCloseout,maxSteps:maxStepsPerStage,budgetMs:CLOSEOUT_TURN_BUDGET_MS,clock:workClock,...options,
     ...(closeoutMeasure?{measure:closeoutMeasure}:{})});
-  const acquirePass=(options={})=>noticeLock(path.join(directory,'pass.lock'),{...options,onRecovery:recovery=>{
-    observe();
-    log({action:'general-pass-lock-recovery',schema:'line-pass-lock-recovery/v1',project:project.identity,org,...recovery});
+  const acquirePass=({resume=false,...options}={})=>noticeLock(path.join(directory,'pass.lock'),{...options,onRecovery:recovery=>{
+    // An already-running command must regain the writer to record its outcome,
+    // even under STOP. This grants no new effect; subsequent observe guards stay.
+    if(!resume)observe();
+    log({action:'general-pass-lock-recovery',schema:'line-pass-lock-recovery/v1',project:project.identity,org,resume,...recovery});
   }});
   function pass(options) {
     // pass.lock serializes scans, but is deliberately yielded for foreground
@@ -272,13 +274,19 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         const subject=effectSubject(key,current().state);
         if(activeSubject===subject)return operation();
         const pending=pendingSubjectCommand(directory,subject);
-        if(pending){log({action:'subject-held',subject,key,original:pending.command,reason:'original command remains active or UNKNOWN',owner:pending.intent.stuck_owner});return;}
+        if(pending){
+          log({action:'subject-held',subject,key,original:pending.command,reason:'original command remains active or UNKNOWN',owner:pending.intent.stuck_owner});
+          if(subject!=='review-health'&&(key!==pending.intent.key||!commandCallerActive(pending.intent)))
+            note(`outcome:${pending.intent.key??key}`,'Original command remains active or UNKNOWN; retain its original attempt for the stuck owner.',{item:subject,owner:pending.intent.stuck_owner,command:pending.command});
+          return;
+        }
         // A later reopen/report owns fresh work, not the old dispatch's unknown
         // result. Pending commands above and the shared item lock still fence
         // active effects; only an earlier dispatch journal row is bypassed.
         const unknown=Object.entries(effects.actions).find(([other,entry])=>other!==key&&entry.state==='started'&&
           (entry.execution_subject??effectSubject(other,current().state))===subject&&!laterDispatchInput(key,other,entry));
-        if(unknown){log({action:'subject-held',subject,key,original:unknown[0],reason:'original started action retained; no replacement'});return;}
+        if(unknown){log({action:'subject-held',subject,key,original:unknown[0],reason:'original started action retained; no replacement'});
+          if(subject!=='review-health')note(`outcome:${unknown[0]}`,'Original started action has no settled outcome; retain its original attempt for the stuck owner.',{item:subject,owner:unknown[1].stuck_owner??to});return;}
         let unlock;try{unlock=noticeLock(subjectLock(subject),{onRecovery:recovery=>log({action:'subject-lock-recovery',subject,...recovery})});}
         catch(error){if(!error.message.startsWith('locked:'))throw error;log({action:'subject-held',subject,key,reason:error.message});return;}
         const previous={activeSubject,activeKey,subject:childEnv.HERDR_LINE_SUBJECT,token:childEnv.HERDR_LINE_SUBJECT_TOKEN};
@@ -307,7 +315,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         finally{
           // This is allocation waiting, never a timeout or permission to stop A.
           // No journal write is allowed until the current writer hands it back.
-          while(!release)try{release=acquirePass({waitMs:1000});}
+          while(!release)try{release=acquirePass({waitMs:1000,resume:true});}
           catch(error){if(!error.message.startsWith('locked:'))throw error;}
           lockedAt=performance.now();
           const latest=readServiceJournal(journal);
@@ -543,13 +551,15 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       if(index)try{
         checkpointNotices();
         const errors=Object.values(effects.record_notices??{}).filter(e=>e.review),health=outside('review-health','review-health',()=>observeReviewHealth({repo,org,index,passId:`${directory}:${effects.pass_number}`,errorCounts:{unique:errors.length,occurrences:errors.reduce((n,e)=>n+e.count,0)},prior:effects.review_health,env:childEnv}));
-        if(!health)throw Error('review health observation already owned');
+        if(!health)log({action:'review-health-held',reason:'observation already owned'});
+        else{
         log({action:'review-health',health});effects.review_health=health;noticesDirty=true;
         for(const gap of health.attribution_gaps)note(`review-attribution:${gap.head}`,gap.reason,{item:gap.item,run:gap.run,head:gap.head,review:true});
         const attribution=new Set(health.attribution_gaps.map(g=>g.head));
         for(const gap of health.coverage_gaps)if(!attribution.has(gap.head)&&gap.retained)note(`review-coverage:${gap.head}`,'Retained producer review scopes do not cover this landed source; preserve immutable attempts and verdicts, judgment is needed.',{item:gap.item,run:gap.run,head:gap.head,review:true});
         for(const held of health.retained_issues)note(`review-cardinality:${held.group}`,held.reason,{item:held.item,run:held.run,review:true});
         if(health.gap_passes>3)note('review-gap','More than three real passes have canonical source without complete queued or reviewed coverage; inspect the review health digest.',{review:true,boundary:index.boundary.id},true);
+        }
       }catch(e){note('review-health',e.message);}
       // Source completion releases the real admission slot independently of
       // review verdicts and physical cleanup. The record owns the conditional
@@ -673,9 +683,39 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       // Failed cleanup/review never prevents considering independent ready work.
       snapshot = current();
       for(const [key,entry]of Object.entries(effects.actions))if(key.startsWith('dispatch:')&&(entry.state!=='complete'||entry.result?.result==='detached'&&entry.original_outcome?.status!=='dispatch-complete')){
-        if(entry.state==='started')continue; // The original command, live or UNKNOWN, owns its outcome.
         const item=key.split(':')[1];
         try{
+          if(entry.state==='started'){
+            // Consume only the exact saved dispatch command after its caller
+            // is positively gone. Never re-run an operation to recover a reply.
+            if(entry.commands?.length!==1)throw Error('Original dispatch completion producer is missing or ambiguous; retain its original attempt for the stuck owner.');
+            const [ref]=entry.commands,terminal=readCommandResult(ref),intent=terminal.intent;
+            if(intent.project!==project.identity||intent.org!==org||intent.cwd!==repo||intent.key!==key||
+              intent.subject!==(entry.execution_subject??item)||intent.consumer!=='line-service'||
+              path.dirname(ref.file)!==path.join(directory,'active-commands')||intent.args?.[0]!==path.join(sourceRoot,'dispatch/dispatch.mjs'))
+              throw Error('original dispatch command binding differs; retain its owner');
+            if(commandCallerActive(intent))continue;
+            let unlock;
+            try{unlock=noticeLock(subjectLock(intent.subject),{onRecovery:recovery=>log({action:'subject-lock-recovery',subject:intent.subject,...recovery})});}
+            catch(error){if(!error.message.startsWith('locked:'))throw error;log({action:'subject-held',key,reason:error.message});continue;}
+            try{
+              observe();
+              const result=terminal.result;
+              entry.receipt=result;
+              if(result.status===0&&!result.error){
+                entry.result=JSON.parse(result.stdout);entry.state='complete';
+                if(['escalate','failed','stopped','judge_promotion'].includes(entry.result?.result)){
+                  entry.state='held';entry.error=entry.result.reason??entry.result.result;
+                }
+              }else{
+                entry.state='held';entry.error=(result.stderr||result.stdout||result.error?.message||`exit ${result.status}`).trim();
+                entry.failure=outcomeFailure({receipt:result});
+              }
+              entry.finished_at=terminal.finished_at;
+              entry.command_recovery={consumer:'line-service',attempt:entry.attempt,command:ref,at:now()};
+              save();log({action:'dispatch-command-recovered',key,...entry});
+            }finally{unlock();}
+          }
           let status=entry.recorded_dispatch_status;
           const outcome=entry.original_outcome??originalDispatchOutcome({repo,org,common:project.identity,item,brief:path.join(directory,`${digest(key)}.ask.md`),journal:entry.result?.journal,events:snapshot.events});
           if(!entry.original_outcome){entry.original_outcome=outcome;save();log({action:'dispatch-outcome-readback',key,...outcome});}
@@ -694,7 +734,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
           else if(!outcome.producer&&!['not-started','dispatch-complete'].includes(outcome.status)){
             note(`outcome:${key}`,'Original dispatch completion producer is missing; retain its original attempt for the project supervisor.',{item,journal:outcome.journal??null,outcome});
           }
-        }catch(e){note(key,e.message,{item});}
+        }catch(e){note(key,e.message,{item,owner:entry.stuck_owner??to});}
       }
       if(config&&!policyHold)try{
         checkpointNotices();

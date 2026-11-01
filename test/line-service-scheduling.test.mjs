@@ -18,7 +18,7 @@ async function until(predicate){
   const end=Date.now()+30000;
   while(!predicate()){assert.ok(Date.now()<end,'fixture progress did not arrive');await new Promise(resolve=>setTimeout(resolve,15));}
 }
-function fixture(t,cap=2){
+function fixture(t,cap=2,{detached=false,fence=false}={}){
   const root=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'line-schedule-'))),repo=path.join(root,'project'),org=path.join(repo,'.org');
   fs.mkdirSync(repo);fs.writeFileSync(path.join(root,'.identity-root'),'fixture\n');
   const fleet=process.env.HERDR_MONITOR_FLEET;process.env.HERDR_MONITOR_FLEET=path.join(root,'fleet');
@@ -34,15 +34,32 @@ function fixture(t,cap=2){
   fs.mkdirSync(directory,{recursive:true});fs.writeFileSync(path.join(directory,'installation.json'),JSON.stringify({at:'2026-10-30T00:00:00Z',repo,org,source:sourceRoot,node:process.execPath,file:path.join(directory,'service.plist'),target:`gui/${process.getuid()}/dev.herdr.line.${path.basename(directory)}`}));
   const add=id=>transact(org,()=>({add:[{type:'item.added',id,role:'engineer',title:'Independent '+id,priority:id==='ENG-1'?2:1}]}));
   add('ENG-1');
-  const driver=path.join(root,'driver.mjs');
+  const driver=path.join(root,'driver.mjs'),helper=path.join(root,'dispatch-helper.mjs');
+  // Run the real foreground receipt helper. This preload replaces only native
+  // dispatch in the isolated project, and survives the scheduling parent's kill.
+  fs.writeFileSync(helper,`
+import fs from 'node:fs';import path from 'node:path';
+import {transact} from ${JSON.stringify(pathToFileURL(path.join(sourceRoot,'lib/store.mjs')).href)};
+const root=${JSON.stringify(root)},repo=${JSON.stringify(repo)},org=${JSON.stringify(org)},common=${JSON.stringify(project.identity)};
+const item=process.argv[2],token=item,brief=process.argv[process.argv.indexOf('--brief')+1],journal=path.join(org,'dispatch',token+'.json');
+fs.mkdirSync(path.dirname(journal),{recursive:true});
+fs.writeFileSync(journal,JSON.stringify({common,repo,org,item,token,brief,stage:'starting',completion_protocol:1,native_launch_attempted:false}));
+fs.appendFileSync(path.join(root,'launches.jsonl'),JSON.stringify({item,at:Date.now(),pid:process.pid})+'\\n');
+fs.writeFileSync(path.join(root,'blocked'),'helper entered');
+while(!fs.existsSync(path.join(root,'release')))Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,15);
+if(${fence})transact(org,()=>({add:[{type:'dispatch.completed',project:common,journal,attempt:token,item,run:null,failure:{kind:'fence',code:'NATIVE_REFUSAL'}}]}));
+process.stdout.write(JSON.stringify({result:'detached',journal,item}));process.exit(0);
+`);
   fs.writeFileSync(driver,`
 import fs from 'node:fs';import path from 'node:path';
 import {createLineService} from ${JSON.stringify(pathToFileURL(path.join(sourceRoot,'line-service/line-service.mjs')).href)};
 import {checkSessionCap,acquireSessionCapLock} from ${JSON.stringify(pathToFileURL(path.join(sourceRoot,'dispatch/session-cap.mjs')).href)};
+import {foregroundCommand} from ${JSON.stringify(pathToFileURL(path.join(sourceRoot,'dispatch/foreground-command.mjs')).href)};
 const repo=${JSON.stringify(repo)},org=${JSON.stringify(org)},root=${JSON.stringify(root)},common=${JSON.stringify(project.identity)},config={dispatch:{max_sessions:${cap}}};
 createLineService({repo,org,to:'supervisor-test',env:process.env,haltAfter:100,maxStarts:1,
- command:(exe,args)=>{
+ command:(exe,args,options)=>{
   if(!args[0].endsWith('/dispatch/dispatch.mjs'))return{status:0,stdout:'{}',stderr:''};
+  if(${detached})return foregroundCommand(exe,args,{...options,env:{...options.env,NODE_OPTIONS:'--import='+${JSON.stringify(helper)}}});
   const item=args[1],jobs=path.join(org,'dispatch'),file=path.join(jobs,item+'.json');
   const release=acquireSessionCapLock(common);
   try{checkSessionCap({config,org,common,kind:'build'});fs.mkdirSync(jobs,{recursive:true});fs.writeFileSync(file,JSON.stringify({common,repo,org,item,token:item,stage:'starting',native_launch_attempted:false}));}finally{release();}
@@ -159,7 +176,7 @@ const exe=process.execPath,args=[${JSON.stringify(script)}],cwd=${JSON.stringify
 
 test('maintenance refuses redirected or inconsistent terminal evidence and retains the active intent',t=>{
   const f=fixture(t),ref=commandIntent(f.directory,{exe:'fixture',args:[],cwd:f.repo,consumer:'line-service',wake_fact:'terminal receipt',stuck_owner:'supervisor-test'});
-  finishCommand(ref,{status:0,stdout:'original'});assertCommandQuiescence(f.directory);
+  finishCommand(ref,{status:0,stdout:'original'});assert.throws(()=>assertCommandQuiescence(f.directory),/original caller/);
   const receipt=JSON.parse(fs.readFileSync(ref.receipt));receipt.intent_sha256='0'.repeat(64);fs.writeFileSync(ref.receipt,JSON.stringify(receipt));
   assert.throws(()=>assertCommandQuiescence(f.directory),/binding changed/);assert.ok(fs.existsSync(ref.file));
 });
@@ -175,7 +192,7 @@ test('missing completion is UNKNOWN; a cleaned active marker requires its bound 
   assert.deepEqual(fs.readFileSync(ref.file),intent,'missing receipt never clears the original intent');
   // A terminal failure is also quiescent, but is never converted into success.
   finishCommand(ref,{status:1,stderr:'original failure'});const terminal=fs.readFileSync(ref.receipt);
-  assertCommandQuiescence(f.directory);forgetActiveCommand(ref);
+  assert.throws(()=>assertCommandQuiescence(f.directory),/original caller/);forgetActiveCommand(ref);assertCommandQuiescence(f.directory);
   assert.equal(fs.existsSync(ref.file),false);assert.equal(readCommandResult(ref).result.status,1);
   assert.deepEqual(fs.readFileSync(ref.receipt),terminal);
   const changed=JSON.parse(terminal);changed.intent.subject='ENG-2';fs.writeFileSync(ref.receipt,JSON.stringify(changed));
@@ -227,4 +244,98 @@ test('direct service operations require the exact subject-lock token as well as 
     assert.equal(serviceRecordBinding({repo:f.repo,org:f.org,env}).identity,f.project.identity);
     for(const token of [undefined,'older-owner'])assert.throws(()=>serviceRecordBinding({repo:f.repo,org:f.org,env:{...env,HERDR_LINE_SUBJECT_TOKEN:token}}),/actual owned pass lock/);
   }finally{release();}
+});
+
+for(const fence of [false,true])test(`a finite wake consumes the killed parent's detached dispatch receipt${fence?' and retains its child fence':''}`,async t=>{
+  const f=fixture(t,2,{detached:true,fence}),a=f.start();await until(()=>fs.existsSync(path.join(f.root,'blocked')));
+  const [key,original]=Object.entries(f.journal().actions).find(([k])=>k.startsWith('dispatch:ENG-1:')),[ref]=original.commands;
+  const intent=fs.readFileSync(ref.file);
+  a.child.kill('SIGKILL');await a.done;
+  fs.writeFileSync(path.join(f.root,'release'),'original helper may finish');
+  await until(()=>{try{return readCommandResult(ref).result.status===0;}catch{return false;}});
+  const receipt=fs.readFileSync(ref.receipt),terminal=readCommandResult(ref),detached=JSON.parse(terminal.result.stdout);
+  const journal=fs.readFileSync(detached.journal);
+  assert.equal(detached.result,'detached');assert.ok(terminal.execution.pid>0);
+  const wake=f.start(),result=await wake.done;assert.equal(result.code,0,result.stderr);
+  const recovered=f.journal().actions[key];
+  assert.equal(recovered.state,fence?'held':'complete');assert.equal(recovered.attempt,original.attempt);
+  assert.deepEqual(recovered.commands,original.commands);assert.deepEqual(recovered.result,detached);
+  assert.deepEqual(recovered.receipt,terminal.result);assert.equal(recovered.command_recovery.consumer,'line-service');
+  assert.equal(recovered.command_recovery.attempt,original.attempt);
+  if(fence){
+    assert.equal(recovered.recorded_dispatch_status.failure.code,'NATIVE_REFUSAL');
+    assert.equal(recovered.failure.kind,'fence');assert.ok(f.journal().outcome_decisions[key]);
+  }
+  assert.equal(f.launches().filter(r=>r.item==='ENG-1').length,1,'no second dispatch launch');
+  assert.deepEqual(fs.readFileSync(ref.file),intent);assert.deepEqual(fs.readFileSync(ref.receipt),receipt);
+  assert.deepEqual(fs.readFileSync(detached.journal),journal,'original detached request unchanged');
+  evidence(t,fence?'crash-receipt-fence':'crash-receipt-consumed',{original,recovered,terminal,launches:f.launches(),
+    original_intent_sha256:createHash('sha256').update(intent).digest('hex'),original_receipt_sha256:createHash('sha256').update(receipt).digest('hex'),
+    outcome_decisions:f.journal().outcome_decisions??{}});
+});
+
+test('a changed input stays held with a stuck-owner diagnostic while the crashed caller helper still runs',async t=>{
+  const f=fixture(t,2,{detached:true}),a=f.start();await until(()=>fs.existsSync(path.join(f.root,'blocked')));
+  const [key,original]=Object.entries(f.journal().actions).find(([k])=>k.startsWith('dispatch:ENG-1:')),[ref]=original.commands;
+  const intent=fs.readFileSync(ref.file);
+  a.child.kill('SIGKILL');await a.done;
+  try{
+    transact(f.org,()=>({add:[{type:'item.reopened',id:'ENG-1',note:'changed dispatch generation'}]}));
+    assert.equal(fs.existsSync(ref.receipt),false);
+    const wake=f.start(),result=await wake.done;assert.equal(result.code,0,result.stderr);
+    assert.equal(f.launches().length,1);assert.deepEqual(f.journal().actions[key],original);
+    const diagnostic=Object.values(f.journal().record_notices).find(n=>n.scope.owner==='supervisor-test'&&n.scope.command?.sha256===ref.sha256);
+    assert.ok(diagnostic,'note() retains the named stuck owner, not only subject-held logging');
+    assert.ok(f.rows().some(r=>r.action==='hold'&&r.canonical_key&&r.scope?.owner==='supervisor-test'));
+    assert.deepEqual(fs.readFileSync(ref.file),intent);assert.equal(fs.existsSync(ref.receipt),false);
+    evidence(t,'crash-no-receipt-changed-input',{original,diagnostic,launches:f.launches(),actions:f.journal().actions});
+  }finally{
+    fs.writeFileSync(path.join(f.root,'release'),'finish original helper');
+    await until(()=>{try{return readCommandResult(ref).result.status===0;}catch{return false;}});
+  }
+});
+
+test('maintenance cannot transition after the terminal receipt while its live caller waits to journal',async t=>{
+  const f=fixture(t,2,{detached:true}),a=f.start();await until(()=>fs.existsSync(path.join(f.root,'blocked')));
+  const [key,original]=Object.entries(f.journal().actions).find(([k])=>k.startsWith('dispatch:ENG-1:')),[ref]=original.commands;
+  let unlock=noticeLock(path.join(f.directory,'pass.lock')),paused=false;
+  try{
+    fs.writeFileSync(path.join(f.root,'release'),'finish helper behind scheduling owner');
+    await until(()=>{try{return readCommandResult(ref).result.status===0;}catch{return false;}});
+    assert.equal(f.journal().actions[key].state,'started');
+    a.child.kill('SIGSTOP');paused=true;unlock();unlock=null;
+    let transitions=0;
+    assert.throws(()=>withRuntimeLocks({directory:f.directory,identity:f.project.identity,org:f.org},
+      {id:'resume-boundary',operation:'upgrade',dryRun:false,owner:{native:{name:'fixture'}},validate:()=>{}},()=>transitions++),/original caller/);
+    assert.equal(transitions,0);assert.ok(fs.existsSync(ref.file));
+    evidence(t,'maintenance-resume-boundary',{state:f.journal().actions[key].state,transitions,terminal:readCommandResult(ref)});
+  }finally{unlock?.();if(paused)a.child.kill('SIGCONT');}
+  assert.equal((await a.done).code,0);assert.equal(f.journal().actions[key].state,'complete');assertCommandQuiescence(f.directory);
+});
+
+test('STOP plus a dead scheduling holder cannot replace a completed command result during resume',async t=>{
+  const f=fixture(t),a=f.start();await until(()=>fs.existsSync(path.join(f.root,'blocked')));
+  const [key,original]=Object.entries(f.journal().actions).find(([k])=>k.startsWith('dispatch:ENG-1:'));
+  const holder=spawnSync(process.execPath,['--input-type=module','-e',
+    `import {noticeLock} from ${JSON.stringify(pathToFileURL(path.join(sourceRoot,'supervisor/notice-lock.mjs')).href)};noticeLock(${JSON.stringify(path.join(f.directory,'pass.lock'))});`],{env:f.env,encoding:'utf8'});
+  assert.equal(holder.status,0,holder.stderr);
+  fs.writeFileSync(path.join(f.directory,'STOP'),'stop new effects');
+  fs.writeFileSync(path.join(f.root,'release'),'finish owned effect');
+  const result=await a.done;assert.ok([0,1].includes(result.code),result.stderr);
+  const completed=f.journal().actions[key];assert.equal(completed.state,'complete');assert.equal(completed.attempt,original.attempt);
+  assert.equal(readCommandResult(completed.commands[0]).result.status,0);
+  assert.ok(f.rows().some(r=>r.action==='general-pass-lock-recovery'&&r.resume&&r.phase==='recovered'));
+  assert.doesNotMatch(result.stderr,/journal mutation requires|scheduling lock/);assert.equal(f.launches().length,1);
+  evidence(t,'stop-dead-holder-resume',{completed,result,recoveries:f.rows().filter(r=>r.action==='general-pass-lock-recovery')});
+});
+
+test('ordinary review-health overlap does not accumulate inspection diagnostics',async t=>{
+  const f=fixture(t);fs.writeFileSync(path.join(f.root,'release'),'dispatch may finish');
+  const lock=path.join(f.directory,'subjects',createHash('sha256').update(JSON.stringify('review-health')).digest('hex')+'.lock'),unlock=noticeLock(lock);
+  try{
+    for(let n=0;n<3;n++){const wake=f.start(),result=await wake.done;assert.equal(result.code,0,result.stderr);}
+    assert.equal(f.rows().filter(r=>r.action==='review-health-held').length,3);
+    assert.equal(Object.values(f.journal().record_notices??{}).some(n=>n.boundary==='review-health'),false);
+    evidence(t,'review-health-overlap',{held:f.rows().filter(r=>r.action==='review-health-held'),notices:f.journal().record_notices??{}});
+  }finally{unlock();}
 });

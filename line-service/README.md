@@ -215,9 +215,20 @@ active marker is removed. Recovery/decision operations keep their actual subject
 lock and exact owner token while using the existing installed-service, source
 and record guards. A saved subject label or reused PID grants no authority.
 
+On the next ordinary wake, a crash-left dispatch action consumes its exact saved
+terminal command receipt after positive caller-death proof and subject locking.
+It records the original result and attempt, then uses the existing detached
+dispatch outcome/status readback, including fence-to-held disposition. It never
+launches a replacement to recover the reply. Missing or inconsistent evidence
+retains the attempt and records a diagnostic for its named stuck owner, including
+when a changed input tries to use the same subject.
+
 Maintenance still orders control, pass and promotion locks. While holding the
 pass lock it additionally checks active command intents for matching terminal
-receipts. An unfinished or UNKNOWN command refuses the transition, retaining its
+receipts. A still-live caller also fences maintenance until it journals the result
+and removes its active marker under the scheduling lock. Resume lock recovery
+allows that bookkeeping under STOP; new effects still require fresh guards.
+An unfinished or UNKNOWN command refuses the transition, retaining its
 named owner. PID disappearance alone cannot prove a quiet point. This applies to
 forward/rollback, recipient changes, restart and cutoff/reference controls; no
 running service or saved pin is changed by source delivery.

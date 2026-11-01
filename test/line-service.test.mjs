@@ -83,14 +83,14 @@ function stoppedFixture(t,{reason='Supervisor STOP appeared before dispatch; no 
   return {...f,item,service,common,key,brief,journal,job,terminal,completion,original,file,bytes,proof};
 }
 
-function prejournalFixture(t,reason='fix base differs from actual saved author branch or main'){
+function prejournalFixture(t,reason='fix base differs from actual saved author branch or main',alterIntent=value=>value){
   const f=fixture(t),item=f.add('Pre-journal refused work'),service=f.service(),common=gitProject(f.repo).identity;
   const key=`dispatch:${item}:${f.show(item).created.seq}:ordinary`,directory=service.directory;
   const brief=path.join(directory,createHash('sha256').update(JSON.stringify(key)).digest('hex')+'.ask.md');
   fs.writeFileSync(brief,'# Original pre-journal ask\n');
   const at=new Date().toISOString(),receipt={status:1,signal:null,stdout:JSON.stringify({result:'failed',code:'DISPATCH_FAILED',reason})+'\n',stderr:`dispatch: ${reason}\n`};
-  const ref=commandIntent(directory,{exe:process.execPath,args:[path.join(sourceRoot,'dispatch/dispatch.mjs'),item,'--repo',f.repo,'--org',f.org,'--brief',brief,'--detach'],
-    cwd:f.repo,project:common,org:f.org,subject:item,key,consumer:'line-service'});
+  const ref=commandIntent(directory,alterIntent({exe:process.execPath,args:[path.join(sourceRoot,'dispatch/dispatch.mjs'),item,'--repo',f.repo,'--org',f.org,'--brief',brief,'--detach'],
+    cwd:f.repo,project:common,org:f.org,subject:item,key,consumer:'line-service'}));
   finishCommand(ref,receipt);forgetActiveCommand(ref);
   const original={state:'held',owner:'line-service',consumer:'line-service',subject:key,execution_subject:item,attempt:'original-attempt',at,
     commands:[ref],receipt,error:`dispatch: ${reason}`,finished_at:new Date().toISOString(),failure:{code:'DISPATCH_FAILED',kind:'unknown'},
@@ -119,6 +119,107 @@ for(const reason of ['fix base differs from actual saved author branch or main',
   const events=loadEvents(f.org).events,admitted=events.filter(e=>e.type==='line-service.dispatch-readmitted');
   assert.equal(admitted.length,1);assert.equal(admitted[0].proof.command.sha256,f.ref.sha256);
   assert.ok(events.every(e=>!/^item\.|^run\./.test(e.type)||e.seq<=f.show(f.item).created.seq),'recovery introduces no item/run event');
+});
+
+for(const mode of ['refusal','detached'])test(`pre-journal recovery ${mode} gives the original item one outcome owner across restarts`,t=>{
+  const f=prejournalFixture(t),receipt=fs.readFileSync(f.ref.receipt,'utf8');
+  const journal=path.join(f.org,'dispatch/recovered.json');
+  if(mode==='refusal')f.setFailure('dispatch: fix base differs from actual saved author branch or main\n');
+  const command=(exe,args,options)=>{
+    const result=f.command(exe,args,options);
+    if(mode!=='detached'||args[0]!==path.join(sourceRoot,'dispatch/dispatch.mjs'))return result;
+    const failure={code:'DISPATCH_FAILED',kind:'error',stage:'open',native_launch_attempted:false};
+    const job={token:'recovered',item:f.item,brief:args[args.indexOf('--brief')+1],repo:f.repo,org:f.org,common:f.common,
+      stage:'open',completion_protocol:1,native_launch_attempted:false,error:'dispatch setup failed',failure};
+    const bytes=JSON.stringify(job);fs.mkdirSync(path.dirname(journal),{recursive:true});fs.writeFileSync(journal,bytes);
+    fs.mkdirSync(journal+'.driver');fs.writeFileSync(journal+'.driver/results.jsonl',JSON.stringify({journal,stage:job.stage,
+      exit_code:1,run:null,native_launch_attempted:false,error:job.error,code:failure.code})+'\n');
+    transact(f.org,()=>({add:[{type:'dispatch.completed',project:f.common,journal,attempt:job.token,item:f.item,run:null,
+      stage:job.stage,exit_code:1,native_launch_attempted:false,failure,request_sha256:createHash('sha256').update(bytes).digest('hex')}]}));
+    return{status:0,stdout:JSON.stringify({result:'detached',journal,run:null,item:f.item}),stderr:''};
+  };
+  const service=()=>f.service({command});
+  service().pass();service().pass();service().pass();service().pass();
+  const effects=JSON.parse(fs.readFileSync(f.file)),recovery=effects.actions[f.key].prejournal_recovery;
+  assert.equal(f.calls.length,1,'only the one fresh attempt is dispatched');
+  const signals=loadEvents(f.org).events.filter(e=>e.type==='item.added'&&e.meta?.uncertain_outcome?.check.key===recovery.key);
+  assert.equal(signals.length,1,'one durable outcome handoff, including after restart');
+  assert.equal(signals[0].parent,f.item);assert.equal(signals[0].meta.uncertain_outcome.check.subject.original_key,f.key);
+  assert.equal(effects.outcome_decisions[recovery.key].item,signals[0].id);
+  if(mode==='detached')assert.equal(effects.actions[recovery.key].recorded_dispatch_status.journal,journal);
+  const {prejournal_recovery,...original}=effects.actions[f.key];assert.deepEqual(original,f.original);
+  assert.equal(fs.readFileSync(f.ref.receipt,'utf8'),receipt);assert.equal(fs.readFileSync(f.brief,'utf8'),'# Original pre-journal ask\n');
+});
+
+test('pre-journal recovery typed capacity refusal retries its saved recovery key and ask',t=>{
+  const f=prejournalFixture(t);let attempts=0;
+  const command=(exe,args,options)=>{
+    const result=f.command(exe,args,options);
+    if(args[0]===path.join(sourceRoot,'dispatch/dispatch.mjs')&&++attempts===1)
+      return{status:1,stdout:JSON.stringify({result:'failed',code:'DISPATCH_SESSION_CAP',reason:'session capacity reached'}),stderr:''};
+    return result;
+  };
+  f.service({command}).pass();f.service({command}).pass();f.service({command}).pass();
+  assert.equal(f.calls.length,2);const asks=f.calls.map(c=>c.args[c.args.indexOf('--brief')+1]);
+  assert.equal(asks[0],asks[1]);assert.notEqual(asks[0],f.brief);
+  const effects=JSON.parse(fs.readFileSync(f.file)),key=effects.actions[f.key].prejournal_recovery.key;
+  assert.equal(effects.actions[key].history.length,1);assert.equal(effects.actions[key].state,'complete');
+  assert.equal(Object.keys(effects.outcome_decisions??{}).length,0,'capacity remains ordinary retry admission');
+});
+
+test('pre-journal recovery keeps legacy opaque keys and hands their held failure to the original item',t=>{
+  const f=prejournalFixture(t),key='dispatch-recovered:legacy-saved-digest';
+  const saved=JSON.parse(fs.readFileSync(f.file));
+  saved.actions[f.key].prejournal_recovery={...f.proof(f.original),key,at:new Date().toISOString()};
+  saved.actions[key]={state:'held',execution_subject:f.item,at:new Date().toISOString(),
+    error:'dispatch: fix base differs from actual saved author branch or main',receipt:{status:1,stdout:'',stderr:'dispatch failed'}};
+  fs.writeFileSync(f.file,JSON.stringify(saved));
+  f.service().pass();f.service().pass();f.service().pass();
+  const effects=JSON.parse(fs.readFileSync(f.file));assert.equal(f.calls.length,0,'old held key grants no second launch');
+  assert.deepEqual(effects.actions[f.key],saved.actions[f.key]);assert.ok(effects.outcome_decisions[key]);
+  const signals=loadEvents(f.org).events.filter(e=>e.type==='item.added'&&e.meta?.uncertain_outcome?.check.key===key);
+  assert.equal(signals.length,1);assert.equal(signals[0].parent,f.item);
+});
+
+for(const fence of ['started','pending'])test(`pre-journal recovery respects the item ${fence} subject fence`,t=>{
+  const f=prejournalFixture(t);
+  if(fence==='started'){
+    const saved=JSON.parse(fs.readFileSync(f.file));saved.actions['unrelated-effect']={state:'started',execution_subject:f.item};
+    fs.writeFileSync(f.file,JSON.stringify(saved));
+  }else commandIntent(f.directory,{exe:'unknown',args:[],cwd:f.repo,project:f.common,org:f.org,subject:f.item,key:'pending-effect',consumer:'line-service'});
+  f.line.pass();f.service().pass();assert.equal(f.calls.length,0);
+  assert.equal(JSON.parse(fs.readFileSync(f.file)).actions[f.key].prejournal_recovery,undefined);
+});
+
+test('pre-journal readiness change leaves recovery unspent and the original notice recurring',t=>{
+  const f=prejournalFixture(t);
+  const service=f.service({capacity:()=>{
+    transact(f.org,()=>({add:[{type:'item.updated',id:f.item,fields:{meta:{hold:true}}}]}));return{count:0,cap:2};
+  }});
+  service.pass();assert.equal(f.calls.length,0);
+  let effects=JSON.parse(fs.readFileSync(f.file));assert.deepEqual(effects.actions[f.key],f.original);
+  assert.equal(Object.keys(effects.actions).length,1,'readiness race saves no recovery intent');
+  // A saved edge without a start/owner must not silence the original notice.
+  const proof=f.proof(f.original),key=`dispatch-recovered:${f.item}:not-started`;
+  effects.actions[f.key].prejournal_recovery={...proof,key};fs.writeFileSync(f.file,JSON.stringify(effects));
+  f.service().pass();f.service().pass();
+  effects=JSON.parse(fs.readFileSync(f.file));
+  assert.ok(Object.values(effects.record_notices).some(n=>n.boundary===`outcome:${f.key}`&&n.scope.item===f.item&&n.inspection_due));
+  // Restore the unspent original after this missing-edge notice control.
+  effects.actions[f.key]=f.original;fs.writeFileSync(f.file,JSON.stringify(effects));
+  transact(f.org,()=>({add:[{type:'item.updated',id:f.item,fields:{meta:{hold:false}}}]}));
+  f.service().pass();f.service().pass();assert.equal(f.calls.length,1,'readiness recovery can start once');
+});
+
+test('pre-journal proof rejects correctly hashed foreign command bindings and nonfresh invocations',t=>{
+  const mutations=[...['project','org','cwd','key','subject','consumer'].map(field=>intent=>({...intent,[field]:'foreign'})),
+    ...['--repo','--org','--brief'].map(flag=>intent=>({...intent,args:intent.args.map((v,i)=>i===intent.args.indexOf(flag)+1?'foreign':v)})),
+    intent=>({...intent,args:intent.args.filter(v=>v!=='--detach')}),
+    intent=>({...intent,args:[...intent.args,'--retry','foreign.json']}),
+    intent=>({...intent,args:intent.args.map((v,i)=>i===1?'ENG-999':v)})];
+  for(const alter of mutations){
+    const f=prejournalFixture(t,undefined,alter);assert.equal(f.proof(f.original),null,'valid immutable hash does not excuse a foreign binding');
+  }
 });
 
 test('pre-journal proof rejects uncertain, contradictory, foreign and incomplete attempts',t=>{

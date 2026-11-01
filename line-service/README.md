@@ -1127,7 +1127,13 @@ launch/run evidence, native fences and unknown diagnostics remain held. The line
 rechecks the original journal/record evidence at admission, preserves the original
 attempt, receipt and ask, and links one separate recovery intent and ask. Existing
 readiness, capacity, source, ownership and STOP/HOLD guards govern the new start;
-this does not replay the original dispatch or resolve an uncertain launch.
+this does not replay the original dispatch or resolve an uncertain launch. New
+recovery keys include the item ID to retain its subject fence; saved legacy keys
+remain authoritative and are followed without allocating another recovery. The
+outcome reader follows the saved recovery edge and hands terminal failures to the
+original item's outcome owner. Until a recorded start or durable handoff exists,
+the original missing-producer notice keeps recurring. Readiness changes defer
+before saving the recovery intent, leaving its one fresh start unspent.
 
 For the explicitly authorized inactive legacy attempts, the owning native
 supervisor uses the existing record queue entry from its own canonical checkout:

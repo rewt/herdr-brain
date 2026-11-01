@@ -719,10 +719,11 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       snapshot = current();
       // Follow the saved readmission edge, including opaque recovery keys. A
       // recovery's terminal failure belongs to the original item's owner too.
-      const stoppedRecoveries=new Map(Object.entries(effects.actions).filter(([key,entry])=>key.startsWith('dispatch:')&&entry.stop_recovery)
-        .map(([key,entry])=>[entry.stop_recovery.key,{key,journal:entry.stop_recovery.journal}]));
-      for(const [key,entry]of Object.entries(effects.actions))if((key.startsWith('dispatch:')||stoppedRecoveries.has(key))&&(entry.state!=='complete'||entry.result?.result==='detached'&&entry.original_outcome?.status!=='dispatch-complete')){
-        const original=stoppedRecoveries.get(key),item=(original?.key??key).split(':')[1];
+      const dispatchRecoveries=new Map(Object.entries(effects.actions).filter(([key])=>key.startsWith('dispatch:'))
+        .flatMap(([key,entry])=>[entry.stop_recovery,entry.prejournal_recovery].filter(Boolean)
+          .map(recovery=>[recovery.key,{key,journal:recovery.journal??null}])));
+      for(const [key,entry]of Object.entries(effects.actions))if((key.startsWith('dispatch:')||dispatchRecoveries.has(key))&&(entry.state!=='complete'||entry.result?.result==='detached'&&entry.original_outcome?.status!=='dispatch-complete')){
+        const original=dispatchRecoveries.get(key),item=(original?.key??key).split(':')[1];
         try{
           if(entry.state==='started'){
             // Consume only the exact saved dispatch command after its caller
@@ -782,8 +783,11 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
             }
             save();stale=true;
           }
-          else if(!entry.prejournal_recovery&&!outcome.producer&&!['not-started','dispatch-complete'].includes(outcome.status)){
-            note(`outcome:${key}`,'Original dispatch completion producer is missing; retain its original attempt for the project supervisor.',{item,journal:outcome.journal??null,outcome});
+          else if(!outcome.producer&&!['not-started','dispatch-complete'].includes(outcome.status)){
+            const recovery=entry.prejournal_recovery,recovered=effects.actions[recovery?.key];
+            // A saved edge alone does not own an exit. Keep the original's
+            // signal until a recorded start or a durable outcome handoff.
+            if(!recovery||!(recovered?.original_outcome?.run||recovered?.recorded_dispatch_status?.run||effects.outcome_decisions?.[recovery.key]))note(`outcome:${key}`,'Original dispatch completion producer is missing; retain its original attempt for the project supervisor.',{item,journal:outcome.journal??null,outcome});
           }
         }catch(e){note(key,e.message,{item,owner:entry.stuck_owner??to});}
       }
@@ -885,7 +889,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
                 prejournalRecovery=prejournalReadmission({entry:prior,key,repo,org,common:project.identity,directory,item:item.id,
                   brief:path.join(directory,`${digest(key)}.ask.md`),events:snapshot.events,outcome:prior.original_outcome});
                 briefRecovery=sourceRecovery??prejournalRecovery??initialBriefRefusal({entry:prior,contract,events:snapshot.events,item:item.id,outcome:prior.original_outcome});
-                if(briefRecovery)dispatchKey=`dispatch-recovered:${digest([key,briefRecovery])}`;
+                if(briefRecovery)dispatchKey=`dispatch-recovered:${item.id}:${digest([key,briefRecovery])}`;
               }
             }
             if(!continuation&&!retryAdmission&&!briefRecovery&&!stopRecovery){log({ action: 'dispatch-retained', key:dispatchKey, state: prior.state });if(roleIs(item,'REV')&&prior.state!=='complete'&&!prior.original_outcome?.error)note(key,prior.error??'original review launch outcome retained; no duplicate launch',{item:item.id,review:true});continue;}
@@ -900,7 +904,6 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
           log({action:'admission-decision',...admission});
           const dispatched = effect(continuation?`dispatch-preflight:${continuation.token}:${continuation.key}`:dispatchKey, fresh => {
             const current = fresh.state.items.get(item.id);
-            if (!current || !queueSelected(current,fresh.state,readOrdinaryAdmission(repo,childEnv)) || obsoleteDecision(current,fresh) || itemLaunchHold(fresh.state,item.id,fresh.events) || dispatchInput({...fresh,item:current,org,identity:project.identity}) !== input || reserved(current) || (!continuation&&(reviewTarget ? reviewQueueRoute(config, current, fresh.state) : routeFor(current, config)) !== route)) throw Error('dispatch readiness or route changed');
             const startDispatch = args => {
               // A lost reply can still mean a live session. Spend this pass's
               // allowance before issuing the command, regardless of its reply.
@@ -954,6 +957,9 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
             writeFileAtomic(brief, target ? reviewQueueBrief(current) : isDecision(current) ? decisionBrief(current) : lineWorkAsk(current, correction?.brief ?? ''), 0o600);
             return startDispatch([item.id, '--repo', repo, '--org', org, '--lane', `${target ? 'review' : 'line'}-${item.id.toLowerCase()}-${current.runs.length + 1}`, '--route', route, '--brief', brief, ...(target ? ['--base', target.head] : correction ? ['--base', correction.base] : []),'--detach']);
           },undefined,undefined,Boolean(retryAdmission),Boolean(retryAdmission),fresh=>{
+            // Defer readiness races before saving a one-shot recovery intent.
+            const current = fresh.state.items.get(item.id);
+            if (!current || !queueSelected(current,fresh.state,readOrdinaryAdmission(repo,childEnv)) || obsoleteDecision(current,fresh) || itemLaunchHold(fresh.state,item.id,fresh.events) || dispatchInput({...fresh,item:current,org,identity:project.identity}) !== input || reserved(current) || (!continuation&&(reviewTarget ? reviewQueueRoute(config, current, fresh.state) : routeFor(current, config)) !== route)) throw Error('dispatch readiness or route changed');
             if(!admit({item:fresh.state.items.get(item.id),state:fresh.state},'launch-mutation',true))return false;
             if(queueSelection(fresh.state)===selection)return true;
             log({action:'queue-selection-changed',item:item.id,stage:'after-capacity'});
@@ -1005,7 +1011,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       for(const [key,entry]of Object.entries(effects.actions))if(entry.state!=='started'&&((entry.failure??outcomeFailure(entry)).kind==='fence'||key.startsWith('review:')&&entry.state!=='complete'&&!entry.recorded_review_status))try{
         // The dispatch status reader records both ends of a stopped recovery.
         // Do not let this generic fallback claim its decision first.
-        if(Object.values(effects.actions).some(original=>original.stop_recovery?.key===key))continue;
+        if(dispatchRecoveries.has(key)||Object.values(effects.actions).some(original=>original.stop_recovery?.key===key||original.prejournal_recovery?.key===key))continue;
         if(key.startsWith('review:')&&entry.failure?.kind!=='fence'){
           const q=[...current().state.items.values()].find(q=>q.meta.review_source_item===key.split(':')[1]&&q.meta.review_target?.head===entry.review_target?.head);
           if(q){entry.recorded_review_status={item:q.id,created_seq:q.created.seq};save();continue;}

@@ -138,9 +138,12 @@ The existing watch entry also supports `--shared` in place of `--detach`.
 Registration requires the original Brain claim, exact live worker name, pane,
 workspace, terminal, native session and checkout, plus a matching project/source/
 socket observer with a live kernel birth. It refuses an existing per-run watcher
-or callback receipt. The returned PID/birth belongs to the shared host; it means
-the duty is durable and its host exists, **not** that a native subscription or a
-report has been accepted. Retries adopt the saved mode and duty. There is no
+or callback receipt. The returned shared registration path is recorded as
+watcher_shared; watcher_host holds the separate host PID/birth/log. A shared run
+has no per-run watcher_pid. The reference proves a durable duty, not subscription
+readiness or report acceptance. Retirement inventories an unfinished shared duty
+without treating its host as a per-run callback. Supervisor entry reports held or
+failed duties to their retained owner instead of inferring health from host liveness. Retries adopt the saved mode and duty. There is no
 fallback to a different executor, runtime, watcher or recipient.
 
 The observer reuses `lanes/board/herdr-client.mjs`. It attaches filesystem hints
@@ -162,7 +165,10 @@ The registration in `watch/shared/R-n.json` names its consumer, wake facts and
 stuck owner. An unfinished duty blocks claim transfer even after report ingestion.
 Unknown callback acknowledgements stay with the original inbox owner. A live
 finite child survives a host restart; a proven dead child resumes the same duty
-and stable notice IDs. Failed consumers retain a held receipt under
+and stable notice IDs. A vanished worker (missing or invalid report) completes its finite step after its
+original notice is delivered or handed to the durable inbox; genuine consumer
+errors stay failed. Pending/refused/uncertain deliveries retain their existing
+effect holds. Failed consumers retain a held receipt under
 `watch/observer/held/`; restarting the host does not replay them.
 
 | Watcher duty | Consumer and retained evidence |
@@ -175,6 +181,17 @@ and stable notice IDs. Failed consumers retain a held receipt under
 | Claim change, abandonment, ingestion and STOP/HOLD | Fresh record/ownership guards before effects; held state and original registrations survive |
 | Report-to-review and resource closeout | Existing finite line intake and single record queue-review/guarded closer; observer grants no lifecycle authority |
 
+Each invalid, foreign, changed or unreadable registration holds only its own duty.
+The first held receipt and original registration/step files are retained. One stable
+exception plan and receipt under watch/observer/exceptions use the existing durable
+supervisor inbox and recorded stuck_owner (or project supervisor for unreadable
+metadata). Host restart keeps the original notice ID, message and recipient;
+refused/uncertain deliveries stay with that inbox owner. Healthy duties still run,
+including during startup alongside a bad registration.
+
+One timer waits until the earliest persisted step deadline or the 30-second safety
+deadline. Hints and checkpoints recompute it; there is no one-second polling tick.
+
 One named **coarse-safety-reconciliation** runs every 30 seconds. It recovers a
 lost final native/file hint even if nothing else happens. Normal operation
 targets zero repairs. The detection bound is one safety interval **plus the
@@ -183,7 +200,13 @@ STOP/HOLD, failed consumers and external input gates are explicit holds, not a
 false wall-clock completion promise. The observer records safety repairs,
 readiness, RSS, queue and consumer times, and exact claim/occupant/server-bound
 completion/state-change counters in `watch/observer/observations.jsonl` for
-ENG-1036. Cache loss causes reconciliation; it cannot manufacture an effect.
+ENG-1036. Each reconciled row also includes host cpu_usage_us (user/system since
+host start), elapsed_ms and reconciliations_per_second. ENG-1036/ENG-1137 soak
+owners must compare CPU delta divided by wall-time delta and reconciliation-count
+delta divided by wall-time delta for the same busy-record and idle windows, with
+run count, note-append rate and finite-consumer queue/runtime recorded separately.
+The 3,000-note synthetic RSS witness is not a host CPU or live-soak result; those
+measurements remain UNRUN until those owners record them. Cache loss causes reconciliation; it cannot manufacture an effect.
 
 `--once` performs a finite reconciliation for offline/integration use. Project
 STOP/HOLD or the observer's own STOP ends a resident host; clearing a marker does

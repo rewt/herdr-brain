@@ -629,13 +629,14 @@ async function watch() {
         undefined,
         { fatal: state === null },
       );
-      if (state === null) throw new Error(`worker ${agent} is gone with an invalid report`);
+      if (state === null) { if(opt.step)return; throw new Error(`worker ${agent} is gone with an invalid report`); }
     } else if (state === null) {
       await sendOnce(
         noReportNotice({ run: runId, item, agent, state: 'gone', report: reportPath }),
         undefined,
         { fatal: true },
       );
+      if(opt.step)return;
       throw new Error(`worker ${agent} is gone without a valid report`);
     } else if (state === 'blocked') {
       await sendOnce(blockedNotice({ run: runId, item, agent, report: reportPath }));
@@ -701,7 +702,7 @@ function registerShared() {
         consumer:'watch/watch.mjs --step',wake_fact:'native lifecycle, report/record change or coarse-safety-reconciliation',stuck_owner:opt.to})+'\n');
     });
   }
-  process.stdout.write(JSON.stringify({run:runId,pid:host.pid,identity:host.identity,log:host.log,shared:file,release:bundleRelease()})+'\n');
+  process.stdout.write(JSON.stringify({run:runId,shared:file,host:{pid:host.pid,identity:host.identity,log:host.log},release:bundleRelease()})+'\n');
 }
 
 try {

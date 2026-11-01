@@ -1,46 +1,19 @@
 import test from '../../test/helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
-import {spawnSync} from 'node:child_process';
-import {initOrg,transact,loadRecord} from '../../lib/store.mjs';
+import {transact,loadRecord} from '../../lib/store.mjs';
 import {ownerIdentity} from '../../lib/process-owner.mjs';
 import {herdrSocketPath} from '../../lanes/board/herdr-client.mjs';
 import {sessionBindFact} from '../../test/helpers/session-bind.mjs';
 import {gitProject} from '../../lib/project.mjs';
-import {brainOwner,outstandingEffects,readOwnedRun} from '../../lib/run-owner.mjs';
-import {bundleRelease} from '../../lib/releases.mjs';
-import {sharedDirectory,registrationFile,stepFile,nativeBinding,readWatchSubject} from '../shared.mjs';
+import {outstandingEffects,readOwnedRun} from '../../lib/run-owner.mjs';
+import {registrationFile,stepFile,readWatchSubject} from '../shared.mjs';
 
-const watch=path.resolve(import.meta.dirname,'../watch.mjs'),source=path.resolve(import.meta.dirname,'../..');
-const reportText=(run='R-1')=>`---\nrun: ${run}\noutcome: done\nsummary: Finished the isolated task.\nheadline: The task is complete\nblockers: []\nproposals: []\nlearnings: []\nartifacts: []\n---\n`;
-function fixture(t,{startGrace='0',idleGrace='0',longAfter='3600',lateSession=false}={}){
-  const root=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'watch-step-'))),repo=path.join(root,'project'),org=path.join(repo,'.org'),report=path.join(root,'report.md');fs.mkdirSync(repo);
-  const fleet=process.env.HERDR_MONITOR_FLEET;process.env.HERDR_MONITOR_FLEET=path.join(root,'fleet');
-  t.after(()=>{if(fleet===undefined)delete process.env.HERDR_MONITOR_FLEET;else process.env.HERDR_MONITOR_FLEET=fleet;fs.rmSync(root,{recursive:true,force:true});});
-  assert.equal(spawnSync('git',['init','-qb','main'],{cwd:repo}).status,0);
-  const project=gitProject(repo),owner=brainOwner();initOrg(org);
-  const native={name:'worker-one',pane_id:'w1:p1',workspace_id:'w1',terminal_id:'term-one',cwd:repo,agent_session:{value:'original-session'},agent_status:'working',state_change_seq:1};
-  const initial=transact(org,()=>({add:[{type:'item.added',id:'ENG-9',title:'Isolated work',role:'engineer'},
-    {type:'run.started',id:'R-1',item:'ENG-9',workspace:repo,report_path:report,meta:{dispatch_project:project.identity,dispatch_record:org,dispatch_journal:path.join(root,'dispatch.json'),dispatch_attempt:'original-attempt'}},
-    {type:'run.claimed',run:'R-1',record:org,project:project.identity,owner},
-    {type:'run.updated',id:'R-1',meta:{agent:native.name,pane:native.pane_id,worker_workspace:native.workspace_id,terminal_id:native.terminal_id,...(lateSession?{}:{agent_session_id:native.agent_session.value})}}]}));
-  const ownership={owner,generation:initial.added.find(e=>e.type==='run.claimed').seq};
-  const status=path.join(root,'native.json'),calls=path.join(root,'calls'),herdr=path.join(root,'herdr');
-  fs.writeFileSync(status,JSON.stringify(native));
-  fs.writeFileSync(herdr,`#!${process.execPath}\nimport fs from 'node:fs';const a=process.argv.slice(2);fs.appendFileSync(${JSON.stringify(calls)},JSON.stringify(a)+'\\n');const n=JSON.parse(fs.readFileSync(${JSON.stringify(status)}));if(n===null){process.stderr.write(JSON.stringify({error:{code:'agent_not_found',message:'gone'}}));process.exitCode=1;}else process.stdout.write(JSON.stringify({result:{agent:n}}));\n`,{mode:0o755});
-  const args=['R-1','--org',org,'--cwd',repo,'--to','supervisor-test','--report',report,'--herdr',herdr,'--record-only','--start-grace',startGrace,'--idle-grace',idleGrace,'--long-after',longAfter];
-  const d={schema:'brain.shared-watch/v1',run:'R-1',org,project:project.identity,repo,cwd:repo,source,release:bundleRelease(),ownership,native:nativeBinding(native),to:'supervisor-test',report,argv:args,
-    consumer:'watch/watch.mjs --step',wake_fact:'native lifecycle, report/record change or coarse-safety-reconciliation',stuck_owner:'supervisor-test'};
-  fs.mkdirSync(sharedDirectory(org),{recursive:true});fs.writeFileSync(registrationFile(org,'R-1'),JSON.stringify(d));
-  const step=()=>spawnSync(process.execPath,[watch,...args,'--step'],{cwd:repo,env:{...process.env,ORG_DIR:org,ORG_ACTOR:'watch-step-fixture'},encoding:'utf8'});
-  const state=()=>JSON.parse(fs.readFileSync(stepFile(org,'R-1')));
-  const setNative=value=>fs.writeFileSync(status,JSON.stringify(value));
-  const notices=()=>loadRecord(org).state.runs.get('R-1').notes.filter(n=>n.text.startsWith('[watch record-only]'));
-  const register=()=>spawnSync(process.execPath,[watch,...args,'--shared'],{cwd:repo,env:{...process.env,ORG_DIR:org,ORG_ACTOR:'watch-step-fixture'},encoding:'utf8'});
-  return {root,repo,org,report,native,step,state,setNative,notices,calls,register};
-}
+import {fixture,reportText} from './step-fixture.mjs';
+import {EventEmitter} from 'node:events';
+import {createObserver} from '../observer.mjs';
+import {enqueueSupervisor,readInbox} from '../../supervisor/prompt-supervisor.mjs';
 function ok(f){const r=f.step();assert.equal(r.status,0,r.stderr||r.stdout);return r;}
 
 test('finite watcher validates a working report without final delivery, then hands the stopped report off once',t=>{
@@ -77,7 +50,7 @@ test('long-run notification is one original logical event across finite consumer
 test('definite vanished worker preserves the no-report exception and exact native replacement stays unavailable',t=>{
   const f=fixture(t);f.setNative({...f.native,agent_status:'done',agent_session:{value:'replacement-session'}});fs.writeFileSync(f.report,reportText());ok(f);
   assert.equal(f.state().phase,'waiting');assert.equal(f.notices().length,0);assert.match(f.state().state.pendingUnavailable,/original native occupant changed/);
-  fs.unlinkSync(f.report);f.setNative(null);const result=f.step();assert.equal(result.status,1);assert.match(result.stderr,/gone without a valid report/);assert.equal(f.state().phase,'failed');
+  fs.unlinkSync(f.report);f.setNative(null);ok(f);assert.equal(f.state().phase,'complete');ok(f);
   assert.ok(f.notices().some(n=>/state=gone/.test(n.text)));
 });
 
@@ -108,8 +81,35 @@ for(const existing of [false,true])test(`shared registration ${existing?'refuses
   const r=f.register();
   if(existing){assert.equal(r.status,1);assert.match(r.stderr,/existing watcher\/receipt retained/);assert.equal(fs.existsSync(file),false);}
   else{
-    assert.equal(r.status,0,r.stderr);const receipt=JSON.parse(r.stdout);assert.equal(receipt.pid,process.pid);assert.equal(receipt.shared,file);
+    assert.equal(r.status,0,r.stderr);const receipt=JSON.parse(r.stdout);assert.equal(receipt.pid,undefined);assert.equal(receipt.host.pid,process.pid);assert.equal(receipt.shared,file);
     const saved=fs.readFileSync(file),d=JSON.parse(saved);assert.equal(d.native.session,f.native.agent_session.value);assert.equal(d.consumer,'watch/watch.mjs --step');assert.equal(d.stuck_owner,'supervisor-test');assert.ok(!d.argv.includes('--shared'));
     const retry=f.register();assert.equal(retry.status,0,retry.stderr);assert.equal(fs.readFileSync(file).compare(saved),0);ok(f);assert.equal(f.state().phase,'waiting');
   }
+});
+
+for(const invalid of [false,true])test('correction vanished '+(invalid?'invalid':'missing')+' report completes without a held consumer or duplicate notice',async t=>{
+  const f=fixture(t);f.setNative(null);if(invalid)fs.writeFileSync(f.report,'---\nrun: R-1\noutcome: invalid\n---');
+  class Client extends EventEmitter{async snapshot(){return {protocol:22,agents:[],panes:[]};}subscribe(){}close(){}}
+  const rows=[],observer=createObserver({repo:f.repo,org:f.org,client:new Client(),consume:()=>{const r=f.step();return {code:r.status};},log:r=>rows.push(r)});
+  t.after(()=>observer.close());await observer.reconcile('startup');await observer.idle();
+  assert.equal(f.state().phase,'complete');assert.equal(observer.counters.consumer_failures,0);
+  assert.equal(fs.existsSync(path.join(observer.directory,'held/R-1.json')),false);
+  assert.equal(f.notices().length,1);assert.match(f.notices()[0].text,invalid?/watch-invalid-report/:/state=gone/);
+  await observer.reconcile('restart');await observer.idle();ok(f);assert.equal(f.notices().length,1);
+  assert.ok(!outstandingEffects(f.org,{...readOwnedRun(f.org,'R-1'),abandoned:{}},gitProject(f.repo).identity).includes('watch:shared-pending'));
+});
+
+test('correction genuine native binding error stays failed and held with one owner exception',async t=>{
+  const f=fixture(t,{lateSession:true}),state=loadRecord(f.org).state,run=state.runs.get('R-1');
+  const fact=sessionBindFact(run,state,{session:f.native.agent_session.value});
+  transact(f.org,()=>({add:[fact,{...fact,session:'changed-session'}]}));
+  class Client extends EventEmitter{async snapshot(){return {protocol:22,agents:[f.native],panes:[]};}subscribe(){}close(){}}
+  const observer=createObserver({repo:f.repo,org:f.org,client:new Client(),consume:()=>({code:f.step().status}),
+    notify:(to,message,options)=>({...enqueueSupervisor(to,message,options),queued:true,delivered:false})});
+  t.after(()=>observer.close());await observer.reconcile('startup');await observer.idle();
+  assert.equal(f.state().phase,'failed');assert.equal(observer.counters.consumer_failures,1);
+  const held=path.join(observer.directory,'held/R-1.json');assert.ok(fs.existsSync(held));
+  const original=fs.readFileSync(held);await observer.reconcile('hint');await observer.idle();
+  assert.deepEqual(fs.readFileSync(held),original);assert.equal(observer.counters.consumer_starts,1);
+  assert.equal(readInbox(path.join(f.org,'supervisor/inbox.log')).length,1);assert.equal(f.notices().length,0);
 });

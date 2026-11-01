@@ -77,6 +77,7 @@ export function coldStart({ cwd = process.cwd(), org, sinceSeq, workspace, env =
   const facts = (r) => ({ run: r.id, item: r.item, title: state.items.get(r.item)?.title,
     route: r.meta.route ?? null, harness: r.meta.harness ?? null, model: r.meta.model ?? null,
     effort: r.meta.effort ?? null, agent: r.meta.agent ?? null, pane: r.meta.pane ?? null,
+    watcher_shared:r.meta.watcher_shared??null,
     watcher_pid: r.meta.watcher_pid ?? null, watcher_identity: r.meta.watcher_identity ?? null, watcher_log: r.meta.watcher_log ?? null,
     lane: r.meta.lane ?? null, workspace: r.workspace, report: r.report_path,
     started: r.started.at,

@@ -330,3 +330,14 @@ test('Linux watcher recovery round-trips textual identities through record set a
   assert.equal(stored(), ownerIdentity(process.pid, readProcess));
   assert.equal(typeof stored(), 'string');
 });
+
+test('shared duty references report failed duties without rearming a process watcher',async t=>{
+  const f=fixture(t),run=f.start('shared worker'),duty=path.join(f.org,'watch/shared',run+'.json'),step=path.join(f.org,'watch/steps',run+'.json');
+  fs.mkdirSync(path.dirname(duty),{recursive:true});fs.mkdirSync(path.dirname(step),{recursive:true});
+  fs.writeFileSync(duty,JSON.stringify({run}));fs.writeFileSync(step,JSON.stringify({phase:'failed'}));
+  f.record(['set',run,'watcher_shared='+duty]);
+  const fake=fakeCommands(f),output=[],{enterSupervisor}=await load();
+  enterSupervisor({cwd:f.repo,org:f.org,role:'supervisor',command:fake.command,output:text=>output.push(text)});
+  assert.ok(!fake.calls.some(a=>a[0].endsWith('watch.mjs')));
+  assert.match(output.join(''),/shared duty is held or unavailable/);
+});

@@ -356,10 +356,15 @@ function ensureWatcher() {
       ...(opt['org-cli'] ? ['--org-cli', opt['org-cli']] : []),...(job.recordOnlyNotices?['--record-only']:[])], undefined, true));
     save();
   } else {
-    if (!ownerAlive(job.watcher)) {
+    if (!ownerAlive(job.watcher.host??job.watcher)) {
       job.watcher = null; save();
       throw new Error('watcher stopped; retry to re-arm it without replaying the prompt');
     }
+  }
+  if(job.watcher.shared){
+    if(job.watchMode!=='shared'||job.watcher.run!==job.run||job.watcher.shared!==path.join(job.org,'watch/shared',`${job.run}.json`)||!ownerAlive(job.watcher.host))throw Error('shared duty reference or observer host is invalid; retain original');
+    record(['set',job.run,`watcher_shared=${job.watcher.shared}`,`watcher_host=${JSON.stringify(job.watcher.host)}`]);
+    return;
   }
   if (!Number.isInteger(job.watcher.pid) || job.watcher.pid < 1) throw new Error('watcher returned an invalid PID');
   if (!ownerAlive(job.watcher)) throw new Error('watcher stopped before its receipt was recorded');

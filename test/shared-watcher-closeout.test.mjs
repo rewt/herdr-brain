@@ -213,3 +213,13 @@ test(`guarded shared closeout: ${scenario}`,t=>{
   assert.equal(all.filter(e=>e.type==='report.ingested'&&e.run==='R-1').length,1);
   assert.equal(all.some(e=>e.type==='report.ingested'&&e.run==='R-2'),false,'failed vanished duty was not silently discharged');
 });
+
+test('shared duty references retain a duty hold without attributing the host PID to the run',t=>{
+  const f=fixture(t),host=JSON.stringify({pid:901,identity:'shared-host-birth'});
+  f.append([{type:'run.updated',id:'R-1',meta:{watcher_pid:null,watcher_identity:null,watcher_shared:f.files.duty,watcher_host:host}}]);
+  assert.equal(sharedWatcherDischarged(f.proof()),true);
+  const adapter=createRetirement({cwd:f.repo,org:f.org,env:f.env,...f.options,reportCloseout:{run:'R-1',cwd:f.lane}});
+  let s=adapter.observe(f.lane);assert.ok(!s.references.some(r=>r.kind==='watcher callback'||r.kind==='shared watcher duty'));
+  f.put(f.files.step,{...f.step,phase:'failed'});s=adapter.observe(f.lane);
+  const ref=s.references.find(r=>r.kind==='shared watcher duty');assert.equal(ref.run,'R-1');assert.equal(ref.pid,undefined);
+});

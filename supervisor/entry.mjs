@@ -10,6 +10,7 @@ import { gitProject } from '../lib/project.mjs';
 import { sanitizeTerminal } from '../lib/sanitize.mjs';
 import { coldStart, receiptDirectory } from './context.mjs';
 import { housekeepingSnapshot } from '../housekeeping/command.mjs';
+import {readJson,stepFile,registrationFile} from '../watch/shared.mjs';
 import { operationFile } from '../lib/releases.mjs';
 
 const local = name => fileURLToPath(new URL(name, import.meta.url));
@@ -105,11 +106,18 @@ export function enterSupervisor({ cwd = process.cwd(), org, role, readOnly = fal
     for (const run of doc.running) attempt(`watch ${run.run}`, () => {
       // Unknown/deleted/legacy repository binding cannot authorize a new watcher.
       if (run.repository_binding !== project.identity || run.checkout_missing || !run.agent) return;
+      if(run.watcher_shared){
+        if(run.watcher_shared!==registrationFile(org,run.run))throw Error('shared duty reference changed; retain original');
+        const duty=readJson(run.watcher_shared),step=readJson(stepFile(org,run.run)),held=readJson(path.join(org,'watch/observer/held',`${run.run}.json`));
+        if(duty?.run!==run.run||!step||held||['failed','held'].includes(step.phase))throw Error('shared duty is held or unavailable; recorded stuck owner retains it');
+        report(`Supervisor entry watch: ${run.run} shared duty phase ${step.phase}; retained.\n`);return;
+      }
       if (run.watcher_pid !== null && ownerAlive({ pid: Number(run.watcher_pid), identity: run.watcher_identity }, readOwner)) return;
       // The fold can change while the brief is printed or housekeeping starts.
       const current = JSON.parse(call(local('../bin/org.mjs'), ['show', run.run, '--json']));
       if (current.report || current.abandoned || current.workspace !== run.workspace || current.meta.agent !== run.agent) return;
       if (gitProject(current.workspace).identity !== project.identity) throw new Error('run repository binding changed');
+      if(current.meta.watcher_shared)throw Error('shared observation duty recorded after snapshot; retain original');
       if (current.meta.watcher_pid != null && ownerAlive({ pid: Number(current.meta.watcher_pid), identity: current.meta.watcher_identity }, readOwner)) return;
       let recipient = to;
       let watcher = local('../watch/watch.mjs');

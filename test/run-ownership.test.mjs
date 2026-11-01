@@ -755,3 +755,13 @@ test('adopting an old installed dispatch receipt retries its saved release inste
   assert.equal(events(f).filter(e => e.type === 'run.claimed').length, 1);
   fs.rmSync(path.join(f.org, 'dispatch'), { recursive: true }); // Old runtime stub performs no launch.
 });
+
+import {fixture as stepFixture} from '../watch/test/step-fixture.mjs';
+for(const invalid of [false,true])test('correction vanished '+(invalid?'invalid':'missing')+' report allows exact claim transfer after abandonment',t=>{
+  const f=stepFixture(t);f.setNative(null);if(invalid)fs.writeFileSync(f.report,'---\nrun: R-1\noutcome: invalid\n---');
+  ok(f.step());assert.equal(f.state().phase,'complete');
+  const record=(...args)=>spawnSync(process.execPath,[path.join(source,'bin/org.mjs'),...args],{cwd:f.repo,env:{...process.env,ORG_DIR:f.org,ORG_ACTOR:'ownership-correction'},encoding:'utf8'});
+  ok(record('abandon','R-1'));assert.deepEqual(outstandingEffects(f.org,readOwnedRun(f.org,'R-1')),[]);
+  ok(record(...transferArgs('R-1',f.ownership)));assert.equal(readOwnedRun(f.org,'R-1').owner.controller,'other');
+  assert.equal(f.notices().length,1);
+});

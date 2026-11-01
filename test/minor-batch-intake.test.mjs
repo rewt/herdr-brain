@@ -32,6 +32,22 @@ const intake = (events,report,body='') => reviewResultEvents({events,state:fold(
 const minors = [{severity:'minor',text:'a.mjs:4 - Empty input loses context'},
   {severity:'minor',text:'b.mjs:8 - Retry loses context'}];
 
+test('clean PASS intake accepts indented and unclosed fences unless a batch heading is attempted', () => {
+  for (const body of ['- Example\n\n    ```md\n    ordinary code\n    ```', 'Reviewed.\n```md\nordinary code']) {
+    const added = intake(seed(), data(undefined), body);
+    const judgments = added.filter(e => e.type === 'change.reviewed');
+    assert.equal(judgments.length, 1, body);
+    assert.equal(judgments[0].verdict, 'PASS');
+    assert.deepEqual(judgments[0].findings, []);
+    assert.equal(added.filter(e => e.type === 'item.added').length, 0);
+  }
+  for (const body of ['## Batched minors\n- a.mjs:1 - Lost', '### Batched Minors\n- a.mjs:1 - Lost',
+    '```md\n## Batched Minors\n- a.mjs:1 - Hidden', '    ```md\n## Batched Minors\n- a.mjs:1 - Indented',
+    '## Batched Minors\n- a.mjs:1 - Visible\n```md\nunclosed']) {
+    assert.throws(() => intake(seed(), data(undefined), body), /Batched Minors requires/, body);
+  }
+});
+
 test('one unselected batch keeps all Minor keys and leaves a fulfilled PASS accepted until selection or an attempt', () => {
   for (const proposals of [[],[{role:'engineer',title:'First',blocking:true},{role:'engineer',title:'Second',blocking:true}]]) {
     const events=seed(), report=data(minors,proposals), added=intake(events,report), batch=added.find(e=>e.type==='item.added');

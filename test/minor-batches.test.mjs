@@ -103,12 +103,27 @@ test('malformed, empty and mixed plain sections fail visibly; fences cannot crea
   assert.equal(reportMinors(text('```md\n' + plain + '\n```')).rows.length, 0);
 });
 
+test('ordinary report fences create no collector findings or issues, including negative and typed reviews', () => {
+  for (const body of ['- Example\n\n    ```md\n    ordinary code\n    ```', 'Reviewed.\n```md\nordinary code']) {
+    const pass = text(body);
+    for (const bytes of [pass, pass.replace('verdict: PASS', 'verdict: NEEDS-WORK'),
+      text(body, 'findings:\n  - severity: major\n    text: lib/a.mjs:1 - Broken\n'),
+      text(body, 'findings:\n  - severity: minor\n    text: lib/a.mjs:1 - Context\n')]) {
+      const inventory = fixture(bytes).collect();
+      assert.deepEqual(inventory.findings, [], bytes);
+      assert.deepEqual(inventory.issues, [], bytes);
+    }
+  }
+});
+
 test('near headings and unclosed or over-indented fences are issues, while valid rows survive malformed lines', () => {
   for (const body of ['## Batched minors\n- lib/a.mjs:1 - Lost', '### Batched Minors\n- lib/a.mjs:1 - Lost',
-    '```md\n' + plain, '    ```md\n' + plain]) {
+    '```md\n' + plain, '    ```md\n' + plain, plain + '\n```md\nunclosed']) {
     const inventory = fixture(text(body)).collect();
     assert.equal(inventory.issues.length, 1, body);
     assert.ok(inventory.findings.some(f => f.malformed), body);
+    assert.ok(inventory.issues[0].findings.length, body);
+    assert.ok(inventory.issues[0].findings.every(key => inventory.findings.some(f => f.key === key)), body);
   }
   const f = fixture(text(plain + '\nwrapped continuation'));
   const before = f.collect();

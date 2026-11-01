@@ -1578,8 +1578,17 @@ keys and obsolete exact closeout inputs are recorded unselected and dropped in
 the same transaction, using existing `item.added`/`item.closed` events. Their
 original checks, evidence, IDs and effect owners remain the deduplication owners;
 later policy changes, ancestor reopening or request requeues do not revive them.
-A current closeout defect or refusal still creates a selected decision. Damaged
-queue evidence refuses creation rather than attesting obsolescence. Existing
+A closeout key covers cwd, run and signal, without source generation. A later
+source with a new refusal therefore also returns the original retired decision;
+its owner must explicitly re-judge and reopen that decision through the ordinary
+record path before selecting it. This limit preserves the old captured check and
+does not attest that the later defect is resolved.
+A current closeout defect or refusal without an existing owner still creates a
+selected decision. Creation and admission share the finite turn's
+`currentCloseoutEntries` view, including report targets held only in record events,
+with source-matched report evaluations. Damaged evidence for the subject refuses
+creation rather than attesting obsolescence; an unrelated damaged queue file
+does not prevent its decision. Existing
 open proposals require an explicit recorded disposition; admission never closes
 them automatically or clears their original effects. ENG-1351 records that
 one-time disposition, with individual judgment for the five ancestry-held cases.

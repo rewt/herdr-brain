@@ -442,6 +442,10 @@ for(const registered of [true,false])test(`finite refusal decision is owned once
   const f=fixture(t);fs.writeFileSync(path.join(f.scratch,'.identity-root'),'fixture');
   fs.writeFileSync(f.file,JSON.stringify({...f.receipt,at:new Date().toISOString()}));f.report();
   const entry=currentCloseoutEntries(f.common,f.org,events(f))[0];
+  assert.equal(entry.reportCloseout,true);
+  assert.equal(fs.existsSync(path.join(f.common,'closeout/entries',entry.key+'.json')),false);
+  const entries=path.join(f.common,'closeout/entries');fs.mkdirSync(entries,{recursive:true});
+  fs.writeFileSync(path.join(entries,'unrelated-damaged.json'),'{');
   const [refusal]=f.append([{type:'closeout.evaluated',identity:f.common,key:entry.key,source:entry.source,
     run:entry.run,item:entry.item,revision:closeoutRevision(entry,events(f)),completed:false,reason:'EPERM native refusal'}]);
   if(registered)transact(f.org,current=>({add:registerCloseoutWait(entry,refusal,current,[entry])}),{actor:'fixture'});
@@ -457,9 +461,23 @@ for(const registered of [true,false])test(`finite refusal decision is owned once
   for(let pass=0;pass<2;pass++)service.pass();
   const decisions=[...fold(events(f)).items.values()].filter(i=>i.role==='decision');
   assert.equal(decisions.length,1);
+  assert.equal(decisions[0].meta.queue_selected,true);
+  assert.equal(decisions[0].closed,null);
+  assert.equal(decisions[0].meta.outcome_disposition,undefined);
   assert.equal(decisions[0].meta.uncertain_outcome.check.key,`closeout:${entry.key}`);
   assert.equal(decisions[0].meta.uncertain_outcome.check.status,'defect');
   assert.deepEqual(decisions[0].meta.uncertain_outcome.check.subject.source,entry.source);
+  const rows=()=>fs.readFileSync(path.join(f.directory,'passes.jsonl'),'utf8').trim().split('\n').map(JSON.parse);
+  assert.equal(rows().some(r=>r.item===decisions[0].id&&r.code==='OBSOLETE_OUTCOME_DECISION'),false);
+  const config=JSON.parse(fs.readFileSync(path.join(f.repo,'.lane.json')));
+  config.routes={unblock:{kind:'codex',model:'fixture',effort:'high'}};
+  fs.writeFileSync(path.join(f.repo,'.lane.json'),JSON.stringify(config));
+  createLineService({repo:f.repo,org:f.org,to:'brain-chat',env:f.env,maxStarts:1,capacity:()=>({cap:7,count:0}),closeoutMeasure:()=>{},
+    recordNotice:d=>({id:d.id,state:'record-only'}),command:(_exe,args)=>{
+      commands.push(args);return{status:0,stdout:'{}',stderr:''};
+    }}).pass();
+  assert.ok(commands.some(args=>args[0]===path.join(sourceRoot,'dispatch/dispatch.mjs')&&args[1]===decisions[0].id),'available capacity reaches ordinary dispatch');
+  assert.equal(rows().some(r=>r.item===decisions[0].id&&r.code==='OBSOLETE_OUTCOME_DECISION'),false);
   assert.deepEqual(f.read().actions,[]);
   assert.equal(commands.some(args=>args.includes('drain')),false,'a refusal never reaches a native executor');
   assert.deepEqual(fs.readFileSync(f.eventFile).subarray(0,original.length),original);
@@ -469,6 +487,26 @@ for(const registered of [true,false])test(`finite refusal decision is owned once
   fs.writeFileSync(path.join(lock,'owner.json'),JSON.stringify({pid:process.pid,identity:'reused process birth'}));
   assert.throws(()=>queueOutcomeDecision(options),/actual owned closeout-turn lock/);
   assert.throws(()=>queueOutcomeDecision({...options,check:{...check,key:'dispatch:foreign'}}),/only closeout decisions/);
+});
+
+test('finite refusal decision is owned once completed report target remains retired',t=>{
+  const f=fixture(t);f.report();
+  const entry=currentCloseoutEntries(f.common,f.org,events(f))[0];
+  assert.equal(entry.reportCloseout,true);
+  const entries=path.join(f.common,'closeout/entries');fs.mkdirSync(entries,{recursive:true});
+  assert.equal(fs.existsSync(path.join(entries,entry.key+'.json')),false);
+  f.append([{type:'closeout.evaluated',identity:f.common,key:entry.key,source:entry.source,run:entry.run,
+    revision:closeoutRevision(entry,events(f)),completed:true,reason:'completed original report target'}]);
+  const check={key:`closeout:${entry.key}`,subject:{key:entry.key,run:entry.run,source:entry.source}},
+    options={repo:f.repo,org:f.org,env:f.env,check},release=noticeLock(path.join(f.directory,'pass.lock'));
+  try{
+    fs.writeFileSync(path.join(entries,entry.key+'.json'),'{');
+    assert.throws(()=>queueOutcomeDecision(options),/JSON|position|property/i,'subject corruption remains a refusal');
+    fs.unlinkSync(path.join(entries,entry.key+'.json'));
+    const result=queueOutcomeDecision(options),item=fold(events(f)).items.get(result.item);
+    assert.equal(item.meta.queue_selected,false);assert.equal(item.closed.as,'dropped');
+    assert.equal(item.meta.outcome_disposition.reason,'cleanup request completed');
+  }finally{release();}
 });
 
 test('a retirement-owned allocation refuses a new dispatch owner',t=>{

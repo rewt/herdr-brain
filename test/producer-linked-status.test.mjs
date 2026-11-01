@@ -185,7 +185,7 @@ test('outcome retirement preserves current closeout refusals and retires only ob
       assert.deepEqual(queueOutcomeDecision(options),result);assert.equal(fold(loadEvents(org).events).items.get(item.id).closed.as,'dropped');
     }
   }
-  fs.writeFileSync(path.join(entries,'damaged.json'),'{');
+  fs.writeFileSync(path.join(entries,'unknown.json'),'{');
   assert.throws(()=>queueOutcomeDecision({repo,org,env,check:{key:'closeout:unknown',subject:{key:'unknown',source:{seq:1}}}}),/JSON|position|property/i,'corrupt queue is not proof of obsolescence');
 });
 

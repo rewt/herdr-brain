@@ -9,10 +9,22 @@ import {protectRecordMutation} from '../lib/record-guard.mjs';
 import {serviceRecordBinding} from './record-inbox.mjs';
 import {uncertainOutcomeDoctrine} from '../lib/uncertain-outcome.mjs';
 import {closeoutNextStage,closeoutWait,closeoutWaitState} from '../lib/closeout-status.mjs';
-import {readCloseoutEntries,closeoutEvaluations} from '../lib/closeout.mjs';
+import {currentCloseoutEntries,closeoutEvaluation,closeoutEvaluations} from '../lib/closeout.mjs';
 import {recordOnlyJudgment} from './decision-policy.mjs';
 const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
 export const outcomeDecisionKey=(identity,org,key)=>createHash('sha256').update(JSON.stringify([identity,org,key])).digest('hex');
+
+// Match the finite turn, including record-only report targets and their exact
+// source evaluation. A later report cannot inherit an older source's completion.
+function currentView(identity,org,events,options) {
+  const entries=currentCloseoutEntries(identity,org,events,options),
+    evaluations=new Map(closeoutEvaluations(identity,org,events).map(e=>[e.key,e]));
+  for(const entry of entries)if(entry.reportCloseout){
+    const prior=closeoutEvaluation(entry,events);
+    if(prior)evaluations.set(entry.key,prior);else evaluations.delete(entry.key);
+  }
+  return {events,entries,evaluations};
+}
 
 // Admission and idle diagnosis observe the same queued cleanup policy. Cache
 // only within one scan; a fresh event snapshot refreshes its cleanup view.
@@ -20,7 +32,7 @@ export function observeOutcomeDecisions({identity,org}) {
   let view;
   return (item,{events})=>{
     if(!item?.meta?.uncertain_outcome)return null;
-    if(view?.events!==events)view={events,entries:readCloseoutEntries(identity,{onInvalid:()=>{}}),evaluations:new Map(closeoutEvaluations(identity,org,events).map(e=>[e.key,e]))};
+    if(view?.events!==events)view=currentView(identity,org,events,{onInvalid:()=>{}});
     return obsoleteOutcomeDecision(item,view);
   };
 }
@@ -68,9 +80,8 @@ export function queueOutcomeDecision({repo,org,env,check,owner='pass'}) {
     // ancestors must not revive it. A fresh, current defect remains ordinary work.
     const reason=recordOnlyJudgment({meta:{uncertain_outcome:{check}}})
       ? 'automatic review/dispatch outcome judgments are retired'
-      : !check.key.startsWith('closeout:')?null:obsoleteOutcomeDecision({meta:{uncertain_outcome:{check}}},{events,
-        entries:readCloseoutEntries(binding.identity),
-        evaluations:new Map(closeoutEvaluations(binding.identity,org,events).map(e=>[e.key,e]))});
+      : !check.key.startsWith('closeout:')?null:obsoleteOutcomeDecision({meta:{uncertain_outcome:{check}}},
+        currentView(binding.identity,org,events,{keys:[check.subject.key]}));
     const id=nextItemId(state,{kind:'work',role:'decision'});
     const mutation={add:[intentFirstCreation({type:'item.added',id,kind:'work',role:'decision',title:'Resolve a missing completion producer or recorded refusal',
       ...(state.items.has(check.subject.item)?{parent:check.subject.item}:{}),

@@ -1450,6 +1450,17 @@ STOP/HOLD and original uncertain/refused effects. This scope closes only the
 original native allocation and grants no Git disposal or preservation proof.
 The ordinary vacancy census settles remaining absence separately.
 
+A detached dispatch stopped by project STOP/HOLD or service STOP before native
+launch may receive one fresh attempt on the first eligible pass after the barrier
+lifts. Its exact typed failure, terminal row and published completion must agree
+on the original request and explicit zero native execution; its driver lock and
+arbitration tickets must be gone. Missing, ambiguous, native or changed evidence
+stays held. The new action shares the item subject lock, saves a separate ask and
+links `stop_recovery` plus `line-service.dispatch-readmitted` to the original
+proof. The original journal, terminal receipt and acknowledgement remain intact;
+restart never replays the original request or repeats the fresh action. Current
+readiness, capacity, source, ownership and STOP/HOLD guards still apply.
+
 Final reports and authorized abandonments bind their original run/claim, dispatch,
 launch receipt, common directory and worktree/branch generation in the source
 transaction. Missing allocation or native identity produces a typed binding

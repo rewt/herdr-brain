@@ -36,6 +36,7 @@ import {serviceSource,acceptedRuntime} from './runtime.mjs';
 import {installedContext} from './cutoff.mjs';
 import { discoverChanges,dispatchInput,phase0Boundary,morningDigest,recordReviewResults,reviewCompletionPlan,recordReviewCompletion,ensureReviewBoundary,canonicalReviewIndex,observeReviewHealth } from './phase1.mjs';
 import {preflightContinuation,initialCapacityRefusal,initialBriefRefusal,initialSourceRootRefusal} from '../dispatch/preflight.mjs';
+import {stoppedDispatchReadmission} from '../dispatch/stopped-readmission.mjs';
 import {sourceCompletionProof,preEffectSourceHold,queueSourceException} from './source-completion.mjs';
 import {createWorkerBrief,projectExceptionAddress} from '../lib/worker-brief.mjs';
 import {observeReviewProgress,recoverServiceReview} from './review-recovery.mjs';
@@ -726,9 +727,13 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
             // child's exact terminal refusal stops that effect, without
             // changing the saved acknowledgement or issuing another dispatch.
             entry.failure=status.failure;entry.state='held';entry.error=`Original dispatch stopped: ${status.failure.code}`;save();
-            effects.outcome_decisions??={};
-            effects.outcome_decisions[key]??=queueOutcomeDecision({repo,org,env:childEnv,check:{key,
-              subject:{item,run:status.run,journal:status.journal,attempt:status.attempt},failure:status.failure,status,outcome}});
+            const stopped=stoppedDispatchReadmission({journal:status.journal,repo,org,common:project.identity,item,
+              brief:path.join(directory,`${digest(key)}.ask.md`),input:entry.admission?.input??key.split(':').slice(2).join(':'),events:snapshot.events});
+            if(!stopped&&!entry.stop_recovery){
+              effects.outcome_decisions??={};
+              effects.outcome_decisions[key]??=queueOutcomeDecision({repo,org,env:childEnv,check:{key,
+                subject:{item,run:status.run,journal:status.journal,attempt:status.attempt},failure:status.failure,status,outcome}});
+            }
             save();stale=true;
           }
           else if(!outcome.producer&&!['not-started','dispatch-complete'].includes(outcome.status)){
@@ -797,10 +802,10 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         if (roleIs(item, 'REV') && !isQueueReview(item)) { note(`dispatch:${item.id}`, 'T2 legacy/manual review queue binding UNKNOWN; retain existing owner/attempt'); observation.retain('legacy review binding');continue; }
         try {
           const key = `dispatch:${item.id}:${input}`;
-          let continuation,retryAdmission,briefRecovery,sourceRecovery,dispatchKey=key;
+          let continuation,retryAdmission,briefRecovery,sourceRecovery,stopRecovery,dispatchKey=key;
           if (effects.actions[key]) {
             const original=effects.actions[key];
-            dispatchKey=original.prejournal_recovery?.key??key;
+            dispatchKey=original.stop_recovery?.key??original.prejournal_recovery?.key??key;
             const prior=effects.actions[dispatchKey];
             if(!prior)throw Error('pre-journal recovery intent has UNKNOWN outcome; retain owner');
             if(prior.original_outcome?.producer&&!prior.recorded_dispatch_status){log({action:'dispatch-producer-pending',key:dispatchKey});continue;}
@@ -808,10 +813,15 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
             if(typeof result==='string')try{result=JSON.parse(result);}catch{}
             if(!result?.journal&&prior.receipt?.stdout)try{result=JSON.parse(prior.receipt.stdout);}catch{}
             if(!result?.journal&&prior.original_outcome?.journal)result={journal:prior.original_outcome.journal};
-            if(result?.journal)continuation=preflightContinuation({journal:result.journal,repo,org,common:project.identity,root:fs.realpathSync(sourceRoot),events:snapshot.events});
+            if(result?.journal){
+              if(!original.stop_recovery&&!original.prejournal_recovery)stopRecovery=stoppedDispatchReadmission({journal:result.journal,repo,org,common:project.identity,item:item.id,
+                brief:path.join(directory,`${digest(key)}.ask.md`),input,events:snapshot.events});
+              if(stopRecovery)dispatchKey=`dispatch-recovered:${item.id}:${digest([key,stopRecovery])}`;
+              else continuation=preflightContinuation({journal:result.journal,repo,org,common:project.identity,root:fs.realpathSync(sourceRoot),events:snapshot.events});
+            }
             else {
               retryAdmission=initialCapacityRefusal(prior);
-              if(!retryAdmission&&!original.prejournal_recovery){
+              if(!retryAdmission&&!original.prejournal_recovery&&!original.stop_recovery){
                 const contract=()=>{
                   const route=routeFor(item,config),brief=path.join(directory,`${digest(key)}.ask.md`);
                   return createWorkerBrief({item,ask:brief,askText:fs.readFileSync(brief,'utf8'),project:repo,org,lane:`line-${item.id.toLowerCase()}-${item.runs.length+1}`,route,harness:resolveLaunchRoute(config,{route}).kind,reviewRoute:reviewQueueRoute(config),exception:projectExceptionAddress(repo,config,route,childEnv)});
@@ -821,7 +831,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
                 if(briefRecovery)dispatchKey=`dispatch-recovered:${digest([key,briefRecovery])}`;
               }
             }
-            if(!continuation&&!retryAdmission&&!briefRecovery){log({ action: 'dispatch-retained', key:dispatchKey, state: prior.state });if(roleIs(item,'REV')&&prior.state!=='complete'&&!prior.original_outcome?.error)note(key,prior.error??'original review launch outcome retained; no duplicate launch',{item:item.id,review:true});continue;}
+            if(!continuation&&!retryAdmission&&!briefRecovery&&!stopRecovery){log({ action: 'dispatch-retained', key:dispatchKey, state: prior.state });if(roleIs(item,'REV')&&prior.state!=='complete'&&!prior.original_outcome?.error)note(key,prior.error??'original review launch outcome retained; no duplicate launch',{item:item.id,review:true});continue;}
           }
           const reviewTarget = isQueueReview(item) ? validateQueuedReview({ item, state: snapshot.state, events: snapshot.events, org, repo,...(continuation?{allowJournal:continuation.journal}:{}) }) : null;
           const route = continuation?.job.route??(reviewTarget ? reviewQueueRoute(config, item, snapshot.state) : routeFor(item, config));
@@ -841,6 +851,18 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
               log({action:'admission-attempted',...admission,start:starts});
               return JSON.parse(cli('dispatch/dispatch.mjs',args));
             };
+            if(stopRecovery){
+              const proof=stoppedDispatchReadmission({journal:stopRecovery.journal,repo,org,common:project.identity,item:item.id,
+                brief:path.join(directory,`${digest(key)}.ask.md`),input,events:fresh.events});
+              if(JSON.stringify(proof)!==JSON.stringify(stopRecovery))throw Error('original stopped dispatch proof changed before re-admission');
+              transact(org,events=>{
+                const checked=stoppedDispatchReadmission({journal:proof.journal,repo,org,common:project.identity,item:item.id,
+                  brief:path.join(directory,`${digest(key)}.ask.md`),input,events});
+                if(JSON.stringify(checked)!==JSON.stringify(proof))throw Error('original stopped dispatch changed during re-admission');
+                return{add:[{type:'line-service.dispatch-readmitted',project:project.identity,org,item:item.id,key,recovery_key:dispatchKey,proof}]};
+              },{actor:'line-service',strictTail:true});
+              effects.actions[key].stop_recovery={...proof,key:dispatchKey,at:now()};save();log({action:'stopped-dispatch-recovery',key,recovery:effects.actions[key].stop_recovery});
+            }
             if(briefRecovery){
               if(sourceRecovery){
                 const proof=initialSourceRootRefusal({entry:effects.actions[key],events:fresh.events,item:item.id,outcome:originalDispatchOutcome({repo,org,common:project.identity,item:item.id,brief:path.join(directory,`${digest(key)}.ask.md`),events:fresh.events}),release:bundleRelease(),env:childEnv});
@@ -858,7 +880,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
               if(reviewTarget)validateQueuedReview({item:current,state:fresh.state,events:fresh.events,org,repo,allowJournal:continuation.journal});
               return startDispatch(['--retry',continuation.journal,'--repo',repo,'--org',org,'--continue-preflight']);
             }
-            const brief = path.join(directory, `${digest(key)}.ask.md`);
+            const brief = path.join(directory, `${digest(stopRecovery?dispatchKey:key)}.ask.md`);
             const target = reviewTarget ? validateQueuedReview({ item: current, state: fresh.state, events: fresh.events, org, repo }) : null;
             const correction = correctionSource({ item: current, state: fresh.state, events: fresh.events, repo, org });
             writeFileAtomic(brief, target ? reviewQueueBrief(current) : isDecision(current) ? decisionBrief(current) : lineWorkAsk(current, correction?.brief ?? ''), 0o600);

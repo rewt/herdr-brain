@@ -18,6 +18,7 @@ import {dispatchInput} from '../line-service/phase1.mjs';
 import {closeoutKey} from '../lib/closeout.mjs';
 import {closeoutWaitId} from '../lib/closeout-status.mjs';
 import {commandIntent,finishCommand,forgetActiveCommand} from '../lib/command-receipt.mjs';
+import {stoppedDispatchReadmission} from '../dispatch/stopped-readmission.mjs';
 import {setup as closeoutFixture,events as closeoutEvents,evaluations as closeoutEvaluations} from './helpers/closeout-fixture.mjs';
 
 function fixture(t) {
@@ -57,6 +58,86 @@ function fixture(t) {
     haltAfter:100,capacity: () => ({ count: 0, cap: 2 }), recordNotice: data => { notes.push({ to:'supervisor-test',text:data.reason,options:data }); return { id:data.id,state:'record-only' }; }, ...overrides });
   return { repo, org, env, record, git, add, show, calls, refreshes, notes, command, service, setFailure: value => { fail = value; } };
 }
+
+function stoppedFixture(t,{reason='Supervisor STOP appeared before dispatch; no new worker launched',stage='start'}={}) {
+  const f=fixture(t),item=f.add('HOLD-stopped engineering'),service=f.service(),common=gitProject(f.repo).identity;
+  const input=`${f.show(item).created.seq}:ordinary`,key=`dispatch:${item}:${input}`;
+  const brief=path.join(service.directory,createHash('sha256').update(JSON.stringify(key)).digest('hex')+'.ask.md');
+  fs.writeFileSync(brief,'# Original assignment\n');
+  const journal=path.join(f.org,'dispatch/stopped-original.json');fs.mkdirSync(path.dirname(journal),{recursive:true});
+  const job={token:'stopped-original',repo:f.repo,org:f.org,common,item,brief,lineInput:input,stage,run:null,
+    release:{root:sourceRoot},completion_protocol:1,detached:true,detached_refused:true,native_launch_attempted:false,error:reason,
+    failure:{code:'DISPATCH_STOPPED',kind:'fence',stage,native_launch_attempted:false}};
+  const bytes=JSON.stringify(job);fs.writeFileSync(journal,bytes);fs.mkdirSync(journal+'.driver');
+  const terminal={journal,stage,run:null,exit_code:0,error:reason,code:'DISPATCH_STOPPED',native_launch_attempted:false};
+  fs.writeFileSync(journal+'.driver/results.jsonl',JSON.stringify(terminal)+'\n');
+  const completion={type:'dispatch.completed',project:common,journal,attempt:job.token,item,run:null,stage,exit_code:0,
+    native_launch_attempted:false,failure:job.failure,request_sha256:createHash('sha256').update(bytes).digest('hex')};
+  transact(f.org,()=>({add:[completion]}));
+  const original={state:'held',at:'2026-11-01T05:00:00Z',error:'Original dispatch stopped: DISPATCH_STOPPED',
+    result:{result:'detached',journal,run:null,item,pid:12345},failure:job.failure};
+  const file=path.join(service.directory,'effects.json');fs.writeFileSync(file,JSON.stringify({identity:common,org:f.org,actions:{[key]:original}}));
+  const proof=()=>({journal,repo:f.repo,org:f.org,common,item,brief,input,events:loadEvents(f.org).events});
+  return {...f,item,service,common,key,brief,journal,job,terminal,completion,original,file,bytes,proof};
+}
+
+for(const fence of ['HOLD','service STOP'])test(`HOLD-stopped dispatch starts once on the first pass after ${fence} lifts and retains its original attempt`,t=>{
+  const f=stoppedFixture(t,{...(fence==='service STOP'?{reason:'service STOP appeared before detached effect',stage:'open'}:{})});
+  const barrier=fence==='HOLD'?path.join(f.repo,'.lane/supervisor/HOLD'):path.join(f.service.directory,'STOP');
+  fs.mkdirSync(path.dirname(barrier),{recursive:true});fs.writeFileSync(barrier,'proving hold');
+  assert.match(f.service.pass().held,/STOP|HOLD/);assert.equal(f.calls.length,0);
+  fs.unlinkSync(barrier);
+  assert.equal(f.service.pass().result,'pass-complete');assert.equal(f.calls.length,1,'first eligible pass dispatches');
+  const restarted=createLineService({repo:f.repo,org:f.org,to:'supervisor-test',env:f.env,command:f.command,
+    haltAfter:100,capacity:()=>({count:0,cap:2}),recordNotice:data=>({id:data.id,state:'record-only'})});
+  restarted.pass();restarted.pass();assert.equal(f.calls.length,1,'restart cannot double-launch');
+  const call=f.calls[0];assert.equal(call.args[1],f.item);assert.ok(!call.args.includes('--retry'));
+  assert.notEqual(call.args[call.args.indexOf('--brief')+1],f.brief);
+  assert.equal(fs.readFileSync(f.journal,'utf8'),f.bytes);assert.equal(fs.readFileSync(f.brief,'utf8'),'# Original assignment\n');
+  assert.equal(fs.readFileSync(f.journal+'.driver/results.jsonl','utf8'),JSON.stringify(f.terminal)+'\n');
+  const actions=JSON.parse(fs.readFileSync(f.file)).actions;
+  assert.deepEqual(actions[f.key].result,f.original.result);assert.deepEqual(actions[f.key].failure,f.original.failure);
+  assert.equal(actions[actions[f.key].stop_recovery.key].state,'complete');
+  const admissions=loadEvents(f.org).events.filter(e=>e.type==='line-service.dispatch-readmitted');
+  assert.equal(admissions.length,1);assert.equal(admissions[0].proof.native_launch_attempted,false);
+  assert.equal(loadEvents(f.org).events.some(e=>e.type==='item.added'&&e.meta?.uncertain_outcome),false);
+});
+
+test('HOLD-stopped dispatch requires exact original zero-launch evidence and released driver ownership',t=>{
+  const f=stoppedFixture(t),args=f.proof(),save=job=>fs.writeFileSync(f.journal,JSON.stringify(job));
+  assert.ok(stoppedDispatchReadmission(args));
+  for(const patch of [{native_launch_attempted:true},{native_launch_attempted:null},{run:'R-1'},{worker:{}},{launchProcess:{}},{sessionBinding:{}},
+    {stage:'launching'},{repo:'/foreign'},{lineInput:'other'},{detached_refused:false},{error:'EPERM native refusal'},
+    {failure:{...f.job.failure,code:'EACCES'}},{failure:{...f.job.failure,native_launch_attempted:null}}]){
+    save({...f.job,...patch});assert.equal(stoppedDispatchReadmission(args),null,JSON.stringify(patch));
+  }
+  save(f.job);
+  for(const patch of [{native_launch_attempted:null},{journal:'/foreign'},{run:'R-1'},{code:'EACCES'},{error:'unknown'}, {stage:'worker'}]){
+    fs.writeFileSync(f.journal+'.driver/results.jsonl',JSON.stringify({...f.terminal,...patch})+'\n');
+    assert.equal(stoppedDispatchReadmission(args),null,JSON.stringify(patch));
+  }
+  fs.writeFileSync(f.journal+'.driver/results.jsonl',JSON.stringify(f.terminal)+'\n');
+  for(const patch of [{project:'/foreign'},{attempt:'other'},{request_sha256:'changed'},{run:'R-1'},{native_launch_attempted:null},{failure:null},{exit_code:1}]){
+    assert.equal(stoppedDispatchReadmission({...args,events:args.events.map(e=>e.type==='dispatch.completed'?{...e,...patch}:e)}),null,JSON.stringify(patch));
+  }
+  assert.equal(stoppedDispatchReadmission({...args,events:[]}),null);
+  assert.equal(stoppedDispatchReadmission({...args,events:[...args.events,{type:'run.started',item:f.item,seq:99999}]}),null);
+  fs.writeFileSync(f.journal+'.lock','original driver');assert.equal(stoppedDispatchReadmission(args),null);fs.unlinkSync(f.journal+'.lock');
+  fs.mkdirSync(f.journal+'.locks');fs.writeFileSync(f.journal+'.locks/original','ticket');assert.equal(stoppedDispatchReadmission(args),null);
+  fs.unlinkSync(f.journal+'.locks/original');assert.ok(stoppedDispatchReadmission(args));
+  fs.unlinkSync(f.journal+'.driver/results.jsonl');assert.equal(stoppedDispatchReadmission(args),null);
+  f.service.pass();assert.equal(f.calls.length,0,'missing terminal evidence stays held');
+});
+
+test('HOLD-stopped dispatch rechecks the original proof after capacity observation before a fresh command',t=>{
+  const f=stoppedFixture(t);
+  const service=createLineService({repo:f.repo,org:f.org,to:'supervisor-test',env:f.env,command:f.command,haltAfter:100,
+    recordNotice:data=>({id:data.id,state:'record-only'}),capacity:()=>{
+      fs.writeFileSync(f.journal,JSON.stringify({...f.job,native_launch_attempted:true}));return{count:0,cap:2};
+    }});
+  service.pass();assert.equal(f.calls.length,0);
+  assert.equal(loadEvents(f.org).events.some(e=>e.type==='line-service.dispatch-readmitted'),false);
+});
 
 test('REV-63 session retirement advances to physical cleanup',t=>{
   for(const refused of [false,true]){

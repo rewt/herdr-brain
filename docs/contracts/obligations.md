@@ -38,14 +38,14 @@ disjoint later captures and cap1; the index does not make those judgments.
 
 | Kind and original subject | Recorded outcome / limit |
 | --- | --- |
-| `report-intake`, run/hash/claim | Same run, start, claim, file and ingested hash. |
+| `report-intake`, run/hash/claim | Same run, start, claim, file and ingested hash. Earlier drafts superseded by a different ingest in the same scope retain their original hash, stay unresolved and are diagnosed unsupported with the superseding reference. |
 | `review-handoff`, run | Original single-round queue item with matching producer/report capture, or native-landing capture. Every recorded landing head must remain covered; the queue command still validates provenance. |
 | `closeout`, common/key/source sequence/type | Exact completed `closeout.evaluated` from the existing closer; resource receipt details are retained. |
 | `closeout-binding`, run/source sequence | Explicit unsupported binding diagnosis and original owner. Later absence is not completion. |
-| `closeout-wait`, common/key/wait ID | Worker-report status requires the original claim and real report completion reference. Other producer types/defects remain explicitly unsupported here, with exact descriptors/statuses for the existing `closeoutWaitState` validator. Classification never acknowledges an effect. |
+| `closeout-wait`, common/key/wait ID | Exact producer descriptors and recorded statuses plus a completed parent `closeout.evaluated` for the same common/key/source. Worker-report statuses require the original claim and report reference; native-command and lane-removal statuses consume the closer's recorded `closeout.effect` completion reference. Both prerequisite orders work. Missing, failed, UNKNOWN, other producer types and defects stay pending and unsupported. Original statuses, descriptors and the parent reference are retained in the outcome; no native validation or attempt is replaced. Classification never acknowledges an effect. |
 | `native-outcome`, common/key/source/intent | Exact intent-linked native result, positive never-started or original refusal. Unknown results remain pending; legacy settlement retains the UNKNOWN label. Git-removal and other unvalidated receipts stay unsupported. No executor or continuation is added. |
 | `dispatch-outcome`, run/attempt/journal | Exact project/item/run/attempt/journal `dispatch.completed`, including an actual failed exit. |
-| `source-completion`, run/report hash | Explicit conditional `item.closed` for that original run/report. Historical prose-only closes are not inferred. |
+| `source-completion`, run/report hash | Explicit conditional `item.closed` for that original run/report. An already-closed item without that exact receipt is historical and unsupported, retaining its close observation without inferring an outcome. Reopening clears that diagnosis. |
 | `unsupported`, pending type/source sequence | Unknown `*.waiting`, `*.requested` or explicit `pending:true` facts are visible with their original payload and project-supervisor owner. |
 
 The inventory is deliberately a record-fact inventory. Saved file-only service,

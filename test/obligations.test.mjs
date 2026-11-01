@@ -64,6 +64,44 @@ test('a later landing or conflicting capture retains original outcome and expose
   assert.deepEqual(r.outcome, outcome); assert.deepEqual(r.uncovered_heads, [later]);
 });
 
+test('review coverage recomputes acceptance without a stale capture diagnosis in either prerequisite order', () => {
+  for (const order of [[landing, queue, report], [landing, report, queue]]) {
+    const s = fold(stampEvents([...start, ...order])), row = rows(s, 'review-handoff')[0];
+    assert.equal(row.supported, true); assert.equal(row.diagnosis, null);
+    const original = structuredClone(row.outcome);
+    add(s, [{ ...queue, id: 'REV-other', meta: { ...queue.meta, review_target: { ...queue.meta.review_target, reportHash: 'unmatched' } } }]);
+    assert.equal(row.supported, true); assert.equal(row.diagnosis, null);
+    assert.equal(row.queues[1].accepted, false); assert.deepEqual(row.outcome, original);
+    add(s, [{ ...landing, head: later, base: head }]);
+    assert.equal(row.supported, true); assert.equal(obligationPending(row), true);
+    assert.match(row.diagnosis, /uncovered source/); assert.doesNotMatch(row.diagnosis, /capture differs/);
+  }
+});
+
+test('superseded report drafts retain their hash and are diagnosed only within the same run, start, claim and file', () => {
+  const available = { type: 'report.available', run: 'R-1', sha256: 'draft', file: report.file, started_seq: 2, claim_generation: 3 };
+  for (const patch of [{}, { run: 'R-other' }, { started_seq: 999 }, { claim_generation: 999 }, { file: 'other.md' }]) {
+    const s = fold(stampEvents([...start, { ...available, ...patch }, report])), row = rows(s, 'report-intake')[0];
+    assert.equal(row.outcome, null); assert.equal(row.report.sha256, 'draft');
+    assert.equal(row.supported, Object.keys(patch).length !== 0);
+    if (!Object.keys(patch).length) { assert.match(row.diagnosis, /superseded/); assert.equal(row.superseded_by.sha256, hash); }
+  }
+  const s = fold(stampEvents([...start, available, { ...report, source: report.file, file: 'archive/R-1.md' }]));
+  assert.equal(rows(s, 'report-intake')[0].supported, false);
+});
+
+test('historical closes stay unsupported without inferring completion, including close-before-report and reopen', () => {
+  const close = { type: 'item.closed', id: 'ENG-1', as: 'done', note: 'legacy close' };
+  for (const order of [[report, close], [close, report]]) {
+    const s = fold(stampEvents([...start, ...order])), row = rows(s, 'source-completion')[0];
+    assert.equal(row.outcome, null); assert.equal(row.supported, false); assert.match(row.diagnosis, /historical/);
+    add(s, [{ type: 'item.reopened', id: 'ENG-1' }]);
+    assert.equal(row.supported, true); assert.equal(row.diagnosis, null);
+    add(s, [{ ...close, completed_run: 'R-1' }]);
+    assert.equal(obligationPending(row), false); assert.equal(row.outcome.result.completed_run, 'R-1');
+  }
+});
+
 test('a report alone has no inferred landed target and no-source eligibility remains explicit', () => {
   const s = fold(stampEvents([...start, report]));
   const r = obligationInventory(s).rows.find(r => r.kind === 'review-handoff');
@@ -101,7 +139,7 @@ test('closeout original source and resource outcomes remain separate from wait c
   assert.deepEqual(request.target.panes, target.panes);
 });
 
-test('worker-report wait validates the original completion reference and claim; other producer kinds stay diagnosed', () => {
+test('worker-report wait validates the original completion reference and claim; incomplete native waits stay diagnosed', () => {
   const producer = { kind: 'worker-report', run: 'R-1', claim: 3 };
   const wait = { type: 'closeout.waiting', identity: project, key: 'key', source: { seq: 1, type: 'cleanup.bound' }, revision: 3,
     wait_id: 'wait', waiting: { owner: 'worker-report', producers: [producer] } };
@@ -109,13 +147,59 @@ test('worker-report wait validates the original completion reference and claim; 
   const row = rows(s, 'closeout-wait')[0], status = { type: 'closeout.producer-status', identity: project, key: 'key', source: wait.source, wait_id: 'wait', producer,
     status: 'complete', completion: { seq: 9999, type: 'report.ingested' } };
   add(s, [status]); assert.equal(row.outcome, null);
-  add(s, [{ ...status, completion: { seq: 5, type: 'report.ingested' } }]); assert.ok(row.outcome);
+  add(s, [{ type: 'closeout.evaluated', identity: project, key: 'key', source: wait.source, completed: true },
+    { ...status, completion: { seq: 5, type: 'report.ingested' } }]); assert.ok(row.outcome);
   const changed = fold(stampEvents([...start, wait, { type: 'run.claimed', run: 'R-1', owner: {} }, report,
     { ...status, completion: { seq: 6, type: 'report.ingested' } }]));
   assert.equal(rows(changed, 'closeout-wait')[0].outcome, null);
   add(s, [{ ...wait, wait_id: 'native', waiting: { owner: 'original-run', producers: [{ kind: 'native-command', intent: 'UNKNOWN' }] } }]);
   assert.equal(rows(s, 'closeout-wait')[1].supported, false);
   assert.match(rows(s, 'closeout-wait')[1].diagnosis, /closeoutWaitState/);
+});
+
+test('native and lane-removal waits consume exact statuses and completed parent in either order without replacing attempts', () => {
+  const source = { seq: 4, type: 'report.ingested' }, scope = { identity: project, key: 'key', source, run: 'R-1' };
+  const native = { kind: 'native-command', key: 'key', source, action: 'agent-exit-requested', intent: 'original-intent', pane: 'pane', terminal: 'terminal', session: 'session' };
+  const removal = { kind: 'lane-removal', key: 'sibling-key', source: { seq: 1, type: 'item.added' }, cwd: '/removed/sibling', head };
+  const waiting = { owner: 'lane-closeout', producers: [native, removal] };
+  const target = { common: project, key: 'key', run: 'R-1', cwd: '/removed/producer', head };
+  const intent = { type: 'closeout.effect', ...scope, effect: native.intent, outcome: { action: native.action, pane: native.pane, occupant: ['worker', 'codex', 'pane', 'workspace', target.cwd, 'terminal', 'session'] } };
+  const wait = { type: 'closeout.waiting', ...scope, wait_id: 'original-wait', revision: 4, waiting };
+  const result = { type: 'closeout.effect', ...scope, intent: native.intent, effect: 'receipt', outcome: { action: 'exit-observed', pane: 'pane', occupant: { terminal_id: 'terminal', agent_session_id: 'session' } } };
+  const removed = { type: 'closeout.effect', identity: project, key: removal.key, source: removal.source, outcome: { action: 'lane-removed', cwd: removal.cwd, tip: head } };
+  const statuses = [native, removal].map((producer, i) => ({ type: 'closeout.producer-status', ...scope, wait_id: wait.wait_id, producer, status: 'complete', completion: { type: 'closeout.effect', seq: 7 + i } }));
+  const evaluation = { type: 'closeout.evaluated', ...scope, completed: true };
+  for (const order of [[...statuses, evaluation], [evaluation, ...statuses]]) {
+    const history = stampEvents([...start, { ...report, closeout_targets: [target] }, intent, wait, result, removed, ...order]);
+    const original = structuredClone(history), s = fold(history), row = rows(s, 'closeout-wait')[0];
+    assert.equal(obligationPending(row), false); assert.equal(row.supported, true);
+    assert.deepEqual(row.waiting, waiting); assert.equal(row.outcome.result.statuses.length, 2);
+    assert.equal(row.outcome.result.parent_closeout.completed, true);
+    assert.deepEqual(row.statuses.map(s => s.producer), waiting.producers);
+    assert.equal(rows(s, 'native-outcome').length, 1); assert.equal(rows(s, 'native-outcome')[0].attempt, native.intent);
+    const outcome = structuredClone(row.outcome); add(s, [wait, ...statuses, evaluation]);
+    assert.deepEqual(row.outcome, outcome); assert.deepEqual(history, original);
+  }
+  // The parent evaluation can predate wait registration; the original target
+  // observation must still join when the statuses arrive.
+  const pre = fold(stampEvents([...start, { ...report, closeout_targets: [target] }, intent,
+    evaluation, wait, result, removed, ...statuses.map((e, i) => ({ ...e, completion: { type: 'closeout.effect', seq: 8 + i } }))]));
+  assert.equal(obligationPending(rows(pre, 'closeout-wait')[0]), false);
+  for (const change of ['no-parent', 'incomplete-parent', 'failed', 'UNKNOWN', 'wrong-common', 'wrong-key', 'wrong-source', 'wrong-wait', 'wrong-producer', 'wrong-completion']) {
+    const st = structuredClone(statuses), ev = structuredClone(evaluation);
+    if (change === 'incomplete-parent') ev.completed = false;
+    if (['failed', 'UNKNOWN'].includes(change)) st[0].status = change;
+    if (change === 'wrong-common') st[0].identity = '/other/.git';
+    if (change === 'wrong-key') st[0].key = 'other-key';
+    if (change === 'wrong-source') st[0].source.seq = 999;
+    if (change === 'wrong-wait') st[0].wait_id = 'other-wait';
+    if (change === 'wrong-producer') st[0].producer.intent = 'replacement';
+    if (change === 'wrong-completion') st[0].completion.type = 'closeout.command-failed';
+    const s = fold(stampEvents([...start, { ...report, closeout_targets: [target] }, intent, wait, result, removed,
+      ...st, ...(change === 'no-parent' ? [] : [ev])])), row = rows(s, 'closeout-wait')[0];
+    assert.equal(obligationPending(row), true, change); assert.equal(row.supported, false, change);
+    assert.deepEqual(row.waiting, waiting); assert.equal(rows(s, 'native-outcome')[0].attempt, native.intent);
+  }
 });
 
 test('UNKNOWN native attempts survive unrelated results and preserve exact refusals without replacement', () => {

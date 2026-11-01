@@ -90,6 +90,7 @@ test('producer old reported source skips cheaply while an unresolved manual revi
   // Historical review intake stays idle, while independent cleanup records
   // the missing original session binding once without granting native effects.
   const after=f.events(),added=after.slice(before.length);
+  t.diagnostic(JSON.stringify({stage:'historical-first',added:added.map(e=>e.type)}));
   assert.equal(added.length,1);const kept=added[0];
   assert.equal(kept.type,'closeout.binding-kept');assert.equal(kept.identity,f.identity);
   assert.equal(kept.run,'R-1');assert.equal(kept.item,'ENG-1');assert.equal(kept.signal,'ready');assert.equal(kept.completed,false);
@@ -139,7 +140,7 @@ test('useful error persistence keeps first errors and repeat counters off the re
   fs.openSync=(file,...args)=>{const fd=open(file,...args);handles.set(fd,path.resolve(String(file)));return fd;};fs.closeSync=fd=>{handles.delete(fd);return close(fd);};fs.fsyncSync=fd=>{if(handles.get(fd)===path.join(f.org,'events.jsonl'))recordCommits++;return flush(fd);};fs.renameSync=(from,to)=>{if(path.resolve(String(to))===journal)fullWrites++;return rename(from,to);};
   try{
     f.service().pass();t.diagnostic(JSON.stringify({stage:'first',fullWrites,recordCommits}));assert.ok(fullWrites<=5,`first pass used ${fullWrites} full writes for ${number} holds`);assert.equal(recordCommits,0,'first observations perform no record append');assert.equal(f.events().filter(e=>e.type==='line-service.review-error').length,0);assert.equal(f.messages().length,0);
-    fullWrites=0;recordCommits=0;f.service().pass();t.diagnostic(JSON.stringify({stage:'repeat',fullWrites,recordCommits}));assert.ok(fullWrites<=5,`repeat pass used ${fullWrites} full writes`);assert.equal(recordCommits,0,'no-change repeats perform no record append');assert.equal(f.messages().length,0);assert.equal(morningDigest({events:f.events(),diagnostics:f.diagnostics()}).review_errors.occurrences,number*2);
+    const beforeRepeat=f.events().length;fullWrites=0;recordCommits=0;f.service().pass();t.diagnostic(JSON.stringify({stage:'repeat',fullWrites,recordCommits,added:f.events().slice(beforeRepeat).map(e=>e.type)}));assert.ok(fullWrites<=5,`repeat pass used ${fullWrites} full writes`);assert.equal(recordCommits,0,'no-change repeats perform no record append');assert.equal(f.messages().length,0);assert.equal(morningDigest({events:f.events(),diagnostics:f.diagnostics()}).review_errors.occurrences,number*2);
   }finally{fs.openSync=open;fs.closeSync=close;fs.fsyncSync=flush;fs.renameSync=rename;}
   assert.equal(f.calls.length,0);assert.equal(fs.existsSync(inboxPath({org:f.org})),false);assert.ok(Object.values(JSON.parse(fs.readFileSync(journal)).record_notices).every(n=>n.count===2&&n.state==='diagnostic-only'));
 });

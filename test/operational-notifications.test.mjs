@@ -79,7 +79,7 @@ for(const priorHistory of [false,true])test('operational review launch with no a
   // Two real passes let the line observe the unchanged abandoned request and
   // surface its recovery refusal for inspection, without granting another run.
   f.pass();f.pass();
-  const held=readPassJournal(path.join(f.directory,'passes.jsonl')).findLast(row=>
+  const held=Array.from(readPassJournal(path.join(f.directory,'passes.jsonl'))).findLast(row=>
     row.action==='hold'&&row.boundary===`review-progress:${review}`);
   assert.ok(held,'the capped abandoned review must leave an owner-visible line reason');
   assert.match(held.reason,/review progressed\/completed or is not an owned normal queue attempt/);

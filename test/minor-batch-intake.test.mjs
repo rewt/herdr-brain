@@ -3,7 +3,10 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
-import { fold, itemConditions } from '../lib/state.mjs';
+import { fold, itemConditions, itemStatus } from '../lib/state.mjs';
+import { proposalSelection } from '../lib/proposal-intake.mjs';
+import { correctionBrief } from '../lib/correction-brief.mjs';
+import { REVIEW_LIVE_WITNESS_PREFIX } from '../lib/review-live-trigger.mjs';
 import { transact } from '../lib/store.mjs';
 import { reviewResultEvents, dispatchInput } from '../line-service/phase1.mjs';
 import { queueSelected } from '../line-service/priority-order.mjs';
@@ -27,7 +30,7 @@ const data = (findings, proposals=[]) => ({outcome:'done', proposals, extra:{ver
   acceptance:{fulfilled:true,source_run:'R-1',source_report_sha256:reportHash,head,claim_generation:3}}});
 const intake = (events,report,body='') => reviewResultEvents({events,state:fold(events),run:fold(events).runs.get('R-2'),report,body,sha256:reviewHash});
 const minors = [{severity:'minor',text:'a.mjs:4 - Empty input loses context'},
-  {severity:'minor',text:'b.mjs:8 - Retry loses context',live_trigger:'A retry loses context live'}];
+  {severity:'minor',text:'b.mjs:8 - Retry loses context'}];
 
 test('one unselected batch keeps all Minor keys and leaves a fulfilled PASS accepted until selection or an attempt', () => {
   for (const proposals of [[],[{role:'engineer',title:'First',blocking:true},{role:'engineer',title:'Second',blocking:true}]]) {
@@ -42,6 +45,8 @@ test('one unselected batch keeps all Minor keys and leaves a fulfilled PASS acce
     const state=fold(recorded), item=state.items.get(batch.id);
     assert.equal(item.finding_bindings.length,2);
     assert.equal(queueSelected(item,state),false);
+    assert.equal(itemStatus(state,item.id),'proposed');
+    assert.equal(proposalSelection(item),'unselected');
     assert.equal(queueSelected(item,state,{selected_only:true}),false);
     assert.equal(itemConditions(state,'ENG-1').Accepted.status,'True');
     assert.equal(itemConditions(state,'ENG-1').phase,'accepted');
@@ -57,12 +62,79 @@ test('one unselected batch keeps all Minor keys and leaves a fulfilled PASS acce
 });
 
 test('a waiting Minor batch cannot turn a negative judgment or missing intent evidence into acceptance', () => {
-  for (const edit of [report=>{report.extra.verdict='FAIL';},report=>{delete report.extra.acceptance;}]) {
+  for (const edit of [report=>{report.extra.verdict='FAIL';},report=>{report.extra.verdict='NEEDS-WORK';},report=>{delete report.extra.acceptance;}]) {
     const events=seed(),report=data(minors);edit(report);
     const added=intake(events,report),state=fold(stamp([...events,...added,{type:'report.ingested',run:'R-2',sha256:reviewHash,report}]));
     assert.notEqual(itemConditions(state,'ENG-1').Accepted.status,'True');
-    if(report.extra.verdict==='FAIL')assert.equal(itemConditions(state,'ENG-1').phase,'needs-work');
+    const batch=added.find(e=>e.type==='item.added');
+    assert.equal(queueSelected(state.items.get(batch.id),state),false);
+    if(report.extra.verdict!=='PASS')assert.equal(itemConditions(state,'ENG-1').phase,'needs-work');
   }
+});
+
+test('immediate Minors and distinct triggers have separate unselected owners and retain explicit brief triggers', () => {
+  const events=seed(), findings=[...minors,
+    {severity:'minor',text:'First conditional',live_trigger:'First race observed live'},
+    {severity:'minor',text:'Same conditional trigger',live_trigger:'First race observed live'},
+    {severity:'minor',text:'Second conditional',live_trigger:'Second race observed live'}];
+  const report=data(findings), added=intake(events,report), batches=added.filter(e=>e.type==='item.added');
+  assert.equal(batches.length,3);
+  assert.deepEqual(batches.map(b=>b.meta.review_finding_keys.length),[2,2,1]);
+  let recorded=stamp([...events,...added,{type:'report.ingested',run:'R-2',sha256:reviewHash,report}]);
+  let state=fold(recorded);
+  assert.equal(itemConditions(state,'ENG-1').phase,'accepted');
+  for(const batch of batches) assert.equal(queueSelected(state.items.get(batch.id),state),false);
+  recorded=stamp([...recorded,...batches.map(b=>({type:'item.updated',id:b.id,fields:{meta:{queue_selected:true}}}))]);
+  state=fold(recorded);
+  assert.equal(queueSelected(state.items.get(batches[0].id),state),true);
+  for(const batch of batches.slice(1)) assert.equal(queueSelected(state.items.get(batch.id),state),false);
+  const first=state.items.get(batches[1].id);
+  for(const binding of first.finding_bindings) recorded=stamp([...recorded,{type:'note.added',id:first.id,
+    text:REVIEW_LIVE_WITNESS_PREFIX+JSON.stringify({schema:'brain.review-live-witness/v1',finding_key:binding.finding_key,
+      trigger:binding.finding.live_trigger,observed_at:'2026-11-01T17:59:00Z',evidence:'/evidence/live'})}]);
+  state=fold(recorded);
+  assert.equal(queueSelected(state.items.get(first.id),state),true);
+  assert.ok(dispatchInput({events:recorded,state,item:state.items.get(first.id)}));
+  assert.equal(queueSelected(state.items.get(batches[2].id),state),false);
+  assert.equal(dispatchInput({events:recorded,state,item:state.items.get(batches[2].id)}),null);
+  const brief=correctionBrief({item:first,findings:first.finding_bindings,prior:[],org:'/record',repo:'/repo'});
+  assert.match(brief,/Live trigger for .*: First race observed live/);
+  assert.deepEqual(intake(recorded,report),[]);
+});
+
+test('batch proposals retain rationale, acceptance, capability and all scoped metadata in fixer context', () => {
+  const proposals=[{role:'engineer',title:'Repair retries',why:'Keep caller context',accept:['Retry retains caller'],
+    capability:'node',extra:{custom_hint:'Inspect saved caller'}}];
+  for(const list of [proposals,[...proposals,{role:'engineer',title:'Repair empty input',why:'Keep empty reason',accept:['Empty retains reason'],extra:{custom_hint:'Second hint'}}]]) {
+    const events=seed(), added=intake(events,data(minors,list)), batch=added.find(e=>e.type==='item.added');
+    assert.deepEqual(batch.meta.review_batch_proposals,list);
+    assert.match(batch.why,/Keep caller context/);
+    assert.ok(batch.accept.some(value=>value.includes('Retry retains caller')));
+    if(list.length===1){assert.equal(batch.capability,'node');assert.equal(batch.meta.custom_hint,'Inspect saved caller');}
+    const item=fold(stamp([...events,...added])).items.get(batch.id);
+    const brief=correctionBrief({item,findings:item.finding_bindings,org:'/record',repo:'/repo'});
+    for(const proposal of list) assert.ok(brief.includes(JSON.stringify(proposal)));
+  }
+});
+
+test('witnessing one selected conditional trigger allows its fix without waiting for an unrelated trigger', () => {
+  const events=seed(), report=data([
+    {severity:'minor',text:'First condition',live_trigger:'First live trigger'},
+    {severity:'minor',text:'Second condition',live_trigger:'Second live trigger'}]);
+  const added=intake(events,report), batches=added.filter(e=>e.type==='item.added');
+  let recorded=stamp([...events,...added,{type:'report.ingested',run:'R-2',sha256:reviewHash,report},
+    ...batches.map(b=>({type:'item.updated',id:b.id,fields:{meta:{queue_selected:true}}}))]);
+  let state=fold(recorded);
+  assert.equal(itemConditions(state,'ENG-1').phase,'accepted');
+  const binding=state.items.get(batches[0].id).finding_bindings[0];
+  recorded=stamp([...recorded,{type:'note.added',id:batches[0].id,text:REVIEW_LIVE_WITNESS_PREFIX+JSON.stringify({
+    schema:'brain.review-live-witness/v1',finding_key:binding.finding_key,trigger:binding.finding.live_trigger,
+    observed_at:'2026-11-01T17:59:00Z',evidence:'/evidence/first-trigger'})}]);
+  state=fold(recorded);
+  assert.equal(itemConditions(state,'ENG-1').phase,'needs-work');
+  assert.equal(queueSelected(state.items.get(batches[0].id),state),true);
+  assert.ok(dispatchInput({events:recorded,state,item:state.items.get(batches[0].id)}));
+  assert.equal(queueSelected(state.items.get(batches[1].id),state),false);
 });
 
 test('old typed Minor owners, selection and UNKNOWN attempts survive new review intake', () => {

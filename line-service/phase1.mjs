@@ -420,7 +420,7 @@ export function reviewResultEvents({state,events,run,report,sha256,body=report.b
   // Prefer existing canonical Minor declarations, just as for tagged summaries.
   if(!findings.some(f=>f.severity==='major')&&!structuredSeverities.has('minor')&&
       !findings.some(f=>f.severity==='minor')){
-    if(plain.sections){
+    if(plain.sections||plain.malformed.length){
       if(plain.sections!==1||plain.malformed.length||!plain.rows.length||verdict!=='PASS'||report.outcome!=='done'||
           (report.proposals??[]).some(p=>roleIs(p,'ENG')))throw Error('Batched Minors requires one nonempty plain section, done/PASS and no engineer proposal');
       for(const row of plain.rows){

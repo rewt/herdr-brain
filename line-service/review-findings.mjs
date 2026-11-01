@@ -129,6 +129,15 @@ export function reviewCorrectionEvents({ state, events, run, review, report, fin
         historical = state.items.get(creation.id);
       }
       const selected = missing.map(key => rows.get(key)), severity = selected.some(row => row.severity === 'major') ? 'major' : 'minor';
+      // Retain every proposal verbatim, including fields that cannot be merged
+      // into a single item's capability/metadata without losing their scope.
+      const details = minorBatch ? {
+        title: proposals.length === 1 ? proposals[0].title : undefined,
+        capability: proposals.length === 1 ? proposals[0].capability : null,
+        why: proposals.map(p => p.why).filter(Boolean).join('\n') || undefined,
+        accept: [...selected.map(row => row.text), ...proposals.flatMap(p => p.accept ?? [])],
+        extra: proposals.length === 1 ? proposals[0].extra : {},
+      } : proposal;
       const id = historical?.id ?? nextItemId(state, { kind: 'work', role: 'engineer' }, taken);
       const meta = { review_fix_of: reviewKey, review_source_item: source,
         review_source_run: review.meta.review_source_run, review_owner_run: review.meta.review_source_run,
@@ -142,12 +151,11 @@ export function reviewCorrectionEvents({ state, events, run, review, report, fin
       if (!historical) {
         taken.add(id);
         add.push(intentFirstCreation({ type: 'item.added', id, kind: 'work', role: proposal?.role ?? 'engineer',
-          capability: proposal?.capability ?? null,
-          title: proposal?.title ?? (minorBatch && proposals.length === 1 ? proposals[0].title :
-            `${severity === 'major' ? 'Fix' : 'Follow up'} ${source} at ${target.head.slice(0, 10)}: ${selected[0].text.slice(0, 120)}`),
-          parent: review.id, from_run: run.id, accept: proposal?.accept ?? selected.map(row => row.text),
-          why: proposal?.why ?? selected.map(row => row.text).join('\n'), meta: { ...proposal?.extra, ...meta,
-            ...(minorBatch ? { review_minor_batch: 'v1' } : {}), queue_selected: !minorBatch } }));
+          capability: details?.capability ?? null,
+          title: details?.title ?? `${severity === 'major' ? 'Fix' : 'Follow up'} ${source} at ${target.head.slice(0, 10)}: ${selected[0].text.slice(0, 120)}`,
+          parent: review.id, from_run: run.id, accept: details?.accept ?? selected.map(row => row.text),
+          why: details?.why ?? selected.map(row => row.text).join('\n'), meta: { ...details?.extra, ...meta,
+            ...(minorBatch ? { review_minor_batch: 'v1', review_batch_proposals: proposals } : {}), queue_selected: !minorBatch } }));
       } else if (!historical.meta.review_fix_of) {
         // Several groups can resolve to the same pre-intake proposal. The fold
         // replaces each meta value shallowly, so carry the whole planned set.
@@ -168,8 +176,8 @@ export function reviewCorrectionEvents({ state, events, run, review, report, fin
       }
     }
   };
-  // One waiting correction owns a fresh Minor-only report, regardless of how
-  // many proposals or conditional Minors it contains. Existing owners and their
+  // One waiting correction owns immediate Minors; each distinct live trigger
+  // owns a separate waiting correction. Existing owners and their
   // attempts are never regrouped, deselected or replaced. Legacy proposal
   // recovery still runs through its original immutable-creation matching below.
   const minorBatch = rows.size && [...rows.values()].every(row => row.severity === 'minor') &&
@@ -197,7 +205,15 @@ export function reviewCorrectionEvents({ state, events, run, review, report, fin
     if (!keys.length) throw Error('multiple correction proposals need explicit review_findings links to their immutable findings');
     if (!minorBatch) createGroups([...new Set(keys)], proposal);
   }
-  if (minorBatch) create([...rows.keys()], undefined, true);
+  if (minorBatch) {
+    const groups = new Map();
+    for (const row of rows.values()) {
+      const trigger = conditionalMinorTrigger(row);
+      if (!groups.has(trigger)) groups.set(trigger, []);
+      groups.get(trigger).push(row.key);
+    }
+    for (const keys of groups.values()) create(keys, undefined, true);
+  }
   else for (const key of rows.keys()) create([key]);
   // A later plain report can quote the same canonical finding. Retain each
   // Part 1 report/line identity as an alias to the original correction owner.

@@ -50,26 +50,40 @@ export function collectMinors({ events, read = file => fs.readFileSync(file, 'ut
         (i.created?.run === run.id || i.meta.review_fix_of === `${context.source}:${context.head}`));
       const starts = [...state.runs.values()].filter(r => corrections.some(i => i.id === r.item)).map(r => r.id);
       Object.assign(context, { correction_items: corrections.map(i => i.id), fix_sessions: starts });
-      if (!extracted.hasMajor && (extracted.oldMinors.length ||
+      const formal = events.filter(e => e.type === 'review.finding-linked' && e.review_item === review.id && e.review_run === run.id &&
+        e.report_sha256 === run.report.sha256 && e.base === target.base && e.head === target.head &&
+        e.finding?.severity === 'minor' && state.items.get(e.correction_item)?.meta.review_minor_batch === 'v1');
+      if (!formal.length && !extracted.hasMajor && (extracted.oldMinors.length ||
           extracted.report.extra?.verdict === 'PASS' && extracted.engineerProposals.length))
         legacy.push({ ...context, tagged_or_structured_minors: extracted.oldMinors, engineer_proposals: extracted.engineerProposals });
-      if (!extracted.sections) continue;
+      // Ordinary reports use canonical immutable finding keys. Plain Part 1
+      // reports keep their original per-body-line identities below.
+      if (!extracted.sections && !extracted.malformed.length && formal.length) {
+        reviews.push(context);
+        for (const event of formal) if (!findings.some(f => f.key === event.finding_key)) findings.push({ ...context,
+          key: event.finding_key, text: event.finding.text, live_trigger: event.finding.live_trigger ?? null,
+          location: /^([^\s:]+:\d+(?::\d+)?)/.exec(event.finding.text.replaceAll('`', ''))?.[1] ?? null });
+      }
+      if (!extracted.sections && !extracted.malformed.length) continue;
       if (extracted.hasMajor || extracted.oldMinors.length || extracted.engineerProposals.length ||
-          extracted.malformed.length || extracted.sections !== 1 || !extracted.rows.length ||
           extracted.report.extra?.verdict !== 'PASS' || extracted.report.outcome !== 'done') {
         issues.push({ ...context, error: 'Batched Minors requires one nonempty plain section, done/PASS, no Major, typed finding or engineer proposal',
           malformed: extracted.malformed });
         continue;
       }
       reviews.push(context);
-      for (const row of extracted.rows) findings.push({ ...context, ...row,
+      const malformed = extracted.malformed.map(row => ({ ...row, location: null, malformed: true }));
+      for (const row of [...extracted.rows, ...malformed]) findings.push({ ...context, ...row,
         key: batchedMinorKey(review.id, run.id, run.report.sha256, row) });
+      if (malformed.length || extracted.sections !== 1 || !extracted.rows.length)
+        issues.push({ ...context, error: 'Malformed Batched Minors section; retain valid rows and dispose malformed entries with evidence',
+          malformed: extracted.malformed, findings: malformed.map(row => batchedMinorKey(review.id, run.id, run.report.sha256, row)) });
     } catch (error) { issues.push({ review: review.id, run: run.id, error: error.message }); }
   }
   const byKey = new Map(findings.map(f => [f.key, f]));
   for (const event of events) {
     if (event.type !== 'review.finding-linked') continue;
-    for (const key of event.finding?.batched_minor_keys ?? []) {
+    for (const key of new Set([event.finding_key, ...(event.finding?.batched_minor_keys ?? [])])) {
       const finding = byKey.get(key), correction = state.items.get(event.correction_item);
       if (!finding || !roleIs(correction, 'ENG') || event.review_item !== finding.review || event.review_run !== finding.run ||
           event.report_sha256 !== finding.report_sha256 || event.head !== finding.head || event.base !== finding.base) continue;
@@ -95,11 +109,22 @@ export function collectMinors({ events, read = file => fs.readFileSync(file, 'ut
       finding.disposition = finding.dispositions.at(-1);
     } catch (error) { issues.push({ review: review.id, note_seq: note.seq, error: error.message }); }
   }
-  const pending = findings.filter(f => !f.disposition);
-  const groups = [...new Set(pending.map(f => f.location.replace(/:\d.*$/, '')))].sort().map(file =>
-    ({ file, findings: pending.filter(f => f.location.startsWith(`${file}:`)).map(f => f.key) }));
+  const terminal = d => ['fixed', 'stale', 'dismissed'].includes(d?.status);
+  const pending = findings.filter(f => !f.disposition || f.disposition.status === 'batched' &&
+    state.items.get(f.disposition.batch)?.closed?.as === 'dropped');
+  const waiting = findings.filter(f => f.disposition?.status === 'batched' &&
+    state.items.get(f.disposition.batch)?.meta.queue_selected === false && !state.items.get(f.disposition.batch)?.closed &&
+    !state.items.get(f.disposition.batch)?.runs.length);
+  const waiting_batches = [...new Set(waiting.map(f => f.disposition.batch))].map(id => ({ batch: id,
+    findings: waiting.filter(f => f.disposition.batch === id).map(f => f.key),
+    selection: 'unselected', live_triggers: state.items.get(id).meta.review_live_triggers ?? [] }));
+  const located = [...new Map([...pending, ...waiting].filter(f => f.location).map(f => [f.key, f])).values()];
+  const groups = [...new Set(located.map(f => f.location.replace(/:\d.*$/, '')))].sort().map(file =>
+    ({ file, findings: located.filter(f => f.location.startsWith(`${file}:`)).map(f => f.key) }));
+  const unresolvedIssues = issues.filter(issue => !issue.findings?.length ||
+    !issue.findings.every(key => terminal(byKey.get(key)?.disposition)));
   return { schema: 'brain.minor-batch-inventory/v1', through_seq: events.at(-1)?.seq ?? 0,
-    reviews, findings, pending: pending.map(f => f.key), groups, legacy_minor_only: legacy, issues };
+    reviews, findings, pending: pending.map(f => f.key), waiting_batches, groups, legacy_minor_only: legacy, issues: unresolvedIssues };
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

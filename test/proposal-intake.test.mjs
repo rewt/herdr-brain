@@ -20,6 +20,17 @@ const intake = (events, data, options = {}) => { const state = fold(events); ret
 const items = events => events.filter(e => e.type === 'item.added');
 const authority = { native_caller:{ name:'fixture-supervisor', terminal_id:'native' }, project:'/fixture/.git' };
 function fixture(t) { const f = setupOrg(); t.after(() => fs.rmSync(f.root, { recursive:true, force:true })); return f; }
+
+test('hand start requires separate selection of a new waiting Minor batch', t => {
+  const f=fixture(t);
+  transact(f.dir,()=>({add:[{type:'item.added',id:'ENG-1',role:'engineer',title:'Waiting batch',
+    meta:{review_minor_batch:'v1',severity:'minor',queue_selected:false}}]}));
+  assert.match(f.fail(['start','ENG-1']),/select the proposal separately/);
+  assert.equal(loadEvents(f.dir).events.filter(e=>e.type==='run.started').length,0);
+  f.ok(['set','ENG-1','meta.queue_selected=true']);
+  f.ok(['start','ENG-1']);
+  assert.equal(loadEvents(f.dir).events.filter(e=>e.type==='run.started').length,1);
+});
 function disposition(events, id, options = {}) { const state = fold(events); return proposalDisposition({ state, events, id,
   expect:proposalToken(state, id), cut:'selection', why:'Explicit bounded selection cut', authority, ...options }); }
 

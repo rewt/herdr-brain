@@ -44,6 +44,25 @@ const fixtures = () => [
   { type: 'item.closed', id: 'HUM-3', as: 'done' },
 ];
 
+test('waiting Minor batches stay proposed without reopening a passed producer on the project page', () => {
+  const rows = [item('ENG-1', 'Producer'), {type:'run.started',id:'R-1',item:'ENG-1'},
+    {type:'report.ingested',run:'R-1',report:{outcome:'done'}},
+    item('ENG-2','Waiting Minor batch',{meta:{review_fix_of:'ENG-1:head',review_source_item:'ENG-1',
+      review_source_run:'R-1',review_minor_batch:'v1',severity:'minor',queue_selected:false}})];
+  const waiting=collectProjectPage({org:record(rows),project,now:NOW});
+  const producer=waiting.work.find(w=>w.id==='ENG-1'), batch=waiting.work.find(w=>w.id==='ENG-2');
+  assert.equal(batch.status,'proposed');
+  assert.equal(producer.open,false);
+  assert.deepEqual(producer.review.corrections,[]);
+  assert.notEqual(producer.review.status,'correction pending');
+  for(const event of [{type:'item.updated',id:'ENG-2',fields:{meta:{queue_selected:true}}},
+    {type:'run.started',id:'R-2',item:'ENG-2'}]) {
+    const active=collectProjectPage({org:record([...rows,event]),project,now:NOW}).work.find(w=>w.id==='ENG-1');
+    assert.equal(active.open,true);
+    assert.equal(active.review.status,'correction pending');
+  }
+});
+
 test('local page inherits stable stages and exposes unassigned, invalid, conflicting and cyclic ancestry', () => {
   const s = selectPageState(fold(eventLog([
     item('ENG-896', 'Stage four', { meta: { stage_ref: 'ENG-896' } }),

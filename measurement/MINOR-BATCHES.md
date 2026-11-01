@@ -38,7 +38,12 @@ It reads existing events and hash-verifies each review's **ingested report copy*
 It never reads the editable worker report as evidence, changes record state,
 selects work, dispatches, or starts a service. JSON output retains every finding's
 review/run, immutable report hash, captured base/head, body line, and stable key.
-`pending` lists undisposed findings; `groups` suggests exact cited files only.
+`pending` lists undisposed findings and findings whose current batch was dropped;
+`waiting_batches` lists unselected, unattempted batches with their finding keys
+and live triggers. `groups` suggests exact cited files among pending findings and
+waiting batches. Ordinary typed/tagged reports linked by the new intake appear
+in `findings` with their canonical `review-finding/v1` keys, rather than being
+misclassified as legacy debt. Part 1 keys remain unchanged.
 An engineer chooses related findings by the actual shared problem, without a
 size target. Malformed sections, changed/missing report bytes and invalid
 dispositions appear in `issues` and produce exit 1; inspect these before using
@@ -46,6 +51,12 @@ counts. `legacy_minor_only` identifies reviews with typed/tagged Minors and no
 typed/tagged Major, plus PASS reviews with engineer proposals. It also exposes
 correction items and fix sessions so reviews
 that kept the old format remain visible. Historical reports are never rewritten.
+Valid plain rows remain listed beside malformed entries. A malformed entry has
+its own immutable key and a null location; it can receive a concrete terminal
+disposition after inspecting the original report. Such a disposition resolves
+that entry's issue without changing the report or disposing valid neighboring
+findings. Near-match headings, unclosed fences and fences indented beyond three
+spaces are visible issues. Intake still refuses malformed plain sections.
 
 Record a disposition with the existing `record note REVIEW_ID` entry, on the
 finding's review, passing this entire single-line text as one quoted argument:
@@ -68,12 +79,29 @@ is involved.
 
 Part 2 accepts ordinary structured/tagged Minor findings as well as the temporary
 `## Batched Minors` section. With no Major it creates one unselected linked
-correction containing all new Minors, including conditional ones. Explicit
+correction for immediate Minors and one unselected correction per distinct live
+trigger for conditional Minors. Findings sharing a trigger keep their individual
+immutable bindings and witness requirements. The explicit trigger and original
+reviewer proposal context reach the fixer's brief. Nothing starts automatically.
+Explicit
 selection remains with the owning line; this change does not start related
 batches automatically. A waiting new batch does not hold a fulfilled PASS's
 acceptance. Selection or any recorded attempt restores the ordinary correction
 discharge requirement. Negative judgments, Major checks, old selected corrections
 and retained attempts keep their meaning.
+In particular, a Minor-only FAIL or NEEDS-WORK still holds source acceptance and
+dependencies, but its new corrections now await explicit selection. They do not
+retain the former automatic start. This is deliberate under the no-Major batch
+policy; it does not turn a negative judgment into PASS. Major/mixed corrections
+retain the existing selected path. Waiting batches are `proposed`, and a hand
+start requires a separate selection just as line admission does.
+
+Until Part 3 supplies automatic related selection, supervisor-herdr owns the
+manual selection step at its next finite queue-selection turn after a new review
+arrives (or after installing the new intake). Consult `waiting_batches`, `groups`
+and each trigger's evidence, record explicit selection on the chosen items, and
+retain unwitnessed conditional fixes. This documents the existing owner and next
+event; the collector adds no dispatch, service or timer.
 
 Keep the temporary reviewer instructions while intake still runs in the sealed
 Part 1 build. The release/soak owner may remove them after the installed-build

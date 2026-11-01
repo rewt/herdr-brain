@@ -40,7 +40,8 @@ test('plain Minor-only report enters one waiting batch and retains every immutab
   assert.deepEqual(inventory.issues, []);
   assert.equal(inventory.findings.length, 2);
   assert.equal(inventory.pending.length, 0);
-  assert.equal(inventory.groups.length, 0);
+  assert.equal(inventory.groups.length, 1);
+  assert.equal(inventory.waiting_batches.length, 1);
   assert.deepEqual(inventory.findings.map(f=>f.key), original.findings.map(f=>f.key));
   assert.ok(inventory.findings.every(f=>f.disposition.status==='batched'));
   assert.deepEqual(inventory.reviews[0].fix_sessions, []);
@@ -97,7 +98,55 @@ test('malformed, empty and mixed plain sections fail visibly; fences cannot crea
   for (const body of ['## Batched Minors\n', '## Batched Minors\n- missing location', `${plain}\ncontinued silently`, `${plain}\n## Batched Minors\n- lib/b.mjs:3 - Duplicate section`, `${plain}\n- [Major] lib/a.mjs:8 - Broken`]) {
     const inventory = fixture(text(body)).collect();
     assert.equal(inventory.issues.length, 1, body);
-    assert.equal(inventory.findings.length, 0);
+    if (body.includes('[Major]')) assert.equal(inventory.findings.length, 0);
   }
   assert.equal(reportMinors(text('```md\n' + plain + '\n```')).rows.length, 0);
+});
+
+test('near headings and unclosed or over-indented fences are issues, while valid rows survive malformed lines', () => {
+  for (const body of ['## Batched minors\n- lib/a.mjs:1 - Lost', '### Batched Minors\n- lib/a.mjs:1 - Lost',
+    '```md\n' + plain, '    ```md\n' + plain]) {
+    const inventory = fixture(text(body)).collect();
+    assert.equal(inventory.issues.length, 1, body);
+    assert.ok(inventory.findings.some(f => f.malformed), body);
+  }
+  const f = fixture(text(plain + '\nwrapped continuation'));
+  const before = f.collect();
+  assert.equal(before.findings.length, 3);
+  assert.equal(before.findings.filter(f => f.location).length, 2);
+  const malformed = before.findings.find(f => f.malformed);
+  f.add({ type: 'note.added', id: 'REV-1', text: DISPOSITION_PREFIX + JSON.stringify({
+    schema: 'brain.minor-batch/v1', finding: malformed.key, status: 'dismissed',
+    reason: 'Continuation repeats the preceding finding; retained original body bytes', evidence: '/evidence/report-analysis' }) });
+  const after = f.collect();
+  assert.deepEqual(after.issues, []);
+  assert.deepEqual(after.pending, before.findings.filter(f => !f.malformed).map(f => f.key));
+  assert.deepEqual(after.findings.map(f => f.key), before.findings.map(f => f.key));
+});
+
+test('dropping a batch returns its findings to pending until a later concrete disposition', () => {
+  const f = fixture(), key = f.collect().pending[0];
+  f.add({ type: 'item.added', id: 'ENG-3', role: 'engineer' });
+  const note = status => f.add({ type: 'note.added', id: 'REV-1', text: DISPOSITION_PREFIX + JSON.stringify({
+    schema: 'brain.minor-batch/v1', finding: key, status, batch: 'ENG-3', reason: 'Retained batch evidence', evidence: '/evidence/batch' }) });
+  note('batched');
+  assert.ok(!f.collect().pending.includes(key));
+  f.add({ type: 'item.closed', id: 'ENG-3', as: 'dropped' });
+  assert.ok(f.collect().pending.includes(key));
+  note('stale');
+  assert.ok(!f.collect().pending.includes(key));
+});
+
+test('ordinary typed Minor batches remain listed and grouped for explicit owner selection', () => {
+  const f = fixture(text('Reviewed.', 'findings:\n  - severity: minor\n    text: lib/a.mjs:9 - Preserve context\n'));
+  const state = fold(f.events);
+  for (const event of reviewResultEvents({state, events:f.events, run:state.runs.get('R-2'),
+    report:f.parsed.report, body:f.parsed.body, sha256:sha(text('Reviewed.', 'findings:\n  - severity: minor\n    text: lib/a.mjs:9 - Preserve context\n'))})) f.add(event);
+  const inventory = f.collect();
+  assert.equal(inventory.findings.length, 1);
+  assert.match(inventory.findings[0].key, /^review-finding\/v1:/);
+  assert.equal(inventory.waiting_batches.length, 1);
+  assert.deepEqual(inventory.groups[0].findings, [inventory.findings[0].key]);
+  assert.deepEqual(inventory.legacy_minor_only, []);
+  assert.deepEqual(inventory.issues, []);
 });

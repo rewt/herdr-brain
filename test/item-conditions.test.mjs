@@ -4,12 +4,14 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
 import { fold, extendFold, itemConditions, itemStatus, dependencyReleases } from '../lib/state.mjs';
 import { blockReason } from '../lib/render.mjs';
 import { buildProjectPage } from '../lib/project-page.mjs';
 import { correctionDischargeEvents } from '../lib/correction-discharge.mjs';
 import { reviewResultEvents } from '../line-service/phase1.mjs';
 import { setupOrg } from './helpers.mjs';
+import { validateTree } from '../lanes/validation.mjs';
 
 const head = 'a'.repeat(40), base = 'b'.repeat(40), reportHash = 'c'.repeat(64), reviewHash = 'd'.repeat(64), project = '/fixture/.git';
 const stamp = rows => rows.map((e, i) => ({ seq: i + 1, at: '2026-10-30T20:00:00Z', by: 'fixture', ...e }));
@@ -156,6 +158,54 @@ test('a completed correction alone does not accept; exact discharge accepts with
   assert.equal(itemConditions(f.s, 'ENG-1').Accepted.status, 'True');
   assert.equal(f.s.runs.get('R-2').report.extra.verdict, 'FAIL');
   assert.equal([...f.s.items.values()].filter(q => q.role === 'reviewer').length, 1);
+});
+
+test('rebased correction keeps stale proof Unknown and discharges only its green final-head control', t => {
+  const f = correction(t), repo = path.join(path.dirname(f.org), 'repo');
+  fs.mkdirSync(repo);
+  const git = (...args) => execFileSync('git', args, { cwd: repo, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+  git('init', '-b', 'main'); git('config', 'user.name', 'Correction fixture'); git('config', 'user.email', 'fixture@example.invalid');
+  fs.writeFileSync(path.join(repo, 'seed'), 'broken'); git('add', 'seed'); git('commit', '-m', 'Baseline');
+  git('checkout', '-b', 'lane/correction');
+  fs.writeFileSync(path.join(repo, 'seed'), 'fixed'); git('commit', '-am', 'Correct exact trigger');
+  const common = git('rev-parse', '--path-format=absolute', '--git-common-dir');
+  const command = `'${process.execPath.replaceAll("'", "'\\''")}' -e 'require("node:assert/strict").equal(require("node:fs").readFileSync("seed", "utf8"), "fixed"); console.log("TAP version 13\\n1..1\\nok 1 - exact trigger corrected\\n# tests 1\\n# pass 1\\n# fail 0\\n# cancelled 0");'`;
+  const capture = () => validateTree({ cwd: repo, common, command, tier: 'fast' });
+  const before = capture();
+  assert.equal(before.executed, true); assert.equal(before.exit_code, 0);
+  Object.assign(f.gate, before); f.finding.command = command; f.finding.sha256 = f.save();
+  const intake = () => correctionDischargeEvents({ state: f.s, run: f.run, report: f.report, sha256: reviewHash, org: f.org });
+  const originalBytes = fs.readFileSync(f.finding.evidence);
+  const originalGate = path.join(f.org, 'evidence', 'pre-rebase-gate.json');
+  fs.writeFileSync(originalGate, originalBytes);
+  for (const file of [before.log, before.execution_receipt]) fs.copyFileSync(file, path.join(f.org, 'evidence', path.basename(file)));
+  git('checkout', 'main');
+  fs.writeFileSync(path.join(repo, 'unrelated'), 'main moved'); git('add', 'unrelated'); git('commit', '-m', 'Advance main');
+  const landingBase = git('rev-parse', 'HEAD');
+  git('checkout', 'lane/correction'); git('rebase', '--', 'main');
+  const rebasedHead = git('rev-parse', 'HEAD');
+  assert.notEqual(rebasedHead, before.head);
+  assert.equal(git('diff', `${before.head}^`, before.head), git('diff', landingBase, rebasedHead), 'owned diff is byte-identical');
+  extendFold(f.s, [{ type: 'change.landed', run: f.run.id, item: f.run.item, head: rebasedHead, base: landingBase,
+    project, producer: { ownership_generation: f.run.owner_generation }, seq: f.s.eventCount + 1 }]);
+  f.finding.head = rebasedHead;
+  assert.deepEqual(intake(), [], 'pre-rebase green receipt cannot discharge the new landed head');
+  f.gate.head = rebasedHead;
+  for (const result of [{ executed: false, exit_code: 0, outcome: 'green' }, { executed: true, exit_code: 1, outcome: 'red' }]) {
+    Object.assign(f.gate, result); f.finding.sha256 = f.save();
+    assert.deepEqual(intake(), [], 'unrun/red final-head proof cannot discharge');
+  }
+  const after = capture();
+  assert.equal(after.head, rebasedHead); assert.equal(after.executed, true); assert.equal(after.reused, false);
+  assert.equal(after.exit_code, 0); assert.notEqual(after.execution_receipt, before.execution_receipt);
+  Object.assign(f.gate, after); f.finding.sha256 = f.save();
+  const facts = intake();
+  assert.equal(facts.length, 1);
+  assert.equal(facts[0].findings[0].head, rebasedHead);
+  assert.equal(facts[0].findings[0].command, f.gate.command);
+  assert.deepEqual(fs.readFileSync(originalGate), originalBytes, 'original green receipt remains immutable');
+  assert.equal(f.s.runs.get('R-2').report.extra.verdict, 'FAIL');
+  assert.equal([...f.s.items.values()].filter(item => item.role === 'reviewer').length, 1);
 });
 
 test('page and item/dependency phases consume the same exact conditions', () => {

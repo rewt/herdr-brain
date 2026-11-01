@@ -66,8 +66,8 @@ all declarations, including missing or failed proof. A done correction alone,
 a selected command, assertions, a moving counter or a prose claim does not discharge.
 
 Example report frontmatter extension (replace every example value with actual
-owned findings, run, claim, landed head and existing check receipt; do not rerun a
-check to create another receipt):
+owned findings, run, claim, landed head and existing check receipt; the rebase
+exception below applies only to a selected unrun final-head correction control):
 
 ```yaml
 correction_discharge:
@@ -94,6 +94,33 @@ record mutation; it does not run checks, retarget findings or start another revi
 A discharge can establish accepted outcome while preserving the original FAIL.
 The release owner still judges whether the specific Major control proves its
 correction and runs final-release/live coverage.
+
+### Required rebase after a correction check
+
+Formal correction context automatically authorizes the worker to run the same
+selected affected command through `lane check --cmd` on the clean committed
+rebased candidate when a required rebase moves the head after its check. No
+supervisor authorization is needed. This is the supported final-head check path,
+including for a byte-identical owned diff; intake still requires
+`gate.head = finding.head = landing.head`. Diff equivalence alone accepts nothing.
+
+Before checking, preserve every earlier gate JSON, log and execution receipt in
+the owning record evidence directory, and record the old/new heads, rebase reason
+and selected command. Run only that control once per new head. Reuse an existing
+green final-head receipt instead of replaying it for another receipt; the lane's
+existing tree/environment cache may also supply a reused receipt with the current
+head and original execution evidence. Another required rebase makes a different
+head's control unrun under the same rule. Red, failed and unrun evidence stays in
+the ledger, with the existing fix limits and failing/affected/unrun selection.
+The report names the landed head, its receipt and the original Major requirement.
+
+This narrow exception to the green-replay rule applies only to formal corrections
+with assigned findings. It authorizes no ordinary continuation, broader suite,
+new review or release and changes no native, claim, source, STOP/HOLD or guarded
+landing checks. Workers should rebase before their first selected check when
+possible; they never run a second check just to create a receipt on the same head.
+The next real rebased correction remains the live witness: its existing report
+intake must discharge without supervisor action. A fixture is not that witness.
 
 ENG-1037's residual obligation is to witness this exact producer-to-intake-to-release
 handoff with a real assigned correction: inherited finding/check, one captured

@@ -84,7 +84,7 @@ test('installed fixture pass leaves recovery alarm before its runtime or STOP re
   assert.equal(fs.readFileSync(f.file,'utf8'),before.plist);assert.equal(fs.readFileSync(f.retained,'utf8'),before.jobs);
   // Restore only the synthetic record copy, never a live record or root.
   fs.writeFileSync(eventsFile,before.events);
-  assert.throws(()=>service.pass(),/STOP\/HOLD/);
+  assert.match(service.pass().held,/STOP\/HOLD/);
   assert.equal(rows().filter(row=>row.action==='recovery-admission').at(-1).admissible,true);
   assert.equal(loadEvents(f.org).events.length,JSON.parse('['+before.events.trim().split('\n').join(',')+']').length);
 });

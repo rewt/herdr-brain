@@ -246,8 +246,14 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       const current = () => { if (stale) { snapshot = observe(); stale = false; reviewCache = new Map(); } return snapshot; };
       let activeSubject,activeKey,parentCommand;
       const subjectLock=subject=>path.join(directory,'subjects',digest(subject)+'.lock');
-      const laterDispatchInput=(key,other)=>{
-        const match=/^dispatch:([A-Z]+-\d+):(.+)$/.exec(key),prior=/^dispatch:([A-Z]+-\d+):(.+)$/.exec(other);
+      const laterDispatchInput=(key,other,entry)=>{
+        const match=/^dispatch:([A-Z]+-\d+):(.+)$/.exec(key);
+        let prior=/^dispatch:([A-Z]+-\d+):(.+)$/.exec(other);
+        // Recovery/continuation keys are opaque. Their original admission,
+        // bound to the execution subject, retains the actual input generation.
+        if(!prior&&/^(dispatch-recovered|dispatch-preflight):/.test(other)&&
+          entry.admission?.item===entry.execution_subject&&typeof entry.admission?.input==='string')
+          prior=[other,entry.admission.item,entry.admission.input];
         if(!match||!prior||match[1]!==prior[1])return false;
         const snapshot=current(),item=snapshot.state.items.get(match[1]);
         if(!item||dispatchInput({...snapshot,item,org,identity:project.identity})!==match[2])return false;
@@ -271,7 +277,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         // result. Pending commands above and the shared item lock still fence
         // active effects; only an earlier dispatch journal row is bypassed.
         const unknown=Object.entries(effects.actions).find(([other,entry])=>other!==key&&entry.state==='started'&&
-          (entry.execution_subject??effectSubject(other,current().state))===subject&&!laterDispatchInput(key,other));
+          (entry.execution_subject??effectSubject(other,current().state))===subject&&!laterDispatchInput(key,other,entry));
         if(unknown){log({action:'subject-held',subject,key,original:unknown[0],reason:'original started action retained; no replacement'});return;}
         let unlock;try{unlock=noticeLock(subjectLock(subject),{onRecovery:recovery=>log({action:'subject-lock-recovery',subject,...recovery})});}
         catch(error){if(!error.message.startsWith('locked:'))throw error;log({action:'subject-held',subject,key,reason:error.message});return;}

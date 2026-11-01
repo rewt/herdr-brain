@@ -390,6 +390,47 @@ test('reopened dispatch keeps active command and unrelated UNKNOWN subject fence
     }
   }
 });
+test('dispatch alias generations admit one later reopen while retaining same-input UNKNOWN and open-run fences',t=>{
+  for(const alias of ['dispatch-recovered:original-digest','dispatch-preflight:original-token:original-key']){
+    const f=fixture(t),item=f.add('Recovered work'),service=f.service(),file=path.join(service.directory,'effects.json');
+    const input=`${f.show(item).created.seq}:ordinary`,original={state:'started',execution_subject:item,
+      admission:{item,input},at:'2026-10-27T00:00:00Z',error:'Original UNKNOWN',receipt:{status:null,stdout:'saved receipt'}};
+    fs.writeFileSync(file,JSON.stringify({identity:gitProject(f.repo).identity,org:f.org,actions:{[alias]:original}}));
+    service.pass();assert.equal(f.calls.length,0,'same-generation alias remains held');
+    f.record(['close',item]);f.record(['reopen',item]);
+    f.service().pass();assert.equal(f.calls.length,1,'the next line pass admits the fresh generation');
+    f.service().pass();assert.equal(f.calls.length,1,'restart cannot repeat the admitted input');
+    transact(f.org,()=>({add:[{type:'run.started',id:'R-1',item,meta:{}},{type:'item.reopened',id:item}]}));
+    f.service().pass();assert.equal(f.calls.length,1,'an open run still suppresses a newer reopen');
+    assert.deepEqual(JSON.parse(fs.readFileSync(file)).actions[alias],original);
+    assert.ok(f.calls.every(c=>!c.args.includes('--retry')),'fresh work never replays the original alias');
+  }
+});
+test('dispatch alias generations retain pending commands until their original terminal receipt',t=>{
+  for(const alias of ['dispatch-recovered:original-digest','dispatch-preflight:original-token:original-key']){
+    const f=fixture(t),item=f.add('Recovered fenced work'),service=f.service(),file=path.join(service.directory,'effects.json');
+    const original={state:'started',execution_subject:item,admission:{item,input:`${f.show(item).created.seq}:ordinary`}};
+    fs.writeFileSync(file,JSON.stringify({identity:gitProject(f.repo).identity,org:f.org,actions:{[alias]:original}}));
+    const pending=commandIntent(service.directory,{exe:'original-dispatch',args:[],cwd:f.repo,subject:item,key:alias});
+    f.record(['close',item]);f.record(['reopen',item]);
+    f.service().pass();assert.equal(f.calls.length,0,'a later generation cannot bypass the original command');
+    finishCommand(pending,{status:0,stdout:'original completed'});forgetActiveCommand(pending);
+    f.service().pass();assert.equal(f.calls.length,1,'terminal command proof releases only the fresh generation');
+    assert.deepEqual(JSON.parse(fs.readFileSync(file)).actions[alias],original);
+  }
+});
+test('dispatch alias generations keep missing foreign invalid and unrelated generation evidence held',t=>{
+  for(const invalid of ['missing','foreign','invalid-reopen','unrelated']){
+    const f=fixture(t),item=f.add('Unproven recovery'),service=f.service(),file=path.join(service.directory,'effects.json');
+    const key=invalid==='unrelated'?`source-complete:${item}:unknown`:'dispatch-recovered:unproven-digest';
+    const original={state:'started',execution_subject:item,...(invalid==='missing'?{}:
+      {admission:{item:invalid==='foreign'?'ENG-999':item,input:`${f.show(item).created.seq}:ordinary${invalid==='invalid-reopen'?':reopened-999999':''}`}})};
+    fs.writeFileSync(file,JSON.stringify({identity:gitProject(f.repo).identity,org:f.org,actions:{[key]:original}}));
+    f.record(['close',item]);f.record(['reopen',item]);
+    f.service().pass();assert.equal(f.calls.length,0,`${invalid} evidence cannot authorize a new dispatch`);
+    assert.deepEqual(JSON.parse(fs.readFileSync(file)).actions[key],original);
+  }
+});
 test('standing order changes the next native dispatch and skips held, reserved, dependent and unselected proposals',t=>{
   const f=fixture(t),a=f.add('Stable Brain',1),b=f.add('Rehearsal',9999),ready=f.add('Independent normal work',0);
   const goal=f.record(['add','Standing outcomes','--goal']).split(' ')[0];

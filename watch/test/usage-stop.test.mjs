@@ -26,6 +26,7 @@ function fixture(t) {
     agent_session_id:native.agent_session.value,dispatch_project:identity,dispatch_record:org,
     dispatch_attempt:'original',dispatch_journal:path.join(org,'dispatch.json')}};
   fs.mkdirSync(org);
+  fs.writeFileSync(path.join(org,'events.jsonl'),'');
   const add=events=>transact(org,()=>({add:events}),{actor:'fixture'});
   add([{type:'item.added',id:'ENG-1',role:'engineer',title:'Usage recovery'},
     {type:'run.started',id:'R-1',item:'ENG-1',workspace:root,meta:current.meta},

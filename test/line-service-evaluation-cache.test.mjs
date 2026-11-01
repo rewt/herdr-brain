@@ -12,7 +12,7 @@ import {initOrg,transact,loadRecord} from '../lib/store.mjs';
 function fixture(t){
   const root=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'negative-evaluation-'))),repo=path.join(root,'project'),org=path.join(repo,'.org');
   fs.mkdirSync(repo);fs.writeFileSync(path.join(root,'.identity-root'),'fixture\n');t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
-  const env={...process.env,ORG_DIR:org,GIT_CONFIG_GLOBAL:'/dev/null',GIT_CONFIG_NOSYSTEM:'1'};
+  const env={...process.env,ORG_DIR:org,MONITOR_SUPERVISOR_AGENT:'supervisor-test',GIT_CONFIG_GLOBAL:'/dev/null',GIT_CONFIG_NOSYSTEM:'1'};
   for(const name of ['LANE_CONFIG','HERDR_ENV','HERDR_PANE_ID','HERDR_WORKSPACE_ID','CODEX_THREAD_ID'])delete env[name];
   const gitAt=(cwd,...args)=>{const r=spawnSync('git',args,{cwd,env,encoding:'utf8'});assert.equal(r.status,0,r.stderr);return r.stdout.trim();};
   const git=(...args)=>gitAt(repo,...args);

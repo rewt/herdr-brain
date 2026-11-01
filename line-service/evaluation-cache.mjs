@@ -68,8 +68,8 @@ function physicalInputs(files,workspaces,identity){
     try{
       const l=fs.lstatSync(file),s=fs.statSync(file);
       if(!s.isFile())throw Error('unknown Git configuration');
-      // Git can atomically rewrite an unchanged common config during worktree
-      // allocation. Its inode/timestamps are not changed scheduling semantics.
+      // An atomic rewrite of an unchanged common config changes its inode and
+      // timestamps without changing scheduling semantics.
       // Keep path/redirect/mode and exact bytes; read failures still decline reuse.
       rows.push([file,fs.realpathSync(file),l.mode,s.mode,hash(fs.readFileSync(file))]);
     }catch(e){if(!['ENOENT','ENOTDIR'].includes(e.code))throw e;rows.push([file,e.code]);}

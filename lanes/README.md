@@ -448,7 +448,12 @@ Guarded cleanup prunes them only after fresh native absence checks; a malformed
 receipt keeps its filename-bound tab instead of the project.
 
 The closeout drain holds the project retirement owner lock only for admission
-and fresh ownership/policy checks. History scans, native exit waits and Git
+and fresh ownership/policy checks, with a bounded 1000 ms contention wait.
+Legacy housekeeping and promotion retirement take the consumer claim before
+the owner claim, so policy rollback cannot overlap an in-flight queue effect.
+Stopped-allocation disposal holds request, consumer and branch allocation claims,
+using owner.lock only for fresh ownership/policy guards.
+History scans, native exit waits and Git
 preservation/removal run under the consumer claim and a branch allocation lock
 in `retirement/allocations/`. Dispatch takes that same allocation lock before
 the project lock: a retiring branch refuses reuse with its exact lock path,

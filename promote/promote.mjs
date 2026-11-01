@@ -5,7 +5,7 @@ import { loadTimeout } from '../lib/deadline.mjs';
 import fs from '../lib/record-observation.mjs';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
-import { closeoutPolicy, claimRetirementOwner, retryPromotionCloseout } from '../lib/closeout.mjs';
+import { closeoutPolicy, claimLegacyRetirement, retryPromotionCloseout } from '../lib/closeout.mjs';
 import { handoffCloseout, completedCloseoutKeys } from '../lib/closeout-handoff.mjs';
 import { joinedCloseoutAttempt } from '../lib/closeout-attempt.mjs';
 import { promotionCloseoutOutcome } from '../lib/closeout-results.mjs';
@@ -368,7 +368,7 @@ export function finishCleanup(job, result, queue, { now = Date.now() } = {}) {
   const diagnostics = (result.warnings ?? []).filter(w => w.startsWith('velocity record:'));
   try {
     if (queueOwnsJob()) return delegated();
-    ownership = claimRetirementOwner(queue.project.identity, { waitMs: 1000 });
+    ownership = claimLegacyRetirement(queue.project.identity, { waitMs: 1000 });
     if (queueOwnsJob()) return delegated();
     checkHold();
     if (job.run) {
@@ -503,7 +503,7 @@ function consumeRequests(queue) {
     const jobs = queueJobs(queue.load());
     const discovered = findOrgDir({ cwd: queue.project.canonical });
     const orgs = new Set([discovered, ...jobs.map(j => j.org)].filter(Boolean));
-    const ownership = claimRetirementOwner(queue.project.identity, { waitMs: 1000 });
+    const ownership = claimLegacyRetirement(queue.project.identity, { waitMs: 1000 });
     try {
     for (const org of orgs) try {
       consumeRetirement({ org, retirement: () => createRetirement({ cwd: queue.project.canonical, org,

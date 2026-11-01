@@ -9,6 +9,9 @@ import {fold} from '../lib/state.mjs';
 import {currentCloseoutEntries} from '../lib/closeout.mjs';
 import {runCloseoutTurn} from '../line-service/closeout-turn.mjs';
 import {gitProject} from '../lib/project.mjs';
+import {performance} from 'node:perf_hooks';
+import {claimRetirementAllocation,claimLegacyRetirement,retirementOwnerLock,retirementAllocationLock} from '../lib/closeout.mjs';
+import {dispatchAllocationEffect} from '../dispatch/allocation-effect.mjs';
 
 function stopped(t,{run=false,occupied=false}={}){
   const f=setup(t,{occupied,merged:true,direct:true,bound:occupied});selectCurrentCleanup(f);
@@ -35,7 +38,41 @@ function stopped(t,{run=false,occupied=false}={}){
 
 test('line removes a never-launched folder with no run and immutable typed Git receipts',t=>{
   const f=stopped(t),journal=fs.readFileSync(f.journal),before=fs.readFileSync(f.eventFile);
+  const command=f.options.command,holds=[],rows=[];
+  const rename=fs.renameSync,rmdir=fs.rmdirSync;let acquired;
+  t.mock.method(fs,'renameSync',function(a,b,...rest){
+    const out=rename.call(fs,a,b,...rest);if(b===retirementOwnerLock(f.common))acquired=performance.now();return out;
+  });
+  t.mock.method(fs,'rmdirSync',function(a,...rest){
+    const out=rmdir.call(fs,a,...rest);if(a===retirementOwnerLock(f.common))holds.push(performance.now()-acquired);return out;
+  });
+  f.options.command=(exe,args,options)=>{
+    if(exe==='git'&&args[2]==='worktree'&&args[3]==='remove'){
+      const at=performance.now();
+      assert.equal(fs.existsSync(retirementOwnerLock(f.common)),false);
+      const allocation=retirementAllocationLock(f.common,'lane/topic'),bytes=fs.readFileSync(path.join(allocation,'owner.json'));
+      assert.throws(()=>claimRetirementAllocation(f.common,'lane/topic'),/locked:/);
+      assert.deepEqual(fs.readFileSync(path.join(allocation,'owner.json')),bytes);
+      assert.throws(()=>claimLegacyRetirement(f.common),/locked:.*consumer.lock/);
+      let admitted=false;
+      dispatchAllocationEffect({project:gitProject(f.repo),org:f.org,branch:'lane/unrelated',waitMs:0},()=>{admitted=true;});
+      assert.equal(admitted,true);
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,250);
+      const result=command(exe,args,options);
+      rows.push({git_ms:performance.now()-at,owner_lock_present:fs.existsSync(retirementOwnerLock(f.common)),unrelated_admitted:admitted});return result;
+    }
+    return command(exe,args,options);
+  };
   const result=f.dispose();assert.equal(result.results[0].disposition,'removed',JSON.stringify(result));
+  assert.equal(rows.length,1);assert.ok(holds.length>1);
+  assert.equal(fs.existsSync(retirementAllocationLock(f.common,'lane/topic')),false);
+  assert.equal(fs.existsSync(path.join(f.common,'closeout/consumer.lock')),false);
+  if(process.env.CLOSEOUT_FIX_EVIDENCE_DIR){
+    fs.mkdirSync(process.env.CLOSEOUT_FIX_EVIDENCE_DIR,{recursive:true});
+    fs.writeFileSync(path.join(process.env.CLOSEOUT_FIX_EVIDENCE_DIR,'after.json'),JSON.stringify({holds_ms:holds,
+      total_owner_hold_ms:holds.reduce((a,b)=>a+b,0),max_owner_hold_ms:Math.max(...holds),rows,
+      qualification:'Offline fixture; 250 ms injected Git latency, actual lock edges; unrelated dispatch admission completes inside removal.'},null,2)+'\n');
+  }
   assert.equal(fs.existsSync(f.lane),false);assert.equal(f.git(['branch','--list','lane/topic']),'');
   assert.deepEqual(fs.readFileSync(f.journal),journal);assert.deepEqual(fs.readFileSync(f.eventFile).subarray(0,before.length),before);
   const actions=events(f).filter(e=>e.type==='closeout.allocation-effect').map(e=>e.outcome.action);

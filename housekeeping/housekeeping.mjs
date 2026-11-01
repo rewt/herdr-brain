@@ -22,7 +22,7 @@ import { readConfig } from './config.mjs';
 import { noticeLock } from '../supervisor/notice-lock.mjs';
 import { resumeInbox, inboxPath } from '../supervisor/prompt-supervisor.mjs';
 import { queueFor, retryCleanup } from '../promote/promote.mjs';
-import { closeoutPolicy, claimRetirementOwner } from '../lib/closeout.mjs';
+import { closeoutPolicy, claimLegacyRetirement } from '../lib/closeout.mjs';
 import { gitProject } from '../lib/project.mjs';
 export { readConfig } from './config.mjs';
 
@@ -96,7 +96,7 @@ function scheduledRetirement({ cwd, common, dryRun, log }) {
       return true;
     };
     if (transferred()) return { allowed: false };
-    if (!dryRun) release = claimRetirementOwner(common ?? project.identity, { waitMs: 1000 });
+    if (!dryRun) release = claimLegacyRetirement(common ?? project.identity, { waitMs: 1000 });
     if (transferred()) return { allowed: false };
     return { allowed: true, release };
   } catch (error) {

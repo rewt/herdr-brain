@@ -110,6 +110,9 @@ node --input-type=module -e 'import fs from "node:fs"; console.log(JSON.stringif
 
 Intake checks the original correction/finding/run binding, claim and landed head,
 receipt hash, command, executed green result, log hash and actual execution result.
+An explicit `tap_totals: null` is the lane runner's successful non-TAP format;
+it needs the same executed green, zero-exit, unsignalled execution proof as TAP.
+Missing/malformed totals and TAP failures/cancellations do not discharge.
 The receipt must survive lane removal in the owning record's evidence directory;
 its original log and execution sidecar remain retrievable. Majors must name their
 original required-check text. Missing, red, changed and unrun controls produce no
@@ -118,6 +121,24 @@ record mutation; it does not run checks, retarget findings or start another revi
 A discharge can establish accepted outcome while preserving the original FAIL.
 The release owner still judges whether the specific Major control proves its
 correction and runs final-release/live coverage.
+
+An evidence-only correction needs no invented source landing. Its finding and
+gate must name the same exact existing commit and tree, already an ancestor of
+the owning project's `refs/heads/main`. Intake verifies the gate against the
+original lane receipt inventory, branch and run interval, plus its original log
+and execution sidecar. Missing/foreign receipts, absent main ancestry and red
+results remain Unknown. A run with a landing still requires that landing's exact
+head, project and ownership generation; this exception cannot substitute a
+different checked head for delivered source.
+
+For a report already ingested, run the existing `record ingest ORIGINAL_REPORT`
+with its unchanged bytes through the intake owner. The same report hash can emit
+one missing `correction.discharged` after verifying its original proof; repeat
+intake is idempotent. It does not rewrite the report, edit any receipt, rerun a
+check or create another review. A changed report is still refused. The current
+run/claim, finding and original review bindings still apply. Historical red,
+split or pre-rebase proof is retained as Unknown when it fails these checks;
+reconciliation does not waive exact-head or overall-green proof requirements.
 
 ### Required rebase after a correction check
 

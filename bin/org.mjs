@@ -929,7 +929,10 @@ async function ingestFile(ctx, file, runHint, currentRun, selfClosedSeq) {
     if (run.report) {
       if (run.report.sha256 === sha256) {
         const add = reviewResultEvents({ state:s, events:committedEvents, run, report:parsed.report, sha256, body:parsed.body, minorBackfillOnly:true });
-        return { add, result: { already: true, runId, minorBatches: add.filter(e=>e.type==='item.added').map(e=>e.id) } };
+        const discharges = correctionDischargeEvents({ state:s, run, report:parsed.report, sha256, org:ctx.dir });
+        add.push(...discharges);
+        return { add, result: { already: true, runId, correctionDischarged: discharges.length > 0,
+          minorBatches: add.filter(e=>e.type==='item.added').map(e=>e.id) } };
       }
       throw new UserError(`${runId} already has a report (recorded ${run.report.at}); start a new run to report again`);
     }
@@ -995,6 +998,7 @@ function printIngest(res) {
   }
   if (res.already) {
     safeOut(`${res.runId}: report already recorded\n`);
+    if (res.correctionDischarged) safeOut('  + correction discharged from the unchanged report and original proof\n');
     for (const id of res.minorBatches ?? []) safeOut(`  + ${id} unselected Minor batch from the immutable report\n`);
     return true;
   }

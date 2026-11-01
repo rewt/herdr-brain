@@ -12,6 +12,8 @@ import { correctionDischargeEvents } from '../lib/correction-discharge.mjs';
 import { reviewResultEvents } from '../line-service/phase1.mjs';
 import { setupOrg } from './helpers.mjs';
 import { validateTree } from '../lanes/validation.mjs';
+import { transact } from '../lib/store.mjs';
+import { readReport } from '../lib/report.mjs';
 
 const head = 'a'.repeat(40), base = 'b'.repeat(40), reportHash = 'c'.repeat(64), reviewHash = 'd'.repeat(64), project = '/fixture/.git';
 const stamp = rows => rows.map((e, i) => ({ seq: i + 1, at: '2026-10-30T20:00:00Z', by: 'fixture', ...e }));
@@ -108,11 +110,11 @@ test('Progressing has True/False/Unknown witnesses; inactivity is a diagnostic w
   assert.equal(itemConditions(state(judge()), 'ENG-1').Progressing.status, 'False');
 });
 
-function correction(t) {
+function correction(t, existingOrg) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'item-discharge-'));
   process.env.HERDR_MONITOR_FLEET = path.join(root, 'fleet');
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-  const org = path.join(root, '.org'); fs.mkdirSync(path.join(org, 'evidence'), { recursive: true });
+  const org = existingOrg ?? path.join(root, '.org'); fs.mkdirSync(path.join(org, 'evidence'), { recursive: true });
   const output = path.join(org, 'evidence', 'check.log'), execution = `${output}.execution.json`, receipt = path.join(org, 'evidence', 'gate.json');
   fs.writeFileSync(output, 'TAP fixture: exact Major trigger corrected\n');
   fs.writeFileSync(execution, JSON.stringify({ command_started: true, exit_code: 0, signal: null, attempts: 1 }));
@@ -133,7 +135,7 @@ function correction(t) {
   const finding = { key: 'finding-1', result: 'PASS', command, head, evidence: receipt, sha256: save(), requirement: 'Reject malformed paths' };
   const report = { outcome: 'done', extra: { correction_discharge: { run: run.id, claim_generation: run.owner_generation,
     review_key: `ENG-1:${head}`, findings: [finding] } } };
-  return { s, run, report, finding, gate, save, org, output, execution };
+  return { s, run, report, finding, gate, save, org, output, execution, rows };
 }
 
 test('correction discharge consumes original findings and actual green receipts; missing/red/changed/unrun results do not discharge', t => {
@@ -142,10 +144,85 @@ test('correction discharge consumes original findings and actual green receipts;
   for (const patch of [{ result: 'unrun' }, { result: undefined }, { sha256: '0'.repeat(64) }, { head: base }, { requirement: 'Unrelated control' }, { key: 'other' }]) {
     const original = { ...f.finding }; Object.assign(f.finding, patch); assert.deepEqual(intake(), [], JSON.stringify(patch)); Object.assign(f.finding, original);
   }
-  for (const patch of [{ executed: false }, { exit_code: 1 }, { outcome: 'red' }, { tap_totals: [{ fail: 1 }] }, { tap_totals: [{ fail: 0, cancelled: 1 }] }, { tap_totals: { fail: 0 } }]) {
+  for (const patch of [{ executed: false }, { exit_code: 1 }, { outcome: 'red' }, { tap_totals: undefined }, { tap_totals: [{ fail: 1 }] }, { tap_totals: [{ fail: 0, cancelled: 1 }] }, { tap_totals: { fail: 0 } }]) {
     const original = { ...f.gate }; Object.assign(f.gate, patch); f.finding.sha256 = f.save(); assert.deepEqual(intake(), []); Object.assign(f.gate, original); f.finding.sha256 = f.save();
   }
   fs.writeFileSync(f.output, 'changed'); assert.deepEqual(intake(), []);
+});
+
+test('correction discharge accepts explicit non-TAP green proof but retains failed and missing execution', t => {
+  const f = correction(t);
+  f.gate.tap_totals = null; f.finding.sha256 = f.save();
+  const intake = () => correctionDischargeEvents({ state: f.s, run: f.run, report: f.report, sha256: reviewHash, org: f.org });
+  const bytes = fs.readFileSync(f.finding.evidence);
+  assert.equal(intake().length, 1);
+  for (const patch of [{ command_started: false }, { exit_code: 1 }, { signal: 'SIGTERM' }, { gate_timeout: true }, { cleanup_error: 'held' }, { attempts: 0 }]) {
+    fs.writeFileSync(f.execution, JSON.stringify({ command_started: true, exit_code: 0, signal: null, attempts: 1, ...patch }));
+    assert.deepEqual(intake(), [], JSON.stringify(patch));
+  }
+  fs.writeFileSync(f.execution, JSON.stringify({ command_started: true, exit_code: 0, signal: null, attempts: 1 }));
+  assert.equal(intake().length, 1, 'original green execution recovers without running a check');
+  assert.deepEqual(fs.readFileSync(f.finding.evidence), bytes);
+  extendFold(f.s, intake().map(e => ({ ...e, seq: f.s.eventCount + 1 })));
+  assert.deepEqual(intake(), [], 'same report cannot discharge twice');
+});
+
+test('same-report correction ingest reconciles original non-TAP proof once without rewriting reports or adding review', t => {
+  const cli = setupOrg(); t.after(() => fs.rmSync(cli.root, { recursive: true, force: true }));
+  const f = correction(t, cli.dir); f.gate.tap_totals = null; f.finding.sha256 = f.save();
+  transact(cli.dir, () => ({ add: f.rows.slice(0, -1).map(({ seq, ...event }) => event) }));
+  const run = fold(cli.events()).runs.get(f.run.id);
+  transact(cli.dir, () => ({ add: [{ type: 'change.landed', run: run.id, item: run.item, head, base, project,
+    producer: { ownership_generation: run.owner_generation } }] }));
+  f.report.extra.correction_discharge.claim_generation = run.owner_generation;
+  const bytes = `---\n${JSON.stringify({ run: run.id, outcome: 'done', summary: 'Correction proof preserved',
+    headline: 'Correction proof preserved', correction_discharge: f.report.extra.correction_discharge })}\n---\nOriginal immutable report.\n`;
+  const sha256 = createHash('sha256').update(bytes).digest('hex'), parsed = readReport(bytes);
+  assert.deepEqual(parsed.errors, []);
+  const stored = path.join(cli.dir, 'reports', `${run.id}.md`); fs.writeFileSync(stored, bytes);
+  transact(cli.dir, () => ({ add: [{ type: 'report.ingested', run: run.id, item: run.item, report: parsed.report, sha256 }] }));
+  const before = cli.events(), gateBytes = fs.readFileSync(f.finding.evidence);
+  assert.match(cli.ok(['ingest', stored]), /correction discharged/);
+  const after = cli.events();
+  assert.equal(after.length, before.length + 1);
+  assert.equal(after.at(-1).type, 'correction.discharged');
+  assert.equal(after.at(-1).report_sha256, sha256);
+  assert.equal(itemConditions(fold(after), run.item).Accepted.status, 'True');
+  assert.equal(fs.readFileSync(stored, 'utf8'), bytes);
+  assert.deepEqual(fs.readFileSync(f.finding.evidence), gateBytes);
+  cli.ok(['ingest', stored]); assert.equal(cli.events().length, after.length);
+  const changed = path.join(cli.root, 'changed.md'); fs.writeFileSync(changed, bytes + 'Changed');
+  assert.match(cli.fail(['ingest', changed]), /already has a report/);
+  assert.equal(cli.events().filter(e => e.type === 'item.added' && e.role === 'reviewer').length, 1);
+});
+
+test('evidence-only correction requires an exact main ancestor and original run lane receipt', t => {
+  const f = correction(t), repo = path.join(path.dirname(f.org), 'repo'); fs.mkdirSync(repo);
+  const git = (...args) => execFileSync('git', ['-C', repo, ...args], { encoding: 'utf8' }).trim();
+  git('init', '-b', 'main'); git('config', 'user.name', 'Fixture'); git('config', 'user.email', 'fixture@example.test');
+  fs.writeFileSync(path.join(repo, 'seed'), 'existing source'); git('add', '.'); git('commit', '-m', 'Existing source');
+  const checkedHead = git('rev-parse', 'HEAD'); git('checkout', '-b', 'lane/correction');
+  const common = git('rev-parse', '--path-format=absolute', '--git-common-dir');
+  f.run.landings = []; f.run.meta.dispatch_project = common; f.run.meta.lane = 'correction';
+  const command = `'${process.execPath}' -e 'console.log("existing documentation verified")'`;
+  const gate = validateTree({ cwd: repo, common, command, tier: 'fast' });
+  assert.equal(gate.executed, true); assert.equal(gate.tap_totals, null); assert.equal(gate.exit_code, 0);
+  Object.assign(f.gate, gate); Object.assign(f.finding, { head: checkedHead, command, sha256: f.save() });
+  const intake = () => correctionDischargeEvents({ state: f.s, run: f.run, report: f.report, sha256: reviewHash, org: f.org });
+  assert.equal(intake().length, 1);
+  for (const patch of [{ head: head }, { tree: head }, { branch: 'lane/foreign' }, { started_at: '2020-01-01T00:00:00Z' }]) {
+    const original = { ...f.gate }; Object.assign(f.gate, patch); f.finding.sha256 = f.save();
+    assert.deepEqual(intake(), [], JSON.stringify(patch)); Object.assign(f.gate, original); f.finding.sha256 = f.save();
+  }
+  git('update-ref', '-d', 'refs/heads/main');
+  assert.deepEqual(intake(), [], 'missing main never accepts');
+  git('update-ref', 'refs/heads/main', checkedHead);
+  assert.equal(intake().length, 1, 'main ancestry recovers using the same proof');
+  const receipt = f.gate.history_receipt ?? path.join(common, 'lane-validation', `${gate.key}.json`);
+  const original = fs.readFileSync(receipt); fs.writeFileSync(receipt, '{}');
+  assert.deepEqual(intake(), [], 'copied declaration alone cannot replace the native receipt');
+  fs.writeFileSync(receipt, original);
+  f.report.outcome = 'failed'; assert.deepEqual(intake(), [], 'red evidence-only runs remain unresolved');
 });
 
 test('a completed correction alone does not accept; exact discharge accepts without rewriting FAIL or adding a review', t => {

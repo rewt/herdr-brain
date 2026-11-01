@@ -70,11 +70,16 @@ test('project HOLD permits original empty report binding refresh before one guar
   assert.deepEqual(events(f).slice(0,old.length),old);
 });
 
-for(const kind of ['service-STOP','project-STOP','retirement-HOLD','dirty','refused','unknown','abandoned'])
+for(const kind of ['service-STOP','project-STOP','retirement-HOLD','dirty','refused','unknown','abandoned','unreported-predecessor'])
 test(`project HOLD preserves ${kind} and its original allocation`,t=>{
   const f=fixture(t);
+  if(kind==='unreported-predecessor')f.append([
+    {type:'item.added',id:'ENG-0',role:'engineer',title:'Unreported predecessor'},
+    {type:'run.started',id:'R-0',item:'ENG-0',workspace:f.lane,meta:{agent:'predecessor',pane:'w:old',
+      worker_workspace:'w',terminal_id:'old-terminal',agent_session_id:'old-session'}},
+    {type:'run.abandoned',id:'R-0'}]);
   if(kind==='abandoned')f.append([{type:'run.abandoned',id:'R-1'}]);else f.report();
-  const [entry]=currentCloseoutEntries(f.common,f.org,events(f));f.hold();
+  const entry=currentCloseoutEntries(f.common,f.org,events(f)).find(e=>e.run==='R-1');f.hold();
   if(kind==='service-STOP')fs.writeFileSync(path.join(f.directory,'STOP'),'stop');
   if(kind==='project-STOP')fs.writeFileSync(path.join(f.repo,'.lane/supervisor/STOP'),'stop');
   if(kind==='retirement-HOLD')fs.writeFileSync(path.join(f.repo,'.lane/supervisor/HOLD-WORKER-TAB-CLOSE'),'keep');
@@ -84,7 +89,13 @@ test(`project HOLD preserves ${kind} and its original allocation`,t=>{
   if(kind==='unknown')f.append([{type:'closeout.effect',identity:f.common,key:entry.key,source:entry.source,run:entry.run,
     effect:'original-unknown',producer:'native-closeout/v2',outcome:{action:'agent-exit-requested',pane:'w:p'}}]);
   const original=events(f),calls=f.herdrCalls();
-  if(kind.endsWith('STOP'))assert.throws(()=>f.service.closeout(),/STOP/);else f.service.closeout();
+  if(kind==='unreported-predecessor'){
+    assert.equal(entry.reportCloseout,true);assert.ok(events(f).some(e=>e.type==='report.ingested'&&e.run===entry.run));
+    assert.ok(entry.panes.some(p=>p.run==='R-0'));assert.equal(events(f).some(e=>e.type==='report.ingested'&&e.run==='R-0'),false);
+    const result=f.drain({keys:[entry.key]});
+    assert.equal(result.evaluated[0].completed,false);
+    assert.match(result.evaluated[0].reason,/STOP\/HOLD prevents queued retirement effect/);
+  }else if(kind.endsWith('STOP'))assert.throws(()=>f.service.closeout(),/STOP/);else f.service.closeout();
   if(kind==='dirty'){
     assert.deepEqual(f.read().tabs,[],'finished session may close while unsaved work stays preserved');
     assert.equal(effects(f).some(e=>e.action==='worktree-removed'),false);

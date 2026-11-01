@@ -174,6 +174,36 @@ test('new defect decisions follow independent report cleanup and existing decisi
   assert.deepEqual(events(f).slice(0,original.length),original);assert.deepEqual(events(f).find(e=>e.seq===refusal.seq),refusal);
 });
 
+test('finite project HOLD defers allocations and new decisions quietly, then resumes them',t=>{
+  const f=fixture(t);fs.writeFileSync(path.join(f.scratch,'.identity-root'),'fixture');
+  fs.writeFileSync(f.file,JSON.stringify({...f.receipt,at:new Date().toISOString()}));f.report();
+  const [entry]=currentCloseoutEntries(f.common,f.org,events(f));
+  f.append([{type:'closeout.evaluated',identity:f.common,key:entry.key,source:entry.source,
+    run:entry.run,item:entry.item,revision:closeoutRevision(entry,events(f)),completed:false,reason:'EPERM native refusal'}]);
+  const original=events(f),hold=path.join(f.repo,'.lane/supervisor/HOLD');fs.writeFileSync(hold,'proving');
+  let allocations=0;
+  const args={...f.args,cli:(file,argv)=>{
+    if(argv[0]==='allocations'){allocations++;return '{}';}
+    return f.args.cli(file,argv);
+  }},decisions=()=>[...fold(events(f)).items.values()].filter(i=>i.meta.uncertain_outcome);
+  for(let turn=0;turn<4;turn++){
+    const result=runCloseoutTurn(args);assert.deepEqual(result.errors,[]);
+    assert.deepEqual(result.decisions,{existing:0,attempted:0});assert.equal(result.continuation.decisions,1);
+  }
+  assert.equal(allocations,0);assert.equal(decisions().length,0);assert.deepEqual(f.read().actions,[]);
+  fs.unlinkSync(hold);
+  for(let turn=0;turn<4;turn++)assert.deepEqual(runCloseoutTurn(args).errors,[]);
+  assert.equal(allocations,1);assert.equal(decisions().length,1);
+  assert.deepEqual(decisions()[0].meta.uncertain_outcome.check.subject.source,entry.source);
+  assert.deepEqual(events(f).slice(0,original.length),original);assert.deepEqual(f.read().actions,[]);
+  const checkpoint=path.join(f.directory,'closeout-turn.json'),state=JSON.parse(fs.readFileSync(checkpoint));
+  state.turn=11;fs.writeFileSync(checkpoint,JSON.stringify(state));
+  const failed=runCloseoutTurn({...args,cli:(file,argv)=>{
+    if(argv[0]==='allocations')throw Error('actual allocation failure');return args.cli(file,argv);
+  }});
+  assert.deepEqual(failed.errors,[{stage:'allocations',reason:'actual allocation failure'}]);
+});
+
 test('a failed subject keeps its original binding and receipt while an independent subject completes in the same turn',t=>{
   const f=fixture(t);f.report();const target=currentCloseoutEntries(f.common,f.org,events(f))[0];
   const secondLane=f.lane+'-second';f.git(['worktree','add','-qb','lane/second',secondLane,f.head]);

@@ -180,7 +180,10 @@ function closeoutTurn({project,org,cli,guard,env=process.env,maxSteps=8,budgetMs
     // Periodic priority also covers turns whose effects consume every second.
     // This is the same finite owner, not another executor or background loop.
     state.turn=(state.turn??0)+1;
-    if(!expired()&&(state.turn%4===0||[...observed.state.runs.values()].some(r=>
+    // These stages retain their own project-HOLD fences. Leave their work
+    // pending while reported closeout continues, without logging expected errors.
+    const projectHeld=()=>fs.existsSync(path.join(project.canonical,'.lane/supervisor/HOLD'));
+    if(!expired()&&!projectHeld()&&(state.turn%4===0||[...observed.state.runs.values()].some(r=>
         r.meta?.dispatch_project===project.identity&&endedUnboundRun(r,observed.events)))){
       try{guard();state.allocations=JSON.parse(cli('supervisor/closeout.mjs',['allocations','--repo',project.canonical,'--org',org,
         '--deadline',String(Math.floor(now()+Math.max(1,budgetMs-(clock()-started))))]));}
@@ -264,7 +267,7 @@ function closeoutTurn({project,org,cli,guard,env=process.env,maxSteps=8,budgetMs
     if(!refreshed)refresh();
     let decisionSteps=0;
     for(const {entry,check}of decisions){
-      if(expired()||decisionSteps>=maxSteps)break;
+      if(expired()||decisionSteps>=maxSteps||projectHeld())break;
       decisionSteps++;
       try{
         const current=read(),entries=currentCloseoutEntries(project.identity,org,current.events,{onInvalid:()=>{}}),

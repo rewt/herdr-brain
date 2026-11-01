@@ -20,6 +20,7 @@ import {reviewQueueNoMutation} from '../line-service/review-queue-outcome.mjs';
 import {reconcileReviewQueue,inspectReviewQueue} from '../line-service/review-queue-reconcile.mjs';
 import {terminalQueuePlanningProof,resolvedQueuePlanning} from '../line-service/review-queue-proof.mjs';
 import {commandIntent,finishCommand,forgetActiveCommand} from '../lib/command-receipt.mjs';
+import {appendPassJournal,readPassJournal} from '../line-service/pass-journal.mjs';
 
 const root=fs.realpathSync(sourceRoot);
 function fixture(t,{diffBytes=0}={}){
@@ -449,15 +450,26 @@ const noMutation=(f,entry,context=f.context())=>reviewQueueNoMutation({...contex
 
 function planningFixture(t,index=0){
   const f=fixture(t);f.prepare({producerEvidence:{kind:'checks'}});
+  let file=path.join(f.directory,'effects.json'),key=`review:ENG-1:${f.head}`,entry,receipt;
+  if(index==='prequeue'){
+    entry={state:'held',owner:'line-service',subject:key,execution_subject:'ENG-1',attempt:'original-prequeue',consumer:'line-service',
+      at:'2026-10-30T01:00:00Z',finished_at:'2026-10-30T01:01:00Z',review_target:f.context().target,review_operation:'record-queue',
+      error:'immutable landed target/evidence changed before queue mutation',failure:{kind:'unknown',code:'OUTCOME_UNKNOWN'}};
+    fs.writeFileSync(file,JSON.stringify({identity:f.identity,org:f.org,actions:{[key]:entry},notices:{}}));
+    const audit=path.join(f.directory,'passes.jsonl');
+    appendPassJournal(audit,{at:entry.at,pid:1234,action:'effect-intent',key,subject:'ENG-1',attempt:entry.attempt});
+    appendPassJournal(audit,{at:entry.at,pid:1234,action:'effect',key,...entry});
+  }else{
   const saved=JSON.parse(fs.readFileSync(new URL('./fixtures/review-queue-planning-errors.json',import.meta.url)))[index];
-  const receipt={...contentionReceipt(f),status:1,stderr:saved.stderr.replaceAll('<repo>',f.repo)};
+  receipt={...contentionReceipt(f),status:1,stderr:saved.stderr.replaceAll('<repo>',f.repo)};
   createLineService({repo:f.repo,org:f.org,to:'fixture-supervisor',env:f.serviceEnv,command:(_exe,args)=>args[1]==='queue-review'?receipt:{status:0,stdout:'{"created":[]}',stderr:''}}).pass();
-  const file=path.join(f.directory,'effects.json'),key=`review:ENG-1:${f.head}`,journal=JSON.parse(fs.readFileSync(file)),entry=journal.actions[key];
+  const journal=JSON.parse(fs.readFileSync(file));entry=journal.actions[key];
   // Retain a real foreground-helper terminal receipt. The fixture repository
   // models Brain's canonical source/consumer checkout without executing it.
   const ref=commandIntent(f.directory,{exe:process.execPath,args:[path.join(f.repo,'bin/org.mjs'),'queue-review','R-1','--head',f.head,'--base',f.base],cwd:f.repo,project:f.identity,org:f.org,subject:'ENG-1',key,consumer:'line-service'});
   const terminal=finishCommand(ref,receipt,{pid:1234,identity:'fixture-birth',started_at:JSON.parse(fs.readFileSync(ref.file)).at});forgetActiveCommand(ref);
   entry.commands=[ref];entry.finished_at=terminal.finished_at;fs.writeFileSync(file,JSON.stringify(journal));
+  }
   const proof=terminalQueuePlanningProof({...f.context(),item:'ENG-1',run:'R-1',entry,key});assert.ok(proof);
   const id='terminal-planning',resolution=path.join(f.org,'queue-resolution.json'),input={item:'ENG-1',run:'R-1',key,attempt:entry.attempt,target:entry.review_target,original_sha256:proof.original_sha256,command_sha256:proof.command_sha256};
   fs.writeFileSync(resolution,JSON.stringify(input));
@@ -465,6 +477,46 @@ function planningFixture(t,index=0){
   const decisionSeq=f.context().events.at(-1).seq,args=()=>({...f.args(),resolution,decisionSeq,id});
   return{...f,file,key,entry,proof,input,resolution,reconcileArgs:args,receipt};
 }
+
+for(const next of ['queued','unknown'])test(`prequeue target-change reconciliation preserves the original and permits one continuation: ${next}`,t=>{
+  const f=planningFixture(t,'prequeue'),before=fs.readFileSync(f.file),audit=fs.readFileSync(path.join(f.directory,'passes.jsonl'));
+  assert.deepEqual(inspectReviewQueue({repo:f.repo,org:f.org,runId:'R-1',attempt:f.entry.attempt}),f.input);
+  assert.equal(noMutation(f,f.entry),null,'even a proven local throw needs its owning supervisor disposition');
+  assert.equal(reconcileReviewQueue(f.reconcileArgs()).existing,false);
+  assert.deepEqual(fs.readFileSync(f.file),before);assert.deepEqual(fs.readFileSync(path.join(f.directory,'passes.jsonl')),audit);
+  assert.equal(reconcileReviewQueue(f.reconcileArgs()).existing,true);
+  assert.equal(noMutation(f,f.entry).kind,'pre-command-target-change');
+  // A final report changes evidence identity, while keeping the delivered source.
+  const c=f.context(),updated={...c.target,reportHash:'a'.repeat(64)};
+  assert.ok(noMutation(f,f.entry,{...c,target:updated}));
+  for(const target of [{...updated,base:f.head},{...updated,diff_sha256:'b'.repeat(64)},{...updated,dispatch:'/foreign'},
+    {...updated,source_group:{...updated.source_group,owned_commits:[f.base]}}])assert.equal(noMutation(f,f.entry,{...c,target}),null);
+  let calls=0;const options={repo:f.repo,org:f.org,to:'fixture-supervisor',env:f.serviceEnv,command:(_exe,args)=>{
+    if(args[1]!=='queue-review')return{status:0,stdout:'{"created":[]}',stderr:''};calls++;
+    return next==='queued'?{status:0,stdout:JSON.stringify(f.queue()),stderr:''}:{status:1,signal:null,stdout:'',stderr:'reply lost after possible append',signal_sent:false};
+  }};
+  createLineService(options).pass();createLineService(options).pass();createLineService(options).pass();
+  assert.equal(calls,1);const after=JSON.parse(fs.readFileSync(f.file)).actions[f.key];assert.deepEqual(after.history,[f.entry]);
+  assert.equal(after.queue_recovery.original_sha256,f.proof.original_sha256);
+  assert.equal([...f.context().state.items.values()].filter(q=>q.role==='reviewer').length,next==='queued'?1:0);
+  const originalAudit=[...readPassJournal(path.join(f.directory,'passes.jsonl'))].filter(r=>r.attempt===f.entry.attempt);
+  assert.deepEqual(originalAudit,f.proof.service_audit.rows);
+});
+
+test('prequeue target-change proof rejects missing, ambiguous, altered or command-bearing original evidence',t=>{
+  const f=planningFixture(t,'prequeue'),options={...f.context(),item:'ENG-1',run:'R-1',key:f.key};
+  for(const mutate of [e=>e.commands=[{}],e=>e.commands={},e=>e.receipt={},e=>e.consumer='other',e=>e.execution_subject='ENG-99',
+    e=>e.error+=' unknown',e=>e.attempt='other',e=>e.review_target.source_group.run='R-99',e=>e.native_launch_attempted=true]){
+    const entry=structuredClone(f.entry);mutate(entry);assert.equal(terminalQueuePlanningProof({...options,entry}),null,mutate.toString());
+  }
+  const file=path.join(f.directory,'passes.jsonl'),bytes=fs.readFileSync(file),rows=[...readPassJournal(file)];
+  for(const changed of [[],[rows[0]],[rows[1],rows[0]],[...rows,rows[1]], [rows[0],{...rows[1],pid:999}],
+    [rows[0],{...rows[1],error:'different'}]]){
+    fs.writeFileSync(file,changed.map(r=>JSON.stringify(r)+'\n').join(''));assert.equal(terminalQueuePlanningProof({...options,entry:f.entry}),null);
+  }
+  fs.writeFileSync(file,bytes);assert.ok(terminalQueuePlanningProof({...options,entry:f.entry}));
+  f.queue();assert.throws(()=>reconcileReviewQueue(f.reconcileArgs()),/review attempt retained/);
+});
 
 for(const index of [0,1])for(const next of ['queued','unknown','contention'])test(`guarded status-1 planning disposition ${index} permits one line continuation: ${next}`,t=>{
   const f=planningFixture(t,index),before=fs.readFileSync(f.file),terminal=fs.readFileSync(f.entry.commands[0].receipt);
@@ -536,8 +588,8 @@ test('terminal planning writer refuses mismatched original inputs and unaudited 
   assert.deepEqual(f.captured(),before);
 });
 
-for(const obstacle of ['STOP','HOLD','reserved','foreign-native','changed-claim','existing-review','uncertain-command'])test(`terminal planning disposition retains ${obstacle}`,t=>{
-  const f=planningFixture(t);
+for(const source of [0,'prequeue'])for(const obstacle of ['STOP','HOLD','reserved','foreign-native','changed-claim','existing-review','uncertain-command'])test(`terminal planning disposition ${source} retains ${obstacle}`,t=>{
+  const f=planningFixture(t,source);
   if(obstacle==='STOP')fs.writeFileSync(path.join(f.directory,'STOP'),'hold');
   if(obstacle==='HOLD'){fs.mkdirSync(path.join(f.repo,'.lane/supervisor'),{recursive:true});fs.writeFileSync(path.join(f.repo,'.lane/supervisor/HOLD'),'hold');}
   if(obstacle==='reserved')f.add([{type:'item.updated',id:'ENG-1',fields:{meta:{operator_reserved:true}}}]);

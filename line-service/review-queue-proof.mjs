@@ -2,9 +2,11 @@
 // Full stderr (including the pre-append stack and runtime) is matched after
 // substituting only the actual canonical repository path. See DEC-445/R-1567.
 import path from 'node:path';
+import {isDeepStrictEqual} from 'node:util';
 import {readCommandResult} from '../lib/command-receipt.mjs';
 import {outcomeFailure} from '../lib/uncertain-outcome.mjs';
 import {reviewDigest as hash,reviewPlain} from './review-resolutions.mjs';
+import {readPassJournal} from './pass-journal.mjs';
 
 const signatures=new Map([
   ['b99e19367af0d2266f495ea003ad418fabdebf377a263038203d33bc8938296d','pre-append-record-observation'],
@@ -22,6 +24,8 @@ export function unconsumedQueueEntry({entry,key,item,target}){
 }
 export function terminalQueuePlanningProof({entry,key,repo,org,identity,item,run}){
   if(!unconsumedQueueEntry({entry,key,item,target:entry?.review_target})||!entry.attempt)return null;
+  const local=terminalPrequeueProof({entry,key,org,identity,item,run});
+  if(local)return local;
   const r=entry.receipt,kind=r&&typeof r.stderr==='string'&&signatures.get(hash(r.stderr.replaceAll(repo,'<repo>')));
   if(!kind||r.status!==1||r.signal!==null||r.stdout!==''||r.error!=null||r.signal_sent!==false||entry.error!==r.stderr.trim()||entry.commands?.length!==1)return null;
   const ref=entry.commands[0],directory=path.join(org,'line-service',hash(JSON.stringify(identity)).slice(0,20));
@@ -36,6 +40,29 @@ export function terminalQueuePlanningProof({entry,key,repo,org,identity,item,run
     Date.parse(command.execution.started_at)<Date.parse(i.at)||Date.parse(command.execution.started_at)>Date.parse(command.finished_at))return null;
   return{schema:'review-queue-no-mutation/v1',kind,project:identity,org,subject:key,item,run,target:t,attempt:entry.attempt,
     original_sha256:hash(JSON.stringify(entry)),receipt_sha256:hash(JSON.stringify(r)),command_sha256:hash(bytes),intent_sha256:ref.sha256};
+}
+
+// This exact service throw precedes cli(), command intent and any queue write.
+// Bind it to the original append-only intent/result pair, rather than treating
+// missing reviewers or missing command files as proof of a non-effect.
+function terminalPrequeueProof({entry,key,org,identity,item,run}){
+  if(entry.error!=='immutable landed target/evidence changed before queue mutation'||
+    entry.consumer!=='line-service'||entry.execution_subject!==item||
+    entry.receipt!=null||entry.commands!=null&&(!Array.isArray(entry.commands)||entry.commands.length)||
+    entry.review_target?.source_group?.run!==run)return null;
+  const file=path.join(org,'line-service',hash(JSON.stringify(identity)).slice(0,20),'passes.jsonl');
+  const rows=[...readPassJournal(file)].filter(r=>r.key===key&&r.attempt===entry.attempt&&['effect-intent','effect'].includes(r.action));
+  if(rows.length!==2)return null;
+  const [intent,result]=rows,{pid,action,...original}=result;
+  if(intent.action!=='effect-intent'||action!=='effect'||intent.subject!==item||
+    !Number.isSafeInteger(pid)||pid<1||pid!==intent.pid||!time(intent.at)||
+    Date.parse(intent.at)<Date.parse(entry.at)||Date.parse(intent.at)>Date.parse(entry.finished_at))return null;
+  delete original.key;
+  if(!isDeepStrictEqual(original,entry))return null;
+  return{schema:'review-queue-no-mutation/v1',kind:'pre-command-target-change',project:identity,org,subject:key,item,run,
+    target:entry.review_target,attempt:entry.attempt,original_sha256:hash(JSON.stringify(entry)),
+    receipt_sha256:hash(JSON.stringify(result)),command_sha256:hash(JSON.stringify(rows)),
+    service_audit:{file,rows}};
 }
 
 // A disposition settles only the exact original entry. A changed/lost-reply

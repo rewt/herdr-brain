@@ -552,11 +552,6 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
           }
           queueConsumer({run,env:childEnv});reviewSteps++;
           effect(key,()=>{
-            // Selection scanned all producers. This fresh exact-target fence
-            // keeps global attribution/peers without rebuilding their ranges.
-            const fresh=observe(),checked=discoverChanges({events:fresh.events,state:fresh.state,repo,org,identity:project.identity,runId:run.id}).changes.find(c=>c.item.id===item.id&&c.target.head===target.head);
-            if(!checked||JSON.stringify(checked.target)!==JSON.stringify(target))throw Error('immutable landed target/evidence changed before queue mutation');
-            queueConsumer({run:checked.run,env:childEnv});
             return JSON.parse(cli('bin/org.mjs',['queue-review',run.id,'--head',target.head,'--base',target.base]));
           },target,'record-queue',true,fresh=>{
             const proof=reviewQueueNoMutation({entry:effects.actions[key],key,...fresh,repo,org,identity:project.identity,item,run,target});
@@ -565,7 +560,15 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
             // precedes the durable continuation intent; ordinary queue-review
             // still owns its record CAS, source/native/STOP guards and cap1.
             return reviewAttempt(item,{...fresh,repo,org,identity:project.identity,effects,target,capturedRun:run.id,ignoreService})?null:proof;
-          },()=>admit({item,run,target},'queue-mutation',true));
+          },fresh=>{
+            if(!admit({item,run,target},'queue-mutation',true))return false;
+            // A report arriving after selection may change evidence without
+            // changing source. Defer before intent, so the next pass selects
+            // the fresh target instead of retaining a command that never ran.
+            const checked=discoverChanges({events:fresh.events,state:fresh.state,repo,org,identity:project.identity,runId:run.id}).changes.find(c=>c.item.id===item.id&&c.target.head===target.head);
+            if(!checked||JSON.stringify(checked.target)!==JSON.stringify(target))return false;
+            queueConsumer({run:checked.run,env:childEnv});return true;
+          });
         }catch(e){note(key,e.message,{item:item.id,run:run.id,head:target.head});}
         finally{reviewLock?.();}
       }

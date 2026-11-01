@@ -1028,6 +1028,34 @@ test('landing-before-report actual source queue command is reached by the instal
   assert.equal(calls.filter(a=>a[1]==='queue-review').length,1);assert.equal(capacityCalls,1,JSON.stringify(diagnostics(f)));const c=f.context(),q=[...c.state.items.values()].filter(i=>i.role==='reviewer');assert.equal(q.length,1);assert.equal(q[0].meta.review_target.evidence_kind,'native-landings/v1');assert.equal(c.run.report,null);assert.equal(c.events.some(e=>e.type==='run.started'&&e.item===q[0].id),false);assert.equal(diagnosticHealth(f).queued,1);
 });
 
+test('landing-before-report defers a report arriving during selection before queue intent and queues once on the next pass',t=>{
+  const f=fixture(t,{reported:false});unreportedNativeLandings(f);
+  const env=installedService(f),read=fs.readFileSync;let arrived=false,calls=0;
+  t.mock.method(fs,'readFileSync',function(file,...args){
+    const bytes=Reflect.apply(read,fs,[file,...args]);
+    if(!arrived&&file===path.join(f.org,'dispatch/source.json')){
+      arrived=true;
+      f.add([{type:'report.ingested',run:'R-1',file:'reports/R-1.md',sha256:hash(f.report),
+        report:{outcome:'done',artifacts:f.heads.map(h=>`Commit: ${h}`),extra:{},blockers:[],proposals:[]}}]);
+    }
+    return bytes;
+  });
+  const options={repo:f.cwd,org:f.org,to:'supervisor-test',env,capacity:()=>{throw Error('occupied');},command:(exe,args,options)=>{
+    if(args[1]==='queue-review'){calls++;return spawnSync(exe,args,options);}
+    return{status:0,stdout:'{"created":[]}',stderr:''};
+  }},cwd=process.cwd();process.chdir(f.cwd);
+  try{
+    createLineService(options).pass();assert.equal(arrived,true);assert.equal(calls,0);
+    const journal=JSON.parse(fs.readFileSync(path.join(f.directory,'effects.json')));
+    assert.equal(Object.keys(journal.actions).some(k=>k.startsWith('review:ENG-1:')),false);
+    createLineService(options).pass();createLineService(options).pass();
+  }finally{process.chdir(cwd);}
+  assert.equal(calls,1);
+  const c=f.context(),reviews=[...c.state.items.values()].filter(i=>i.role==='reviewer');assert.equal(reviews.length,1);
+  assert.deepEqual(reviews[0].meta.review_target.source_group.owned_commits,f.heads);
+  assert.equal(c.events.some(e=>e.type==='run.started'&&e.item===reviews[0].id),false);
+});
+
 test('landing-before-report retains an original UNKNOWN attempt and refuses admission-only foreign or unqualified ownership as positive source evidence',t=>{
   for(const kind of ['unknown','admission','foreign','unqualified']){
     const f=fixture(t,{reported:false});

@@ -84,7 +84,7 @@ export function reconcileReviewQueue({repo,org,runId,resolution,decisionSeq,id,r
       const retained=reviewAttempt(item,{events,state,repo:c.repo,org:c.org,identity:c.identity,target:entry.review_target,capturedRun:runId,effects:journal,
         ignoreService:{file,key,target:entry.review_target,operation:'record-queue'}});
       if(retained)throw Error('another review attempt retained: '+retained);
-      const bytes=Buffer.from(JSON.stringify({proof,original:entry,command:JSON.parse(reviewPlain(entry.commands[0].receipt))},null,2)+'\n'),archive=path.join(c.org,'evidence/review-queue-reconciliation',`${id}.json`);
+      const bytes=Buffer.from(JSON.stringify({proof,original:entry,...(proof.service_audit?{service_audit:proof.service_audit}:{command:JSON.parse(reviewPlain(entry.commands[0].receipt))})},null,2)+'\n'),archive=path.join(c.org,'evidence/review-queue-reconciliation',`${id}.json`);
       fs.mkdirSync(path.dirname(archive),{recursive:true});
       try{const fd=fs.openSync(archive,'wx',0o444);try{fs.writeFileSync(fd,bytes);fs.fsyncSync(fd);}finally{fs.closeSync(fd);}}catch(e){if(e.code!=='EEXIST'||hash(reviewPlain(archive))!==hash(bytes))throw e;}
       guard();if(!same(readServiceJournal(file)?.actions[key],entry))throw Error('original queue attempt changed');

@@ -221,6 +221,18 @@ The original helper receipt must match its saved intent, project, record,
 source run, queue head/base, result and execution times. No absence inference
 or general status-1 retry is permitted.
 
+The same writer also accepts the exact service-local error `immutable landed
+target/evidence changed before queue mutation`. It requires the original
+`effect-intent` and terminal `effect` audit rows, with the same attempt, item,
+PID and unchanged full journal entry. This throw precedes the queue command;
+any command reference, command receipt, native attempt, missing/duplicate audit
+row or different diagnostic prevents this proof. The audit reader includes
+rotated pass-journal segments. Here `command_sha256` binds the two service audit
+rows, and the archive preserves them instead of inventing a command receipt.
+An empty queue or absent reviewer alone never qualifies. The current line checks
+fresh target selection before recording intent, deferring a newly arrived report
+to the next pass without creating another held queue attempt.
+
 Read each original attempt once, saving the output as its resolution input:
 
 ```sh
@@ -239,10 +251,10 @@ node line-service/review-queue-reconcile.mjs resolve --repo REPO --org ORG --run
 Use the project's pinned Node/source entry. The writer retains native supervisor,
 source/clean-head CAS, pass/promotion/record locks, command quiescence, claim,
 STOP/HOLD, reserved subject and competing-review guards. It archives the exact
-original entry, full terminal command and target, then appends
+original entry, full terminal command (or pre-command service audit) and target, then appends
 `line-service.review-queue-reconciled`; it never rewrites the original journal or
 executes `queue-review`. An identical request is idempotent. Consumers revalidate
-the archive, decision, owner generation and original command bytes.
+the archive, decision, owner generation and original command/audit bytes.
 
 A command-quiescence refusal names both the active intent and the terminal
 receipt it could not validate (`LINE_COMMAND_OUTCOME_UNKNOWN`), retaining the

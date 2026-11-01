@@ -43,6 +43,7 @@ test('large held backlog skips unchanged evaluations across process instances an
   assert.equal(summary(first).evaluations.admission_evaluated,201);
   assert.equal(summary(second).evaluations.admission_evaluated,0);
   assert.equal(summary(second).evaluations.admission_skipped,201);
+  t.diagnostic(JSON.stringify({warm_diagnostics:second.filter(r=>['hold','admission-eligible'].includes(r.action))}));
   assert.equal(second.filter(r=>['hold','admission-eligible'].includes(r.action)).length,0);
   assert.equal(f.calls.length,0);
   f.append([{type:'note.added',id:'G-2',text:'Ancestor input changed'}]);
@@ -120,6 +121,7 @@ test('real pass processes reuse admission and source negatives with linked skill
   fs.writeFileSync(path.join(lane,'runtime-output'),'unrelated');
   const warm=pass();assert.notEqual(summary(first).pid,summary(warm).pid);
   assert.equal(summary(warm).evaluations.admission_skipped,1);assert.equal(summary(warm).evaluations.source_skipped,1);
+  t.diagnostic(JSON.stringify({warm_diagnostics:warm.filter(r=>['hold','admission-eligible'].includes(r.action))}));
   assert.equal(warm.filter(r=>['hold','admission-eligible'].includes(r.action)).length,0);
   f.append([{type:'item.updated',id:'ENG-1',fields:{meta:{hold:true}}}]);
   const changed=pass();assert.equal(summary(changed).evaluations.admission_evaluated,1);assert.equal(summary(changed).evaluations.source_evaluated,1);
@@ -203,7 +205,7 @@ test('shared Git config replacement preserves warm passes while changed bytes, r
   const allocationReplacedConfig=fs.statSync(config).ino!==allocatedBefore;
   const before=fs.statSync(config).ino;replace(config,bytes);assert.notEqual(fs.statSync(config).ino,before);
   const replaced=warm();
-  f.git('config','core.ignorecase','true');fresh();warm();
+  f.git('config','core.filemode','false');fresh();warm();
   const worktreeConfig=path.join(f.identity,'config.worktree');
   fs.writeFileSync(worktreeConfig,'[core]\n\tfilemode = false\n');fresh();warm();
   replace(worktreeConfig,fs.readFileSync(worktreeConfig));warm();

@@ -14,6 +14,11 @@ import {evaluateWitness} from '../measurement/live-witnesses.mjs';
 
 function fixture(t){
   const f=setup(t,{direct:true,bound:true,merged:true}),binding=selectCurrentCleanup(f),project=gitProject(f.repo);
+  // This older helper constructs a binding without the event envelope's at.
+  // Live witnesses require a complete timestamped stream, like the real store.
+  const original=events(f);
+  for(const event of original)if(event.type==='run.session_bound'&&!event.at)event.at=event.observed_at;
+  fs.writeFileSync(f.eventFile,original.map(e=>JSON.stringify(e)+'\n').join(''));
   f.append([{type:'run.claimed',run:'R-1',project:f.common,record:f.org,owner:brainOwner()}]);
   f.report();
   const hold=path.join(f.repo,'.lane/supervisor/HOLD');fs.mkdirSync(path.dirname(hold),{recursive:true});fs.writeFileSync(hold,'Written scratch HOLD for closeout proof\n');

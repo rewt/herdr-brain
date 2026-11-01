@@ -490,7 +490,7 @@ for(const registered of [true,false])test(`finite refusal decision is owned once
 });
 
 test('finite refusal decision is owned once completed report target remains retired',t=>{
-  const f=fixture(t);f.report();
+  const f=fixture(t);fs.writeFileSync(path.join(f.scratch,'.identity-root'),'fixture');f.report();
   const entry=currentCloseoutEntries(f.common,f.org,events(f))[0];
   assert.equal(entry.reportCloseout,true);
   const entries=path.join(f.common,'closeout/entries');fs.mkdirSync(entries,{recursive:true});

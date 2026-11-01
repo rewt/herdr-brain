@@ -37,6 +37,7 @@ import {installedContext} from './cutoff.mjs';
 import { discoverChanges,dispatchInput,phase0Boundary,morningDigest,recordReviewResults,reviewCompletionPlan,recordReviewCompletion,ensureReviewBoundary,canonicalReviewIndex,observeReviewHealth } from './phase1.mjs';
 import {preflightContinuation,initialCapacityRefusal,initialBriefRefusal,initialSourceRootRefusal} from '../dispatch/preflight.mjs';
 import {stoppedDispatchReadmission} from '../dispatch/stopped-readmission.mjs';
+import {prejournalReadmission} from '../dispatch/prejournal-readmission.mjs';
 import {sourceCompletionProof,preEffectSourceHold,queueSourceException} from './source-completion.mjs';
 import {createWorkerBrief,projectExceptionAddress} from '../lib/worker-brief.mjs';
 import {observeReviewProgress,recoverServiceReview} from './review-recovery.mjs';
@@ -766,7 +767,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
             }
             save();stale=true;
           }
-          else if(!outcome.producer&&!['not-started','dispatch-complete'].includes(outcome.status)){
+          else if(!entry.prejournal_recovery&&!outcome.producer&&!['not-started','dispatch-complete'].includes(outcome.status)){
             note(`outcome:${key}`,'Original dispatch completion producer is missing; retain its original attempt for the project supervisor.',{item,journal:outcome.journal??null,outcome});
           }
         }catch(e){note(key,e.message,{item,owner:entry.stuck_owner??to});}
@@ -841,7 +842,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         if (roleIs(item, 'REV') && !isQueueReview(item)) { note(`dispatch:${item.id}`, 'T2 legacy/manual review queue binding UNKNOWN; retain existing owner/attempt'); observation.retain('legacy review binding');continue; }
         try {
           const key = `dispatch:${item.id}:${input}`;
-          let continuation,retryAdmission,briefRecovery,sourceRecovery,stopRecovery,dispatchKey=key;
+          let continuation,retryAdmission,briefRecovery,sourceRecovery,prejournalRecovery,stopRecovery,dispatchKey=key;
           if (effects.actions[key]) {
             const original=effects.actions[key];
             dispatchKey=original.stop_recovery?.key??original.prejournal_recovery?.key??key;
@@ -866,7 +867,9 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
                   return createWorkerBrief({item,ask:brief,askText:fs.readFileSync(brief,'utf8'),project:repo,org,lane:`line-${item.id.toLowerCase()}-${item.runs.length+1}`,route,harness:resolveLaunchRoute(config,{route}).kind,reviewRoute:reviewQueueRoute(config),exception:projectExceptionAddress(repo,config,route,childEnv)});
                 };
                 sourceRecovery=initialSourceRootRefusal({entry:prior,events:snapshot.events,item:item.id,outcome:prior.original_outcome,release:bundleRelease(),env:childEnv});
-                briefRecovery=sourceRecovery??initialBriefRefusal({entry:prior,contract,events:snapshot.events,item:item.id,outcome:prior.original_outcome});
+                prejournalRecovery=prejournalReadmission({entry:prior,key,repo,org,common:project.identity,directory,item:item.id,
+                  brief:path.join(directory,`${digest(key)}.ask.md`),events:snapshot.events,outcome:prior.original_outcome});
+                briefRecovery=sourceRecovery??prejournalRecovery??initialBriefRefusal({entry:prior,contract,events:snapshot.events,item:item.id,outcome:prior.original_outcome});
                 if(briefRecovery)dispatchKey=`dispatch-recovered:${digest([key,briefRecovery])}`;
               }
             }
@@ -903,6 +906,17 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
               effects.actions[key].stop_recovery={...proof,key:dispatchKey,at:now()};save();log({action:'stopped-dispatch-recovery',key,recovery:effects.actions[key].stop_recovery});
             }
             if(briefRecovery){
+              if(prejournalRecovery){
+                const proofFor=events=>prejournalReadmission({entry:effects.actions[key],key,repo,org,common:project.identity,directory,item:item.id,
+                  brief:path.join(directory,`${digest(key)}.ask.md`),events,outcome:originalDispatchOutcome({repo,org,common:project.identity,item:item.id,
+                    brief:path.join(directory,`${digest(key)}.ask.md`),events})});
+                if(JSON.stringify(proofFor(fresh.events))!==JSON.stringify(prejournalRecovery))throw Error('original pre-journal refusal changed before re-admission');
+                transact(org,events=>{
+                  const proof=proofFor(events);
+                  if(JSON.stringify(proof)!==JSON.stringify(prejournalRecovery))throw Error('original pre-journal refusal changed during re-admission');
+                  return{add:[{type:'line-service.dispatch-readmitted',project:project.identity,org,item:item.id,key,recovery_key:dispatchKey,proof}]};
+                },{actor:'line-service',strictTail:true});
+              }
               if(sourceRecovery){
                 const proof=initialSourceRootRefusal({entry:effects.actions[key],events:fresh.events,item:item.id,outcome:originalDispatchOutcome({repo,org,common:project.identity,item:item.id,brief:path.join(directory,`${digest(key)}.ask.md`),events:fresh.events}),release:bundleRelease(),env:childEnv});
                 if(JSON.stringify(proof)!==JSON.stringify(sourceRecovery))throw Error('original zero-effect source refusal changed before re-admission');
@@ -919,7 +933,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
               if(reviewTarget)validateQueuedReview({item:current,state:fresh.state,events:fresh.events,org,repo,allowJournal:continuation.journal});
               return startDispatch(['--retry',continuation.journal,'--repo',repo,'--org',org,'--continue-preflight']);
             }
-            const brief = path.join(directory, `${digest(stopRecovery||effects.actions[key]?.stop_recovery?dispatchKey:key)}.ask.md`);
+            const brief = path.join(directory, `${digest(stopRecovery||briefRecovery||effects.actions[key]?.stop_recovery||effects.actions[key]?.prejournal_recovery?dispatchKey:key)}.ask.md`);
             const target = reviewTarget ? validateQueuedReview({ item: current, state: fresh.state, events: fresh.events, org, repo }) : null;
             const correction = correctionSource({ item: current, state: fresh.state, events: fresh.events, repo, org });
             writeFileAtomic(brief, target ? reviewQueueBrief(current) : isDecision(current) ? decisionBrief(current) : lineWorkAsk(current, correction?.brief ?? ''), 0o600);

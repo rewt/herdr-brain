@@ -1081,6 +1081,18 @@ launch receipt, and recounts admission under the existing locks before handoff.
 Missing zero-native evidence, a live/unknown native attempt, permission/identity
 refusal, a different saved helper or an already spent continuation remains held.
 
+For legacy failures before journal allocation, the line can consume one exact
+terminal refusal through the existing `line-service.dispatch-readmitted` edge.
+The original foreground command receipt must bind the project, record, subject,
+key and fresh detached command. Only the exact consistent-read or correction-base
+diagnostic, or the legacy session/review-cap diagnostic, with terminal exit 1
+and no journal/retry output qualifies. Missing receipts, signals, contradictory
+launch/run evidence, native fences and unknown diagnostics remain held. The line
+rechecks the original journal/record evidence at admission, preserves the original
+attempt, receipt and ask, and links one separate recovery intent and ask. Existing
+readiness, capacity, source, ownership and STOP/HOLD guards govern the new start;
+this does not replay the original dispatch or resolve an uncertain launch.
+
 For the explicitly authorized inactive legacy attempts, the owning native
 supervisor uses the existing record queue entry from its own canonical checkout:
 

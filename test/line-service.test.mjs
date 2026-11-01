@@ -20,6 +20,7 @@ import {closeoutWaitId} from '../lib/closeout-status.mjs';
 import {queueOutcomeDecision} from '../line-service/outcome-decision.mjs';
 import {commandIntent,finishCommand,forgetActiveCommand} from '../lib/command-receipt.mjs';
 import {stoppedDispatchReadmission} from '../dispatch/stopped-readmission.mjs';
+import {prejournalReadmission} from '../dispatch/prejournal-readmission.mjs';
 import {setup as closeoutFixture,events as closeoutEvents,evaluations as closeoutEvaluations} from './helpers/closeout-fixture.mjs';
 
 function fixture(t) {
@@ -81,6 +82,81 @@ function stoppedFixture(t,{reason='Supervisor STOP appeared before dispatch; no 
   const proof=()=>({journal,repo:f.repo,org:f.org,common,item,brief,input,events:loadEvents(f.org).events});
   return {...f,item,service,common,key,brief,journal,job,terminal,completion,original,file,bytes,proof};
 }
+
+function prejournalFixture(t,reason='fix base differs from actual saved author branch or main'){
+  const f=fixture(t),item=f.add('Pre-journal refused work'),service=f.service(),common=gitProject(f.repo).identity;
+  const key=`dispatch:${item}:${f.show(item).created.seq}:ordinary`,directory=service.directory;
+  const brief=path.join(directory,createHash('sha256').update(JSON.stringify(key)).digest('hex')+'.ask.md');
+  fs.writeFileSync(brief,'# Original pre-journal ask\n');
+  const at=new Date().toISOString(),receipt={status:1,signal:null,stdout:JSON.stringify({result:'failed',code:'DISPATCH_FAILED',reason})+'\n',stderr:`dispatch: ${reason}\n`};
+  const ref=commandIntent(directory,{exe:process.execPath,args:[path.join(sourceRoot,'dispatch/dispatch.mjs'),item,'--repo',f.repo,'--org',f.org,'--brief',brief,'--detach'],
+    cwd:f.repo,project:common,org:f.org,subject:item,key,consumer:'line-service'});
+  finishCommand(ref,receipt);forgetActiveCommand(ref);
+  const original={state:'held',owner:'line-service',consumer:'line-service',subject:key,execution_subject:item,attempt:'original-attempt',at,
+    commands:[ref],receipt,error:`dispatch: ${reason}`,finished_at:new Date().toISOString(),failure:{code:'DISPATCH_FAILED',kind:'unknown'},
+    original_outcome:{status:'unknown',reason:'original request outcome unavailable; no replacement',native_launch_attempted:null,run:null}};
+  const file=path.join(directory,'effects.json');fs.writeFileSync(file,JSON.stringify({identity:common,org:f.org,actions:{[key]:original}}));
+  const proof=entry=>prejournalReadmission({entry,key,repo:f.repo,org:f.org,common,directory,item,brief,events:loadEvents(f.org).events,outcome:entry.original_outcome});
+  return{...f,item,line:service,common,key,directory,brief,original,file,ref,proof};
+}
+
+for(const reason of ['fix base differs from actual saved author branch or main',
+  'record changed repeatedly while preparing a consistent read; no mutation attempted',
+  'session cap 1 reached: pending start original-other-journal',
+  'review cap 3 reached: original-other-runs'])test(`pre-journal terminal refusal readmits once and preserves evidence: ${reason}`,t=>{
+  const f=prejournalFixture(t,reason),receipt=fs.readFileSync(f.ref.receipt,'utf8');
+  const barrier=path.join(f.repo,'.lane/supervisor/HOLD');fs.mkdirSync(path.dirname(barrier),{recursive:true});fs.writeFileSync(barrier,'held');
+  assert.match(f.line.pass().held,/HOLD/);assert.equal(f.calls.length,0);fs.unlinkSync(barrier);
+  f.line.pass();assert.equal(f.calls.length,1,'one fresh dispatch after the guard lifts');
+  f.service().pass();f.service().pass();assert.equal(f.calls.length,1,'restarts retain the replacement outcome');
+  const actions=JSON.parse(fs.readFileSync(f.file)).actions,recovery=actions[f.key].prejournal_recovery;
+  assert.equal(recovery.kind,'terminal-prejournal-refusal');assert.equal(recovery.native_launch_attempted,false);
+  const {prejournal_recovery,...original}=actions[f.key];assert.deepEqual(original,f.original);
+  assert.equal(actions[recovery.key].state,'complete');
+  assert.equal(fs.readFileSync(f.brief,'utf8'),'# Original pre-journal ask\n');assert.equal(fs.readFileSync(f.ref.receipt,'utf8'),receipt);
+  const call=f.calls[0];assert.equal(call.args[1],f.item);assert.ok(!call.args.includes('--retry'));
+  assert.notEqual(call.args[call.args.indexOf('--brief')+1],f.brief,'new attempt owns a separate ask');
+  const events=loadEvents(f.org).events,admitted=events.filter(e=>e.type==='line-service.dispatch-readmitted');
+  assert.equal(admitted.length,1);assert.equal(admitted[0].proof.command.sha256,f.ref.sha256);
+  assert.ok(events.every(e=>!/^item\.|^run\./.test(e.type)||e.seq<=f.show(f.item).created.seq),'recovery introduces no item/run event');
+});
+
+test('pre-journal proof rejects uncertain, contradictory, foreign and incomplete attempts',t=>{
+  const f=prejournalFixture(t);assert.ok(f.proof(f.original));
+  for(const alter of [e=>e.state='started',e=>e.native_launch_attempted=true,e=>e.worker={},e=>e.run='R-1',
+    e=>e.launchProcess={},e=>e.sessionBinding={},e=>e.result={journal:'original'},e=>e.history=[{}],
+    e=>e.failure.kind='fence',e=>e.failure.native_launch_attempted=true,e=>e.original_outcome.journal='original',e=>e.receipt.signal='SIGTERM',
+    e=>e.receipt.signal_sent=true,e=>e.receipt.error={message:'lost'},e=>e.commands=[],
+    e=>e.execution_subject='ENG-999',e=>e.finished_at=e.at='invalid',
+    e=>e.receipt.stdout=JSON.stringify({result:'failed',code:'DISPATCH_FAILED',reason:'fix base differs from actual saved author branch or main',native_launch_attempted:true}),
+    e=>e.error='native outcome unknown']){
+    const entry=structuredClone(f.original);alter(entry);assert.equal(f.proof(entry),null);
+  }
+  const entry=structuredClone(f.original);entry.commands[0].sha256='foreign';assert.throws(()=>f.proof(entry),/binding changed/);
+  fs.unlinkSync(f.ref.receipt);assert.throws(()=>f.proof(f.original),/ENOENT/);
+  f.line.pass();assert.equal(f.calls.length,0,'missing terminal receipt remains held');
+  assert.deepEqual(JSON.parse(fs.readFileSync(f.file)).actions[f.key],f.original);
+});
+
+test('pre-journal readmission retains a concurrent recorded start before a fresh effect',t=>{
+  const f=prejournalFixture(t);let checked=false;
+  const service=createLineService({repo:f.repo,org:f.org,to:'supervisor-test',env:f.env,command:f.command,haltAfter:100,
+    capacity:()=>{
+      if(!checked){checked=true;transact(f.org,()=>({add:[{type:'run.started',id:'R-1',item:f.item,meta:{}}]}));}
+      return{count:0,cap:2};
+    },recordNotice:data=>({id:data.id,state:'record-only'})});
+  service.pass();assert.equal(f.calls.length,0);assert.deepEqual(JSON.parse(fs.readFileSync(f.file)).actions[f.key],f.original);
+  assert.equal(loadEvents(f.org).events.some(e=>e.type==='line-service.dispatch-readmitted'),false);
+});
+
+test('pre-journal readmission retains a journal contradicting its cached unknown outcome',t=>{
+  const f=prejournalFixture(t),journal=path.join(f.org,'dispatch/original.json');fs.mkdirSync(path.dirname(journal),{recursive:true});
+  fs.writeFileSync(journal,JSON.stringify({token:'original',item:f.item,brief:f.brief,repo:f.repo,org:f.org,common:f.common,
+    stage:'launching',native_launch_attempted:true}));
+  f.line.pass();f.service().pass();assert.equal(f.calls.length,0);
+  assert.deepEqual(JSON.parse(fs.readFileSync(f.file)).actions[f.key],f.original);
+  assert.equal(loadEvents(f.org).events.some(e=>e.type==='line-service.dispatch-readmitted'),false);
+});
 
 for(const fence of ['HOLD','service STOP'])test(`HOLD-stopped dispatch starts once on the first pass after ${fence} lifts and retains its original attempt`,t=>{
   const f=stoppedFixture(t,{...(fence==='service STOP'?{reason:'service STOP appeared before detached effect',stage:'open'}:{})});

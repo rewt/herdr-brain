@@ -38,6 +38,9 @@ export function retargetService({repo,org,to,dryRun=false,cwd=process.cwd(),env=
   plainDirectory(c.directory,{create:false});
   const savedBytes=readPlainFile(c.installationFile),plistBytes=readPlainFile(file),saved=JSON.parse(savedBytes);
   if(saved.phase!=='installed')throw Error('retarget requires a known installed phase; retain refused/UNKNOWN installation');
+  // developmentHistory does not replay recipient changes. Refuse previews and
+  // no-ops too, before asking the owner to stop or touching any control state.
+  if(saved.probation_bootstrap)throw Error('service retarget refuses a bootstrap-bound installation until development history replays recipient changes; retain the current recipient and trial/recovery history');
   const p=savedPlist(c,saved,command),oldRecipient=p.ProgramArguments[8];
   const bind=()=>{
     const b=nativeSender(c.org,{cwd,env,...(call?{call}:{})});

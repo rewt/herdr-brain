@@ -1435,7 +1435,7 @@ allocation uses the same birth-aware retirement exclusion. These source changes
 do not restart an installation, change pins, release, or prove live latency.
 
 The finite closeout turn also finalizes an original binding-gated worker that
-ended without `run.session_bound`: protocol 2, an expired unbound observation
+ended without `run.session_bound`: protocol 2, a terminal unbound observation
 with no proposal or commit attempt, matching recorded and journaled `process_end`
 (`done` or `gone`), and the exact terminal dispatcher receipt are required.
 An original idle/done process or complete native absence is freshly verified;
@@ -1444,6 +1444,12 @@ native refusals, claim changes and STOP/HOLD remain retained. The abandonment
 records the journal hash, process-end source and missing binding, then the same
 turn's guarded closer releases the original allocation. The saved attempt and
 watcher are preserved; no session binding or successful delivery is fabricated.
+Deadline expiry, observation failure and unavailable launch continuity qualify;
+changed process identity and native refusals stay retained. Without launch process
+continuity only complete original native absence qualifies. Non-deadline failures
+can end before the saved deadline, but never before observation began. Only a
+fully admitted, not-yet-attempted ended request accelerates the allocation pass;
+retained attempts retry on the existing fourth-turn cadence with fresh guards.
 
 Delivered source carries `brain.dispatch-source/v1` in the existing post-FF
 receipt: actual Git common directory, owning record, original dispatch attempt,

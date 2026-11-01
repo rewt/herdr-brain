@@ -8,7 +8,7 @@ import {sessionBindFact} from './helpers/session-bind.mjs';
 import {fold,itemStatus} from '../lib/state.mjs';
 import {workerReceipt} from '../lib/worker-identity.mjs';
 import {appendTiming,timingJournal} from '../lib/run-timing.mjs';
-import {disposeStoppedAllocations} from '../lib/closeout-allocations.mjs';
+import {disposeStoppedAllocations,pendingEndedAllocation} from '../lib/closeout-allocations.mjs';
 import {runCloseoutTurn} from '../line-service/closeout-turn.mjs';
 import {gitProject} from '../lib/project.mjs';
 
@@ -41,13 +41,15 @@ function fixture(t){
   };
   complete();
   const dispose=()=>disposeStoppedAllocations({cwd:f.repo,org:f.org,env:f.env,retirementOptions:f.options});
+  let allocationCalls=0;
   const turn=()=>runCloseoutTurn({project:gitProject(f.repo),org:f.org,env:f.env,guard:()=>{},measure:()=>{},
     cli:(_file,args)=>{
-      if(args[0]==='allocations')return JSON.stringify(dispose());
+      if(args[0]==='allocations'){allocationCalls++;return JSON.stringify(dispose());}
       if(args[0]==='refresh')return '{}';
       return JSON.stringify(f.drain({keys:JSON.parse(args[args.indexOf('--keys')+1]),retrySafe:true}));
     }});
-  return{...f,journal,report,job,end,complete,dispose,turn};
+  const pending=()=>pendingEndedAllocation(gitProject(f.repo),f.org,events(f),fold(events(f)));
+  return{...f,journal,report,job,end,complete,dispose,turn,pending,allocationCalls:()=>allocationCalls};
 }
 
 test('one finite turn abandons an ended unbound gate-wait run and releases its original session and clean folder',t=>{
@@ -78,6 +80,76 @@ test('a fully absent ended worker releases its clean folder without inventing a 
   const result=f.turn();assert.deepEqual(result.errors,[]);assert.equal(fs.existsSync(f.lane),false);
   assert.equal(events(f).find(e=>e.type==='run.abandoned').authorization.proof.status,'gone');
   assert.deepEqual(f.read().actions.filter(a=>['agent','tab'].includes(a[0])),[]);
+});
+
+for(const kind of ['observation-failed','continuity-unavailable'])test(`non-deadline ${kind} releases an ended unbound worker in one turn`,t=>{
+  const f=fixture(t);
+  f.job.sessionBinding.reason=kind==='observation-failed'?'native session observation failed: temporary transport error':
+    'native process continuity unavailable at launch';
+  if(kind==='continuity-unavailable'){
+    f.job.launchProcess=null;f.job.sessionBinding.process=null;
+    f.state.agents=[];f.state.panes=[];f.state.tabs=[];f.save();
+  }
+  const end={...f.end,at:new Date(Date.parse(f.job.sessionBinding.prompted_at)+10000).toISOString()};
+  appendTiming(f.journal,end);f.append([{type:'run.updated',id:'R-1',meta:{process_end:JSON.stringify(end)}}]);f.complete();
+  assert.equal(f.pending(),true);
+  const bytes=fs.readFileSync(f.journal),timing=fs.readFileSync(timingJournal(f.journal)),result=f.turn();
+  assert.deepEqual(result.errors,[]);assert.equal(f.allocationCalls(),1);assert.equal(fs.existsSync(f.lane),false);
+  const proof=events(f).find(e=>e.type==='run.abandoned').authorization.proof;
+  assert.deepEqual(proof.process_end.event,end);assert.equal(proof.binding.reason,f.job.sessionBinding.reason);
+  assert.equal(events(f).some(e=>e.type==='run.session_bound'),false);
+  assert.deepEqual(fs.readFileSync(f.journal),bytes);assert.deepEqual(fs.readFileSync(timingJournal(f.journal)),timing);
+});
+
+test('retained ended allocation retries periodically without per-turn attempt growth and recovers when clean',t=>{
+  const f=fixture(t),dirty=path.join(f.lane,'unsaved');fs.writeFileSync(dirty,'retain');
+  assert.equal(f.pending(),true);f.turn();assert.equal(f.allocationCalls(),1);
+  const attempts=()=>events(f).filter(e=>e.type==='closeout.allocation-attempted');
+  assert.equal(attempts().length,1);assert.equal(f.pending(),false);
+  const calls=f.herdrCalls();
+  f.turn();f.turn();assert.equal(f.allocationCalls(),1);assert.equal(attempts().length,1);
+  assert.deepEqual(f.herdrCalls(),calls,'intervening turns do not repeat native inventory');
+  assert.equal(fold(events(f)).runs.get('R-1').abandoned,null);
+  fs.unlinkSync(dirty);
+  const result=f.turn();assert.deepEqual(result.errors,[]);assert.equal(f.allocationCalls(),2);
+  assert.ok(fold(events(f)).runs.get('R-1').abandoned);assert.equal(fs.existsSync(f.lane),false);
+});
+
+for(const kind of ['working','birth'])test(`retained ${kind} allocation leaves intervening turns quiet`,t=>{
+  const f=fixture(t);
+  if(kind==='working')f.state.agents[0].agent_status='working';else f.state.info.process_tree[1].identity='other';
+  f.save();f.turn();assert.equal(f.allocationCalls(),1);assert.equal(f.pending(),false);
+  const before=events(f).filter(e=>e.type==='closeout.allocation-attempted').length,calls=f.herdrCalls();
+  f.turn();assert.equal(f.allocationCalls(),1);assert.equal(events(f).filter(e=>e.type==='closeout.allocation-attempted').length,before);
+  assert.deepEqual(f.herdrCalls(),calls);assert.equal(fold(events(f)).runs.get('R-1').abandoned,null);
+});
+
+for(const kind of ['no-protocol','report','proposed','changed','observation-refusal','unknown-reason','receipt','completion-CAS','unavailable-occupied',
+  'unavailable-with-process','failure-before-observation'])test(`allocation priority rejects ${kind}`,t=>{
+  const f=fixture(t);
+  if(kind==='no-protocol')delete f.job.workerSessionWaitProtocol;
+  if(kind==='report')fs.writeFileSync(f.report,'pending report');
+  if(kind==='proposed')f.job.sessionBinding.proposed={type:'run.session_bound'};
+  if(kind==='changed')f.job.sessionBinding.reason='native process changed';
+  if(kind==='observation-refusal')f.job.sessionBinding.reason='native session observation failed: EPERM';
+  if(kind==='unknown-reason')f.job.sessionBinding.reason='unknown observation outcome';
+  if(kind==='receipt')f.job.sessionBinding.receipt.seq++;
+  if(kind.startsWith('unavailable')){
+    f.job.sessionBinding.reason='native process continuity unavailable at launch';
+    if(kind==='unavailable-occupied'){f.job.launchProcess=null;f.job.sessionBinding.process=null;}
+  }
+  if(kind==='failure-before-observation'){
+    f.job.sessionBinding.reason='native session observation failed: transport error';
+    const end={...f.end,at:new Date(Date.parse(f.job.sessionBinding.prompted_at)-1).toISOString()};
+    appendTiming(f.journal,end);f.append([{type:'run.updated',id:'R-1',meta:{process_end:JSON.stringify(end)}}]);
+  }
+  f.complete();if(kind==='completion-CAS')fs.appendFileSync(f.journal,' ');
+  // Occupied/no-continuity admission is deliberately deferred to fresh native
+  // inventory; all other failures can be rejected by the read-only predicate.
+  if(kind!=='unavailable-occupied')assert.equal(f.pending(),false);
+  f.turn();assert.equal(f.allocationCalls(),kind==='unavailable-occupied'?1:0);
+  assert.equal(fold(events(f)).runs.get('R-1').abandoned,null);assert.ok(fs.existsSync(f.lane));
+  if(kind==='unavailable-occupied')assert.equal(f.pending(),false);
 });
 
 for(const kind of ['bound-slow','bound-ended','proposed','commit-unknown','record-refusal','prompting','no-protocol','resume',

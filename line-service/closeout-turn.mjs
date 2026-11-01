@@ -18,7 +18,7 @@ import {recordCloseoutTurn} from './closeout-measurement.mjs';
 import {missingCloseoutBinding} from '../lib/closeout-facts.mjs';
 import {reconcileCloseoutBacklog} from '../lib/closeout-backlog.mjs';
 import {vacantAllocation} from '../lib/closeout-vacancy.mjs';
-import {endedUnboundRun} from '../lib/closeout-unbound-ended.mjs';
+import {pendingEndedAllocation} from '../lib/closeout-allocations.mjs';
 
 export const closeoutServiceDirectory=(org,common)=>path.join(org,'line-service',createHash('sha256').update(JSON.stringify(common)).digest('hex').slice(0,20));
 // Git removal alone may need its existing 600s inventory-sized allowance.
@@ -183,8 +183,7 @@ function closeoutTurn({project,org,cli,guard,env=process.env,maxSteps=8,budgetMs
     // These stages retain their own project-HOLD fences. Leave their work
     // pending while reported closeout continues, without logging expected errors.
     const projectHeld=()=>fs.existsSync(path.join(project.canonical,'.lane/supervisor/HOLD'));
-    if(!expired()&&!projectHeld()&&(state.turn%4===0||[...observed.state.runs.values()].some(r=>
-        r.meta?.dispatch_project===project.identity&&endedUnboundRun(r,observed.events)))){
+    if(!expired()&&!projectHeld()&&(state.turn%4===0||pendingEndedAllocation(project,org,observed.events,observed.state))){
       try{guard();state.allocations=JSON.parse(cli('supervisor/closeout.mjs',['allocations','--repo',project.canonical,'--org',org,
         '--deadline',String(Math.floor(now()+Math.max(1,budgetMs-(clock()-started))))]));}
       catch(error){if(error.code==='CLOSEOUT_CODE_CHANGED')throw error;errors.push({stage:'allocations',reason:error.message});}

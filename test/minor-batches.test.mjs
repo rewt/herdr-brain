@@ -56,7 +56,7 @@ test('Major and mixed reviews keep existing corrections; old Minor format is rep
   legacy.add({ type: 'item.added', id: 'ENG-2', role: 'engineer', from_run: 'R-2' });
   legacy.add({ type: 'run.started', id: 'R-3', item: 'ENG-2' });
   assert.deepEqual(legacy.collect().legacy_minor_only[0].fix_sessions, ['R-3']);
-  const structured = fixture(text('Reviewed.', 'findings: [{"severity":"minor","text":"lib/a.mjs:9 - Reason"}]\n'));
+  const structured = fixture(text('Reviewed.', 'findings:\n  - severity: minor\n    text: lib/a.mjs:9 - Reason\n'));
   assert.equal(structured.collect().legacy_minor_only[0].tagged_or_structured_minors.length, 1);
 });
 

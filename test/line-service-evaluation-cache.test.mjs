@@ -183,6 +183,40 @@ test('a foreign linked Git common directory remains uncacheable instead of hidin
   probe().retain('foreign source retained');assert.equal(probe().skip,false);assert.equal(counts.source_uncacheable,2);
 });
 
+test('shared Git config replacement preserves warm passes while changed bytes, redirects and missing inputs invalidate',t=>{
+  const f=fixture(t),lane=path.join(f.root,'worker');f.git('worktree','add','-qb','worker',lane);
+  f.append([work('ENG-1',{meta:{hold:true}}),{type:'run.started',id:'R-1',item:'ENG-1',workspace:lane},
+    {type:'report.ingested',run:'R-1',file:'runs/R-1/report.md',sha256:'fixture',report:{outcome:'blocked',artifacts:['Commit: '+'a'.repeat(40)]}}]);
+  const cold=summary(f.pass()).evaluations,warm=()=>{
+    const result=summary(f.pass()).evaluations;
+    assert.equal(result.admission_skipped,1);assert.equal(result.source_skipped,1);return result;
+  },fresh=()=>{
+    const result=summary(f.pass()).evaluations;
+    assert.equal(result.admission_evaluated,1);assert.equal(result.source_evaluated,1);return result;
+  };
+  assert.equal(cold.admission_evaluated,1);assert.equal(cold.source_evaluated,1);warm();
+  const config=path.join(f.identity,'config'),bytes=fs.readFileSync(config),mode=fs.statSync(config).mode;
+  const replace=(file,content)=>{fs.writeFileSync(file+'.replacement',content,{mode});fs.renameSync(file+'.replacement',file);};
+  const allocatedBefore=fs.statSync(config).ino;
+  f.git('worktree','add','-qb','other-worker',path.join(f.root,'other-worker'));
+  assert.deepEqual(fs.readFileSync(config),bytes);warm();
+  const allocationReplacedConfig=fs.statSync(config).ino!==allocatedBefore;
+  const before=fs.statSync(config).ino;replace(config,bytes);assert.notEqual(fs.statSync(config).ino,before);
+  const replaced=warm();
+  f.git('config','core.ignorecase','true');fresh();warm();
+  const worktreeConfig=path.join(f.identity,'config.worktree');
+  fs.writeFileSync(worktreeConfig,'[core]\n\tfilemode = false\n');fresh();warm();
+  replace(worktreeConfig,fs.readFileSync(worktreeConfig));warm();
+  const target=config+'.target';fs.renameSync(config,target);fs.symlinkSync(target,config);fresh();warm();
+  fs.unlinkSync(config);fs.renameSync(target,config);fresh();warm();
+  fs.unlinkSync(worktreeConfig);fresh();warm();
+  fs.mkdirSync(worktreeConfig);
+  const unknown=fresh();assert.equal(unknown.admission_uncacheable,1);assert.equal(unknown.source_uncacheable,1);
+  fresh();fs.rmdirSync(worktreeConfig);fresh();warm();
+  assert.equal(f.calls.length,0,'negative reuse grants no launch authority');
+  t.diagnostic(JSON.stringify({cold,allocationReplacedConfig,replaced,unknown}));
+});
+
 test('canonical source projection changes for own membership and competing attribution, not another landing',t=>{
   const base='a'.repeat(40),own='b'.repeat(40),other='c'.repeat(40),later='d'.repeat(40);
   const row=(head,item,run)=>({head,item,run,attribution:'report-claim'}),run={id:'R-1',report:{artifacts:[`source: ${own}; base: ${base}`]}},item={id:'ENG-1'};

@@ -62,9 +62,22 @@ function physicalInputs(files,workspaces,identity){
     for(const name of fs.readdirSync(file).sort())tree(path.join(file,name));
   };
   const read=file=>{try{return fs.readFileSync(file,'utf8');}catch(e){if(['ENOENT','ENOTDIR'].includes(e.code))return null;throw e;}};
+  const config=file=>{
+    file=path.resolve(file);if(seen.has(file))return;seen.add(file);
+    if(--remaining<0)throw Error('evaluation input inventory exceeds cache bound');
+    try{
+      const l=fs.lstatSync(file),s=fs.statSync(file);
+      if(!s.isFile())throw Error('unknown Git configuration');
+      // Git can atomically rewrite an unchanged common config during worktree
+      // allocation. Its inode/timestamps are not changed scheduling semantics.
+      // Keep path/redirect/mode and exact bytes; read failures still decline reuse.
+      rows.push([file,fs.realpathSync(file),l.mode,s.mode,hash(fs.readFileSync(file))]);
+    }catch(e){if(!['ENOENT','ENOTDIR'].includes(e.code))throw e;rows.push([file,e.code]);}
+  };
   const git=dir=>{
     stat(dir,true);
-    for(const name of ['commondir','gitdir','config','config.worktree','shallow','info/grafts','objects/info/alternates'])stat(path.join(dir,name));
+    for(const name of ['config','config.worktree'])config(path.join(dir,name));
+    for(const name of ['commondir','gitdir','shallow','info/grafts','objects/info/alternates'])stat(path.join(dir,name));
     const commonFile=read(path.join(dir,'commondir')),common=commonFile===null?dir:path.resolve(dir,commonFile.trim());
     if(commonFile!==null&&fs.realpathSync(common)!==fs.realpathSync(identity))throw Error('foreign Git common directory requires fresh evaluation');
     if(fs.existsSync(path.join(common,'refs'))&&fs.lstatSync(path.join(common,'refs')).isSymbolicLink())throw Error('linked Git refs require fresh evaluation');
@@ -101,7 +114,8 @@ function physicalInputs(files,workspaces,identity){
   }
   // Shared configuration and replacement objects can change Git semantics.
   // Packed ordinary refs are deliberately excluded; observe packed replacements.
-  for(const name of ['config','shallow','info/grafts','objects/info/alternates'])stat(path.join(identity,name));
+  for(const name of ['config','config.worktree'])config(path.join(identity,name));
+  for(const name of ['shallow','info/grafts','objects/info/alternates'])stat(path.join(identity,name));
   tree(path.join(identity,'refs/replace'));
   rows.push(['packed-replacements',(read(path.join(identity,'packed-refs'))??'').split('\n').filter(row=>row.includes(' refs/replace/')).sort()]);
   return rows;

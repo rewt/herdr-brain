@@ -49,6 +49,14 @@ commit, elapsed seconds and the summary's SHA-256. A build without `--live` reco
 `{"ran":false,"ready":false}` and cannot be pinned. Global activation and rollback
 remain available for unpinned callers; they do not certify acceptance.
 
+The manifest's `release.kind` describes the coverage path, not adoption
+eligibility. `{"kind":"stable","fullCoverage":"PASS"}` means the full offline
+coverage requirement was met, including for a plain `build TAG` without `--live`.
+That offline-only bundle still records `acceptance: {"ran":false,"ready":false}`
+and cannot be pinned. Stable adoption requires READY live acceptance for the exact
+candidate as well as full coverage and corrected Majors; the `stable` label alone
+does not establish readiness.
+
 Routine `build TAG --landing-checks` / `ship TAG --landing-checks` snapshots
 explicitly record full coverage UNRUN and non-READY acceptance. They can update
 global `current` with rollback intact but cannot be pinned, attested into stable

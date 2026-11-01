@@ -73,6 +73,8 @@ try {
     const commit = fs.readFileSync(path.join(home, '.release-commit'), 'utf8').trim();
     const validationFile = path.join(home, '.release-validation.json');
     const frozen = fs.existsSync(validationFile) ? JSON.parse(readPlainFile(validationFile)) : null;
+    // kind describes the coverage path: stable means full offline coverage,
+    // not adoption eligibility. READY acceptance is checked separately.
     const release = frozen ? { kind: frozen.releaseMode === 'routine' ? 'routine' : 'stable',
       fullCoverage: frozen.releaseMode === 'routine' ? 'UNRUN' : 'PASS' } : undefined;
     if (release?.kind === 'routine' && target) throw Error('routine release cannot claim live acceptance or stable adoption');

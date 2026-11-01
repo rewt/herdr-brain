@@ -9,7 +9,7 @@ import { productFiles, createProductCheckout, captureProductCheckout, verifyProd
 import { readPlainFile } from '../lib/files.mjs';
 import { durableWrite } from '../lib/durable-json.mjs';
 import { PIN_FILE, acceptanceRecord, checkBundle, checkRelease, releaseAcceptance, requireReadyAcceptance,
-  releaseProject, releaseHome, runRelease, pinStatus } from '../lib/releases.mjs';
+  releaseProject, releaseHome, runRelease, pinStatus, checkConsumerPins } from '../lib/releases.mjs';
 import { requireHomeRelease } from '../lib/releases.mjs';
 import { homeProject, policyLocation } from '../lib/config-home.mjs';
 import { writeAuditedConfig } from '../lib/config-audit.mjs';
@@ -69,6 +69,8 @@ try {
       ...completed } }));
   } else if (action === 'verify-bundle') {
     checkBundle(home, { verifyFiles: true });
+  } else if (action === 'check-consumer-pins') {
+    console.log(JSON.stringify({ consumers: checkConsumerPins(home) }));
   } else if (action === 'manifest') {
     const commit = fs.readFileSync(path.join(home, '.release-commit'), 'utf8').trim();
     const validationFile = path.join(home, '.release-validation.json');

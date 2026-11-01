@@ -172,6 +172,7 @@ activate() {
   for l in $LAUNCHERS; do absent_or_link "$BIN_DIR/${l%%:*}"; [ -f "$dir/${l#*:}" ] || die "release is missing ${l#*:}"; done
   absent_or_link "$HOME_DIR/current"; absent_or_link "$HOME_DIR/previous"
   node "$TOOLS" verify-bundle "$dir"
+  node "$TOOLS" check-consumer-pins "$HOME_DIR"
   retire_brain_service
   mkdir -p "$BIN_DIR"
   if [ -L "$HOME_DIR/current" ] && [ "$(readlink "$HOME_DIR/current")" != "$dir" ]; then

@@ -59,6 +59,7 @@ export function successorHistory(events,c,{trial,scope,saved,savedBytes,plist,la
   inventory(path.join(c.directory,'probation-successor-clears'),clears.map(e=>e.id+'.json'));
   if(rows.length&&!extensions.length)throw Error('successor effect lacks original authority');
   const anchor={installation:savedBytes,plist,last};
+  const legacyIds=new Set(events.filter(e=>e.type==='line-service.probation-switched'&&e.project===c.identity&&e.org===c.org).map(e=>e.id));
   const expectedFences=new Map(),ids=new Set(),used=new Set();let installed=null;
   for(const event of rows){
     const a=archive(event.archive,path.join(c.directory,'probation-successor-effects',event.id+'.json'));
@@ -66,7 +67,7 @@ export function successorHistory(events,c,{trial,scope,saved,savedBytes,plist,la
     if(!extension)throw Error('successor effect lacks exact extension authority');
     const note=events.find(e=>e.seq===event.authority),originalNote=events.find(e=>e.seq===original.authority);
     const target=event.rollback?scope.previous.release:extension.scope.candidate.release;
-    if(!valid(event.id)||ids.has(event.id)||event.trial!==trial.id||event.repo!==c.repo||event.previous_seq!==last.seq||event.seq<=last.seq||
+    if(!valid(event.id)||ids.has(event.id)||legacyIds.has(event.id)||event.trial!==trial.id||event.repo!==c.repo||event.previous_seq!==last.seq||event.seq<=last.seq||
         a.schema!=='brain-probation-successor-effect/v1'||a.id!==event.id||a.trial!==trial.id||a.repo!==c.repo||a.org!==c.org||a.identity!==c.identity||
         !same(a.extension,extension.event.archive)||!same(a.successor_scope,extension.scope)||a.previous_seq!==last.seq||
         a.scope_sha256!==trial.scope_sha256||a.recovery_sha256!==successorDigest(canonical(scope.previous))||

@@ -1292,7 +1292,7 @@ Project `.lane/supervisor/HOLD` permits finished report intake and the guarded
 release of original reported sessions and clean worktrees in a finite closeout
 turn. Each effect still checks every bound run's report, source/claim/native
 identity, preservation and Git guards. Unreported cleanup remains held. Service
-STOP, project STOP and `HOLD-WORKER-TAB-CLOSE` retain their closeout fences;
+STOP, project STOP and `HOLD-WORKER-TAB-CLOSE` retain their normal closeout fences;
 dirty work and original refused/uncertain effects retain their binding and owner.
 Starts, source completion, landings and promotions remain held, including the
 unchanged `PROMOTION_HELD` result. This exception neither clears the HOLD nor
@@ -1385,6 +1385,26 @@ heartbeat age grants no authority to stop or replace them.
 The new `line-service/closeout.mjs --once --repo ... --org ...` hint entry delegates
 to the same role. Both use the birth-aware `closeout-turn.lock`; the existing
 closer still owns its consumer and retirement locks and every native/Git effect.
+
+For a memory burst, the owning supervisor can keep the service stopped and run
+one finite turn from that installation's current source and pinned Node:
+
+```sh
+node line-service/closeout.mjs --once --release-only --repo /OWN/PROJECT --org /OWN/RECORD
+```
+
+`--release-only` permits service STOP, including with project HOLD, solely for
+original reported allocations whose bound predecessors also have reports. It
+uses the same closer, preservation and native/Git receipts. It skips report
+intake, allocation finalization, outcome decisions and general work; it neither
+launches nor restarts the line, changes pins, clears STOP/HOLD, admits work nor
+lands source. Exact named drains and record-only original report binding refresh
+carry this explicit mode across process/code handoffs. Project STOP and
+`HOLD-WORKER-TAB-CLOSE` still fence release, as do changed ownership/source/native
+bindings, dirty folders and original refused/UNKNOWN effects. Clean folders may
+be removed after session release; unlanded branches and unsaved folders remain.
+The supervisor records the actual stopped-line release receipts and the next BCH
+memory observation against its 22 GiB target; source tests alone do not prove it.
 
 New original watchers publish `record report-available --run R-n --sha256 HASH`
 after validation, ahead of waiting for idle. That commits a source hint before

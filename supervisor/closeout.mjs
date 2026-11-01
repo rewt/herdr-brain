@@ -6,12 +6,13 @@ import { gitProject } from '../lib/project.mjs';
 
 export async function closeoutMain(argv = process.argv.slice(2)) {
   const { positionals, values } = parseArgs({ args: argv, allowPositionals: true, options: {
-    keys: { type: 'string' }, receipt: { type: 'string' }, deadline: { type: 'string' }, 'no-restart': { type: 'boolean' }, 'retry-safe': { type: 'boolean' },'sessions-only':{type:'boolean'}, owner:{type:'boolean'},
+    keys: { type: 'string' }, receipt: { type: 'string' }, deadline: { type: 'string' }, 'no-restart': { type: 'boolean' }, 'retry-safe': { type: 'boolean' },'sessions-only':{type:'boolean'},'release-only':{type:'boolean'}, owner:{type:'boolean'},
     repo: { type: 'string', default: process.cwd() }, org: { type: 'string' }, seq: { type: 'string' }, why: { type: 'string' },
     original: { type: 'string' }, candidate: { type: 'string' },
   } });
   const [command, topic] = positionals, cwd = values.repo;
   if (values.owner && command !== 'status') throw Error('--owner is a read-only status option');
+  if(values['release-only']&&!['drain','refresh'].includes(command))throw Error('--release-only requires drain or refresh');
   if ((values.original || values.candidate) && command !== 'packet') throw Error('--original/--candidate are read-only packet options');
   if (command === 'capabilities' && positionals.length === 1) {
     const { readCloseoutCapabilities } = await import('../lib/closeout-packet.mjs');
@@ -34,7 +35,7 @@ export async function closeoutMain(argv = process.argv.slice(2)) {
     const {refreshCloseouts}=await import('../lib/closeout-consumer.mjs');
     const deadline=values.deadline===undefined?Date.now()+45000:Number(values.deadline);
     if(!Number.isSafeInteger(deadline)||deadline<0)throw Error('invalid finite refresh deadline');
-    result=refreshCloseouts({cwd,org,loadedCode,deadline});
+    result=refreshCloseouts({cwd,org,loadedCode,deadline,releaseOnly:values['release-only']});
   }
   else if (command === 'packet' && positionals.length === 1) {
     const { prepareCloseoutPacket } = await import('../lib/closeout-packet.mjs');
@@ -42,13 +43,14 @@ export async function closeoutMain(argv = process.argv.slice(2)) {
   }
   else if (command === 'drain' && positionals.length === 1) {
     const keys = values.keys === undefined ? undefined : JSON.parse(values.keys), bound = values.deadline===undefined?Date.now()+180000:Number(values.deadline);
+    if(values['release-only']&&bound===0)throw Error('release-only requires a finite deadline');
     if ((keys !== undefined && (!Array.isArray(keys) || keys.some(k => !/^[a-f0-9]{64}$/.test(k)))) || !Number.isSafeInteger(bound)||bound<0||(!bound||values['sessions-only'])&&keys===undefined) throw Error('invalid closer keys/deadline; unbounded/session phases need exact named targets');
     const deadline=bound===0?Infinity:bound;
     const { drainCloseout } = await import('../lib/closeout-consumer.mjs');
     const { restartCloseout } = await import('../lib/closeout-attempt.mjs');
     const command=bound===0?(await import('../dispatch/foreground-command.mjs')).foregroundCommand:undefined;
-    result = drainCloseout({ cwd, org, keys, loadedCode, retrySafe: values['retry-safe'],sessionsOnly:values['sessions-only'], retirementOptions: { deadline,...(command?{command}:{}) } });
-    if (result.restart) result.successor = restartCloseout({ cwd, org, restart: result.restart, deadline, noRestart: values['no-restart'] });
+    result = drainCloseout({ cwd, org, keys, loadedCode, releaseOnly:values['release-only'],retrySafe: values['retry-safe'],sessionsOnly:values['sessions-only'], retirementOptions: { deadline,...(command?{command}:{}) } });
+    if (result.restart) result.successor = restartCloseout({ cwd, org, restart: result.restart, deadline, noRestart: values['no-restart']||values['release-only'] });
   }
   else if (command === 'handoff' && positionals.length === 1 && values.receipt) {
     const { handoffCloseout } = await import('../lib/closeout-handoff.mjs');

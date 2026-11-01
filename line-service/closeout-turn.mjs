@@ -20,6 +20,7 @@ import {reconcileCloseoutBacklog} from '../lib/closeout-backlog.mjs';
 import {vacantAllocation} from '../lib/closeout-vacancy.mjs';
 import {pendingEndedAllocation} from '../lib/closeout-allocations.mjs';
 import {selfClosedDecision} from '../lib/self-closed-decision.mjs';
+import {reportedCloseout} from '../lib/closeout-finished.mjs';
 
 export const closeoutServiceDirectory=(org,common)=>path.join(org,'line-service',createHash('sha256').update(JSON.stringify(common)).digest('hex').slice(0,20));
 // Git removal alone may need its existing 600s inventory-sized allowance.
@@ -27,6 +28,11 @@ export const closeoutServiceDirectory=(org,common)=>path.join(org,'line-service'
 // finite role has its own allowance, independent of a general review pass.
 export const CLOSEOUT_TURN_BUDGET_MS=720000;
 export const CLOSEOUT_MIN_STEP_BUDGET_MS=120000;
+export function assertCloseoutFences(project,org,{releaseOnly=false}={}) {
+  if(fs.existsSync(path.join(project.canonical,'.lane/supervisor/STOP'))||
+      !releaseOnly&&fs.existsSync(path.join(closeoutServiceDirectory(org,project.identity),'STOP')))
+    throw Error('STOP prevents line closeout');
+}
 function ingestEligible(run,state,identity,events) {
   const item=state.items.get(run?.item);
   if(!item||(item.closed&&!selfClosedDecision(run,state,events))||run.report||run.abandoned||!run.report_path||
@@ -41,7 +47,7 @@ export function runCloseoutTurn(options) {
   try{
     // Intake has its own finite owner. A retained closeout command must never
     // prevent the next scheduled wake from committing a finished report.
-    const intake=options.reconcileReports===false?{}:runReportIntake(options),result=closeoutTurn({...options,intake});
+    const intake=options.releaseOnly||options.reconcileReports===false?{}:runReportIntake(options),result=closeoutTurn({...options,intake});
     contended=Boolean(result.already_running);return result;
   }
   catch(error){
@@ -53,7 +59,7 @@ export function runCloseoutTurn(options) {
     const remaining=(options.budgetMs??CLOSEOUT_TURN_BUDGET_MS)-(clock()-started);
     if(remaining<=0)return{result:'closeout-code-handoff-pending',reason:'original finite allowance spent',old:error.binding,current:error.current};
     const reply=options.cli('line-service/closeout.mjs',['--once','--repo',options.project.canonical,'--org',options.org,
-      '--no-handoff','--deadline',String(Math.floor(now()+Math.max(1,remaining)))]);
+      '--no-handoff',...(options.releaseOnly?['--release-only']:[]),'--deadline',String(Math.floor(now()+Math.max(1,remaining)))]);
     successor=true;const result=JSON.parse(reply);
     return{result:'closeout-code-handoff',old:error.binding,current:error.current,successor:result};
   }finally{
@@ -132,7 +138,7 @@ export function runReportIntake({project,org,cli,guard,maxSteps=8,budgetMs=CLOSE
     return{ingested,errors,remaining:state.remaining,attempts:state.ingest};
   }finally{release();}
 }
-function closeoutTurn({project,org,cli,guard,env=process.env,maxSteps=8,budgetMs=CLOSEOUT_TURN_BUDGET_MS,intake={},
+function closeoutTurn({project,org,cli,guard,env=process.env,maxSteps=8,budgetMs=CLOSEOUT_TURN_BUDGET_MS,intake={},releaseOnly=false,
   clock=()=>performance.now(),now=()=>Date.now(),fault=()=>{}}) {
   const directory=closeoutServiceDirectory(org,project.identity),file=path.join(directory,'closeout-turn.json');
   fs.mkdirSync(directory,{recursive:true});
@@ -149,7 +155,7 @@ function closeoutTurn({project,org,cli,guard,env=process.env,maxSteps=8,budgetMs
     let observed=read(),steps=0;const ingested=intake.ingested??0,errors=[...(intake.errors??[])];
     if(intake.attempts)state.ingest=intake.attempts; // compatibility diagnostic only
     const backlogStarted=clock();
-    const backlog=reconcileCloseoutBacklog({project,org,events:observed.events,state:observed.state,expired,
+    const backlog=releaseOnly?[]:reconcileCloseoutBacklog({project,org,events:observed.events,state:observed.state,expired,
       guard:()=>{guard();code.verify();}});
     state.backlog_reconcile_ms=Math.max(0,clock()-backlogStarted);
     // Re-publish exact committed envelopes only. No re-binding a namesake.
@@ -165,6 +171,7 @@ function closeoutTurn({project,org,cli,guard,env=process.env,maxSteps=8,budgetMs
     for(const source of observed.events.toReversed()){
       if(missing.length>=maxSteps)break;
       const runId=source.type==='report.ingested'?source.run:source.type==='run.abandoned'?(source.run??source.id):source.type==='item.closed'?source.completed_run:null;
+      if(releaseOnly&&source.type!=='report.ingested')continue;
       const run=observed.state.runs.get(runId);
       if(!run||run.meta?.dispatch_project&&run.meta.dispatch_project!==project.identity||vacantAllocation(run,observed.events,project.identity)||boundRuns.has(runId)||kept.has(JSON.stringify([runId,{seq:source.seq,type:source.type}])))continue;
       missing.push(missingCloseoutBinding({project,org,source,run,signal:source.type==='item.closed'?'landed':'ready',events:observed.events}));
@@ -176,6 +183,7 @@ function closeoutTurn({project,org,cli,guard,env=process.env,maxSteps=8,budgetMs
       if(expired()||!lineServiceOwnsCleanup(project,org))return;
       refreshed=true;
       try{guard();cli('supervisor/closeout.mjs',['refresh','--repo',project.canonical,'--org',org,
+        ...(releaseOnly?['--release-only']:[]),
         '--deadline',String(Math.floor(now()+Math.min(60000,budgetMs-(clock()-started))))]);}
       catch(error){if(error.code==='CLOSEOUT_CODE_CHANGED')throw error;errors.push({stage:'refresh',reason:error.message});}
     };
@@ -186,7 +194,7 @@ function closeoutTurn({project,org,cli,guard,env=process.env,maxSteps=8,budgetMs
     // These stages retain their own project-HOLD fences. Leave their work
     // pending while reported closeout continues, without logging expected errors.
     const projectHeld=()=>fs.existsSync(path.join(project.canonical,'.lane/supervisor/HOLD'));
-    if(!expired()&&!projectHeld()&&(state.turn%4===0||pendingEndedAllocation(project,org,observed.events,observed.state))){
+    if(!releaseOnly&&!expired()&&!projectHeld()&&(state.turn%4===0||pendingEndedAllocation(project,org,observed.events,observed.state))){
       try{guard();state.allocations=JSON.parse(cli('supervisor/closeout.mjs',['allocations','--repo',project.canonical,'--org',org,
         '--deadline',String(Math.floor(now()+Math.max(1,budgetMs-(clock()-started))))]));}
       catch(error){if(error.code==='CLOSEOUT_CODE_CHANGED')throw error;errors.push({stage:'allocations',reason:error.message});}
@@ -213,6 +221,7 @@ function closeoutTurn({project,org,cli,guard,env=process.env,maxSteps=8,budgetMs
     const eligible=entries.filter(entry=>{
       if(expired())return false;
       if(entry.project!==project.canonical||entry.org!==org)return false;
+      if(releaseOnly&&!reportedCloseout(entry,observed.state))return false;
       const prior=evaluations.get(entry.key);if(prior?.completed)return false;
       const next=prior&&closeoutNextStage(entry,prior,observed.events,entries);
       const wait=prior&&closeoutWait(entry,prior,observed.events),status=closeoutWaitState(wait,observed.events);
@@ -222,7 +231,7 @@ function closeoutTurn({project,org,cli,guard,env=process.env,maxSteps=8,budgetMs
         // no per-defect native/source discovery or record fold is needed. New
         // decisions run after cleanup with their original fresh mutation guards.
         if(knownDecisions.has(outcomeDecisionKey(project.identity,org,key)))existingDecisions++;
-        else decisions.push({entry,check:{key,
+        else if(!releaseOnly)decisions.push({entry,check:{key,
           subject:{item:entry.item,run:entry.run,key:entry.key,head:entry.head,source:entry.source},wait,status}});
         return false;
       }
@@ -252,6 +261,7 @@ function closeoutTurn({project,org,cli,guard,env=process.env,maxSteps=8,budgetMs
       try{
         guard();code.verify();
         const result=JSON.parse(cli('supervisor/closeout.mjs',['drain','--repo',project.canonical,'--org',org,
+          ...(releaseOnly?['--release-only']:[]),
           '--keys',JSON.stringify([entry.key]),'--no-restart','--retry-safe','--deadline',String(Math.floor(now()+Math.max(1,budgetMs-(clock()-started)))),
           ...(sessionsOnly?['--sessions-only']:[])]));
         subjects.push({key:entry.key,run:entry.run,source:entry.source,

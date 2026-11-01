@@ -48,7 +48,7 @@ import {judgmentDispatchAllowed} from './decision-policy.mjs';
 import {outcomeFailure} from '../lib/uncertain-outcome.mjs';
 import {queueOutcomeDecision,observeOutcomeDecisions} from './outcome-decision.mjs';
 import {registerCloseoutWait,closeoutWait,closeoutWaitState,closeoutNextStage} from '../lib/closeout-status.mjs';
-import {runCloseoutTurn,runReportIntake,CLOSEOUT_TURN_BUDGET_MS} from './closeout-turn.mjs';
+import {runCloseoutTurn,runReportIntake,assertCloseoutFences,CLOSEOUT_TURN_BUDGET_MS} from './closeout-turn.mjs';
 import {transact} from '../lib/store.mjs';
 import {readReviewAdmission,readOrdinaryAdmission,reviewAdmissionSubject} from './review-admission.mjs';
 import {reviewAdmissionHold} from '../lib/review-admission.mjs';
@@ -164,14 +164,15 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
   const sourceGit = (cwd, args) => execFileSync('git', ['--no-optional-locks', '-C', cwd, ...args], {
     env: childEnv, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 32 * 1024 * 1024,timeout:10000,
   }).trim();
-  const observe = ({ closeout = false } = {}) => {
+  const observe = ({ closeout = false,releaseOnly=false } = {}) => {
     const started = performance.now();
     if (timings) timings.snapshots++;
     const live = identify(repo);
     if (live.identity !== project.identity || live.canonical !== repo) throw Error('project identity changed');
     if(bundleRelease().commit)acceptedRuntime(repo,{verifyFiles:false,home:runtimeHome});
-    if (fs.existsSync(path.join(directory, 'STOP')) || fs.existsSync(path.join(repo, '.lane/supervisor/STOP')) ||
-        !closeout && fs.existsSync(path.join(repo, '.lane/supervisor/HOLD'))) throw Error('STOP/HOLD prevents line-service effects');
+    if(closeout)assertCloseoutFences(project,org,{releaseOnly});
+    else if (fs.existsSync(path.join(directory, 'STOP')) || fs.existsSync(path.join(repo, '.lane/supervisor/STOP')) ||
+        fs.existsSync(path.join(repo, '.lane/supervisor/HOLD'))) throw Error('STOP/HOLD prevents line-service effects');
     const loaded = loadRecord(org);
     if (loaded.tornTail) throw Error('incomplete record tail');
     const result = { events: loaded.events, tornTail: loaded.tornTail, state: loaded.state };
@@ -191,7 +192,8 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
   // The closer still admits only reported allocations under HOLD at each effect.
   const observeCloseout=()=>observe({closeout:true});
   const intake=()=>runReportIntake({project,org,cli,guard:observeCloseout,maxSteps:maxStepsPerStage,clock:workClock});
-  const closeout=(options={})=>runCloseoutTurn({project,org,env:childEnv,cli,guard:observeCloseout,maxSteps:maxStepsPerStage,budgetMs:CLOSEOUT_TURN_BUDGET_MS,clock:workClock,...options,
+  const closeout=(options={})=>runCloseoutTurn({project,org,env:childEnv,cli,maxSteps:maxStepsPerStage,budgetMs:CLOSEOUT_TURN_BUDGET_MS,clock:workClock,...options,
+    guard:()=>observe({closeout:true,releaseOnly:options.releaseOnly===true}),
     ...(closeoutMeasure?{measure:closeoutMeasure}:{})});
   const acquirePass=({resume=false,...options}={})=>noticeLock(path.join(directory,'pass.lock'),{...options,onRecovery:recovery=>{
     // An already-running command must regain the writer to record its outcome,

@@ -11,10 +11,10 @@ import {lineServiceOwnsCleanup} from '../lib/closeout.mjs';
 import {foregroundCommand} from '../dispatch/foreground-command.mjs';
 import {serviceSource} from './runtime.mjs';
 import {installedContext} from './cutoff.mjs';
-import {runCloseoutTurn,closeoutServiceDirectory,CLOSEOUT_TURN_BUDGET_MS} from './closeout-turn.mjs';
+import {runCloseoutTurn,assertCloseoutFences,CLOSEOUT_TURN_BUDGET_MS} from './closeout-turn.mjs';
 const root=fileURLToPath(new URL('../',import.meta.url));
 export function closeoutTurnMain(argv=process.argv.slice(2)){
-  const {values:v}=parseArgs({args:argv,options:{once:{type:'boolean'},repo:{type:'string'},org:{type:'string'},'no-handoff':{type:'boolean'},deadline:{type:'string'}}});
+  const {values:v}=parseArgs({args:argv,options:{once:{type:'boolean'},repo:{type:'string'},org:{type:'string'},'release-only':{type:'boolean'},'no-handoff':{type:'boolean'},deadline:{type:'string'}}});
   if(!v.once||!v.repo)throw Error('use --once --repo CANONICAL; the owning line supplies finite wakes');
   const project=gitProject(v.repo),org=fs.realpathSync(v.org??findOrgDir({cwd:v.repo,env:{...process.env,ORG_DIR:''}}));
   serviceSource(project.canonical);installedContext(project.canonical,org);
@@ -25,8 +25,7 @@ export function closeoutTurnMain(argv=process.argv.slice(2)){
     serviceSource(project.canonical);
     // Project HOLD permits reported allocation release; the executor checks
     // that scope and the explicit retirement hold at every native/Git effect.
-    for(const file of [path.join(closeoutServiceDirectory(org,project.identity),'STOP'),path.join(project.canonical,'.lane/supervisor/STOP')])
-      if(fs.existsSync(file))throw Error('STOP prevents line closeout');
+    assertCloseoutFences(project,org,{releaseOnly:v['release-only']});
   };
   const cli=(file,args)=>{
     const r=foregroundCommand(process.execPath,[path.join(root,file),...args],{cwd:project.canonical,env,encoding:'utf8',maxBuffer:32*1024*1024,timeout:0});
@@ -34,7 +33,7 @@ export function closeoutTurnMain(argv=process.argv.slice(2)){
   };
   const deadline=v.deadline===undefined?Date.now()+CLOSEOUT_TURN_BUDGET_MS:Number(v.deadline);
   if(!Number.isSafeInteger(deadline)||deadline<0)throw Error('invalid finite closeout deadline');
-  return runCloseoutTurn({project,org,env,cli,guard,handoff:!v['no-handoff'],budgetMs:Math.max(0,Math.min(CLOSEOUT_TURN_BUDGET_MS,deadline-Date.now()))});
+  return runCloseoutTurn({project,org,env,cli,guard,releaseOnly:v['release-only'],handoff:!v['no-handoff'],budgetMs:Math.max(0,Math.min(CLOSEOUT_TURN_BUDGET_MS,deadline-Date.now()))});
 }
 if(isMain(import.meta.url))try{process.stdout.write(JSON.stringify(closeoutTurnMain())+'\n');}
 catch(error){process.stderr.write(`line-closeout: ${error.message}\n`);process.exitCode=1;}

@@ -315,8 +315,33 @@ test('engineering-idle ignores retired automatic judgments across completed pass
   assert.equal(journal.halt_progress.count,0);assert.deepEqual(journal.actions,{});
   const observations=fs.readFileSync(path.join(f.service().directory,'passes.jsonl'),'utf8').trim().split('\n').map(JSON.parse).filter(r=>r.action==='engineering-idle-observation');
   assert.equal(observations.length,3);assert.ok(observations.every(r=>r.observation.ready.length===0));
+  const rows=fs.readFileSync(path.join(f.service().directory,'passes.jsonl'),'utf8').trim().split('\n').map(JSON.parse);
+  for(let n=1;n<=12;n++){
+    const hold=rows.find(r=>r.action==='admission-held'&&r.item===`DEC-${n}`);
+    assert.equal(hold?.code,'RETIRED_JUDGMENT');assert.match(hold.reason,/retired; no saved dispatch for this exact input/);
+    assert.equal(journal.negative_evaluations.entries[`admission:DEC-${n}`].reason,hold.reason,'warm negative observations retain the hold explanation');
+  }
   const ready=f.add('Independent engineering');f.service({haltAfter:3}).pass();
   assert.deepEqual(f.calls.map(c=>c.args[1]),[ready]);
+});
+
+test('selected decision admission records a policy hold and launches once after its removal',t=>{
+  const f=fixture(t);
+  transact(f.org,()=>({add:[{type:'item.added',id:'DEC-1',kind:'work',role:'decision',title:'Selected decision',
+    meta:{queue_selected:true,route:'engineer',uncertain_outcome:{check:{key:'dispatch:original'}}}}]}));
+  const service=f.service(),rows=()=>fs.readFileSync(path.join(service.directory,'passes.jsonl'),'utf8').trim().split('\n').map(JSON.parse);
+  service.pass();
+  assert.equal(f.calls.length,0);assert.equal(rows().find(r=>r.action==='admission-held'&&r.item==='DEC-1')?.code,'RETIRED_JUDGMENT');
+  f.record(['set','DEC-1','meta.uncertain_outcome=null']);
+  f.record(['set','DEC-1','meta.reserved=true']);
+  service.pass();
+  assert.equal(f.calls.length,0,'removing retirement does not bypass reserved authority');
+  assert.ok(rows().some(r=>r.action==='hold'&&r.boundary==='dispatch:DEC-1'&&/reserved/.test(r.reason)));
+  f.record(['set','DEC-1','meta.reserved=false']);
+  service.pass();service.pass();
+  assert.deepEqual(f.calls.map(c=>c.args[1]),['DEC-1'],'fresh policy observation dispatches once without hand dispatch');
+  assert.equal(rows().filter(r=>r.action==='admission-attempted'&&r.item==='DEC-1').length,1);
+  assert.equal(rows().filter(r=>r.action==='admission-started'&&r.item==='DEC-1').length,1);
 });
 
 test('engineering-idle keeps only exact saved judgment inputs and rechecks them before repair intent without replay',t=>{
@@ -354,6 +379,8 @@ test('engineering-idle ignores obsolete closeout decisions across completed pass
   const saved=JSON.parse(fs.readFileSync(journal));assert.equal(saved.halt_progress.count,0);assert.deepEqual(saved.actions,{[key]:original});
   const observations=fs.readFileSync(path.join(f.service().directory,'passes.jsonl'),'utf8').trim().split('\n').map(JSON.parse).filter(r=>r.action==='engineering-idle-observation');
   assert.equal(observations.length,3);assert.ok(observations.every(r=>r.observation.ready.length===0));
+  const holds=fs.readFileSync(path.join(f.service().directory,'passes.jsonl'),'utf8').trim().split('\n').map(JSON.parse).filter(r=>r.action==='admission-held'&&r.item==='DEC-1');
+  assert.equal(holds.length,3);assert.ok(holds.every(r=>r.code==='OBSOLETE_OUTCOME_DECISION'&&r.reason==='cleanup request is no longer queued'));
   const ready=f.add('Independent engineering');f.service({haltAfter:3}).pass();
   assert.deepEqual(f.calls.map(c=>c.args[1]),[ready]);
 });

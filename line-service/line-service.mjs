@@ -802,7 +802,12 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         const observation=evaluationCache.probe('admission',{snapshot,item:item.id,policy:{...evaluationPolicy,standing}});
         if(observation.skip)continue;
         if(!queueSelected(snapshot.state.items.get(item.id),snapshot.state,ordinaryPolicy)){observation.retain('not selected');continue;}
-        if(obsoleteDecision(snapshot.state.items.get(item.id),snapshot)){timings.outcome_decisions_deferred++;continue;}
+        const obsolete=obsoleteDecision(snapshot.state.items.get(item.id),snapshot);
+        if(obsolete){
+          timings.outcome_decisions_deferred++;
+          log({action:'admission-held',item:item.id,source_seq:item.created.seq,code:'OBSOLETE_OUTCOME_DECISION',reason:obsolete});
+          continue;
+        }
         const input=dispatchInput({...snapshot,item:snapshot.state.items.get(item.id),org,identity:project.identity});
         if(!input){observation.retain('no dispatch input');continue;}
         try{checkExceptionTriage(item,{...snapshot,repo,org,identity:project.identity});}catch(error){observation.retain(error.message);continue;}
@@ -811,7 +816,11 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
           observed_at:eligibleAt,wake_owner:'line-service',event_to_wake_ms:null});
         // A saved request may finish through the original guarded continuation.
         // No new rule-generated review/dispatch or backlog attempt is admitted.
-        if(!judgmentDispatchAllowed(item,input,effects.actions)){observation.retain('judgment input retained');continue;}
+        if(!judgmentDispatchAllowed(item,input,effects.actions)){
+          const reason='automatic review/dispatch judgments and backlog batches are retired; no saved dispatch for this exact input';
+          log({action:'admission-held',item:item.id,input,observed_at:eligibleAt,code:'RETIRED_JUDGMENT',reason});
+          observation.retain(reason);continue;
+        }
         if(!admissionLogged){log({action:'admission-stage',preceding_work_ms:precedingWork,preceding_budget_exhausted:precedingWork>=passBudgetMs,work_budget_ms:passBudgetMs});admissionLogged=true;}
         if(roleIs(item,'REV')&&cutoff&&isQueueReview(item)&&!index?.heads.includes(item.meta.review_target?.head)&&!snapshot.events.some(e=>e.type==='review.recovery-completed'&&e.item===item.meta.review_source_item&&e.target?.head===item.meta.review_target?.head)){
           try{sourceGit(repo,['merge-base','--is-ancestor',item.meta.review_target.head,cutoff.canonical_head]);timings.historical_review_skipped++;continue;}catch{/* Unlanded/unknown targets are errors, never historical skips. */}

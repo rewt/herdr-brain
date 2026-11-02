@@ -572,6 +572,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
             // the fresh target instead of retaining a command that never ran.
             const checked=discoverChanges({events:fresh.events,state:fresh.state,repo,org,identity:project.identity,runId:run.id}).changes.find(c=>c.item.id===item.id&&JSON.stringify(c.target)===JSON.stringify(target));
             if(!checked){
+              reviewSteps--; // A stale selection did not spend a queue step.
               note(key,'Review queue deferred: immutable landed target/evidence changed before queue intent; fresh selection is required.',{item:item.id,run:run.id,head:target.head,review:true},false,{action:'review-queue-deferred',key});
               return false;
             }
@@ -592,6 +593,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
             if(!admit({selector,target},'queue-mutation',true))return false;
             const checked=discoverChanges({events:fresh.events,state:fresh.state,repo,org,identity:project.identity}).unattributed?.find(c=>c.selector===selector&&JSON.stringify(c.target)===JSON.stringify(target));
             if(!checked){
+              reviewSteps--; // A stale selection did not spend a queue step.
               note(key,'Review queue deferred: immutable canonical target/evidence changed before queue intent; fresh selection is required.',{head:target.head,review:true},false,{action:'review-queue-deferred',key});
               return false;
             }

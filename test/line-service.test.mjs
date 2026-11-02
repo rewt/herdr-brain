@@ -569,7 +569,7 @@ test('outcome retirement line pass never creates cleanup judgments or evaluates 
   assert.ok(rows.some(r=>r.action==='pass-complete'));
   assert.ok(!rows.some(r=>retired.includes(r.item)),'no admission probe, policy hold or dispatch for terminal proposals');
   const effects=readSchedulingJournal(path.join(service.directory,'effects.json'));
-  for(const id of retired)assert.equal(effects.negative_evaluations.entries[`admission:${id}`],undefined,'not even a cached admission evaluation');
+  for(const id of retired)assert.equal(effects.negative_evaluations?.entries[`admission:${id}`],undefined,'not even a cached admission evaluation');
   assert.equal(f.calls.some(c=>/^DEC-/.test(c.args[1]??'')),false,'the native refusal stays owned without a judgment session');
   assert.equal(loadEvents(f.org).events.some(e=>e.type==='closeout.effect'),false,'fixture never executes or clears the refused cleanup');
 });

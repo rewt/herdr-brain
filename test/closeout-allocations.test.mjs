@@ -94,7 +94,7 @@ for(const session of [null,'session'])test(`typed STOP between launch and prompt
   const f=stopped(t,{run:true,occupied:true});
   const worker={agentName:'worker',pane:'w:p',workspaceId:'w',terminalId:'term',agentSessionId:session,cwd:f.lane};
   f.append([{type:'run.updated',id:'R-1',meta:{agent:'worker',pane:'w:p',worker_workspace:'w',terminal_id:'term',agent_session_id:session}}]);
-  f.state.agents[0].agent_session=session?{value:session}:null;f.save();
+  f.state.agents[0].agent_session=session?{value:session}:null;fs.writeFileSync(f.file,JSON.stringify(f.state));
   Object.assign(f.job,{worker,launchProcess:{pid:2,identity:'native'},stage:'prompt',native_launch_attempted:true,
     error:'STOP/HOLD prevents native dispatch effect',failure:{code:'DISPATCH_STOPPED',kind:'fence',stage:'prompt',native_launch_attempted:true}});
   f.save();
@@ -106,13 +106,13 @@ for(const session of [null,'session'])test(`typed STOP between launch and prompt
   const original=fs.readFileSync(f.eventFile),journal=fs.readFileSync(f.journal),result=f.dispose();
   assert.equal(result.results[0].disposition,'NOT_PROMPTED',JSON.stringify(result));
   const entry=currentCloseoutEntries(f.common,f.org,events(f))[0];
-  assert.equal(fold(events(f)).runs.get('R-1').abandoned.authorization.kind,'positive-unprompted-stopped-allocation');
+  assert.equal(events(f).find(e=>e.type==='run.abandoned').authorization.kind,'positive-unprompted-stopped-allocation');
   if(!session){
     assert.equal(f.drain({keys:[entry.key],retrySafe:true}).evaluated[0].completed,false);
     assert.deepEqual(f.read().actions,[]);assert.equal(fs.existsSync(f.lane),true);
     // The original occupant departs independently. No SID is reconstructed,
     // and the finite closer uses its existing active-process observation path.
-    f.state.agents=[];f.state.panes=[];f.state.tabs=[];f.save();
+    f.state.agents=[];f.state.panes=[];f.state.tabs=[];fs.writeFileSync(f.file,JSON.stringify(f.state));
   }
   const final=f.drain({keys:[entry.key],retrySafe:true});
   assert.equal(final.evaluated[0].completed,true,JSON.stringify(final));assert.equal(fs.existsSync(f.lane),false);

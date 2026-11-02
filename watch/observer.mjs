@@ -34,8 +34,10 @@ export function createObserver({repo,org,socket=herdrSocketPath(),client=new Her
   const began=now(),cpuBegan=process.cpuUsage();let waiter;
   let stopped=false,ready=false,subscription='',revision=0,scan,again=false,lastSafety=now(),fileWatch;
   const counters={reconciliations:0,safety_reconciliations:0,repairs:0,consumer_starts:0,consumer_failures:0};
-  const stoppedByProject=()=>[path.join(repo,'.lane/supervisor/STOP'),path.join(repo,'.lane/supervisor/HOLD'),
-    path.join(org,'STOP'),path.join(directory,'STOP')].some(f=>fs.existsSync(f));
+  const line=path.join(org,'line-service',digest(project.identity).slice(0,20));
+  const stoppedByProject=()=>{const installed=readJson(path.join(line,'installation.json'));return[path.join(repo,'.lane/supervisor/STOP'),path.join(repo,'.lane/supervisor/HOLD'),
+    path.join(org,'STOP'),path.join(directory,'STOP'),path.join(line,'STOP')].some(f=>fs.existsSync(f)) ||
+    Boolean(installed?.source&&installed.source!==source);};
   const emit=(action,detail={})=>log({schema:'brain.run-observer/v1',at:new Date(now()).toISOString(),action,project:project.identity,org,...detail});
   const readSubjects=subjects??(duties=>{
     const reader=openRecordReader(path.join(org,'events.jsonl'));
@@ -229,9 +231,10 @@ export async function main(argv=process.argv.slice(2)){
   try{
     observer=createObserver({repo,org,log:emit});
     if(observer.stoppedByProject())throw Error('STOP/HOLD prevents observer start');
+    await observer.start();
+    if(observer.stoppedByProject())throw Error('STOP/HOLD prevents observer readiness');
     writeFileAtomic(file,JSON.stringify({schema:'brain.run-observer-owner/v1',org,repo,project:project.identity,source,socket:herdrSocketPath(),
       release:bundleRelease(),pid:process.pid,identity:ownerIdentity(process.pid),log,at:new Date().toISOString()})+'\n');
-    await observer.start();
     while(!v.once&&!stopping&&!observer.stoppedByProject()){
       if(await observer.wait()==='deadline')await observer.tick();
     }

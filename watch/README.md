@@ -152,7 +152,7 @@ Internal response waits adapt to measured machine load; see the
 An explicitly started project observer can replace resident watchers **for new
 ordinary dispatches**. Existing watchers and saved recipients finish unchanged.
 No installed plist, pin, hook, running service or saved job is rewritten by this
-feature. The canonical project supervisor owns starting/stopping the observer
+feature. The canonical project supervisor owns the project choice and holds; the installed line can manage starting/stopping the observer
 through its existing native execution path, after the normal installation or
 canary authorization. A worker must not activate it on a live consumer.
 
@@ -245,3 +245,55 @@ not restart it. SIGTERM/SIGINT drain already owned finite children and release
 the singleton host lock. The supervisor retains restart and rollback ownership;
 an unknown host/child birth is never reclaimed on age alone. Source landing and
 focused tests do not activate this mode or qualify installed/live acceptance.
+
+The installed line can own the observer lifecycle. In the canonical project,
+the supervisor selects new ordinary **and queued-review** starts with:
+
+```sh
+node /installed/build/bin/org.mjs config set dispatch.watch_mode shared
+# Default/off for new starts:
+node /installed/build/bin/org.mjs config set dispatch.watch_mode process
+```
+
+Use pinned Node 20.19.4 and the project's installed build. The setting lives in
+the existing project lane policy (home policy after adoption, `.lane.json` in
+legacy projects). Commit a tracked legacy policy before running the line.
+Absent means `process`; invalid values hold selection. Each new dispatch saves
+its choice. Retrying an existing dispatch retains its saved mode, regardless of
+subsequent policy edits. Existing process watchers are never migrated.
+
+Each scheduled line pass with shared mode selected, or pending shared duties,
+calls the finite `watch/host.mjs` launcher. It starts only `watch/observer.mjs`,
+not another resident manager. A live exact project/source/socket/kernel-birth
+receipt is reused. A proven dead host is restarted on the next ordinary pass.
+The observer checks the line's own STOP as well as project STOP/HOLD and its own
+STOP, and exits when the saved installation changes build. After a supported
+install/restart and cleared boundaries, the new installed line starts its host.
+Clearing a marker alone never starts a service. A live foreign build/birth,
+unknown launch or refusal is retained rather than replaced. Original duties,
+consumer failures and saved dispatches remain immutable; a build change does
+not migrate a prior build's registrations or authorize replay of their consumers.
+
+`SHARED_OBSERVER_HELD` blocks new starts before a dispatch is issued and records
+its project-supervisor owner, original evidence and next action in
+`watch/observer/line-host.json` and the line's effects/diagnostics. The line submits
+one stable notice through the existing durable project-supervisor inbox; pending,
+refused and uncertain delivery stays with that original notice. There is no
+process-watcher fallback. A registration race after launch retains the original
+run/claim/journal and also sends a stable supervisor notice.
+
+After inspecting the original hold and `watch/observer/host.log`, the actual
+canonical project supervisor can explicitly reconcile/retry the finite launcher:
+
+```sh
+node /installed/build/watch/host.mjs --repo /project --org /record --retry
+```
+
+This rechecks native canonical ownership, installed binding and STOP/HOLD. It
+never replaces a live unidentified/foreign child. For a dispatch already held
+at its original `watch` stage, restore its matching original source observer and
+use that dispatch's saved `--retry` command, preserving mode, run and claim.
+No new run or launch replay is authorized. The installed canary shared control
+selects project policy and drives these real line starts; its command adapter
+supplies neither a watch-mode flag nor an observer process. Real Brain installation
+and a real line-started shared witness remain supervisor/release work.

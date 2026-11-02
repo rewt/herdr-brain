@@ -62,6 +62,7 @@ import {negativeEvaluationCache,sourceEvaluationInputs} from './evaluation-cache
 import {observeGeneralOwners} from './general-owner-alarm.mjs';
 import {observeRecoveryAdmission} from './recovery-admission.mjs';
 import {consumeExceptions,returnExceptionReports,checkExceptionTriage} from './exception-triage.mjs';
+import {pendingSharedDuties} from '../watch/shared.mjs';
 import {pendingWitnesses} from '../measurement/live-witnesses.mjs';
 export { reviewAttempt } from './review.mjs';
 
@@ -454,6 +455,24 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       };
       const admission=readAdmission('pass-start'),admissionPolicy=admission?.review,ordinaryPolicy=admission?.ordinary;
       if(admission)try{({config}=loadDiscoveredRoutes({cwd:repo,env:childEnv}));}catch(error){holdPolicy(error,'pass-start');}
+      let sharedWatchHold;
+      if(config&&!policyHold)try{
+        if(config.dispatch?.watch_mode==='shared'||pendingSharedDuties(org)){
+        checkpointNotices();
+        const host=outside('shared-observer-host','shared-observer-host',()=>JSON.parse(cli('watch/host.mjs',['--repo',repo,'--org',org])));
+        if(!host||host.state!=='ready'){
+          sharedWatchHold=host??{id:'unknown',code:'SHARED_OBSERVER_HELD',reason:'observer host is already owned or unknown',evidence:path.join(org,'watch/observer/line-host.json')};
+        }
+        }
+      }catch(error){sharedWatchHold={id:'host-command',code:'SHARED_OBSERVER_HELD',reason:error.message,evidence:path.join(org,'watch/observer/line-host.json')};}
+      if(sharedWatchHold){
+        const owner=projectExceptionAddress(repo,config,config.routes?.['engineer-xhigh']?'engineer-xhigh':'engineer',childEnv).to;
+        effects.shared_watch={...sharedWatchHold,owner,wake_fact:'next pass after explicit original host recovery'};save();
+        note('shared-observer',sharedWatchHold.reason,{code:'SHARED_OBSERVER_HELD',owner,evidence:sharedWatchHold.evidence},true);
+        effect(`shared-observer-notice:${sharedWatchHold.id}`,()=>cli('supervisor/prompt-supervisor.mjs',[owner,
+          `[line-shared-observer-held] code=SHARED_OBSERVER_HELD owner=${owner}; evidence=${sharedWatchHold.evidence}; reason=${sharedWatchHold.reason}; held-action=new shared line starts; recover the original host with watch/host.mjs --retry, never fall back to process mode`,
+          '--org',org,'--id',`line-shared-observer:${digest([project.identity,sharedWatchHold.id])}`,'--project-supervisor'],{environment:{SUPERVISOR_INPUT_WAIT_SECONDS:'0'}}));
+      }else if(effects.shared_watch){effects.shared_watch={...effects.shared_watch,state:'released',released_at:now()};save();}
       const evaluationCounts={admission_evaluated:0,admission_skipped:0,source_evaluated:0,source_skipped:0};
       const evaluationCache=negativeEvaluationCache({store:()=>effects,identity:project.identity,org,repo,
         counts:evaluationCounts,log,dirty:()=>{noticesDirty=true;}});
@@ -779,6 +798,16 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
           const outcome=entry.original_outcome??originalDispatchOutcome({repo,org,common:project.identity,item,brief:path.join(directory,`${digest(key)}.ask.md`),journal:entry.result?.journal,events:snapshot.events});
           if(!entry.original_outcome){entry.original_outcome=outcome;save();log({action:'dispatch-outcome-readback',key,...outcome});}
           status??=snapshot.events.findLast(e=>e.type==='dispatch.completed'&&e.project===project.identity&&e.journal===outcome.journal&&e.attempt===outcome.producer?.attempt&&e.item===item&&e.run===outcome.run);
+          if(status?.failure&&outcome.journal){
+            const job=regularJSON(outcome.journal);
+            if(job?.watchMode==='shared'&&status.stage==='watch'){
+              const owner=projectExceptionAddress(repo,config,config.routes?.['engineer-xhigh']?'engineer-xhigh':'engineer',childEnv).to;
+              note(`shared-observer:${item}`,'SHARED_OBSERVER_HELD: original shared registration failed; retain run, claim and journal',{item,run:status.run,owner,journal:outcome.journal},true);
+              effect(`shared-watch-notice:${job.token}`,()=>cli('supervisor/prompt-supervisor.mjs',[owner,
+                `[line-shared-observer-held] run=${status.run} item=${item} code=SHARED_OBSERVER_HELD owner=${owner}; evidence=${outcome.journal}; held-action=original shared registration; restore its original host and use the original dispatch --retry, never replace the run or watcher mode`,
+                '--org',org,'--run',status.run,'--id',`line-shared-watch:${job.token}`,'--project-supervisor'],{environment:{SUPERVISOR_INPUT_WAIT_SECONDS:'0'}}));
+            }
+          }
           if(status&&!entry.recorded_dispatch_status){entry.recorded_dispatch_status=status;save();log({action:'dispatch-linked-status',key,status});}
           if(original&&(status&&(status.failure||status.exit_code!==0)||!outcome.producer&&entry.state==='held'&&!initialCapacityRefusal(entry))){
             if(status){entry.failure=outcomeFailure(status);entry.state='held';entry.error=`Recovery dispatch failed: ${status.failure?.code??status.exit_code}`;}
@@ -974,7 +1003,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
             const target = reviewTarget ? validateQueuedReview({ item: current, state: fresh.state, events: fresh.events, org, repo }) : null;
             const correction = correctionSource({ item: current, state: fresh.state, events: fresh.events, repo, org });
             writeFileAtomic(brief, target ? reviewQueueBrief(current) : isDecision(current) ? decisionBrief(current) : lineWorkAsk(current, correction?.brief ?? ''), 0o600);
-            return startDispatch([item.id, '--repo', repo, '--org', org, '--lane', `${target ? 'review' : 'line'}-${item.id.toLowerCase()}-${current.runs.length + 1}`, '--route', route, '--brief', brief, ...(target ? ['--base', target.head] : correction ? ['--base', correction.base] : []),'--detach']);
+            return startDispatch([item.id, '--repo', repo, '--org', org, '--lane', `${target ? 'review' : 'line'}-${item.id.toLowerCase()}-${current.runs.length + 1}`, '--route', route, '--brief', brief, '--watch-mode', config.dispatch?.watch_mode??'process', ...(target ? ['--base', target.head] : correction ? ['--base', correction.base] : []),'--detach']);
           },undefined,undefined,Boolean(retryAdmission),Boolean(retryAdmission),fresh=>{
             // Defer readiness races before saving a one-shot recovery intent.
             const current = fresh.state.items.get(item.id);
@@ -999,11 +1028,11 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       const classify=queueClassifier(snapshot.state,standing);
       const ordered=orderQueue(snapshot.state,[...snapshot.state.items.values()].filter(item=>!item.closed&&item.kind!=='goal'),standing,classify);
       log({action:'queue-order',policy:standing,candidates:ordered.map(item=>({item:item.id,class:classify(item)}))});
-      if(config&&!policyHold)admitItems(ordered);
+      if(config&&!policyHold&&!sharedWatchHold)admitItems(ordered);
       // Detached acknowledgements and review activity are not engineering
       // progress. This is the end of a completed pass, under the same lock.
       const latestAdmission=readAdmission('pass-end');
-      if(config&&latestAdmission&&(!latestAdmission.review.enabled||!latestAdmission.review.hold_ordinary))try {
+      if(config&&!sharedWatchHold&&latestAdmission&&(!latestAdmission.review.enabled||!latestAdmission.review.hold_ordinary))try {
         snapshot=observe();
         const haltConfig={...config,ordinary_admission:latestAdmission.ordinary};
         const observation=haltObservation({...snapshot,org,identity:project.identity,config:haltConfig,actions:effects.actions,occupancy:latestOccupancy});

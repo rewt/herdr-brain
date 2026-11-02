@@ -95,6 +95,7 @@ export function validateRoutesConfig(config, options = {}) {
       (!Number.isSafeInteger(config.dispatch.max_sessions) || config.dispatch.max_sessions < 1)) {
     throw new Error("dispatch.max_sessions must be a positive integer");
   }
+  if(config.dispatch?.watch_mode!==undefined&&!['process','shared'].includes(config.dispatch.watch_mode))throw Error('dispatch.watch_mode must be process or shared');
   if(config.dispatch?.max_review_sessions!==undefined&&(!Number.isSafeInteger(config.dispatch.max_review_sessions)||config.dispatch.max_review_sessions<1))throw Error('dispatch.max_review_sessions must be a positive integer');
   if(config.dispatch?.max_total_sessions!==undefined&&(!Number.isSafeInteger(config.dispatch.max_total_sessions)||config.dispatch.max_total_sessions<1))throw Error('dispatch.max_total_sessions must be a positive integer');
   if (config.routes !== undefined && !record(config.routes)) throw new Error("routes must be an object");

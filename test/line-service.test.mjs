@@ -1164,3 +1164,52 @@ test('producer linked source completion retains an old held effect without fabri
   const saved=JSON.parse(fs.readFileSync(file));assert.equal(saved.actions[key].state,'held');assert.equal(Object.keys(saved.outcome_decisions).length,1);
   assert.equal(f.calls.filter(c=>c.args[1]==='close').length,0);assert.equal(fs.readFileSync(done.saved,'utf8'),done.review);
 });
+
+for(const mode of [undefined,'process','shared'])test(`shared watch line choice ${mode??'default'} reaches ordinary dispatch`,t=>{
+  const f=fixture(t),file=path.join(f.repo,'.lane.json'),config=JSON.parse(fs.readFileSync(file));
+  if(mode)config.dispatch.watch_mode=mode;fs.writeFileSync(file,JSON.stringify(config));
+  f.add('Selected shared work');let hosts=0;
+  const command=(exe,args,options)=>{
+    if(args[0]===path.join(sourceRoot,'watch/host.mjs')){hosts++;return{status:0,stdout:JSON.stringify({state:'ready'})};}
+    return f.command(exe,args,options);
+  };
+  f.service({command}).pass();
+  const dispatch=f.calls.find(c=>c.args[0]===path.join(sourceRoot,'dispatch/dispatch.mjs'));
+  assert.ok(dispatch);assert.equal(dispatch.args[dispatch.args.indexOf('--watch-mode')+1],mode??'process');
+  assert.equal(hosts,mode==='shared'?1:0);
+});
+
+test('shared watch line hold reaches the supervisor once and releases only after host recovery',t=>{
+  const f=fixture(t),file=path.join(f.repo,'.lane.json'),config=JSON.parse(fs.readFileSync(file));
+  config.dispatch.watch_mode='shared';fs.writeFileSync(file,JSON.stringify(config));f.add('Waiting for observer');
+  let ready=false;const notices=[];
+  const command=(exe,args,options)=>{
+    if(args[0]===path.join(sourceRoot,'watch/host.mjs'))return{status:0,stdout:JSON.stringify(ready?{state:'ready'}:
+      {id:'original-host',state:'held',code:'SHARED_OBSERVER_HELD',reason:'observer refused',evidence:'original-host.json'})};
+    if(args[0]===path.join(sourceRoot,'supervisor/prompt-supervisor.mjs')){notices.push(args);return{status:0,stdout:'{"queued":true,"delivered":false}'};}
+    return f.command(exe,args,options);
+  };
+  const service=()=>f.service({command});service().pass();service().pass();
+  assert.equal(f.calls.length,0,'no dispatch or process fallback while shared host is held');assert.equal(notices.length,1);
+  assert.ok(notices[0].includes('--project-supervisor'));assert.match(notices[0][2],/SHARED_OBSERVER_HELD/);
+  const effects=()=>JSON.parse(fs.readFileSync(path.join(service().directory,'effects.json')));
+  assert.equal(effects().shared_watch.code,'SHARED_OBSERVER_HELD');assert.ok(effects().shared_watch.owner);
+  ready=true;service().pass();assert.equal(f.calls.length,1);assert.equal(effects().shared_watch.state,'released');
+});
+
+test('shared watch invalid project choice holds instead of selecting process',t=>{
+  const f=fixture(t),file=path.join(f.repo,'.lane.json'),config=JSON.parse(fs.readFileSync(file));
+  config.dispatch.watch_mode='typo';fs.writeFileSync(file,JSON.stringify(config));f.add('Invalid observer choice');
+  f.service().pass();assert.equal(f.calls.length,0);
+});
+
+test('shared watch saved duties keep their observer when the new-start choice is process',t=>{
+  const f=fixture(t),registry=path.join(f.org,'watch/shared');fs.mkdirSync(registry,{recursive:true});
+  fs.writeFileSync(path.join(registry,'R-9.json'),'{}');f.add('Deliberate process choice');let hosts=0;
+  f.service({command:(exe,args,options)=>{
+    if(args[0]===path.join(sourceRoot,'watch/host.mjs')){hosts++;return{status:0,stdout:'{"state":"ready"}'};}
+    return f.command(exe,args,options);
+  }}).pass();
+  assert.equal(hosts,1);const call=f.calls.find(c=>c.args[0]===path.join(sourceRoot,'dispatch/dispatch.mjs'));
+  assert.equal(call.args[call.args.indexOf('--watch-mode')+1],'process');
+});

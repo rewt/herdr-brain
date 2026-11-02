@@ -50,3 +50,10 @@ export function observerReceipt(org, {repo, project, source, socket}, alive = ow
       saved.source !== source || saved.socket !== socket || !alive(saved)) throw Error('matching live project observer required; retain the original observation duty');
   return saved;
 }
+
+// A project can turn new starts off without abandoning existing shared duties.
+export function pendingSharedDuties(org) {
+  const directory=sharedDirectory(org);
+  if(!fs.existsSync(directory))return false;
+  return fs.readdirSync(directory).some(name=>/^R-\d+\.json$/.test(name)&&readJson(stepFile(org,name.slice(0,-5)))?.phase!=='complete');
+}

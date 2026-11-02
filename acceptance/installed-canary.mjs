@@ -4,7 +4,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import assert from 'node:assert/strict';
-import {spawn} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {expiredCloseoutControl} from './installed-closeout-control.mjs';
 import {processControlPid, setProcessControl} from './installed-observations.mjs';
@@ -348,13 +347,25 @@ export async function runCanary(c) {
     // finite watcher consumers; only snapshot/account/transport and dropped
     // hint inputs are scripted. No per-run resident process is created.
     fs.writeFileSync(process.env.HERDR_SOCKET_PATH,'scripted protocol-22 socket identity');
-    const log=path.join(root,'evidence/shared-observer.log'),fd=fs.openSync(log,'a');
-    const observer=spawn(process.execPath,[path.join(bundle,'watch/observer.mjs'),'--repo',repo,'--org',org],
-      {cwd:repo,env:{...env,INSTALLED_CYCLE_DROP_HINTS:'1'},stdio:['ignore',fd,fd]});fs.closeSync(fd);
+    // Enable the same project choice used by installed ordinary/review starts.
+    // The real line owns startup; this harness supplies no watch-mode flag and
+    // starts no observer process.
+    const policy=path.join(repo,'.lane.json');
+    const selected=JSON.parse(fs.readFileSync(policy));selected.dispatch={...selected.dispatch,watch_mode:'shared'};
+    fs.writeFileSync(policy,JSON.stringify(selected)+'\n');
+    // This fixture's project policy is tracked. Keep canonical main clean for
+    // real report closeout, and exclude only a review of fixture configuration.
+    git(['add','.lane.json']);git(['commit','-qm','Select shared observation in scratch project']);
+    const existingItems=new Set(state().items.keys()),savedDrop=env.INSTALLED_CYCLE_DROP_HINTS;
+    env.INSTALLED_CYCLE_DROP_HINTS='1';
     const ownerFile=path.join(org,'watch/observer/owner.json');
+    let owner;
     try {
-      await until(()=>fs.existsSync(ownerFile),'shared observer owner receipt');
-      const owner=JSON.parse(fs.readFileSync(ownerFile));assert.equal(owner.pid,observer.pid);assert.equal(owner.source,bundle);
+      service(0).pass();
+      for(const queued of state().items.values())if(!existingItems.has(queued.id)&&queued.meta?.review_target)
+        record(['set',queued.id,'meta.queue_selected=false']);
+      await until(()=>fs.existsSync(ownerFile),'line-owned shared observer receipt');
+      owner=JSON.parse(fs.readFileSync(ownerFile));assert.equal(owner.source,bundle);
       const sharedHost=job=>{
         assert.equal(job.watchMode,'shared');assert.equal(job.watcher.run,job.run);
         assert.equal(job.watcher.shared,path.join(org,'watch/shared',job.run+'.json'));
@@ -365,7 +376,6 @@ export async function runCanary(c) {
         assert.equal(duty.run,job.run);assert.equal(duty.source,bundle);
         assert.deepEqual(duty.ownership,job.ownership);
       };
-      fs.writeFileSync(path.join(root,'shared-watch'),'shared dispatch');
       const sharedItem=record(['add','Shared installed observation control','--role','engineer']).match(/ENG-\d+/)[0];service(1).pass();
       const job=journals().find(j=>j.item===sharedItem);assert.ok(job,audit());sharedHost(job);
       const step=path.join(org,'watch/steps',job.run+'.json'),observations=path.join(org,'watch/observer/observations.jsonl');
@@ -420,8 +430,11 @@ export async function runCanary(c) {
         vanishedStep,goneNotes,originalDutyUnchanged:true,originalJournalUnchanged:true,vanishedAllocationRetained:true,
         completedStepNotReplayed:true,originalBinding:original,reportOnce:true,reportFolderRemoved:true,reportNativeReleased:true,consumerCap:2});
     } finally {
-      if(fs.existsSync(path.join(root,'shared-watch')))fs.unlinkSync(path.join(root,'shared-watch'));
-      if(observer.exitCode===null&&observer.signalCode===null){const closed=new Promise(resolve=>observer.once('close',resolve));observer.kill('SIGTERM');await closed;}
+      if(savedDrop===undefined)delete env.INSTALLED_CYCLE_DROP_HINTS;else env.INSTALLED_CYCLE_DROP_HINTS=savedDrop;
+      // Fixture teardown uses the supported line STOP boundary.
+      fs.writeFileSync(path.join(directory,'STOP'),'Shared canary teardown\n');
+      owner??=fs.existsSync(ownerFile)?JSON.parse(fs.readFileSync(ownerFile)):null;
+      if(owner)await until(()=>!ownerAlive(owner),'line-owned observer stopped');
     }
   }
 }

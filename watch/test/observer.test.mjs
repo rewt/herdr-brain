@@ -203,3 +203,14 @@ test('correction original finite consumer preserves a real native-binding failur
   await observer.reconcile('hint');await observer.idle();assert.deepEqual(fs.readFileSync(held),original);
   assert.equal(observer.counters.consumer_starts,1);assert.equal(readInbox(path.join(f.org,'supervisor/inbox.log')).length,1);
 });
+
+test('shared watch observer follows the line STOP and installed-source boundaries without changing duties',async t=>{
+  const f=fixture(t),directory=path.join(f.org,'line-service',digest(f.project.identity).slice(0,20));
+  fs.mkdirSync(directory,{recursive:true});const original=fs.readFileSync(path.join(sharedDirectory(f.org),'R-1.json'));
+  const stop=path.join(directory,'STOP');fs.writeFileSync(stop,'Line stopped');
+  assert.equal(f.observer.stoppedByProject(),true);assert.deepEqual(await f.observer.reconcile('held'),{held:true});
+  fs.unlinkSync(stop);assert.equal(f.observer.stoppedByProject(),false);
+  fs.writeFileSync(path.join(directory,'installation.json'),JSON.stringify({source:'/successor-build'}));
+  assert.equal(f.observer.stoppedByProject(),true);assert.equal(f.calls.length,0);
+  assert.deepEqual(fs.readFileSync(path.join(sharedDirectory(f.org),'R-1.json')),original);
+});

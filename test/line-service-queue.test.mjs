@@ -527,3 +527,22 @@ test('typed initial review capacity refusal waits for fresh availability then co
   const directory=path.join(f.org,'line-service',createHash('sha256').update(JSON.stringify(f.identity)).digest('hex').slice(0,20)),entry=Object.entries(JSON.parse(fs.readFileSync(path.join(directory,'effects.json'))).actions).find(([k])=>k.startsWith('dispatch:REV-'))[1];
   assert.equal(entry.history.length,1);assert.equal(JSON.parse(entry.history[0].receipt.stdout).code,'DISPATCH_REVIEW_CAP');assert.equal(entry.result.result,'detached');assert.equal(f.context().events.some(e=>e.type==='run.started'&&e.item.startsWith('REV-')),false);
 });
+
+test('shared watch project choice reaches the ordinary queued-review start path',t=>{
+  const f=fixture(t),queued=f.create().review_item,calls=[];
+  const policy=path.join(f.cwd,'.lane.json'),config=JSON.parse(fs.readFileSync(policy));
+  config.dispatch.watch_mode='shared';fs.writeFileSync(policy,JSON.stringify(config));
+  // Fixture configuration is a deliberate project commit, not producer work.
+  f.git(['add','.lane.json']);f.git(['commit','-qm','Select shared review observation']);
+  const command=(exe,args,options)=>{
+    calls.push(args);
+    if(args[0]===path.join(root,'watch/host.mjs'))return{status:0,stdout:'{"state":"ready"}'};
+    if(args[0]===entry)return spawnSync(exe,args,{...options,env:f.env});
+    if(args[0]===path.join(root,'supervisor/closeout.mjs'))return{status:0,stdout:'{"evaluated":[]}'};
+    assert.equal(args[0],path.join(root,'dispatch/dispatch.mjs'));return{status:0,stdout:'{"result":"dispatched"}'};
+  };
+  createLineService({repo:f.cwd,org:f.org,to:'test-supervisor',env:f.env,capacity:()=>({cap:7,count:0}),command,maxStarts:1,haltAfter:100}).pass();
+  const args=calls.find(a=>a[0]===path.join(root,'dispatch/dispatch.mjs'));
+  assert.ok(args);assert.equal(args[1],queued);assert.match(args[args.indexOf('--lane')+1],/^review-/);
+  assert.equal(args[args.indexOf('--watch-mode')+1],'shared');
+});

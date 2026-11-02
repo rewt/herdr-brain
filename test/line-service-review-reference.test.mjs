@@ -37,7 +37,7 @@ function fixture(t,{diffBytes=0}={}){
   add([
     ...['line-service.cutover','line-service.phase0'].map(type=>({type,id:type,project:identity,repo,org,source:root,main:'main',canonical_head:base})),
     {type:'item.added',id:'ENG-1',title:'Build',role:'engineer',meta:{}},
-    {type:'run.started',id:'R-1',item:'ENG-1',workspace:repo,meta:{lane:'source',agent:'fixture-producer',dispatch_journal:dispatch,dispatch_attempt:'source'}},
+    {type:'run.started',id:'R-1',item:'ENG-1',workspace:repo,meta:{lane:'source',agent:'fixture-producer',dispatch_project:identity,dispatch_record:org,dispatch_journal:dispatch,dispatch_attempt:'source'}},
     {type:'run.claimed',run:'R-1',record:org,project:identity,owner:{controller:'brain',legacy:false,release:{id:'source',root,identity:gitProject(root).identity,commit:null}}},
     {type:'report.ingested',run:'R-1',item:'ENG-1',file:'reports/R-1.md',sha256:hash(report),report:{outcome:'done',artifacts:[`source: ${head}; base: ${base}`,reference]}},
   ]);

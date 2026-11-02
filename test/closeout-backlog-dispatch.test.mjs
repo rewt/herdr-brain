@@ -49,8 +49,9 @@ test('held closeout classification preserves its queued resolver and the line op
   const rows=reconcileCloseoutBacklog({project:gitProject(f.repo),org:f.org,events:before,guard:()=>{}});
   assert.equal(rows.length,1);const [held]=rows;assert.equal(held.disposition,'held');
   const all=events(f),item=fold(all).items.get('DEC-1'),view={events:all,entries:[entry],evaluations:new Map([[entry.key,evaluation]])};
-  assert.equal(closeoutWaitState(wait,all),'defect');assert.equal(obsoleteOutcomeDecision(item,view),null);
-  // Only settled/owned-stage dispositions may suppress the old defect. Latest
+  assert.equal(closeoutWaitState(wait,all),'defect');assert.match(obsoleteOutcomeDecision(item,view),/original owner evidence/);
+  // Classifications settle waits; cleanup judgments stay deferred even for a
+  // current refusal, whose original effect owner remains authoritative. Latest
   // matching evidence wins, including when a continuation becomes held again.
   const evaluated={...held,disposition:'evaluated'},continuation={...held,disposition:'continuation',continuation:{kind:'owned-stage'}};
   for(const classified of [evaluated,continuation]){
@@ -68,7 +69,7 @@ test('held closeout classification preserves its queued resolver and the line op
   assert.equal(pass.unknown_open,1);assert.equal(pass.unknown_settled,0);assert.equal(pass.classified_retained,0);
   assert.equal(pass.starts,0);assert.ok(commands.every(({exe,args})=>exe===process.execPath&&args[0].endsWith('/supervisor/closeout.mjs')&&args[1]==='refresh'),JSON.stringify(commands));
   assert.deepEqual([...fold(events(f)).items.values()].filter(i=>i.meta.uncertain_outcome).map(i=>i.id),['DEC-1'],
-    'the existing resolver is reused without creating a duplicate');
+    'the retained proposal is preserved without creating another judgment');
   assert.deepEqual(JSON.parse(fs.readFileSync(path.join(service.directory,'closeout-turn.json'),'utf8')).errors,[]);
   assert.deepEqual(fs.readFileSync(f.eventFile).subarray(0,bytes.length),bytes,'all original rows remain byte-identical');
   assert.deepEqual(events(f).slice(0,before.length),before);

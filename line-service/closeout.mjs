@@ -27,9 +27,10 @@ export function closeoutTurnMain(argv=process.argv.slice(2)){
     // that scope and the explicit retirement hold at every native/Git effect.
     assertCloseoutFences(project,org,{releaseOnly:v['release-only']});
   };
-  const cli=(file,args)=>{
-    const r=foregroundCommand(process.execPath,[path.join(root,file),...args],{cwd:project.canonical,env,encoding:'utf8',maxBuffer:32*1024*1024,timeout:0});
-    if(r.error||r.status!==0)throw Error(r.stderr||r.stdout||r.error?.message||`exit ${r.status}`);return r.stdout.trim();
+  const cli=(file,args,{environment={}}={})=>{
+    const r=foregroundCommand(process.execPath,[path.join(root,file),...args],{cwd:project.canonical,env:{...env,...environment},encoding:'utf8',maxBuffer:32*1024*1024,timeout:0});
+    if(r.error||r.status!==0)throw Object.assign(Error(r.stderr||r.stdout||r.error?.message||`exit ${r.status}`),
+      {receipt:{status:r.status,signal:r.signal,stdout:r.stdout??'',stderr:r.stderr??'',error:r.error?.message}});return r.stdout.trim();
   };
   const deadline=v.deadline===undefined?Date.now()+CLOSEOUT_TURN_BUDGET_MS:Number(v.deadline);
   if(!Number.isSafeInteger(deadline)||deadline<0)throw Error('invalid finite closeout deadline');

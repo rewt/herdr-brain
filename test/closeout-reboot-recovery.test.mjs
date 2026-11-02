@@ -2,6 +2,7 @@ import test from './helpers/bounded-test.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import {setTimeout as pause} from 'node:timers/promises';
 import {setup,events,effects,selectCurrentCleanup} from './helpers/closeout-fixture.mjs';
 import {currentCloseoutEntries,fileIdentity,sameFileIdentity,closeoutRevision} from '../lib/closeout.mjs';
 import {runCloseoutTurn} from '../line-service/closeout-turn.mjs';
@@ -46,14 +47,47 @@ test('finite closer releases a clean landed original allocation saved before reb
   assert.ok(effects(f).some(e=>e.action==='lane-preflight'));
 });
 
-for(const kind of ['replaced-log','changed-log','replaced-folder','STOP','dirty','unmerged','UNKNOWN','refusal'])
+for(const mode of ['rename-copy','reflog-expire'])
+test(`reflog correction releases identical history after two ${mode} rewrites without rebinding`,async t=>{
+  const f=fixture(t),entry=savedBeforeReboot(f),old=prior(f,entry,'queued branch generation changed; keep');
+  const bytes=fs.readFileSync(entry.branchLog.path),tree=fileIdentity(f.lane),gitDir=fileIdentity(entry.gitDirectory);
+  for(let n=0;n<2;n++){
+    const before=fileIdentity(entry.branchLog.path);await pause(5);
+    if(mode==='rename-copy'){
+      const backup=entry.branchLog.path+`.original-${n}`;
+      fs.renameSync(entry.branchLog.path,backup);fs.copyFileSync(backup,entry.branchLog.path);
+    }else f.git(['reflog','expire','--expire=never','--all']);
+    const after=fileIdentity(entry.branchLog.path);
+    assert.notEqual(after.ino,before.ino);assert.notEqual(after.birthtimeMs,before.birthtimeMs);
+    assert.deepEqual(fs.readFileSync(entry.branchLog.path),bytes);
+    assert.deepEqual(fileIdentity(f.lane),tree);assert.deepEqual(fileIdentity(entry.gitDirectory),gitDir);
+    assert.equal(f.git(['rev-parse','lane/topic']),entry.head);
+    assert.deepEqual(closeoutNextStage(entry,old,events(f)),{stage:'pre-effect-observation',ready:true});
+  }
+  const original=fs.readFileSync(f.eventFile),result=f.turn();
+  assert.deepEqual(result.errors,[]);assert.equal(result.steps,1);
+  assert.equal(result.subjects[0].evaluations[0].completed,true,JSON.stringify(result));
+  assert.equal(fs.existsSync(f.lane),false);assert.deepEqual(f.read().agents,[]);
+  assert.equal(f.git(['branch','--list','lane/topic']),'');
+  assert.equal(events(f).some(e=>['cleanup.bound','run.session_bound'].includes(e.type)&&e.seq>entry.source.seq),false);
+  assert.deepEqual(fs.readFileSync(f.eventFile).subarray(0,original.length),original);
+  for(const action of ['lane-preflight','worktree-removed','branch-removed','lane-removed'])assert.ok(effects(f).some(e=>e.action===action),action);
+});
+
+for(const kind of ['changed-log','recreated-branch','replaced-folder','replaced-git-directory','STOP','dirty','unmerged','UNKNOWN','refusal'])
 test(`reboot recovery retains the real ${kind} safeguard`,t=>{
   const f=fixture(t),entry=savedBeforeReboot(f);
   const old=prior(f,entry,'queued branch generation changed; keep');
-  if(kind==='replaced-log'){
-    fs.renameSync(entry.branchLog.path,entry.branchLog.path+'.original');
-    fs.copyFileSync(entry.branchLog.path+'.original',entry.branchLog.path);
-    assert.equal(sameFileIdentity(entry.branchLog.path,entry.branchLog.identity),false);
+  if(kind==='recreated-branch'){
+    const original=fs.readFileSync(entry.branchLog.path);
+    f.git(['update-ref','-d','refs/heads/lane/topic']);
+    f.git(['update-ref','-m','recreated branch','refs/heads/lane/topic',entry.head]);
+    assert.equal(f.git(['rev-parse','lane/topic']),entry.head);
+    assert.notDeepEqual(fs.readFileSync(entry.branchLog.path),original);
+  }
+  if(kind==='replaced-git-directory'){
+    fs.renameSync(entry.gitDirectory,entry.gitDirectory+'.original');
+    fs.cpSync(entry.gitDirectory+'.original',entry.gitDirectory,{recursive:true});
   }
   if(kind==='changed-log')fs.appendFileSync(entry.branchLog.path,'different branch history\n');
   if(kind==='replaced-folder'){
@@ -66,14 +100,14 @@ test(`reboot recovery retains the real ${kind} safeguard`,t=>{
   if(kind==='UNKNOWN')f.append([{type:'closeout.effect',identity:f.common,key:entry.key,source:entry.source,effect:'unknown',
     producer:'native-closeout/v2',outcome:{action:'shell-close-requested',tab_id:'w:t',panes:[{pane:'w:p',terminal:'term'}]}}]);
   if(kind==='refusal')prior(f,entry,'original native refusal remains held; explicit owner clearing evidence required',{failure:{kind:'fence',code:'EPERM'}});
-  if(['replaced-log','changed-log','replaced-folder'].includes(kind))assert.equal(closeoutNextStage(entry,old,events(f)),undefined);
+  if(['changed-log','recreated-branch','replaced-folder','replaced-git-directory'].includes(kind))assert.equal(closeoutNextStage(entry,old,events(f)),undefined);
   const original=fs.readFileSync(f.eventFile),calls=f.herdrCalls();f.drain({keys:[entry.key],retrySafe:true});
   assert.deepEqual(fs.readFileSync(f.eventFile).subarray(0,original.length),original);
   if(kind==='unmerged'){
     assert.equal(fs.existsSync(f.lane),false,'the clean folder can release while its unmerged branch is retained');
     assert.equal(f.git(['rev-parse','lane/topic']),f.head);
   }else assert.equal(fs.existsSync(f.lane),true);
-  if(['replaced-log','changed-log','replaced-folder','STOP','UNKNOWN','refusal'].includes(kind))assert.deepEqual(f.read().actions,[]);
+  if(['changed-log','recreated-branch','replaced-folder','replaced-git-directory','STOP','UNKNOWN','refusal'].includes(kind))assert.deepEqual(f.read().actions,[]);
   if(['UNKNOWN','refusal'].includes(kind))assert.deepEqual(f.herdrCalls(),calls);
 });
 

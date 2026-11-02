@@ -90,6 +90,25 @@ test('line finalizes only its exact pre-native run and the ordinary closer remov
   assert.deepEqual(fs.readFileSync(f.eventFile).subarray(0,before.length),before);
 });
 
+test('typed STOP at worker stage before native launch finalizes only its exact run',t=>{
+  const f=stopped(t,{run:true});
+  Object.assign(f.job,{error:'STOP/HOLD prevents native dispatch effect',failure:{code:'DISPATCH_STOPPED',kind:'fence',stage:'worker',native_launch_attempted:false}});
+  f.save();
+  f.append([{type:'dispatch.completed',project:f.common,journal:f.journal,attempt:'attempt',item:'ENG-1',run:'R-1',stage:'worker',
+    exit_code:0,native_launch_attempted:false,request_sha256:createHash('sha256').update(fs.readFileSync(f.journal)).digest('hex'),failure:f.job.failure}]);
+  const stop=path.join(f.repo,'.lane/supervisor/STOP');fs.mkdirSync(path.dirname(stop),{recursive:true});fs.writeFileSync(stop,'stop');
+  assert.throws(f.dispose,/STOP\/HOLD/);assert.deepEqual(f.read().actions,[]);fs.unlinkSync(stop);
+  const original=fs.readFileSync(f.eventFile),journal=fs.readFileSync(f.journal),result=f.dispose();
+  assert.equal(result.results[0].disposition,'NOT_STARTED',JSON.stringify(result));
+  const abandoned=events(f).find(e=>e.type==='run.abandoned');
+  assert.equal(abandoned.authorization.kind,'positive-pre-native-stopped-allocation');
+  assert.equal(events(f).some(e=>e.type==='run.session_bound'),false);
+  const entry=currentCloseoutEntries(f.common,f.org,events(f))[0];
+  assert.equal(f.drain({keys:[entry.key],retrySafe:true}).evaluated[0].completed,true);
+  assert.equal(fs.existsSync(f.lane),false);assert.deepEqual(f.read().actions,[]);
+  assert.deepEqual(fs.readFileSync(f.journal),journal);assert.deepEqual(fs.readFileSync(f.eventFile).subarray(0,original.length),original);
+});
+
 for(const session of [null,'session'])test(`typed STOP between launch and prompt finalizes its exact allocation; session=${session}`,t=>{
   const f=stopped(t,{run:true,occupied:true});
   const worker={agentName:'worker',pane:'w:p',workspaceId:'w',terminalId:'term',agentSessionId:session,cwd:f.lane};

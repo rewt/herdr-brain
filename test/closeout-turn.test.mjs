@@ -520,3 +520,44 @@ test('the existing installation wakes finite closeout while its general child is
   const xml=launchPlist({label:'line',repo:'/project',org:'/record',directory:'/service',herdr:'/bin/herdr',socket:'/socket',to:'brain-chat',interval:60});
   assert.match(xml,/line-service\/line-service.mjs/);assert.match(xml,/<integer>60<\/integer>/);assert.match(xml,/<key>RunAtLoad<\/key><true\/>/);
 });
+
+for(const delivery of ['queued','refused','UNKNOWN'])test(`grouped closeout alarm routes two holds once and retains ${delivery} delivery`,t=>{
+  const f=fixture(t);f.report();
+  // The recorded supervisor may be absent first; no alternative recipient.
+  fs.writeFileSync(path.join(f.repo,'.promote.json'),JSON.stringify({}));
+  const second=f.lane+'-second';f.git(['worktree','add','-qb','lane/second',second,f.head]);
+  f.append([{type:'item.added',id:'ENG-2',role:'engineer',title:'Second held allocation'},
+    {type:'run.started',id:'R-2',item:'ENG-2',workspace:second,meta:{lane:'second'}},
+    {type:'report.ingested',run:'R-2',sha256:'second',report:{outcome:'done'}}]);
+  const entries=currentCloseoutEntries(f.common,f.org,events(f));assert.equal(entries.length,2);
+  for(const entry of entries)f.append([{type:'closeout.evaluated',identity:f.common,key:entry.key,source:entry.source,
+    run:entry.run,item:entry.item,revision:closeoutRevision(entry,events(f)),completed:false,
+    reason:'original native refusal remains held; explicit owner clearing evidence required',failure:{kind:'fence',code:'EPERM'}}]);
+  const original=fs.readFileSync(f.eventFile),calls=[],native=f.herdrCalls(),actions=f.read().actions;
+  const cli=(file,args,options)=>{
+    if(args[0]==='refresh')return '{}';
+    assert.equal(file,'supervisor/prompt-supervisor.mjs');calls.push({file,args,options});
+    assert.equal(fs.existsSync(path.join(f.org,'lock')),false);
+    const id=args[args.indexOf('--id')+1];
+    if(delivery==='queued')throw Object.assign(Error('queued'),{receipt:{status:3,stdout:JSON.stringify({id,queued:true,delivered:false})}});
+    if(delivery==='refused')throw Object.assign(Error('native refusal'),{code:'EPERM',receipt:{status:1,stderr:'EPERM'}});
+    throw Error('input outcome UNKNOWN');
+  };
+  const turn=()=>runCloseoutTurn({...f.args,cli});
+  for(let n=0;n<4;n++)assert.deepEqual(turn().errors,[]);
+  assert.equal(calls.length,0);
+  const checkpoint=()=>JSON.parse(fs.readFileSync(path.join(f.directory,'closeout-turn.json')));
+  assert.equal(Object.values(checkpoint().alarm_notices)[0].state,'pending');
+  fs.writeFileSync(path.join(f.repo,'.promote.json'),JSON.stringify({to:'supervisor-test'}));
+  f.git(['add','.promote.json']);f.git(['commit','-qm','record supervisor']);
+  for(let n=0;n<3;n++)assert.deepEqual(turn().errors,[]);
+  assert.equal(calls.length,1);assert.equal(calls[0].args[0],'supervisor-test');
+  assert.match(calls[0].args[1],/2 finished allocations/);assert.ok(calls[0].args.includes('--project-supervisor'));
+  assert.equal(calls[0].options.environment.SUPERVISOR_INPUT_WAIT_SECONDS,'0');
+  const notices=Object.values(checkpoint().alarm_notices);assert.equal(notices.length,1);
+  assert.equal(notices[0].state,delivery==='queued'?'queued':'held');
+  assert.equal(fs.existsSync(f.lane),true);assert.equal(fs.existsSync(second),true);
+  assert.deepEqual(f.herdrCalls(),native);assert.deepEqual(f.read().actions,actions);
+  assert.deepEqual(fs.readFileSync(f.eventFile).subarray(0,original.length),original);
+  assert.equal([...fold(events(f)).items.values()].some(i=>i.role==='decision'),false);
+});

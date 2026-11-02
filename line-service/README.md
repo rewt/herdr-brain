@@ -1661,25 +1661,34 @@ or clear a refusal. The existing finite closer owns the next guarded observation
 the release coordinator owns installation and the still-unrun live witness.
 `obsoleteOutcomeDecision` remains a read-only admission filter, not a closer.
 
-New outcome proposals are checked before selection. Retired review/dispatch
-keys and obsolete exact closeout inputs are recorded unselected and dropped in
-the same transaction, using existing `item.added`/`item.closed` events. Their
-original checks, evidence, IDs and effect owners remain the deduplication owners;
-later policy changes, ancestor reopening or request requeues do not revive them.
-A closeout key covers cwd, run and signal, without source generation. A later
-source with a new refusal therefore also returns the original retired decision;
-its owner must explicitly re-judge and reopen that decision through the ordinary
-record path before selecting it. This limit preserves the old captured check and
-does not attest that the later defect is resolved.
-A current closeout defect or refusal without an existing owner still creates a
-selected decision. Creation and admission share the finite turn's
-`currentCloseoutEntries` view, including report targets held only in record events,
-with source-matched report evaluations. Damaged evidence for the subject refuses
-creation rather than attesting obsolescence; an unrelated damaged queue file
-does not prevent its decision. Existing
-open proposals require an explicit recorded disposition; admission never closes
-them automatically or clears their original effects. ENG-1351 records that
-one-time disposition, with individual judgment for the five ancestry-held cases.
+New retired review/dispatch proposals are recorded unselected and dropped in
+one transaction, preserving their captured inputs and deduplication IDs. Cleanup
+holds create no new decision item or judgment session: the original wait and
+effect owner retain the obligation. Every queued legacy cleanup decision is
+deferred, including a current refusal. Reopening or selecting it cannot bypass
+that admission policy or clear the underlying native/Git hold.
+
+The finite closer groups unchanged holds after three turns or thirty minutes.
+It records each source, reason, continuation and original owner in `closeout.log`
+and queues one grouped notice through the existing durable project-supervisor
+inbox to the recorded `promote.to`. An absent binding stays pending under the
+same notice ID; queued, refused, started and UNKNOWN deliveries retain their
+original receipts and never acquire a replacement attempt. The notice grants
+no effect authority. No per-run judgment or operator chat relay is created.
+
+Supervisor-herdr owns the one-time recorded disposition of DEC-525, DEC-528,
+DEC-530, DEC-531 and DEC-532 after consuming ENG-1400's correction report. Use
+normal record disposition with individual supersession reasons; preserve original
+waits, proposals, callbacks and native/Git receipts. This worker does not close
+another owner's items or attest their resources retired. Earlier ENG-1334 and
+ENG-1351 dispositions remain historical evidence.
+
+Branch-generation checks use the complete reflog bytes and unchanged branch tip,
+with strict saved inode/birth identity for the worktree and Git directory. A
+byte-identical reflog rewrite, including repeated Git maintenance rewrites, can
+be reobserved through the original finite closer without rebinding. Changed
+history, a recreated branch, replaced directories, dirty work, STOP/HOLD,
+refusals and uncertain effects retain their existing guards.
 
 The exact historical pre-journal release-source override refusal can be admitted
 once when an accepted release no longer supplies that override. The original

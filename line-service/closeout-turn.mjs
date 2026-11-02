@@ -22,6 +22,7 @@ import {pendingEndedAllocation} from '../lib/closeout-allocations.mjs';
 import {selfClosedDecision} from '../lib/self-closed-decision.mjs';
 import {reportedCloseout} from '../lib/closeout-finished.mjs';
 import {beginHoldCloseout,finishHoldCloseout} from './hold-evidence.mjs';
+import {routeCloseoutAlarm} from './closeout-alarm.mjs';
 
 export const closeoutServiceDirectory=(org,common)=>path.join(org,'line-service',createHash('sha256').update(JSON.stringify(common)).digest('hex').slice(0,20));
 // Git removal alone may need its existing 600s inventory-sized allowance.
@@ -303,6 +304,7 @@ function closeoutTurn({project,org,cli,guard,env=process.env,maxSteps=8,budgetMs
         oldest:alarms.map(a=>a.first_seen).sort()[0]??null,scopes:alarms,authority:'visibility only; original holds and effects retained'})+'\n',{mode:0o600});
       state.alarm_signature=signature;
     }
+    if(!projectHeld())routeCloseoutAlarm({project,org,env,cli,state,save,scopes:alarms,guard:()=>{guard();code.verify();}});
     state.hold_closeout=finishHoldCloseout(evidenceOptions,evidenceStart,{turn:state.turn,subjects,completed:true});
     state.completed_at=new Date(now()).toISOString();state.errors=errors;state.continuation={
       ingest:intake.remaining??0,closeout:Math.max(0,scheduled.length-steps),decisions:0,reconcile_committed_sources:true};

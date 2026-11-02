@@ -594,7 +594,7 @@ test('engineering-idle ignores obsolete closeout decisions across completed pass
   assert.deepEqual(f.calls.map(c=>c.args[1]),[ready]);
 });
 
-test('engineering-idle shares closeout deferrals and rechecks current cleanup defects before repair intent',t=>{
+test('engineering-idle shares closeout deferrals and excludes current cleanup defects from repair intent',t=>{
   const f=fixture(t),identity=gitProject(f.repo).identity,directory=path.join(identity,'closeout/entries');fs.mkdirSync(directory,{recursive:true});
   const cases=['source-changed','completed','owned-stage','unlinked','defect'],entries=[],add=[];
   for(const [n,name] of cases.entries()){
@@ -615,14 +615,16 @@ test('engineering-idle shares closeout deferrals and rechecks current cleanup de
   transact(f.org,()=>({add}));
   const events=loadEvents(f.org).events,state=fold(events),observation=haltObservation({state,events,org:f.org,identity,config:{}});
   for(const id of ['DEC-1','DEC-2','DEC-3','DEC-4','DEC-5','DEC-6'])assert.ok(dispatchInput({state,events,item:state.items.get(id),org:f.org,identity}),id);
-  assert.deepEqual(observation.ready,['DEC-5','DEC-6'],'only the current cleanup defect and ordinary manual decision count');
+  assert.deepEqual(observation.ready,['DEC-6'],'only the ordinary manual decision counts');
   const options={repo:f.repo,org:f.org,env:f.env,observation,route:'engineer',after:1,audit:'fixture audit',effects:'fixture effects'};
   const release=noticeLock(path.join(f.service().directory,'pass.lock'));t.after(release);
   const result=completeHaltPass({...options,pass:'current-defect'});
   assert.equal(result.dispatch,true,'the transactional recheck uses the same closeout policy');
-  const repair=fold(loadEvents(f.org).events).items.get(result.item);assert.match(repair.meta.scope,/ready items DEC-5, DEC-6/);
+  const repair=fold(loadEvents(f.org).events).items.get(result.item);assert.match(repair.meta.scope,/ready items DEC-6/);
   const entry=entries.at(-1);fs.writeFileSync(path.join(directory,entry.key+'.json'),JSON.stringify({...entry,source:{...entry.source,seq:2}}));
-  assert.throws(()=>completeHaltPass({...options,pass:'changed-source'}),/halt ready inputs changed/,'a newly obsolete defect cannot pass a stale repair-intent recheck');
+  assert.deepEqual(haltObservation({state,events,org:f.org,identity,config:{}}).ready,['DEC-6'],'changing a cleanup source cannot make a zero-effect judgment ready');
+  transact(f.org,()=>({add:[{type:'item.updated',id:'DEC-6',fields:{meta:{queue_selected:false}}}]}));
+  assert.throws(()=>completeHaltPass({...options,pass:'changed-source'}),/halt ready inputs changed/,'changed ordinary ready work cannot pass a stale repair-intent recheck');
   assert.equal(f.calls.length,0,'observation and intent do not execute cleanup or replay the refusal');
   assert.deepEqual(loadEvents(f.org).events.slice(0,events.length),events);
 });

@@ -36,8 +36,12 @@ test('Brain probation admits exactly one sealed non-READY tuple while ordinary p
   assert.throws(()=>selectRelease(f.cwd,f.installationHome),/READY/);
   assert.equal(f.admit().commit,release.commit,'moving source main cannot reselect the trial');
   assert.deepEqual(JSON.parse(fs.readFileSync(path.join(f.next,'.release-manifest.json'))).acceptance,{ran:false,ready:false});
-  assert.equal(f.main(['probation-complete','--repo',f.cwd,'--org',f.org,'--id','original-trial'],f.args).admissions,false);
-  assert.throws(f.admit,/completed/);
+  for(const action of ['probation-complete','probation-withdraw'])for(const preview of [[],['--dry-run']]){
+    const before=state(f);
+    assert.throws(()=>f.main([action,'--repo',f.cwd,'--org',f.org,'--id','original-trial',...preview],f.args),/READY/);
+    assert.deepEqual(state(f),before);
+  }
+  f.withdraw();assert.throws(f.admit,/withdrawn/);
   assert.throws(()=>f.control({id:'replacement',dryRun:true}),/existing\/UNKNOWN probation/);
 });
 
@@ -153,10 +157,13 @@ test('trial restart native refusal stops that original effect and leaves STOP an
   assert.ok(fs.existsSync(entry.archive.file));assert.equal(fs.readFileSync(f.retained,'utf8'),f.jobs);
 });
 
-test('completed probation leaves separately qualified ordinary pin admission available without reviving trial authority',async t=>{
-  const f=await fixture(t);f.authorize();f.enter();
-  f.main(['probation-complete','--repo',f.cwd,'--org',f.org,'--id','original-trial'],f.args);
-  assert.throws(f.admit,/completed/);
+for(const development of [false,true])for(const action of ['probation-complete','probation-withdraw'])test(`${action} preserves qualified ordinary admission and the next pass (${development?'bootstrap':'installed predecessor'})`,async t=>{
+  const f=await fixture(t,{development});f.authorize();
+  if(development)switchApply(f,'entry',f.cwd,f.next);else f.enter();
+  const finish=[action,'--repo',f.cwd,'--org',f.org,'--id','original-trial'];
+  const before=state(f);
+  assert.throws(()=>f.main([...finish,'--dry-run'],f.args),/settled installed root/);
+  assert.deepEqual(state(f),before);assert.equal(f.admit().probation.id,'original-trial');
   const manifest=fs.readFileSync(path.join(f.next,'.release-manifest.json')),release={root:f.next,id:'trial',commit:JSON.parse(manifest).commit,protocol:1};
   // Synthetic coordinator evidence in private scratch, through the production
   // offer publisher. No real canary, check, READY flag or activation is claimed.
@@ -173,12 +180,37 @@ test('completed probation leaves separately qualified ordinary pin admission ava
   const packetFile=path.join(f.scratch,'synthetic-offer.json');fs.writeFileSync(packetFile,JSON.stringify({...packet,attestationDigest,attestationSeq:note.seq}));
   const {publishConsumerOffer}=await f.module(f.next,'lib/consumer-offer.mjs');
   publishConsumerOffer({release,home:f.installationHome,canonical:f.cwd,file:packetFile,env:f.args.env});
-  assert.throws(f.admit,/completed/,'qualification alone never replaces a project pin');
+  assert.throws(()=>f.main([...finish,'--dry-run'],f.args),/settled installed root/,'qualification alone never replaces a project pin');
+  assert.equal(f.admit().probation.id,'original-trial');
   fs.writeFileSync(path.join(f.cwd,'.herdr-release.json'),'{"release":"trial"}\n');f.git('add','.herdr-release.json');f.git('commit','-qm','Accept qualified fixture candidate');
+  const installed=fs.readFileSync(f.installationFile),saved=JSON.parse(installed);
+  fs.writeFileSync(f.installationFile,JSON.stringify({...saved,phase:'uncertain-or-refused'})+'\n');
+  assert.throws(()=>f.main([...finish,'--dry-run'],f.args),/settled installed root/);fs.writeFileSync(f.installationFile,installed);
+  const qualified=state(f),preview=f.main([...finish,'--dry-run'],f.args);
+  assert.equal(preview.ordinary_admissions,true);assert.equal(preview.continuation.root,f.next);assert.deepEqual(state(f),qualified);
+  const result=f.main(finish,f.args);assert.deepEqual(result.continuation,preview.continuation);assert.equal(result.ordinary_admissions,true);
   assert.equal(f.admit().root,f.next);assert.equal(f.admit().probation,undefined);
   assert.equal(selectRelease(f.cwd,f.installationHome).root,f.next);
   assert.deepEqual(fs.readFileSync(path.join(f.next,'.release-manifest.json')),manifest);
   assert.equal(loadEvents(f.org).events.filter(e=>e.type==='line-service.probation-authorized').length,1);
+  assert.equal(f.main(finish,f.args).existing,true);
+  fs.unlinkSync(f.stop);await privatePass(f,f.next);
+});
+
+test('ordinary withdrawal refuses without a continuation while explicit emergency revocation survives STOP/HOLD and preserves captures',async t=>{
+  const f=await fixture(t,{development:true});f.authorize();
+  switchApply(f,'entry',f.cwd,f.next);
+  const argv=['probation-withdraw','--repo',f.cwd,'--org',f.org,'--id','original-trial'];
+  const before=state(f);
+  assert.throws(()=>f.main([...argv,'--dry-run'],f.args),/settled installed root/);assert.deepEqual(state(f),before);
+  for(const name of ['STOP','HOLD']){
+    const file=path.join(f.cwd,'.lane/supervisor',name);fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,'held');
+  }
+  const preview=f.main([...argv,'--emergency','--dry-run'],f.args);assert.equal(preview.emergency,true);assert.deepEqual(state(f),before);
+  const revoked=f.main([...argv,'--emergency'],f.args);assert.equal(revoked.ordinary_admissions,false);assert.equal(revoked.emergency,true);
+  assert.equal(fs.readFileSync(f.installationFile,'utf8'),before.installation);assert.equal(fs.readFileSync(f.retained,'utf8'),f.jobs);
+  assert.throws(f.admit,/withdrawn/);
+  assert.throws(()=>f.main(['probation-complete','--repo',f.cwd,'--org',f.org,'--id','original-trial','--emergency'],f.args),/only to probation-withdraw/);
 });
 
 function switchArgs(f,id,from,to){return['probation-switch','--repo',f.cwd,'--org',f.org,'--trial','original-trial','--id',id,'--from-root',from,'--target-root',to];}

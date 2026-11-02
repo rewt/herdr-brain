@@ -21,6 +21,7 @@ import {prepareDevelopmentRecovery,sealDevelopmentRecovery,verifyDevelopmentReco
 import {legacyRecipientHistory,recipientChanges} from './recipient-history.mjs';
 import {successorExtensions} from './probation-successor-history.mjs';
 import {requireRecoveryEntry} from './recovery-admission.mjs';
+import {runtimeHistory} from './runtime.mjs';
 
 const toolRoot=fs.realpathSync(fileURLToPath(new URL('../',import.meta.url)));
 const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
@@ -119,10 +120,29 @@ export function probationRuntime(repo,{root,home=releaseHome(),events,allowEnded
     ...(root===successor?.release.root?{successor:{seq:extension.event.seq,archive:extension.event.archive,scope_sha256:sha(canonical(extension.scope))}}:{})}};
 }
 
-export function probationControl({repo,org,id,fromRoot,targetRoot,authority,recoveryAuthority,finish,developmentRecovery=false,dryRun=false,expectedPlan,cwd=process.cwd(),env=process.env,call,command=spawnSync,home=releaseHome(),fault=()=>{}}={}){
+function ordinaryContinuation(c,events,home){
+  const pin=projectPin(c.repo);
+  if(!pin?.release)throw Error('trial ending requires an explicit READY project pin selecting the installed root');
+  const selected=selectRelease(c.repo,home,{pin});
+  requireReadyAcceptance(checkRelease(home,pin.release,{verifyFiles:true}),home);
+  requireRecordCompatibility(selected.root,events);
+  const installationBytes=readPlainFile(path.join(c.directory,'installation.json')),installation=JSON.parse(installationBytes);
+  const file=path.join(c.directory,'service.plist'),plist=readPlainFile(file);
+  if(installation.repo!==c.repo||installation.org!==c.org||installation.file!==file||installation.node!==process.execPath||
+      installation.target!==`gui/${process.getuid()}/dev.herdr.line.${path.basename(c.directory)}`||
+      installation.phase!=='installed'||installation.source!==selected.root)
+    throw Error('trial ending requires the READY project pin to select the settled installed root');
+  const cutovers=events.filter(e=>e.type==='line-service.cutover'&&e.project===c.identity&&e.org===c.org);
+  if(cutovers.length!==1||cutovers[0].repo!==c.repo)throw Error('trial ending requires the original service cutover');
+  runtimeHistory(events,{...c,installation,cutover:cutovers[0],root:selected.root});
+  return{root:selected.root,release:pin.release,installation_sha256:sha(installationBytes),plist_sha256:sha(plist)};
+}
+
+export function probationControl({repo,org,id,fromRoot,targetRoot,authority,recoveryAuthority,finish,emergency=false,developmentRecovery=false,dryRun=false,expectedPlan,cwd=process.cwd(),env=process.env,call,command=spawnSync,home=releaseHome(),fault=()=>{}}={}){
   if(process.platform!=='darwin'||process.version!=='v20.19.4')throw Error('probation requires macOS and pinned Node 20.19.4');
   if(!/^[-a-zA-Z0-9_]{1,80}$/.test(id??''))throw Error('probation needs a stable --id');
   const c=context(repo,org);
+  if(emergency&&finish!=='withdrawn')throw Error('--emergency applies only to probation-withdraw');
   const bind=()=>{
     const b=nativeSender(c.org,{cwd,env,...(call?{call}:{})});
     const policy=readProjectPolicy(c.repo,'promote',env,{canonical:c.repo}).config;
@@ -138,7 +158,7 @@ export function probationControl({repo,org,id,fromRoot,targetRoot,authority,reco
     return git(c.repo,['rev-parse','HEAD']);
   };
   if(finish){
-    if(!['withdrawn','completed'].includes(finish)||dryRun||expectedPlan||fromRoot||targetRoot||authority||recoveryAuthority||developmentRecovery)throw Error('withdraw/complete takes only the original trial id');
+    if(!['withdrawn','completed'].includes(finish)||expectedPlan||fromRoot||targetRoot||authority||recoveryAuthority||developmentRecovery)throw Error('withdraw/complete takes the original trial id, optional --dry-run and withdrawal-only --emergency');
     // Revocation may contain a running line even during STOP/HOLD. It performs
     // no native input, stop, cancellation, restart or installation mutation.
     const unlock=noticeLock(path.join(c.directory,'control.lock'),{recover:false});
@@ -154,7 +174,16 @@ export function probationControl({repo,org,id,fromRoot,targetRoot,authority,reco
       }
       if(!ownSource&&toolRoot!==a.scope.candidate.release.root&&!successorTool)throw Error('probation withdrawal tool is outside its original Brain source/candidate/successor');
       if(ended(events,c,id))return{add:[],result:{existing:true,id,admissions:false}};
-      return{add:[{type:`line-service.probation-${finish}`,id,project:c.identity,repo:c.repo,org:c.org,authority_seq:found[0].seq,archive:found[0].archive,native_caller:owner.native}],result:{id,admissions:false,captured_work_preserved:true,runtime_started:false}};
+      if(!emergency){
+        for(const name of ['STOP','HOLD'])if(fs.existsSync(path.join(c.repo,'.lane/supervisor',name)))throw Error('project STOP/HOLD prevents ordinary trial ending');
+        const note=events.find(e=>e.seq===a.authority);
+        if(!note)throw Error('probation recorded authority is missing');
+        authorityOwner(note,events);
+      }
+      const continuation=emergency?null:ordinaryContinuation(c,events,home);
+      const result={id,admissions:false,ordinary_admissions:Boolean(continuation),emergency,continuation,captured_work_preserved:true,runtime_started:false};
+      if(dryRun)return{add:[],result:{...result,dry_run:true}};
+      return{add:[{type:`line-service.probation-${finish}`,id,project:c.identity,repo:c.repo,org:c.org,authority_seq:found[0].seq,archive:found[0].archive,native_caller:owner.native,emergency,continuation}],result};
     },{actor:owner.native.name,strictTail:true,lockOptions:{recover:false}}).result;}finally{unlock();}
   }
   // This comparison derives Brain's real common directory from the issuing

@@ -80,7 +80,7 @@ export async function fixture(t,{development=false,phase='installed',sourceSuffi
   const {main}=await module(next,'line-service/launchd.mjs');
   const upgrade=['upgrade','--repo',f.cwd,'--org',org,'--id','trial-entry','--from-root',f.bundle,'--target-root',next];
   const enter=()=>{const p=main([...upgrade,'--dry-run'],args);return main([...upgrade,'--expected-plan',p.archive.sha256],args);};
-  const withdraw=()=>main(['probation-withdraw','--repo',f.cwd,'--org',org,'--id','original-trial'],args);
+  const withdraw=()=>main(['probation-withdraw','--repo',f.cwd,'--org',org,'--id','original-trial','--emergency'],args);
   const rollback=['upgrade','--repo',f.cwd,'--org',org,'--id','trial-rollback','--from-root',next,'--target-root',f.bundle,'--rollback'];
   const back=extra=>{const p=main([...rollback,'--dry-run'],args);return main([...rollback,'--expected-plan',p.archive.sha256],{...args,...extra});};
   const {acceptedRuntime}=await module(next,'line-service/runtime.mjs');

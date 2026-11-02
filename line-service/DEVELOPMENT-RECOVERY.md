@@ -107,18 +107,38 @@ root/pin edit, automatic repair, native replay or replacement authority is used.
 ## Withdrawal, preservation and handoff
 
 ```sh
-"$BRAIN_NODE" "$CANDIDATE_ROOT/line-service/launchd.mjs" probation-withdraw --repo "$BRAIN_SOURCE" --org "$BRAIN_RECORD" --id "$TRIAL_ID"
+"$BRAIN_NODE" "$BRAIN_SOURCE/line-service/launchd.mjs" probation-complete --repo "$BRAIN_SOURCE" --org "$BRAIN_RECORD" --id "$TRIAL_ID" --dry-run
 ```
 
-Withdrawal closes new controller/worker admission for this trial; captured
-workers, watchers and review consumers retain their original root and callbacks.
-It does not stop a service, cancel work or rewrite any saved job. A stopped
-switch to recovery may still contain a withdrawn trial, but withdrawal does not
-authorize a fresh recovery restart or candidate return. Perform the deliberate
-restart/pass/return drill while the original trial is active. On a real failure,
-withdraw and route the original exception to its supervisor; never replay a
-refused native effect. `probation-complete` ends the exception only after the
-owner accounts for the trial. Ordinary qualified pin admission remains separate.
+Ordinary completion and withdrawal on corrected source require a READY explicit
+project pin selecting the settled installed root, compatible records and valid
+installation/plist history. A preview refuses before ending the trial if that
+continuation is absent; a successful preview changes no authority. Apply the same
+command without `--dry-run` only under the coordinator's existing authority. It
+rechecks the continuation and leaves ordinary admission available. The later
+upgrade/history handoff and login registration remain ENG-1340's obligation.
+
+On failure, stop through the current installed root's normal owner and **keep
+the original trial active** for recovery. For the installed successor history,
+the working rollback is canonical Brain source `probation-successor --rollback`,
+with the original trial ID, current successor as `--from-root`, and original
+sealed recovery as `--target-root`. Follow the exact preview/decision/apply and
+separate recovery restart in [the successor procedure](PROBATION-SUCCESSOR.md).
+The initial pre-successor drill uses `probation-switch` above. Ordinary
+`upgrade --rollback` applies to an accepted installed predecessor, not this
+development bootstrap. Do not replace an existing rollback ID or UNKNOWN attempt.
+
+Deliberate revocation remains possible with corrected canonical source:
+
+```sh
+"$BRAIN_NODE" "$BRAIN_SOURCE/line-service/launchd.mjs" probation-withdraw --repo "$BRAIN_SOURCE" --org "$BRAIN_RECORD" --id "$TRIAL_ID" --emergency
+```
+
+It can end admissions during STOP/HOLD with no admissible fallback.
+It does not stop the service, cancel captured work, change saved callbacks or
+authorize a fresh recovery restart/return. Route that containment and its lost
+continuation to the supervisor. Never replay a refused native effect. Frozen
+candidate/recovery tools are unchanged and may still offer unconditional ending.
 
 Live successor canary, installed pass, recovery restart/pass and candidate
 return remain UNRUN by the implementation engineer. Fixtures prove mechanics,

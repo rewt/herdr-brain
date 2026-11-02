@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import fs from 'node:fs';
-import {assertCommandQuiescence} from '../lib/command-receipt.mjs';
+import {assertCommandQuiescence,restartCommandHolds} from '../lib/command-receipt.mjs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
@@ -38,10 +38,11 @@ export function main(argv = process.argv.slice(2), { command = spawnSync,call:na
       'expected-plan':{type:'string'},
       authority:{type:'string'},
       'recovery-authority':{type:'string'},
-      trial:{type:'string'},'development-recovery':{type:'boolean'},
+      trial:{type:'string'},'development-recovery':{type:'boolean'},emergency:{type:'boolean'},
       'from-root':{type:'string'},'target-root':{type:'string'},rollback:{type:'boolean'},
     } });
   const action = positionals[0];
+  if(v.emergency&&action!=='probation-withdraw')throw Error('--emergency applies only to probation-withdraw');
   if(action==='probation-successor'){
     if(positionals.length!==1||!v.repo||v.to||v.herdr||v.socket||v.interval||v.commit||v['development-recovery'])throw Error('probation successor preserves saved bindings and original trial');
     return probationSuccessor({repo:v.repo,org:v.org??findOrgDir({cwd:v.repo,env:{...env,ORG_DIR:''}}),id:v.id,trial:v.trial,fromRoot:v['from-root'],targetRoot:v['target-root'],rollback:v.rollback,authority:v.authority,
@@ -56,7 +57,7 @@ export function main(argv = process.argv.slice(2), { command = spawnSync,call:na
   if(['probation-authorize','probation-withdraw','probation-complete'].includes(action)){
     if(positionals.length!==1||!v.repo||v.to||v.herdr||v.socket||v.interval||v.commit||v.rollback)throw Error('probation preserves installation, transport, pins and native services');
     return probationControl({repo:v.repo,org:v.org??findOrgDir({cwd:v.repo,env:{...env,ORG_DIR:''}}),id:v.id,fromRoot:v['from-root'],targetRoot:v['target-root'],authority:v.authority,
-      recoveryAuthority:v['recovery-authority'],developmentRecovery:v['development-recovery'],finish:action==='probation-authorize'?undefined:action==='probation-withdraw'?'withdrawn':'completed',dryRun:v['dry-run'],expectedPlan:v['expected-plan'],command,call:nativeCall,home,cwd,env});
+      recoveryAuthority:v['recovery-authority'],developmentRecovery:v['development-recovery'],emergency:v.emergency,finish:action==='probation-authorize'?undefined:action==='probation-withdraw'?'withdrawn':'completed',dryRun:v['dry-run'],expectedPlan:v['expected-plan'],command,call:nativeCall,home,cwd,env});
   }
   if(action==='register-login'){
     if(positionals.length!==1||!v.repo||v.id||v.to||v.herdr||v.socket||v.interval||v.commit||v['from-root']||v['target-root']||v.rollback||v.authority)throw Error('register-login preserves all saved installation and transport bindings');
@@ -117,30 +118,46 @@ export function main(argv = process.argv.slice(2), { command = spawnSync,call:na
         installation:regularJSON(path.join(directory,'installation.json')),state:record.state,loaded:status.loaded})};
   }
   fs.mkdirSync(directory, { recursive: true });
-  const releaseControl=noticeLock(path.join(directory,'control.lock'),{recover:false});
-  let releasePass,releasePromotion;
-  try{
-    if(action==='install'||action==='restart'){
-      releasePass=noticeLock(path.join(directory,'pass.lock'),{recover:false});
-      assertCommandQuiescence(directory);
-      releasePromotion=acquireLock(path.join(project.identity,'lane-promote.lock'));
-    }
-    return control();
-  }finally{releasePromotion?.();releasePass?.();releaseControl();}
-  function control(){
   const bind=()=>{
     const b=nativeSender(org,{cwd,env,...(nativeCall?{call:nativeCall}:{})});
     if(b.project.checkout!==repo||b.project.identity!==project.identity)throw Error('service launch requires actual own canonical native supervisor');
     return {name:b.native.name,pane:b.native.pane_id,workspace:b.native.workspace_id,terminal:b.native.terminal_id,session:b.native.agent_session.value};
   };
   let owner;
-  if (action === 'install' || action === 'restart') {
-    if (process.platform !== 'darwin') throw Error('launchd control requires macOS');
-    if (process.version !== 'v20.19.4') throw Error('use the project-pinned Node 20.19.4');
-    owner=bind();serviceSource(repo,{home});
-    if (fs.existsSync(path.join(repo, '.lane/supervisor/STOP')) || fs.existsSync(path.join(repo, '.lane/supervisor/HOLD'))) throw Error('project STOP/HOLD prevents launch');
+  const launchGuard=()=>{
+    if(process.platform!=='darwin'||process.version!=='v20.19.4')throw Error('launch requires macOS and pinned Node 20.19.4');
+    const observed=bind();
+    if(owner&&JSON.stringify(observed)!==JSON.stringify(owner))throw Error('native service owner changed before launch');
+    owner??=observed;
+    serviceSource(repo,{home});
+    if(fs.existsSync(path.join(repo,'.lane/supervisor/STOP'))||fs.existsSync(path.join(repo,'.lane/supervisor/HOLD')))throw Error('project STOP/HOLD prevents launch');
     const record=loadEvents(org);if(record.tornTail)throw Error('incomplete record prevents launch');
     serviceCutoff(record.events,{repo,org,identity:project.identity});
+    if(action==='restart'&&(!fs.existsSync(stopped)||inspect().loaded))throw Error('restart requires this service own STOP and positively unloaded service');
+  };
+  const releaseControl=noticeLock(path.join(directory,'control.lock'),{recover:false});
+  let releasePass,releasePromotion;
+  try{
+    if(action==='install'||action==='restart'){
+      launchGuard();
+      releasePass=noticeLock(path.join(directory,'pass.lock'),{recover:action==='restart',onRecovery:recovery=>{
+        const prior=recovery.owner;
+        if(!(typeof prior.identity==='string'&&prior.identity.trim())&&
+            !(Number.isFinite(Date.parse(prior.at))&&Array.isArray(prior.argv)&&prior.argv.length&&prior.argv.every(a=>typeof a==='string')))
+          throw Error('restart pass lock owner identity is missing');
+        launchGuard();audit({phase:'pass-lock-recovery',native_caller:owner,recovery});
+      }});
+      if(action==='restart'){
+        const holds=restartCommandHolds(directory,{repo,org,identity:project.identity});
+        if(holds.length)audit({phase:'restart-command-holds',holds,quiescent:false});
+      }else assertCommandQuiescence(directory);
+      releasePromotion=acquireLock(path.join(project.identity,'lane-promote.lock'));
+    }
+    return control();
+  }finally{releasePromotion?.();releasePass?.();releaseControl();}
+  function control(){
+  if (action === 'install' || action === 'restart') {
+    launchGuard();
   }
   if (action === 'restart') {
     const receipt = installedContext(repo,org).installation;

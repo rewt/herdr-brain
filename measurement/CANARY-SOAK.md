@@ -145,15 +145,32 @@ INCOMPLETE: withhold the offer; retain every pending run/resource, owner, reason
 and next event. The same authorized trial may continue for genuine demand, never
 by replacement of uncertain effects. FAIL: withhold/withdraw the offer even if
 the scripted layer passed and ten other units succeeded. The canonical supervisor
-contains **new admissions** through supported STOP/probation withdrawal, preserves
+contains **new admissions** through supported STOP (or explicit emergency probation withdrawal), preserves
 all captured workers/watchers/callbacks/UNKNOWN attempts, and owns recovery.
 
-Use the existing candidate `probation-withdraw` with the **original trial ID**,
-then the normal stop owner. Preview/apply existing candidate `upgrade --rollback`
-with reversed roots and a stable rollback ID; retain the unchanged expected-plan
-and original upgrade/rollback archive. Separately restart the compatible previous
-installed root. A global current-link rollback alone does not restore a pinned
-line. Do not revert landed source or downgrade incompatible records. Confirm
+Stop through the installed controller's normal owner first. Keep the original
+trial active while recovering: withdrawing its exception can prevent the sealed
+non-READY recovery root from restarting. For this Brain development-recovery
+trial, use **canonical Brain source** `probation-successor --rollback`, the
+**original trial ID**, current installed successor as `--from-root`, and the
+original sealed recovery as `--target-root`. Preview, record its exact required
+decision, and apply that unchanged plan under one stable recovery ID as documented
+in [the successor rollback procedure](../line-service/PROBATION-SUCCESSOR.md).
+Restart through the sealed recovery's own tool, retaining all recovery and clear
+receipts. Do not use ordinary `upgrade --rollback` for this bootstrap history.
+
+For a trial entered from an accepted installed predecessor through ordinary
+upgrade history, use that candidate's `upgrade --rollback` with reversed roots
+and a stable rollback ID, then restart the accepted predecessor separately.
+An explicit `probation-withdraw --emergency` on a corrected tool revokes trial
+admissions even when no continuation exists; it does not promise a recovery
+restart. Use it only for deliberate containment and route the lost continuation
+to the supervisor. Ordinary withdraw/complete previews refuse without a READY
+explicit project pin selecting the settled installed root. Frozen tools retain
+their old behavior; source landing does not patch them.
+
+A global current-link rollback alone does not restore a pinned line. Do not
+revert landed source or downgrade incompatible records. Confirm
 the prior controller plus a normal eligible start; that is recovery evidence,
 not a new candidate PASS.
 

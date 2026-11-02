@@ -547,6 +547,20 @@ through the same verified stopped-state settlement, retaining `stopped_at` and
 the exact original receipt bytes in the archive.
 `restart` records its own uncertainty in `controls.jsonl`; it does not rewrite
 the installation phase. Do not edit that receipt or replay the install.
+
+On a corrected installed controller, same-root `restart` can recover an identified
+dead `pass.lock` owner only on positive ESRCH, with fsynced intent/recovered
+entries in `controls.jsonl` before/after removal. Fresh native, runtime, service
+STOP, unloaded-job, project STOP/HOLD and history guards still apply. A live,
+unprobeable or unidentified owner stays locked; failed audit keeps its lock.
+Bound orphan line commands with dead callers remain in `active-commands` with
+their original UNKNOWN outcome, owner and subject fence. Restart logs those
+holds; it never archives their markers, fabricates a result or replays input.
+The next pass may handle independent subjects. Installation changes and runtime
+handoffs still require terminal-receipt quiescence; restart grants none. Foreign,
+unbound, live-caller or corrupt command evidence refuses. Frozen controllers
+retain the old restart behavior until a separately authorized installation.
+
 Migration accepts these original receipts only with all the same guards,
 including positive native absence and this service's unchanged STOP. Its
 immutable migration archive records a `line-stopped-installation/v1` observation,
@@ -812,21 +826,31 @@ watcher, shared-observer registration, pending/held/refused/UNKNOWN attempt or
 review callback is rewritten or selected again.
 
 The named trial is bounded by explicit withdrawal or completion, not a timer
-that expires uncertain work. Either command closes admission and performs no
-native input, cancellation, installation edit or restart:
+that expires uncertain work. On corrected source, ordinary ending requires a
+READY explicit project pin selecting the settled installed root, compatible
+record readers and valid installation/plist history. Preview before ending:
 
 ```sh
-"$NODE" "$CANDIDATE_ROOT/line-service/launchd.mjs" probation-withdraw --repo "$BRAIN_SOURCE" --org "$BRAIN_RECORD" --id "$TRIAL_ID"
-# Or probation-complete, only after the coordinator accounts for the trial.
+"$NODE" "$BRAIN_SOURCE/line-service/launchd.mjs" probation-complete --repo "$BRAIN_SOURCE" --org "$BRAIN_RECORD" --id "$TRIAL_ID" --dry-run
+# Apply without --dry-run only under the coordinator's existing authority.
+# Ordinary probation-withdraw has the same continuation guard.
 ```
 
-Revocation is allowed during project STOP/HOLD to contain admissions. It retains
-captured workers and original callbacks. A separately qualified, normally
-accepted exact project pin can later admit the bundle through ordinary guards;
-this never revives its ended trial authority. Stop the controller through its normal
-owner, then use the existing `upgrade --rollback` preview/apply flow above from
-the candidate tool, reversing the roots and retaining a new stable rollback ID.
-Withdrawal does not require the candidate to remain healthy; rollback still
+Successful ordinary ending removes the exception while keeping ordinary pin
+admission. No native input, cancellation, installation edit or restart occurs.
+Explicit `probation-withdraw --emergency` permits deliberate revocation during
+project STOP/HOLD even without a continuation. It retains captured workers and
+callbacks, but can intentionally leave no admissible runtime; it is containment,
+not successful recovery. Frozen tools retain their old ending semantics.
+
+For the Brain development-recovery trial, stop through the current installed
+owner and keep the trial active. Recover an installed successor through canonical
+source `probation-successor --rollback` using the original trial ID and original
+sealed recovery, then restart recovery separately; follow
+[the exact successor procedure](PROBATION-SUCCESSOR.md). Use `probation-switch`
+only for the initial pre-successor drill. For an accepted installed predecessor
+with ordinary upgrade history, the candidate's `upgrade --rollback` preview/apply
+flow above applies, reversing roots under one stable rollback ID. Rollback still
 requires the original candidate identity, exact archived previous root/manifest,
 compatible current record and all existing effect guards. It restores the exact
 prior installation/plist, retaining original migration/cutover, jobs and watcher

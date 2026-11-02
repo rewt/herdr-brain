@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { setupOrg } from './helpers.mjs';
+import { retirementLock } from '../lib/retire-lock.mjs';
 
 test('deferred start returns its committed run without post-commit reads or preparation; brief prepares the original facts', t => {
   const f = setupOrg();
@@ -53,6 +54,42 @@ syncBuiltinESMExports();`);
   assert.deepEqual(fs.readFileSync(path.join(f.dir, 'events.jsonl')), before);
   assert.equal(f.ok(['brief', 'R-1', '--prepare-start'], { env }), brief);
   assert.equal(f.events().filter(e => e.type === 'run.started').length, 1);
+});
+
+for (const fault of ['busy', 'malformed']) test(`reopened deferred start prepares despite a ${fault} retirement hint`, t => {
+  const f = setupOrg();
+  t.after(() => fs.rmSync(f.root, { recursive: true, force: true }));
+  const id = f.ok(['add', 'Reopened work']).trim();
+  f.ok(['close', id, '--dropped']);
+  const report = path.join(f.root, 'reports/result.md');
+  f.ok(['start', id, '--defer-preparation', '--report', report]);
+  const before = fs.readFileSync(path.join(f.dir, 'events.jsonl'));
+  const lock = path.join(f.dir, 'retirement/request.lock');
+  let owner;
+  if (fault === 'busy') {
+    const release = retirementLock(lock);
+    t.after(release);
+    owner = fs.readFileSync(path.join(lock, 'owner.json'));
+  } else {
+    fs.writeFileSync(path.join(f.dir, 'retirement/request.json'), 'malformed hint');
+  }
+  const result = f.org(['brief', 'R-1', '--prepare-start']);
+  assert.equal(result.code, 0, result.err + result.out);
+  assert.match(result.err, /record: retirement request deferred:/);
+  if (fault === 'busy') {
+    assert.match(result.err, /request\.lock; owner is live or unknown/);
+    assert.deepEqual(fs.readFileSync(path.join(lock, 'owner.json')), owner, 'live hint lock is retained');
+  } else {
+    assert.equal(fs.readFileSync(path.join(f.dir, 'retirement/request.json'), 'utf8'), 'malformed hint');
+    assert.equal(fs.existsSync(lock), false, 'hint writer releases its own lock after an error');
+  }
+  assert.match(result.out, /# Brief: run R-1/);
+  assert.match(result.out, /Reopened work/);
+  assert.ok(fs.existsSync(path.dirname(report)));
+  assert.equal(fs.readFileSync(path.join(f.dir, 'runs/R-1/brief.md'), 'utf8'), result.out);
+  assert.deepEqual(fs.readFileSync(path.join(f.dir, 'events.jsonl')), before, 'original start and reopen remain intact');
+  assert.equal(f.events().filter(e => e.type === 'run.started').length, 1);
+  assert.equal(f.events().filter(e => e.type === 'item.reopened').length, 1);
 });
 
 test('deferred start retains real pre-commit refusal and cannot prepare an unrelated legacy start', t => {

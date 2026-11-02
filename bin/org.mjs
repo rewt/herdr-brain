@@ -1110,7 +1110,10 @@ function brief(argv) {
     const reopen = ctx.events.find(e => e.seq === source.seq - 1 && e.type === 'item.reopened' &&
       e.id === run.item && e.note === `reopened by starting ${run.id}`);
     publishCloseoutEvents({ org: ctx.dir, added: [...(reopen ? [reopen] : []), source], deferBusy: true });
-    if (reopen) requestRetirement({ org: ctx.dir, eventSeq: source.seq, source: 'record start' });
+    if (reopen) {
+      try { requestRetirement({ org: ctx.dir, eventSeq: source.seq, source: 'record start' }); }
+      catch (e) { err(`record: retirement request deferred: ${e.message}\n`); }
+    }
     fs.mkdirSync(path.dirname(run.report_path), { recursive: true });
   }
   if (!fs.existsSync(run.brief_path)) writeFileAtomic(run.brief_path, renderBrief(ctx.state, run.id,

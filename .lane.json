@@ -17,8 +17,7 @@
     "timeout": 0
   },
   "dispatch": {
-    "max_sessions": 12,
-    "watch_mode": "shared"
+    "max_sessions": 12
   },
   "selection_policy": {
     "by_task_class": {

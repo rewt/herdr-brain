@@ -231,7 +231,21 @@ rotated pass-journal segments. Here `command_sha256` binds the two service audit
 rows, and the archive preserves them instead of inventing a command receipt.
 An empty queue or absent reviewer alone never qualifies. The current line checks
 fresh target selection before recording intent, deferring a newly arrived report
-to the next pass without creating another held queue attempt.
+to the next pass with a durable review-scoped deferral diagnostic and no queue
+intent for that stale selection. Freshness compares the complete selected target,
+including supplemental scopes sharing a head with a recomputed whole target.
+Queue reconciliation reopens saved retained markers for that producer, including
+markers at a later head; the normal inventory and exact original proof still
+control whether any queue effect is permitted.
+
+This is a snapshot fence before intent, not an atomic fence across the command.
+A report arriving after that snapshot can still cause a receipt-bearing retained
+queue refusal; that original must remain held for its existing outcome owner.
+The pre-command proof does not cover those refusals or historical unattributed
+canonical holds (which have no source run). New canonical selections also check
+freshness before intent and record deferrals. The project supervisor owns the
+historical canonical and receipt-bearing inventory and its explicit disposition;
+absence of reviewers never proves those attempts created nothing.
 
 Read each original attempt once, saving the output as its resolution input:
 

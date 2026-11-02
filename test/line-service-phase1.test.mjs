@@ -1028,7 +1028,7 @@ test('landing-before-report actual source queue command is reached by the instal
   assert.equal(calls.filter(a=>a[1]==='queue-review').length,1);assert.equal(capacityCalls,1,JSON.stringify(diagnostics(f)));const c=f.context(),q=[...c.state.items.values()].filter(i=>i.role==='reviewer');assert.equal(q.length,1);assert.equal(q[0].meta.review_target.evidence_kind,'native-landings/v1');assert.equal(c.run.report,null);assert.equal(c.events.some(e=>e.type==='run.started'&&e.item===q[0].id),false);assert.equal(diagnosticHealth(f).queued,1);
 });
 
-test('landing-before-report defers a report arriving during selection before queue intent and queues once on the next pass',t=>{
+test('supplemental coverage report-arrival defers during selection before queue intent and queues once on the next pass',t=>{
   const f=fixture(t,{reported:false});unreportedNativeLandings(f);
   const env=installedService(f),rename=fs.renameSync;let arrived=false,calls=0;
   t.mock.method(fs,'renameSync',function(from,file,...args){
@@ -1218,6 +1218,39 @@ test('supplemental coverage keeps pending and verdict scopes immutable and exclu
     const health=reviewHealth({...c,index:canonicalReviewIndex(c)});assert.equal(health.done_commits,1);assert.ok(!health.coverage_gaps.some(g=>later.includes(g.head)));assert.ok(health.coverage_gaps.some(g=>g.head===foreign));
     fs.mkdirSync(path.join(f.org,'settle'),{recursive:true});fs.writeFileSync(path.join(f.org,'settle/unknown.json'),JSON.stringify({run:'R-1',head:later[1],qualification:'UNKNOWN'}));assert.throws(()=>validateQueuedReview({...c,item:q}),/UNKNOWN|attempt/);
   }finally{process.chdir(before);}
+});
+
+for(const stale of [false,true])test(`supplemental coverage real line passes ${stale?'record persistent freshness deferral without an attempt':'queue the exact supplemental scope once'}`,t=>{
+  const f=fixture(t);partialReview(f,'REV-1200',{head:f.heads[0],base:f.base,run:'R-3400'});partialReview(f,'REV-1201',{head:f.heads[1],base:f.heads[0],run:'R-3401'});
+  const originals=[...f.context().state.items.values()].filter(q=>q.role==='reviewer').map(q=>structuredClone(q));
+  const land=n=>{
+    const base=f.git(['rev-parse','HEAD']);fs.writeFileSync(path.join(f.workspace,`supplement-${n}`),String(n));f.git(['add','.']);f.git(['commit','-qm',`Supplement ${n}`]);const head=f.git(['rev-parse','HEAD']);
+    f.git(['merge','--ff-only',head],f.cwd);f.add([{type:'change.landed',item:'ENG-1',run:'R-1',head,base,project:f.identity}]);return head;
+  };
+  const later=land(1),target=discoverChanges({...f.context(),pendingOnly:true}).changes.find(c=>c.run.id==='R-1').target;
+  assert.equal(target.evidence_kind,'supplemental-review/v1');assert.deepEqual(capturedReviewCommits(target),[later]);assert.equal(target.base,f.heads[1]);
+  const env=installedService(f),rename=fs.renameSync;let moved=1,calls=0;
+  if(stale)t.mock.method(fs,'renameSync',function(from,file,...args){
+    const result=Reflect.apply(rename,fs,[from,file,...args]);
+    if(typeof file==='string'&&path.dirname(file)===f.directory&&/^review-change-.*\.lock$/.test(path.basename(file)))land(++moved);
+    return result;
+  });
+  const options={repo:f.cwd,org:f.org,to:'supervisor-test',env,capacity:()=>{throw Error('occupied');},command:(exe,args,options)=>{
+    if(args[1]==='queue-review'){calls++;return spawnSync(exe,args,options);}return{status:0,stdout:'{"created":[]}',stderr:''};
+  }},cwd=process.cwd();process.chdir(f.cwd);
+  try{for(let n=0;n<3;n++)createLineService(options).pass();}finally{process.chdir(cwd);}
+  assert.equal(calls,stale?0:1);const c=f.context(),reviews=[...c.state.items.values()].filter(q=>q.role==='reviewer');assert.equal(reviews.length,stale?2:3);
+  for(const original of originals)assert.deepEqual(c.state.items.get(original.id),original);
+  const journal=JSON.parse(fs.readFileSync(path.join(f.directory,'effects.json')));
+  if(stale){
+    assert.equal(moved,4);assert.equal(Object.keys(journal.actions).some(k=>k.startsWith('review:ENG-1:')),false);
+    const rows=diagnostics(f).filter(r=>r.action==='review-queue-deferred');assert.equal(rows.length,3);
+    for(const row of rows){assert.match(row.reason,/Review queue deferred/);assert.equal(row.scope.review,true);assert.equal(row.scope.item,'ENG-1');assert.equal(row.notice_record.entry.review,true);}
+    assert.ok(Object.values(journal.record_notices).some(n=>n.review&&/Review queue deferred/.test(n.reason)));
+  }else{
+    const queued=reviews.find(q=>!originals.some(o=>o.id===q.id));assert.deepEqual(queued.meta.review_target,target);
+    assert.equal(journal.actions[`review:ENG-1:${later}`].state,'complete');
+  }
 });
 
 test('supplemental coverage refuses UNKNOWN or overlapping prior captures instead of duplicating uncovered source',t=>{

@@ -541,7 +541,12 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         try{
           reviewLock=noticeLock(path.join(directory,`review-change-${digest([item.id,target.head])}.lock`),{recover:false});
           const ignoreService={file:journal,key,target,operation:'record-queue'};
-          const retained=effects.review_reference_observed?.[key],resolutionSeq=referenceRevision({events:snapshot.events,identity:project.identity,org,item:item.id,run:run.id,target});
+          // A queue disposition may settle an older target/key for this same
+          // producer. It wakes selection only; reviewAttempt and the effect
+          // continuation still validate the exact original proof and inventory.
+          const retained=effects.review_reference_observed?.[key],resolutionSeq=Math.max(
+            referenceRevision({events:snapshot.events,identity:project.identity,org,item:item.id,run:run.id,target}),
+            ...snapshot.events.filter(e=>e.type==='line-service.review-queue-reconciled'&&e.project===project.identity&&e.org===org&&e.item===item.id&&e.run===run.id).map(e=>e.seq));
           if(retained&&resolutionSeq<=(effects.review_reference_reconsidered?.[key]?.resolution_seq??0))continue;
           const attempt=reviewAttempt(item,{org,identity:project.identity,events:snapshot.events,state:snapshot.state,repo,effects,cache:reviewCache,target,capturedRun:run.id,ignoreService});
           if(attempt){
@@ -565,8 +570,11 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
             // A report arriving after selection may change evidence without
             // changing source. Defer before intent, so the next pass selects
             // the fresh target instead of retaining a command that never ran.
-            const checked=discoverChanges({events:fresh.events,state:fresh.state,repo,org,identity:project.identity,runId:run.id}).changes.find(c=>c.item.id===item.id&&c.target.head===target.head);
-            if(!checked||JSON.stringify(checked.target)!==JSON.stringify(target))return false;
+            const checked=discoverChanges({events:fresh.events,state:fresh.state,repo,org,identity:project.identity,runId:run.id}).changes.find(c=>c.item.id===item.id&&JSON.stringify(c.target)===JSON.stringify(target));
+            if(!checked){
+              note(key,'Review queue deferred: immutable landed target/evidence changed before queue intent; fresh selection is required.',{item:item.id,run:run.id,head:target.head,review:true},false,{action:'review-queue-deferred',key});
+              return false;
+            }
             queueConsumer({run:checked.run,env:childEnv});return true;
           });
         }catch(e){note(key,e.message,{item:item.id,run:run.id,head:target.head});}
@@ -579,10 +587,16 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         try{
           reviewLock=noticeLock(path.join(directory,`review-change-${digest(selector)}.lock`),{recover:false});reviewSteps++;
           effect(key,()=>{
-            const fresh=observe(),checked=discoverChanges({events:fresh.events,state:fresh.state,repo,org,identity:project.identity}).unattributed?.find(c=>c.selector===selector);
-            if(!checked||JSON.stringify(checked.target)!==JSON.stringify(target))throw Error('immutable canonical target/evidence changed before queue mutation');
             return JSON.parse(cli('bin/org.mjs',['queue-review',selector,'--head',target.head,'--base',target.base]));
-          },target,'record-queue',true,false,()=>admit({selector,target},'queue-mutation',true));
+          },target,'record-queue',true,false,fresh=>{
+            if(!admit({selector,target},'queue-mutation',true))return false;
+            const checked=discoverChanges({events:fresh.events,state:fresh.state,repo,org,identity:project.identity}).unattributed?.find(c=>c.selector===selector&&JSON.stringify(c.target)===JSON.stringify(target));
+            if(!checked){
+              note(key,'Review queue deferred: immutable canonical target/evidence changed before queue intent; fresh selection is required.',{head:target.head,review:true},false,{action:'review-queue-deferred',key});
+              return false;
+            }
+            return true;
+          });
         }catch(e){note(key,e.message,{head:target.head,review:true});}
         finally{reviewLock?.();}
       }

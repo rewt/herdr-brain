@@ -21,6 +21,8 @@ import {reconcileReviewQueue,inspectReviewQueue} from '../line-service/review-qu
 import {terminalQueuePlanningProof,resolvedQueuePlanning} from '../line-service/review-queue-proof.mjs';
 import {commandIntent,finishCommand,forgetActiveCommand} from '../lib/command-receipt.mjs';
 import {appendPassJournal,readPassJournal} from '../line-service/pass-journal.mjs';
+import {recordOwnLanding} from '../lib/landing-receipt.mjs';
+import {discoverChanges} from '../line-service/phase1.mjs';
 
 const root=fs.realpathSync(sourceRoot);
 function fixture(t,{diffBytes=0}={}){
@@ -448,12 +450,23 @@ const failedQueue=(f,receipt=contentionReceipt(f))=>({state:'held',owner:'line-s
   error:receipt.stderr.trim(),receipt,failure:{kind:'unknown',code:'OUTCOME_UNKNOWN'}});
 const noMutation=(f,entry,context=f.context())=>reviewQueueNoMutation({...context,entry,key:`review:ENG-1:${f.head}`});
 
-function planningFixture(t,index=0){
+function planningFixture(t,index=0,{preReport=false}={}){
   const f=fixture(t);f.prepare({producerEvidence:{kind:'checks'}});
+  let reportRow,nativeTarget;
+  if(preReport){
+    reportRow=f.context().events.find(e=>e.type==='report.ingested');
+    fs.writeFileSync(path.join(f.org,'events.jsonl'),f.context().events.filter(e=>e!==reportRow&&e.seq!==reportRow.seq).map(e=>JSON.stringify(e)+'\n').join(''));
+    const actor=structuredClone(f.observation.agents[0]);actor.cwd=f.repo;
+    f.add([{type:'run.updated',id:'R-1',meta:{agent:actor.name,pane:actor.pane_id,worker_workspace:actor.workspace_id,terminal_id:actor.terminal_id,agent_session_id:actor.agent_session.value}}]);
+    const env={...f.env,HERDR_ENV:'1',HERDR_PANE_ID:actor.pane_id,HERDR_WORKSPACE_ID:actor.workspace_id,CODEX_THREAD_ID:actor.agent_session.value};
+    recordOwnLanding({canonical:f.repo,workspace:f.repo,base:f.base,head:f.head,landedAt:'2026-10-27T07:00:00.000Z',env,call:()=>JSON.stringify({result:{agent:actor}})});
+    nativeTarget=discoverChanges(f.context()).changes[0].target;
+    assert.equal(nativeTarget.evidence_kind,'native-landings/v1');
+  }
   let file=path.join(f.directory,'effects.json'),key=`review:ENG-1:${f.head}`,entry,receipt;
   if(index==='prequeue'){
     entry={state:'held',owner:'line-service',subject:key,execution_subject:'ENG-1',attempt:'original-prequeue',consumer:'line-service',
-      at:'2026-10-30T01:00:00Z',finished_at:'2026-10-30T01:01:00Z',review_target:f.context().target,review_operation:'record-queue',
+      at:'2026-10-30T01:00:00Z',finished_at:'2026-10-30T01:01:00Z',review_target:nativeTarget??f.context().target,review_operation:'record-queue',
       error:'immutable landed target/evidence changed before queue mutation',failure:{kind:'unknown',code:'OUTCOME_UNKNOWN'}};
     fs.writeFileSync(file,JSON.stringify({identity:f.identity,org:f.org,actions:{[key]:entry},notices:{}}));
     const audit=path.join(f.directory,'passes.jsonl');
@@ -475,7 +488,7 @@ function planningFixture(t,index=0){
   fs.writeFileSync(resolution,JSON.stringify(input));
   f.add([{type:'note.added',id:'ENG-1',decision:true,text:`Reconcile ${id} ENG-1 R-1 ${entry.attempt} ${proof.original_sha256} ${proof.command_sha256}; pure pre-append only, preserve the original.`}]);
   const decisionSeq=f.context().events.at(-1).seq,args=()=>({...f.args(),resolution,decisionSeq,id});
-  return{...f,file,key,entry,proof,input,resolution,reconcileArgs:args,receipt};
+  return{...f,file,key,entry,proof,input,resolution,reconcileArgs:args,receipt,ingest:()=>{const {seq,at,by,...row}=reportRow;f.add([row]);}};
 }
 
 for(const next of ['queued','unknown'])test(`prequeue target-change reconciliation preserves the original and permits one continuation: ${next}`,t=>{
@@ -501,6 +514,45 @@ for(const next of ['queued','unknown'])test(`prequeue target-change reconciliati
   assert.equal([...f.context().state.items.values()].filter(q=>q.role==='reviewer').length,next==='queued'?1:0);
   const originalAudit=[...readPassJournal(path.join(f.directory,'passes.jsonl'))].filter(r=>r.attempt===f.entry.attempt);
   assert.deepEqual(originalAudit,f.proof.service_audit.rows);
+});
+
+for(const mode of ['same-range','wider','unreconciled','uncertain'])test(`prequeue changed report target reopens its saved line marker only after reconciliation: ${mode}`,t=>{
+  const f=planningFixture(t,'prequeue',{preReport:true});f.ingest();
+  if(mode==='wider'){
+    fs.writeFileSync(path.join(f.repo,'later-source'),'later same-run source');f.git('add','later-source');f.git('commit','-qm','Later source');
+    f.add([{type:'change.landed',item:'ENG-1',run:'R-1',head:f.git('rev-parse','HEAD'),base:f.head,project:f.identity}]);
+  }
+  const selected=()=>discoverChanges({...f.context(),pendingOnly:true}).changes.find(c=>c.run.id==='R-1').target;
+  const target=selected(),key=`review:ENG-1:${target.head}`;
+  assert.notDeepEqual(target,f.entry.review_target);
+  if(mode!=='wider')for(const field of ['head','base','diff_sha256','dispatch'])assert.deepEqual(target[field],f.entry.review_target[field]);
+  if(mode!=='wider')assert.deepEqual(target.source_group.owned_commits,f.entry.review_target.source_group.owned_commits);
+  let calls=0;const options={repo:f.repo,org:f.org,to:'fixture-supervisor',env:f.serviceEnv,capacity:()=>{throw Error('occupied');},command:(_exe,args)=>{
+    if(args[1]!=='queue-review')return{status:0,stdout:'{"created":[]}',stderr:''};calls++;
+    const cwd=process.cwd();process.chdir(f.repo);
+    try{return{status:0,stdout:JSON.stringify(transact(f.org,(events,state)=>queueReviewMutation({state,events,org:f.org,repo:f.repo,runId:'R-1',head:target.head,base:target.base,env:f.serviceEnv}),{actor:'line-service'}).result),stderr:''};}
+    finally{process.chdir(cwd);}
+  }};
+  createLineService(options).pass();
+  const journal=()=>JSON.parse(fs.readFileSync(f.file)),marker=journal().review_reference_observed[key];assert.ok(marker);assert.equal(calls,0);
+  if(mode!=='unreconciled')reconcileReviewQueue(f.reconcileArgs());
+  if(mode==='uncertain'){
+    const changed=journal();changed.actions[key]={...f.entry,attempt:'uncertain-new',review_target:target,error:'reply lost after possible append',receipt:{status:1,signal:null,stdout:'',stderr:'reply lost after possible append',signal_sent:false}};
+    fs.writeFileSync(f.file,JSON.stringify(changed));
+  }
+  const before=structuredClone(journal().actions);
+  for(let n=0;n<3;n++)createLineService(options).pass();
+  const queued=['same-range','wider'].includes(mode),after=journal();assert.equal(calls,queued?1:0);
+  const reviews=[...f.context().state.items.values()].filter(q=>q.role==='reviewer');assert.equal(reviews.length,queued?1:0);
+  assert.deepEqual(after.review_reference_observed[key],marker,'original saved marker is retained');
+  if(mode==='same-range')assert.deepEqual(after.actions[key].history,[f.entry]);
+  if(mode==='wider'){
+    assert.deepEqual(after.actions[f.key],f.entry);assert.deepEqual(reviews[0].meta.review_target,target);
+    assert.deepEqual(target.source_group.owned_commits,[f.head,target.head]);assert.equal(target.base,f.base);
+    const archive=JSON.parse(fs.readFileSync(f.context().events.find(e=>e.type==='line-service.review-queue-reconciled').archive.file));assert.deepEqual(archive.original,f.entry);
+  }
+  if(!queued)assert.deepEqual(after.actions,before);
+  assert.deepEqual([...readPassJournal(path.join(f.directory,'passes.jsonl'))].filter(r=>r.attempt===f.entry.attempt),f.proof.service_audit.rows);
 });
 
 test('prequeue target-change proof rejects missing, ambiguous, altered or command-bearing original evidence',t=>{

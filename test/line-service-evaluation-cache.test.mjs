@@ -153,10 +153,11 @@ test('original-cache-Major: real same-revision processes skip covered source and
   f.append([{type:'change.landed',item:'ENG-1',run:'R-1',head,base,project:f.identity,landed_at:new Date().toISOString(),landing_tip:head,previous_main:base,
     source:{...dispatchSourceBinding({run,events:captured.events,identity:f.identity,org:f.org}),base,head},
     producer:{agent:worker.agent,pane:worker.pane,terminal:worker.terminal_id,session:worker.agent_session_id,ownership_generation:run.owner_generation}},
-    {type:'report.ingested',run:'R-1',item:'ENG-1',file:'reports/R-1.md',sha256:hash(report),report:{outcome:'blocked',artifacts:[`source: ${head}; base: ${base}`]}},
+    {type:'report.ingested',run:'R-1',item:'ENG-1',file:'reports/R-1.md',sha256:hash(report),report:{outcome:'done',artifacts:[`source: ${head}; base: ${base}`]}},
     {type:'item.added',id:'REV-1',role:'reviewer',title:'Original covered review',meta:{review_source_item:'ENG-1',review_source_run:'R-1',review_round_cap:1,
       review_target:{head,base,reportHash:hash(report),evidence:reportFile,diff_sha256:hash(f.git('diff','--no-ext-diff','--no-textconv',base,head)),scope:{base,commits:[head],claims:[head],unresolved:[],deferred:false}}}},
-    {type:'change.reviewed',item:'ENG-1',head,base,review_item:'REV-1',verdict:'PASS',findings:[]},{type:'item.closed',id:'REV-1',as:'done'}]);
+    {type:'change.reviewed',item:'ENG-1',head,base,review_item:'REV-1',verdict:'PASS',findings:[]},{type:'item.closed',id:'REV-1',as:'done'},
+    {type:'item.closed',id:'ENG-1',as:'done',completed_run:'R-1'}]);
   const delivered=loadRecord(f.org),proof=deliveredSourceProof({project:{identity:f.identity,canonical:f.repo},org:f.org,run:delivered.state.runs.get('R-1'),...delivered,git:(_repo,args)=>f.git(...args)});
   assert.equal(proof.status,'covered');assert.equal(proof.coverage,'guarded');
   const effects=path.join(f.root,'unexpected-effects'),entries=()=>JSON.parse(fs.readFileSync(path.join(f.directory,'effects.json'))).negative_evaluations.entries;
@@ -174,16 +175,20 @@ test('original-cache-Major: real same-revision processes skip covered source and
   const first=pass();assert.equal(entries()['source:R-1'].reason,'no pending source');
   f.append([{type:'report.ingested',run:'R-3',item:'ENG-3',file:'reports/R-3.md',sha256:'unrelated-report',report:{outcome:'blocked',summary:'Unrelated report names shared G-1',artifacts:[]}}]);
   const warm=pass(),start=rows=>rows.find(r=>r.action==='pass-start');
+  t.diagnostic(JSON.stringify({first:summary(first),warm:summary(warm),warm_rows:warm}));
   assert.notEqual(summary(first).pid,summary(warm).pid);assert.equal(start(first).source_head,start(warm).source_head);
   assert.ok(summary(warm).evaluations.admission_skipped>=1);assert.ok(summary(warm).evaluations.source_skipped>=1);
   assert.equal(summary(warm).evaluations.source_evaluated,0);assert.equal(summary(warm).evaluations.admission_evaluated,0);
   assert.equal(warm.some(r=>['hold','admission-eligible'].includes(r.action)),false);
-  f.append([{type:'item.updated',id:'ENG-1',fields:{meta:{hold:true}}}]);
-  const changed=pass();assert.equal(summary(changed).evaluations.source_evaluated,1);assert.equal(summary(changed).evaluations.admission_evaluated,1);
-  assert.equal(summary(changed).evaluations.admission_skipped,1,'the unchanged held sibling stays warm');
+  f.append([{type:'item.updated',id:'ENG-2',fields:{meta:{hold:true}}}]);
+  const changed=pass();assert.equal(summary(changed).evaluations.source_skipped,1);assert.equal(summary(changed).evaluations.admission_evaluated,1);
   const recovered=pass();assert.equal(summary(recovered).evaluations.source_skipped,1);
-  assert.equal(summary(recovered).evaluations.admission_skipped,2);
-  t.diagnostic(JSON.stringify({first:summary(first),warm:summary(warm),changed:summary(changed),recovered:summary(recovered),source_proof:proof}));
+  assert.equal(summary(recovered).evaluations.admission_skipped,1);
+  fs.writeFileSync(brief,'Changed producer brief');
+  const sourceChanged=pass();assert.equal(summary(sourceChanged).evaluations.source_evaluated,1);
+  assert.equal(summary(sourceChanged).evaluations.admission_skipped,1,'the unchanged held sibling stays warm');
+  const sourceRecovered=pass();assert.equal(summary(sourceRecovered).evaluations.source_skipped,1);
+  t.diagnostic(JSON.stringify({changed:summary(changed),recovered:summary(recovered),source_changed:summary(sourceChanged),source_recovered:summary(sourceRecovered),source_proof:proof}));
 });
 
 test('source negatives stay warm across consecutive passes with routine writes and unchanged Git config replacements',t=>{

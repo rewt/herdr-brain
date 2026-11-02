@@ -105,7 +105,7 @@ test('typed STOP at worker stage before native launch finalizes only its exact r
   assert.equal(events(f).some(e=>e.type==='run.session_bound'),false);
   const entry=currentCloseoutEntries(f.common,f.org,events(f))[0];
   assert.equal(f.drain({keys:[entry.key],retrySafe:true}).evaluated[0].completed,true);
-  assert.equal(fs.existsSync(f.lane),false);assert.deepEqual(f.read().actions,[]);
+  assert.equal(fs.existsSync(f.lane),false);assert.deepEqual(f.read().actions,[['workspace','close','w']]);
   assert.deepEqual(fs.readFileSync(f.journal),journal);assert.deepEqual(fs.readFileSync(f.eventFile).subarray(0,original.length),original);
 });
 

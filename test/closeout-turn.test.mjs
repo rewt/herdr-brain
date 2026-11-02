@@ -536,6 +536,7 @@ for(const delivery of ['queued','refused','UNKNOWN'])test(`grouped closeout alar
   const original=fs.readFileSync(f.eventFile),calls=[],native=f.herdrCalls(),actions=f.read().actions;
   const cli=(file,args,options)=>{
     if(args[0]==='refresh')return '{}';
+    if(args[0]==='allocations')return '{"results":[]}';
     assert.equal(file,'supervisor/prompt-supervisor.mjs');calls.push({file,args,options});
     assert.equal(fs.existsSync(path.join(f.org,'lock')),false);
     const id=args[args.indexOf('--id')+1];

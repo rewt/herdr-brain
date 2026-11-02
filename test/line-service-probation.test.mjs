@@ -222,11 +222,11 @@ function switchApply(f,id,from,to){
 }
 async function privatePass(f,root){
   const script=`import {createLineService} from ${JSON.stringify(pathToFileURL(path.join(root,'line-service/line-service.mjs')).href)};
-    const service=createLineService({repo:${JSON.stringify(f.cwd)},org:${JSON.stringify(f.org)},to:'fixture-supervisor',haltAfter:100,
+    const service=createLineService({repo:${JSON.stringify(f.cwd)},org:${JSON.stringify(f.org)},to:'fixture-supervisor',haltAfter:100,runtimeHome:${JSON.stringify(f.installationHome)},
       command:()=>({status:0,stdout:'{"created":[]}'}),capacity:()=>({count:0,cap:2})});
     console.log(JSON.stringify(service.pass()));`;
   const r=spawnSync(process.execPath,['--input-type=module','-e',script],{cwd:f.cwd,env:f.env,encoding:'utf8'});
-  assert.equal(r.status,0,r.stderr);assert.equal(JSON.parse(r.stdout).result,'pass-complete');
+  assert.equal(r.status,0,r.stderr);assert.equal(JSON.parse(r.stdout).result,'pass-complete',r.stdout);
 }
 
 test('development recovery accepts a trailing-slash source and preserves original bytes through candidate recovery and return',async t=>{

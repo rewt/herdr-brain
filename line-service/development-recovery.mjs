@@ -85,7 +85,7 @@ export function developmentSwitchRows(events,{directory,identity,org}){
   }else if(rows.length)throw Error('development recovery switch archive missing');
   return rows;
 }
-export function developmentHistory(events,{repo,org,identity,directory,installation,cutover,root,trial}){
+export function developmentHistory(events,{repo,org,identity,directory,installation,cutover,root,trial,through=Infinity,plistBytes}){
   const p=trial.previous,authority=events.find(e=>e.seq===trial.seq),scope=authority?.scope;
   if(p?.kind!=='development-recovery'||!same(p.original.cutover,cutover)||scope?.previous?.release.root!==p.release.root)
     throw Error('development recovery history authority/cutover differs');
@@ -119,10 +119,10 @@ export function developmentHistory(events,{repo,org,identity,directory,installat
   }
   const successor=successorHistory(events,{repo,org,identity,directory},{trial,scope,saved,savedBytes,plist,last});
   saved=successor.installation;plist=successor.plist;last=successor.last;
-  for(const change of loginChanges(events,{repo,org,identity,directory})){
+  for(const change of loginChanges(events,{repo,org,identity,directory}).filter(c=>c.event.seq<=through)){
     const next=applyLoginChange(change,{installation:saved,plist,last});saved=next.installation;last=next.last;
   }
-  if(!rows.length||saved.source!==root||!same(saved,installation)||readPlainFile(path.join(directory,'service.plist'))!==plist)
+  if(last.seq>through||!rows.length||saved.source!==root||!same(saved,installation)||(plistBytes??readPlainFile(path.join(directory,'service.plist')))!==plist)
     throw Error('development recovery installation/plist drifted');
   return{last,installation:saved,plist,successor};
 }

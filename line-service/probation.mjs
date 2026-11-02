@@ -22,6 +22,7 @@ import {legacyRecipientHistory,recipientChanges} from './recipient-history.mjs';
 import {successorExtensions} from './probation-successor-history.mjs';
 import {requireRecoveryEntry} from './recovery-admission.mjs';
 import {runtimeHistory} from './runtime.mjs';
+import {completeBootstrap,completionFile} from './probation-completion.mjs';
 
 const toolRoot=fs.realpathSync(fileURLToPath(new URL('../',import.meta.url)));
 const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
@@ -157,6 +158,13 @@ export function probationControl({repo,org,id,fromRoot,targetRoot,authority,reco
     if(git(c.repo,['symbolic-ref','--short','HEAD'])!==main||git(c.repo,['status','--porcelain=v1','--untracked-files=all']))throw Error('probation requires clean canonical main');
     return git(c.repo,['rev-parse','HEAD']);
   };
+  if(finish==='completed'){
+    const saved=JSON.parse(readPlainFile(path.join(c.directory,'installation.json')));
+    if(saved.probation_bootstrap||saved.migration?.file===completionFile(c,id)){
+      if(fromRoot||targetRoot||authority||recoveryAuthority||developmentRecovery)throw Error('bootstrap completion takes only original trial id and dry-run/exact plan');
+      return completeBootstrap({c,id,owner,clean,toolRoot,home,dryRun,expectedPlan,command,fault});
+    }
+  }
   if(finish){
     if(!['withdrawn','completed'].includes(finish)||expectedPlan||fromRoot||targetRoot||authority||recoveryAuthority||developmentRecovery)throw Error('withdraw/complete takes the original trial id, optional --dry-run and withdrawal-only --emergency');
     // Revocation may contain a running line even during STOP/HOLD. It performs

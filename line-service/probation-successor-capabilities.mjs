@@ -29,6 +29,8 @@ const profiles = new Map([
   ['3ab9dbc10bf9bb3d178333f8b012eb1538e9e98002ec4b73100519f307e483ae', 'successor-extensions'],
   // ENG-1339: guarded endings and same-root restart preserve successor archives/contracts.
   ['6b908188fce4a9457cb90fcecd7271fb02375fdcf3c807ed933675283b3af60c', 'successor-extensions'],
+  // ENG-1340: ordinary completion anchors preserve active successor contracts.
+  ['daf453d2ccf094259ecd05d052e53ac3e4f9cf7c2a8d9ddebbc15a9b78749466', 'successor-extensions'],
 ]);
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 export function successorFingerprint(root) {

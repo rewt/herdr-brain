@@ -15,6 +15,7 @@ import {findOrgDir,loadEvents} from '../lib/store.mjs';
 import {requireRecordCompatibility} from '../lib/record-compatibility.mjs';
 import {probationRuntime} from './probation.mjs';
 import {developmentHistory} from './development-recovery.mjs';
+import {completionRows,completedInstallation} from './probation-completion.mjs';
 
 export const runtimeRoot=fs.realpathSync(fileURLToPath(new URL('../',import.meta.url)));
 export const digest=bytes=>createHash('sha256').update(bytes).digest('hex');
@@ -45,7 +46,9 @@ export function serviceSource(repo,options={}) {
 // Resolve the immutable migration followed by completed release handoffs. The
 // original boundary and migration stay intact, including across a rollback.
 export function runtimeHistory(events,{repo,org,identity,directory,installation,cutover,root=runtimeRoot}) {
+  const completions=completionRows(events,{repo,org,identity,directory});
   if(installation.probation_bootstrap){
+    if(completions.length)throw Error('probation completion migration binding differs');
     const admitted=probationRuntime(repo,{root:installation.source,events,allowEnded:true});
     if(admitted?.probation.id!==installation.probation_bootstrap.trial)throw Error('development recovery trial binding differs');
     return developmentHistory(events,{repo,org,identity,directory,installation,cutover,root,trial:admitted.probation});
@@ -53,7 +56,12 @@ export function runtimeHistory(events,{repo,org,identity,directory,installation,
   const changes=recipientChanges(events,{repo,org,identity,directory});
   const rows=events.filter(e=>e.type==='line-service.runtime-migrated'&&e.project===identity&&e.org===org);
   let saved,plist,last,previous,historyStart;
-  if(cutover.mode==='accepted-release-install'){
+  if(rows.length===1&&rows[0].mode==='probation-completion'){
+    const event=rows[0],ref=installation.migration;
+    if(installation.probation_bootstrap||!ref||ref.id!==event.id||ref.file!==event.archive?.file||ref.sha256!==event.archive?.sha256)
+      throw Error('probation completion migration binding differs');
+    ({installation:saved,plist,last}=completedInstallation(events,{repo,org,identity,directory},{event,cutover}));historyStart=event.seq;
+  }else if(cutover.mode==='accepted-release-install'){
     if(rows.length||installation.migration)throw Error('fresh release installation has an unexpected migration');
     ({installation:saved,plist,last}=freshInstallation({repo,org,identity,directory,cutover}));historyStart=cutover.seq;
   }else{
@@ -80,7 +88,7 @@ export function runtimeHistory(events,{repo,org,identity,directory,installation,
     if(JSON.stringify(files)!==JSON.stringify(upgrades.map(e=>e.id+'.json').sort()))throw Error('existing/UNKNOWN runtime upgrade is retained; no replay or replacement');
   }else if(upgrades.length)throw Error('service runtime upgrade archive is missing');
   const ids=new Set();
-  for(const next of [...upgrades,...logins.map(c=>c.event),...changes.filter(c=>c.event.seq>historyStart).map(c=>c.event)].sort((a,b)=>a.seq-b.seq)){
+  for(const next of [...upgrades,...logins.filter(c=>c.event.seq>historyStart).map(c=>c.event),...changes.filter(c=>c.event.seq>historyStart).map(c=>c.event)].sort((a,b)=>a.seq-b.seq)){
     if(next.type==='line-service.login-registered'){
       const state=applyLoginChange(logins.find(c=>c.event.seq===next.seq),{installation:saved,plist,last});
       saved=state.installation;last=state.last;continue;

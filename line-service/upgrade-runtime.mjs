@@ -16,14 +16,15 @@ import {loadDiscoveredRoutes} from '../lanes/routes.mjs';
 import {installationPhaseProof,settledInstallation} from './runtime-phase.mjs';
 import {requireRecordCompatibility} from '../lib/record-compatibility.mjs';
 import {probationRuntime} from './probation.mjs';
+import {completionFile} from './probation-completion.mjs';
 
 const git=(repo,args)=>execFileSync('git',['--no-optional-locks','-C',repo,...args],{encoding:'utf8',stdio:['ignore','pipe','pipe'],timeout:10000}).trim();
 const same=(a,b)=>canonical(a)===canonical(b);
 const json=v=>JSON.stringify(v)+'\n';
 
-function releaseRoot(root,home,repo,{allowEnded=false}={}){
+function releaseRoot(root,home,repo,{allowEnded=false,ordinary=false}={}){
   if(!path.isAbsolute(root??'')||path.resolve(root)!==root||fs.realpathSync(root)!==root)throw Error('name an exact immutable accepted release root');
-  const trial=probationRuntime(repo,{root,home,allowEnded});
+  const trial=ordinary?null:probationRuntime(repo,{root,home,allowEnded});
   if(trial)return trial;
   const release=checkRelease(home,path.basename(root),{verifyFiles:true});
   if(release.root!==root)throw Error('release root differs from the installation home');
@@ -46,6 +47,7 @@ export function upgradeRuntime({repo,org,id,fromRoot,targetRoot,rollback=false,d
     return {project:b.project,native:{name:b.native.name,pane:b.native.pane_id,workspace:b.native.workspace_id,terminal:b.native.terminal_id,session:b.native.agent_session.value}};
   };
   const owner=bind(),direction=rollback?'rollback':'upgrade';
+  const savedBytes=readPlainFile(installationFile),saved=JSON.parse(savedBytes),plistBytes=readPlainFile(file);
   const initial=()=>{
     if(!same(bind(),owner))throw Error('upgrade native owner changed');
     for(const name of ['STOP','HOLD'])if(fs.existsSync(path.join(c.repo,'.lane/supervisor',name)))throw Error('project STOP/HOLD prevents service upgrade');
@@ -54,7 +56,10 @@ export function upgradeRuntime({repo,org,id,fromRoot,targetRoot,rollback=false,d
     if(git(c.repo,['symbolic-ref','--short','HEAD'])!==main||git(c.repo,['status','--porcelain=v1','--untracked-files=all']))throw Error('upgrade requires clean canonical main');
     // Reading the retained previous runtime is recovery/provenance, never a
     // fresh trial admission, including after completion or withdrawal.
-    const previous=releaseRoot(fromRoot,home,c.repo,{allowEnded:true}),runtime=releaseRoot(targetRoot,home,c.repo);
+    const ordinary=saved.migration?.file===completionFile(c,saved.migration?.id);
+    if(ordinary&&!fs.existsSync(path.join(targetRoot,'line-service/probation-completion.mjs')))
+      throw Error('upgrade target lacks the probation completion reader; retain the current runtime');
+    const previous=releaseRoot(fromRoot,home,c.repo,{allowEnded:true,ordinary}),runtime=releaseRoot(targetRoot,home,c.repo);
     if(rollback&&previous.probation){
       const prior=previous.probation.previous;
       if(!same(runtime,prior.release)||digest(readPlainFile(path.join(targetRoot,'.release-manifest.json')))!==prior.manifest_sha256)
@@ -67,7 +72,6 @@ export function upgradeRuntime({repo,org,id,fromRoot,targetRoot,rollback=false,d
   };
   const snapshot=initial(),loaded=loadEvents(c.org);if(loaded.tornTail)throw Error('incomplete record prevents service upgrade');
   requireRecordCompatibility(targetRoot,loaded.events);
-  const savedBytes=readPlainFile(installationFile),saved=JSON.parse(savedBytes),plistBytes=readPlainFile(file);
   if(saved.repo!==c.repo||saved.org!==c.org||saved.file!==file||saved.target!==target||saved.node!==process.execPath||!['installed','uncertain-or-refused'].includes(saved.phase)||!(saved.migration||saved.fresh_install))throw Error('saved migrated/fresh installation binding differs; retain it');
   const history=events=>{
     const cutovers=events.filter(e=>e.type==='line-service.cutover'&&e.project===c.identity&&e.org===c.org);

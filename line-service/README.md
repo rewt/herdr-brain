@@ -836,8 +836,14 @@ record readers and valid installation/plist history. Preview before ending:
 # Ordinary probation-withdraw has the same continuation guard.
 ```
 
+Development-bootstrap completion uses the stopped-service
+[ordinary-history handoff](PROBATION-COMPLETION.md) before later upgrades. Run
+that completion from the exact installed root carrying its reader; its preview
+also supplies an optional exact plan for apply.
+
 Successful ordinary ending removes the exception while keeping ordinary pin
-admission. No native input, cancellation, installation edit or restart occurs.
+admission. Bootstrap completion additionally converts the installation to an
+ordinary migration anchor. No native input, cancellation or restart occurs.
 Explicit `probation-withdraw --emergency` permits deliberate revocation during
 project STOP/HOLD even without a continuation. It retains captured workers and
 callbacks, but can intentionally leave no admissible runtime; it is containment,

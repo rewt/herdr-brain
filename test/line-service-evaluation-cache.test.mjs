@@ -37,6 +37,43 @@ function fixture(t){
 const work=(id,extra={})=>({type:'item.added',id,role:'engineer',title:id,...extra});
 const summary=rows=>rows.findLast(r=>r.action==='pass-complete');
 
+test('warm review admission holds remain visible without evaluation or launch and recover after policy release',t=>{
+  const f=fixture(t),config=JSON.parse(fs.readFileSync(f.config));
+  config.review_admission={enabled:true,producer_groups:[],canonical_commits:[],hold_ordinary:true};
+  fs.writeFileSync(f.config,JSON.stringify(config));
+  f.append([work('ENG-1'),{type:'item.added',id:'REV-1',role:'reviewer',title:'Legacy review'}]);
+  const held=()=>JSON.parse(fs.readFileSync(path.join(f.directory,'effects.json'))).review_admission.held;
+  const expected=[['ENG-1','ordinary','REVIEW_ADMISSION_ORDINARY_HELD'],['REV-1','unknown','REVIEW_ADMISSION_BINDING_UNKNOWN']];
+  const projection=rows=>rows.map(({item,kind,code})=>[item,kind,code]).sort(([a],[b])=>a.localeCompare(b));
+  const cold=f.pass(),original=held();
+  assert.deepEqual(projection(original),expected);
+  assert.deepEqual(projection(cold.filter(row=>row.action==='review-admission-held')),expected);
+  assert.equal(summary(cold).evaluations.admission_evaluated,2);
+  for(let n=0;n<2;n++){
+    const warm=f.pass(),rows=held(),journal=warm.filter(row=>row.action==='review-admission-held');
+    assert.equal(summary(warm).evaluations.admission_skipped,2);
+    assert.equal(summary(warm).evaluations.admission_evaluated,0);
+    assert.deepEqual(rows,original.map(row=>({...row,cached:true})));
+    assert.deepEqual(projection(journal),expected);
+    assert.ok(journal.every(row=>row.stage==='launch'&&row.cached===true));
+    assert.equal(warm.some(row=>['hold','admission-eligible','effect-intent'].includes(row.action)&&['ENG-1','REV-1'].includes(row.item)),false);
+    assert.deepEqual(f.calls,[]);
+    assert.equal(Object.keys(JSON.parse(fs.readFileSync(path.join(f.directory,'effects.json'))).actions).some(key=>key.startsWith('dispatch:')),false);
+  }
+  // A policy change must discard the negative and use fresh launch guards.
+  config.review_admission.hold_ordinary=false;fs.writeFileSync(f.config,JSON.stringify(config));
+  const released=f.pass();
+  assert.equal(summary(released).evaluations.admission_evaluated,2);
+  assert.equal(summary(released).evaluations.admission_skipped,0);
+  assert.deepEqual(f.calls,['ENG-1']);
+  assert.deepEqual(projection(held()),expected.slice(1));
+  const warm=f.pass();
+  assert.ok(warm.some(row=>row.action==='review-admission-held'&&row.item==='REV-1'&&row.cached===true));
+  assert.equal(warm.some(row=>row.action==='review-admission-held'&&row.item==='ENG-1'),false);
+  assert.deepEqual(f.calls,['ENG-1'],'a retained dispatch is not replayed by a later pass');
+  t.diagnostic(JSON.stringify({cold:summary(cold).evaluations,released:summary(released).evaluations,warm_held:held(),dispatches:f.calls,native:'scripted; live acceptance unrun'}));
+});
+
 test('large held backlog skips unchanged evaluations across process instances and invalidates only dependent ancestry/links',t=>{
   const f=fixture(t),events=[];
   for(let n=1;n<=200;n++)events.push({type:'item.added',id:`G-${n}`,kind:'goal',title:'Parent',meta:{hold:true}},work(`ENG-${n}`,{parent:`G-${n}`}));

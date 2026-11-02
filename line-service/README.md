@@ -52,6 +52,8 @@ Each pass retains typed `REVIEW_ADMISSION_PRODUCER_NOT_ALLOWED`,
 `REVIEW_ADMISSION_CANONICAL_NOT_ALLOWED`, `REVIEW_ADMISSION_BINDING_UNKNOWN`, or
 `REVIEW_ADMISSION_ORDINARY_HELD` rows in `passes.jsonl` and
 `effects.json.review_admission.held` under the existing project service directory.
+Warm negative-cache hits retain these per-pass rows with `cached: true`, without
+repeating eligibility evaluation or granting launch authority.
 These are expected selection holds, separate from review errors and verdicts.
 The read-only view shows exact selectors, policy holds and independent source
 holds without queueing or dispatching anything. An allowed row still needs every

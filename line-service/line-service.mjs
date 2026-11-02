@@ -514,12 +514,15 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       }
       effects.ordinary_admission.exclusions={count:exclusions.length,by_code,digest:digest(exclusions.sort(([a],[b])=>a.localeCompare(b)))};
       noticesDirty=true;log({action:'ordinary-admission-exclusions',...effects.ordinary_admission.exclusions});
+      const retainReviewAdmissionHold=row=>{
+        effects.review_admission.held.push(row);noticesDirty=true;log({action:'review-admission-held',...row});
+      };
       const admit=(subject,stage,fresh=false)=>{
         const policies=fresh?readAdmission(stage):admission;
         const hold=policyHold??reviewAdmissionHold(policies.review,reviewAdmissionSubject(subject));
         if(!hold)return reviewAdmissionSubject(subject).kind!=='ordinary'||!ordinaryHold(subject.item,subject.state??snapshot.state,stage,policies.ordinary);
         const row={stage,item:subject.item?.id,run:subject.run?.id,head:subject.target?.head??subject.item?.meta.review_target?.head,...reviewAdmissionSubject(subject),...hold};
-        effects.review_admission.held.push(row);noticesDirty=true;log({action:'review-admission-held',...row});return false;
+        retainReviewAdmissionHold(row);return false;
       };
       snapshot=current();
       // Saved timely proposals are idempotent record facts, independent of
@@ -897,7 +900,13 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         snapshot=current();
         if(JSON.stringify(queuePolicy(snapshot.state))!==JSON.stringify(standing)||queueSelection(snapshot.state)!==selection){log({action:'queue-selection-changed'});break;}
         const observation=evaluationCache.probe('admission',{snapshot,item:item.id,policy:{...evaluationPolicy,standing}});
-        if(observation.skip)continue;
+        if(observation.skip){
+          // A cached exclusion still belongs in this pass's policy projection.
+          // Restore only its diagnostic row; the hit never enters launch work.
+          const held=observation.reason?.review_admission;
+          if(held)retainReviewAdmissionHold({...held,cached:true});
+          continue;
+        }
         if(!queueSelected(snapshot.state.items.get(item.id),snapshot.state,ordinaryPolicy)){observation.retain('not selected');continue;}
         const obsolete=obsoleteDecision(snapshot.state.items.get(item.id),snapshot);
         if(obsolete){
@@ -924,7 +933,11 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         }
         const hold=itemLaunchHold(snapshot.state,item.id,snapshot.events);
         if (reserved(item) || hold) { note(`dispatch:${item.id}`, 'held or reserved ready item needs judgment',hold?{subject:hold.subject}:{},true);observation.retain('held or reserved');continue; }
-        if(!admit({item:snapshot.state.items.get(item.id)},'launch')){observation.retain('admission policy');continue;}
+        const heldBefore=effects.review_admission.held.length;
+        if(!admit({item:snapshot.state.items.get(item.id)},'launch')){
+          const held=effects.review_admission.held[heldBefore];
+          observation.retain(held?{review_admission:held}:'admission policy');continue;
+        }
         if (roleIs(item, 'REV') && !isQueueReview(item)) { note(`dispatch:${item.id}`, 'T2 legacy/manual review queue binding UNKNOWN; retain existing owner/attempt'); observation.retain('legacy review binding');continue; }
         try {
           const key = `dispatch:${item.id}:${input}`;

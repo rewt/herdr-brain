@@ -12,6 +12,7 @@ import {loadEvents, transact} from '../../lib/store.mjs';
 import {fold} from '../../lib/state.mjs';
 import {gitProject} from '../../lib/project.mjs';
 import {dispatchLaneName} from '../../lib/lane-name.mjs';
+import {ownerProcess} from '../../lib/process-owner.mjs';
 import {createLineService, serviceDirectory} from '../../line-service/line-service.mjs';
 import {runCloseoutTurn} from '../../line-service/closeout-turn.mjs';
 import {developmentRoot} from '../../line-service/cutoff.mjs';
@@ -28,7 +29,9 @@ export function notificationFixture(t, {startFail=false,topic='topic',item='ENG-
   const laneTopic=dispatchLaneName(topic,item),lane=path.join(f.root,`lane-${laneTopic}`);
   setSessionEnvironment(t,{HERDR_MONITOR_FLEET:f.env.HERDR_MONITOR_FLEET});
   Object.assign(f.env,{HERDR_BRAIN_ROOT:source,LANE_WORKTREE_ROOT:f.root,
-    MONITOR_SUPERVISOR_AGENT:'supervisor-test',HERDR_TEST_SCRATCH_ROOTS:'[]'});
+    MONITOR_SUPERVISOR_AGENT:'supervisor-test',HERDR_TEST_SCRATCH_ROOTS:'[]',
+    // Keep fake native observations on one readable process and birth identity.
+    FAKE_RETIREMENT_OWNER:JSON.stringify(ownerProcess(process.pid))});
   fs.symlinkSync(f.org,path.join(f.repo,'.org'));
   fs.writeFileSync(path.join(f.repo,'.git/info/exclude'),'.org/\n.lane/\n.lane.json\n');
   fs.writeFileSync(path.join(f.repo,'.lane.json'),JSON.stringify({main:'main',

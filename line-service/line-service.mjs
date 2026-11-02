@@ -21,7 +21,7 @@ import { checkSessionCap,dispatchPool } from '../dispatch/session-cap.mjs';
 import { noticeLock } from '../supervisor/notice-lock.mjs';
 import { closeoutRevision, scheduleLineCloseouts,lineServiceOwnsCleanup } from '../lib/closeout.mjs';
 import { parseArgs, isMain } from '../lib/cli-help.mjs';
-import { reviewAttempt, readServiceJournal } from './review.mjs';
+import { reviewAttempt } from './review.mjs';
 import {referenceRevision} from './review-reference-proof.mjs';
 import {reviewQueueNoMutation} from './review-queue-outcome.mjs';
 import {completionAttempts,completionPlanningProof,reconcileReviewCompletion} from './review-completion.mjs';
@@ -59,6 +59,7 @@ import {commandIntent,finishCommand,forgetActiveCommand,pendingSubjectCommand,re
 import {refreshJournal,effectSubject} from './scheduling.mjs';
 import {appendPassJournal,withPassJournal,passJournalSize,readPassJournal} from './pass-journal.mjs';
 import {negativeEvaluationCache,sourceEvaluationInputs} from './evaluation-cache.mjs';
+import {readSchedulingJournal,writeEffectJournal,writeEvaluationCache,evaluationCacheFile} from './journal.mjs';
 import {observeGeneralOwners} from './general-owner-alarm.mjs';
 import {observeRecoveryAdmission} from './recovery-admission.mjs';
 import {consumeExceptions,returnExceptionReports,checkExceptionTriage} from './exception-triage.mjs';
@@ -168,16 +169,20 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
   const sourceGit = (cwd, args) => execFileSync('git', ['--no-optional-locks', '-C', cwd, ...args], {
     env: childEnv, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 32 * 1024 * 1024,timeout:10000,
   }).trim();
+  const timed = (name, operation) => {
+    const start=performance.now();
+    try{return operation();}finally{if(timings)timings[name]=(timings[name]??0)+performance.now()-start;}
+  };
   const observe = ({ closeout = false,releaseOnly=false } = {}) => {
     const started = performance.now();
     if (timings) timings.snapshots++;
-    const live = identify(repo);
+    const live = timed('snapshot_identity_ms',()=>identify(repo));
     if (live.identity !== project.identity || live.canonical !== repo) throw Error('project identity changed');
-    if(bundleRelease().commit)acceptedRuntime(repo,{verifyFiles:false,home:runtimeHome});
+    if(bundleRelease().commit)timed('snapshot_runtime_ms',()=>acceptedRuntime(repo,{verifyFiles:false,home:runtimeHome}));
     if(closeout)assertCloseoutFences(project,org,{releaseOnly});
     else if (fs.existsSync(path.join(directory, 'STOP')) || fs.existsSync(path.join(repo, '.lane/supervisor/STOP')) ||
         fs.existsSync(path.join(repo, '.lane/supervisor/HOLD'))) throw Error('STOP/HOLD prevents line-service effects');
-    const loaded = loadRecord(org);
+    const loaded = timed('snapshot_materialize_ms',()=>loadRecord(org));
     if (loaded.tornTail) throw Error('incomplete record tail');
     const result = { events: loaded.events, tornTail: loaded.tornTail, state: loaded.state };
     if (timings) timings.record_snapshot_ms += performance.now() - started;
@@ -255,22 +260,33 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       log({action:'closeout-timing',duration_ms:closeout_ms,budget_ms:CLOSEOUT_TURN_BUDGET_MS});
     }
     let release = acquirePass(),lockedAt=performance.now();
-    let effects,checkpointNotices;
+    let effects,checkpointNotices,checkpointCache;
     const passAt=now(),heartbeat=phase=>writeFileAtomic(path.join(directory,'heartbeat.json'),JSON.stringify({at:now(),started_at:passAt,project:project.identity,source:sourceRoot,phase,pid:process.pid})+'\n',0o600);
     heartbeat('starting');
     try {
       const passStarted = performance.now();
+      const passCPU=process.cpuUsage();
       let workStarted=workClock();const maintenanceStarted=workStarted,expired=()=>workClock()-workStarted>=passBudgetMs;
       timings = { closeout_ms,snapshots: 0, record_snapshot_ms: 0, effect_command_ms: 0, historical_intake_skipped: 0, historical_review_skipped: 0, closeout_retained: 0,outcome_decisions_deferred:0,effects_journal_writes:0,notice_record_attempts:0,
-        pass_lock_ms:0,pass_lock_max_segment_ms:0,suspended_ms:0 };
-      effects = readServiceJournal(journal) ?? { identity: project.identity, org, actions: {}, notices: {} };
+        pass_lock_ms:0,pass_lock_max_segment_ms:0,suspended_ms:0,effects_journal_bytes:0,effects_journal_serialize_ms:0,effects_journal_write_ms:0,
+        evaluation_cache_writes:0,evaluation_cache_bytes:0,evaluation_cache_serialize_ms:0,evaluation_cache_write_ms:0 };
+      effects = timed('journal_read_ms',()=>readSchedulingJournal(journal)) ?? { identity: project.identity, org, actions: {}, notices: {} };
       if (effects.identity !== project.identity || effects.org !== org) throw Error('effect journal project binding changed');
       const audit=path.join(directory,'passes.jsonl'),restored=replayNoticeAudit(audit,effects);let noticesDirty=false;
+      let cacheDirty=Boolean(effects.negative_evaluations)&&!fs.existsSync(evaluationCacheFile(journal));
       timings.notice_audit_replayed=restored.length;
       // Older unbound rows remain visible and unchanged; they grant no effect.
       timings.review_error_unbound=0;
       for(const [key,e]of Object.entries(effects.record_notices??{}))if(e.review){try{noticeBoundary(key,e);}catch{timings.review_error_unbound++;}}
-      const save = () => {if(!release)throw Error('journal mutation requires the scheduling lock');effects.notice_audit_offset=passJournalSize(audit);writeFileAtomic(journal, JSON.stringify(effects, null, 2) + '\n', 0o600);timings.effects_journal_writes++;noticesDirty=false;};
+      const accountWrite=(kind,result)=>{if(!result)return;timings[`${kind}_writes`]++;for(const k of ['bytes','serialize_ms','write_ms'])timings[`${kind}_${k}`]+=result[k];};
+      const save = () => {if(!release)throw Error('journal mutation requires the scheduling lock');effects.notice_audit_offset=passJournalSize(audit);accountWrite('effects_journal',writeEffectJournal(journal,effects));noticesDirty=false;};
+      checkpointCache=()=>{
+        if(!cacheDirty)return;
+        if(!release)throw Error('cache checkpoint requires the scheduling lock');
+        try{accountWrite('evaluation_cache',writeEvaluationCache(journal,effects));}
+        catch(error){log({action:'evaluation-cache-write-held',reason:error.message});}
+        cacheDirty=false;
+      };
       checkpointNotices=()=>{if(noticesDirty)save();};
       if(effects.pass_number!==undefined&&(!Number.isSafeInteger(effects.pass_number)||effects.pass_number<0))throw Error('service pass counter is inconsistent');
       effects.pass_number=(effects.pass_number??0)+1;save();
@@ -330,6 +346,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         ...(activeKey&&effects.actions[activeKey]?.admission?{admission:effects.actions[activeKey].admission}:{}),
         consumer:'line-service',wake_fact:'terminal command receipt on the next line wake',stuck_owner:to,...(parentCommand?{parent:parentCommand.receipt}:{})});
       const unlockSchedule=()=>{
+        checkpointCache();
         const duration_ms=performance.now()-lockedAt;timings.pass_lock_ms+=duration_ms;
         timings.pass_lock_max_segment_ms=Math.max(timings.pass_lock_max_segment_ms,duration_ms);
         log({action:'schedule-unlocked',pass:passAt,pid:process.pid,duration_ms});
@@ -352,9 +369,9 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
           while(!release)try{release=acquirePass({waitMs:1000,resume:true});}
           catch(error){if(!error.message.startsWith('locked:'))throw error;}
           lockedAt=performance.now();
-          const latest=readServiceJournal(journal);
+          const latest=timed('journal_read_ms',()=>readSchedulingJournal(journal));
           if(!latest||latest.identity!==project.identity||latest.org!==org)throw Error('journal binding changed while scheduling was yielded');
-          refreshJournal(effects,latest);stale=true;noticesDirty=false;parentCommand=previous;
+          timed('journal_refresh_ms',()=>refreshJournal(effects,latest));stale=true;noticesDirty=false;cacheDirty=false;parentCommand=previous;
           timings.suspended_ms+=performance.now()-pausedAt;workStarted+=workClock()-pausedWork;
           // A helper publishes its result before replying. Missing completion
           // remains UNKNOWN and fences maintenance, without blocking other work.
@@ -493,7 +510,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       }else if(effects.shared_watch&&effects.shared_watch.state!=='released'){effects.shared_watch={...effects.shared_watch,state:'released',released_at:now()};save();}
       const evaluationCounts={admission_evaluated:0,admission_skipped:0,source_evaluated:0,source_skipped:0};
       const evaluationCache=negativeEvaluationCache({store:()=>effects,identity:project.identity,org,repo,
-        counts:evaluationCounts,log,dirty:()=>{noticesDirty=true;}});
+        counts:evaluationCounts,log,dirty:()=>{cacheDirty=true;}});
       const evaluationPolicy={admissionPolicy,ordinaryPolicy,config,supervisor:childEnv.MONITOR_SUPERVISOR_AGENT??null};
       effects.review_admission.policy=admissionPolicy??null;
       // Observations share the next stage/pre-effect checkpoint. They grant no
@@ -1087,7 +1104,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       }catch(e){note('halt-repair',e.message);}
       checkpointNotices();
       if(performance.now()-passStarted>600000)note('long-pass','line pass exceeded ten minutes',{},true);
-      checkpointNotices();const duration_ms = performance.now() - passStarted;
+      checkpointNotices();
       for(const [key,entry]of Object.entries(effects.actions))if(entry.state!=='started'&&((entry.failure??outcomeFailure(entry)).kind==='fence'||key.startsWith('review:')&&entry.state!=='complete'&&!entry.recorded_review_status))try{
         // The dispatch status reader records both ends of a stopped recovery.
         // Do not let this generic fallback claim its decision first.
@@ -1105,10 +1122,13 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       const finalEvents=current().events,waits=finalEvents.filter(e=>e.type==='closeout.waiting'&&e.identity===project.identity),
         statuses=waits.map(w=>({wait:w,status:closeoutWaitState(w,finalEvents)})),
         pending=statuses.filter(row=>!['complete','classified'].includes(row.status)).map(row=>row.wait);
+      checkpointCache();
+      const duration_ms=performance.now()-passStarted;
       log({ action: 'pass-complete', starts,unknown_open:pending.length,unknown_oldest_min:pending.length?Math.max(0,...pending.map(w=>(Date.parse(now())-Date.parse(w.at))/60000)):0,
         unknown_settled:statuses.filter(row=>row.status==='complete').length,
         classified_retained:statuses.filter(row=>row.status==='classified').length,unknown_escalated:Object.keys(effects.outcome_decisions??{}).length,
         evaluations:evaluationCounts,backlog:ordered.length,
+        resources:{cpu_us:process.cpuUsage(passCPU),rss_bytes:process.memoryUsage.rss(),max_rss_kib:process.resourceUsage().maxRSS,scope:'scheduler process only; child trees require the external diagnostic'},
         timing: { ...timings,pass_lock_ms:timings.pass_lock_ms+performance.now()-lockedAt,
           pass_lock_max_segment_ms:Math.max(timings.pass_lock_max_segment_ms,performance.now()-lockedAt),duration_ms,
           other_scan_and_guard_ms: Math.max(0, duration_ms - timings.effect_command_ms - timings.record_snapshot_ms) } });
@@ -1119,7 +1139,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         catch(error){log({action:'live-witness-held',reason:error.message});}
       }
       return { result: 'pass-complete', directory };
-    } finally {commandTurn=undefined;try{if(release)checkpointNotices?.();}finally{try{heartbeat('finished');}finally{if(release){
+    } finally {commandTurn=undefined;try{if(release){checkpointNotices?.();checkpointCache?.();}}finally{try{heartbeat('finished');}finally{if(release){
       log({action:'schedule-unlocked',pass:passAt,pid:process.pid,duration_ms:performance.now()-lockedAt});release();release=null;
     }}} }
   }

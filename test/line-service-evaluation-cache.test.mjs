@@ -7,6 +7,7 @@ import {spawnSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {createLineService,sourceRoot,serviceDirectory} from '../line-service/line-service.mjs';
 import {negativeEvaluationCache,sourceEvaluationInputs} from '../line-service/evaluation-cache.mjs';
+import {evaluationCacheFile,readSchedulingJournal} from '../line-service/journal.mjs';
 import {gitProject} from '../lib/project.mjs';
 import {initOrg,transact,loadRecord} from '../lib/store.mjs';
 import {dispatchSourceBinding,deliveredSourceProof} from '../lib/source-provenance.mjs';
@@ -36,6 +37,20 @@ function fixture(t){
 }
 const work=(id,extra={})=>({type:'item.added',id,role:'engineer',title:id,...extra});
 const summary=rows=>rows.findLast(r=>r.action==='pass-complete');
+
+test('held observations checkpoint once per lock turn and warm passes write no unchanged cache',t=>{
+  const f=fixture(t);f.append([work('ENG-1',{meta:{hold:true}}),work('ENG-2',{meta:{hold:true}})]);
+  const first=summary(f.pass()),cache=evaluationCacheFile(path.join(f.directory,'effects.json')),inode=fs.statSync(cache).ino;
+  assert.equal(first.timing.evaluation_cache_writes,1);
+  assert.equal(first.timing.evaluation_cache_bytes,fs.statSync(cache).size);
+  assert.ok(first.timing.effects_journal_bytes>0);
+  assert.equal(Object.hasOwn(JSON.parse(fs.readFileSync(path.join(f.directory,'effects.json'))),'negative_evaluations'),false);
+  const warm=summary(f.pass());assert.equal(warm.evaluations.admission_skipped,2);
+  assert.equal(warm.timing.evaluation_cache_writes,0);assert.equal(fs.statSync(cache).ino,inode);
+  assert.ok(warm.resources.cpu_us.user>=0&&warm.resources.cpu_us.system>=0);assert.ok(warm.resources.rss_bytes>0);
+  assert.ok(warm.timing.snapshot_materialize_ms>=0&&warm.timing.snapshot_identity_ms>=0);
+  assert.equal(f.calls.length,0);
+});
 
 test('warm review admission holds remain visible without evaluation or launch and recover after policy release',t=>{
   const f=fixture(t),config=JSON.parse(fs.readFileSync(f.config));
@@ -197,7 +212,7 @@ test('original-cache-Major: real same-revision processes skip covered source and
     {type:'item.closed',id:'ENG-1',as:'done',completed_run:'R-1'}]);
   const delivered=loadRecord(f.org),proof=deliveredSourceProof({project:{identity:f.identity,canonical:f.repo},org:f.org,run:delivered.state.runs.get('R-1'),...delivered,git:(_repo,args)=>f.git(...args)});
   assert.equal(proof.status,'covered');assert.equal(proof.coverage,'guarded');
-  const effects=path.join(f.root,'unexpected-effects'),entries=()=>JSON.parse(fs.readFileSync(path.join(f.directory,'effects.json'))).negative_evaluations.entries;
+  const effects=path.join(f.root,'unexpected-effects'),entries=()=>readSchedulingJournal(path.join(f.directory,'effects.json')).negative_evaluations.entries;
   const pass=()=>{
     const journal=path.join(f.directory,'passes.jsonl'),before=fs.existsSync(journal)?fs.statSync(journal).size:0;
     const script=`import fs from 'node:fs';import {createLineService} from ${JSON.stringify(new URL('../line-service/line-service.mjs',import.meta.url).href)};
@@ -244,7 +259,7 @@ test('source negatives stay warm across consecutive passes with routine writes a
     assert.equal(result.status,0,result.stderr);
     return fs.readFileSync(path.join(f.directory,'passes.jsonl')).subarray(before).toString().trim().split('\n').map(JSON.parse);
   };
-  const cacheFile=path.join(f.directory,'effects.json'),entries=()=>JSON.parse(fs.readFileSync(cacheFile)).negative_evaluations.entries;
+  const cacheFile=evaluationCacheFile(path.join(f.directory,'effects.json')),entries=()=>JSON.parse(fs.readFileSync(cacheFile)).entries;
   const first=pass(),retained=Object.keys(entries()).filter(k=>k.startsWith('source:')).length;
   assert.equal(retained,3);assert.equal(summary(first).evaluations.source_evaluated,retained);
   for(const entry of Object.values(entries())){
@@ -262,7 +277,7 @@ test('source negatives stay warm across consecutive passes with routine writes a
   assert.equal(summary(second).evaluations.source_skipped,retained);assert.equal(summary(second).evaluations.source_changed??0,0);
   assert.equal(summary(second).evaluations.admission_skipped,3);
   // A matching legacy entry upgrades its evidence without losing a warm hit.
-  const saved=JSON.parse(fs.readFileSync(cacheFile));delete saved.negative_evaluations.entries['source:R-1'].components;fs.writeFileSync(cacheFile,JSON.stringify(saved));
+  const saved=JSON.parse(fs.readFileSync(cacheFile));delete saved.entries['source:R-1'].components;fs.writeFileSync(cacheFile,JSON.stringify(saved));
   replace();const upgraded=pass();assert.equal(summary(upgraded).evaluations.source_skipped,retained);assert.ok(entries()['source:R-1'].components);
   fs.writeFileSync(path.join(workers[0],'source'),'genuinely changed source');f.gitAt(workers[0],'add','source');f.gitAt(workers[0],'commit','-qm','Changed source input');
   const changed=pass(),misses=changed.filter(r=>r.action==='evaluation-cache-miss'&&r.miss==='changed'),sourceMiss=misses.find(r=>r.stage==='source');
@@ -390,7 +405,7 @@ test('real passes skip source and admission across unrelated concurrent landings
   f.append([work('ENG-2'),{type:'item.closed',id:'ENG-2',as:'done'},{type:'note.added',id:'ENG-2',text:'Unrelated report names ENG-1 and R-1'}]);
   const warm=f.pass();assert.equal(summary(warm).evaluations.source_skipped,1);assert.equal(summary(warm).evaluations.admission_skipped,1);
   assert.equal(warm.some(r=>r.action==='hold'&&r.boundary?.startsWith('review-source:R-1:')),false);
-  const file=path.join(f.directory,'effects.json'),damage=value=>{const data=JSON.parse(fs.readFileSync(file));if(value===undefined)delete data.negative_evaluations;else data.negative_evaluations=value;fs.writeFileSync(file,JSON.stringify(data));};
+  const file=evaluationCacheFile(path.join(f.directory,'effects.json')),damage=value=>{if(value===undefined)fs.unlinkSync(file);else fs.writeFileSync(file,JSON.stringify(value));};
   for(const value of [undefined,{schema:'damaged',entries:null}]){
     damage(value);const recovery=f.pass();
     assert.equal(summary(recovery).evaluations.source_evaluated,1);assert.equal(summary(recovery).evaluations.admission_evaluated,1);

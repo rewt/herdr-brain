@@ -170,6 +170,22 @@ action on the same subject. On return the pass reacquires the scheduling lock
 and reloads the journal in place before writing its result. Other passes' receipts
 are inherited. Productive command time does not consume the scheduling allowance.
 
+The strict effect journal retains every original action, intent and result.
+Rebuildable negatives live in `negative-evaluations.json` under the same lock;
+only a dirty cache is checkpointed before yielding or releasing it. Legacy
+embedded negatives migrate on the first pass. Missing, damaged, foreign or
+redirected cache files force fresh evaluation and never supply effect authority.
+A cache-write failure leaves the original effect journal intact and is diagnosed;
+it does not justify replaying an effect. Readers that inspect actions continue to
+use `effects.json` alone.
+
+Pass counters record requested journal/cache bytes, serialization/write time,
+journal reload/refresh time and snapshot identity/runtime/materialization time.
+CPU and RSS counters cover the scheduler process only; a bounded external
+diagnostic must attribute its child trees. Requested bytes are not physical disk
+bytes. `duration_ms` includes final bookkeeping and the final cache checkpoint;
+older rows stopped that clock before final bookkeeping, so compare with care.
+
 A pass's start budget counts dispatch commands when they are issued, including
 failed or uncertain replies and guarded preflight continuations. A lost reply
 may already have started a session, so it cannot free a start for another

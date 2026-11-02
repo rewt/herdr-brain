@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { createLineService, wakeLineService, sourceRoot, reviewAttempt, serviceDirectory, routeFor } from '../line-service/line-service.mjs';
+import {readSchedulingJournal} from '../line-service/journal.mjs';
 import { launchPlist } from '../line-service/launchd.mjs';
 import { noticeLock } from '../supervisor/notice-lock.mjs';
 import { gitProject } from '../lib/project.mjs';
@@ -489,7 +490,7 @@ test('engineering-idle ignores retired automatic judgments across completed pass
   for(let n=0;n<3;n++)f.service({haltAfter:3}).pass();
   assert.equal(f.calls.length,0,'no new judgment or recursive repair dispatch');
   assert.deepEqual(loadEvents(f.org).events,original,'retired READY records and their full history stay intact');
-  const journal=JSON.parse(fs.readFileSync(path.join(f.service().directory,'effects.json')));
+  const journal=readSchedulingJournal(path.join(f.service().directory,'effects.json'));
   assert.equal(journal.halt_progress.count,0);assert.deepEqual(journal.actions,{});
   const observations=fs.readFileSync(path.join(f.service().directory,'passes.jsonl'),'utf8').trim().split('\n').map(JSON.parse).filter(r=>r.action==='engineering-idle-observation');
   assert.equal(observations.length,3);assert.ok(observations.every(r=>r.observation.ready.length===0));
@@ -565,7 +566,7 @@ test('outcome retirement line pass never evaluates terminal proposals and still 
   const rows=fs.readFileSync(path.join(service.directory,'passes.jsonl'),'utf8').trim().split('\n').map(JSON.parse);
   assert.ok(rows.some(r=>r.action==='pass-complete'));
   assert.ok(!rows.some(r=>retired.includes(r.item)),'no admission probe, policy hold or dispatch for terminal proposals');
-  const effects=JSON.parse(fs.readFileSync(path.join(service.directory,'effects.json')));
+  const effects=readSchedulingJournal(path.join(service.directory,'effects.json'));
   for(const id of retired)assert.equal(effects.negative_evaluations.entries[`admission:${id}`],undefined,'not even a cached admission evaluation');
   assert.ok(f.calls.some(c=>c.args[1]==='DEC-4'),'the real current defect keeps ordinary decision dispatch');
   assert.equal(loadEvents(f.org).events.some(e=>e.type==='closeout.effect'),false,'fixture never executes or clears the refused cleanup');

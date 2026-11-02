@@ -355,9 +355,19 @@ export async function runCanary(c) {
     try {
       await until(()=>fs.existsSync(ownerFile),'shared observer owner receipt');
       const owner=JSON.parse(fs.readFileSync(ownerFile));assert.equal(owner.pid,observer.pid);assert.equal(owner.source,bundle);
+      const sharedHost=job=>{
+        assert.equal(job.watchMode,'shared');assert.equal(job.watcher.run,job.run);
+        assert.equal(job.watcher.shared,path.join(org,'watch/shared',job.run+'.json'));
+        assert.deepEqual(job.watcher.host,{pid:owner.pid,identity:owner.identity,log:owner.log});
+        assert.equal(ownerAlive(job.watcher.host),true,'shared duty belongs to the live original observer');
+        assert.equal(job.watcher.pid,undefined,'shared duty has no per-run resident');
+        const duty=JSON.parse(fs.readFileSync(job.watcher.shared));
+        assert.equal(duty.run,job.run);assert.equal(duty.source,bundle);
+        assert.deepEqual(duty.ownership,job.ownership);
+      };
       fs.writeFileSync(path.join(root,'shared-watch'),'shared dispatch');
       const sharedItem=record(['add','Shared installed observation control','--role','engineer']).match(/ENG-\d+/)[0];service(1).pass();
-      const job=journals().find(j=>j.item===sharedItem);assert.ok(job,audit());assert.equal(job.watchMode,'shared');assert.equal(job.watcher.pid,owner.pid);
+      const job=journals().find(j=>j.item===sharedItem);assert.ok(job,audit());sharedHost(job);
       const step=path.join(org,'watch/steps',job.run+'.json'),observations=path.join(org,'watch/observer/observations.jsonl');
       const rows=()=>fs.existsSync(observations)?fs.readFileSync(observations,'utf8').trim().split('\n').filter(Boolean).map(JSON.parse):[];
       const settled=async(file,label)=>until(()=>{
@@ -382,7 +392,7 @@ export async function runCanary(c) {
         fs.existsSync(path.join(org,'watch/observer/held',job.run+'.json')),'vanished original consumer failure durably held');
       const vanishedStep=JSON.parse(fs.readFileSync(step));assert.equal(vanishedStep.phase,'failed');
       const reportItem=record(['add','Shared report and cleanup control','--role','engineer']).match(/ENG-\d+/)[0];service(1).pass();
-      const reportJob=journals().find(j=>j.item===reportItem);assert.ok(reportJob,audit());assert.equal(reportJob.watchMode,'shared');
+      const reportJob=journals().find(j=>j.item===reportItem);assert.ok(reportJob,audit());sharedHost(reportJob);
       await settled(path.join(org,'watch/steps',reportJob.run+'.json'),'report shared consumer durably waiting and observer idle');
       report(reportJob,[]);
       await until(()=>events().some(e=>e.type==='note.added'&&e.id===reportJob.run&&e.watch_notice_id===`watch:${reportJob.run}:final`),'lost report hint recovered by original finite watcher');
@@ -396,6 +406,7 @@ export async function runCanary(c) {
       const reconciled=rows().filter(r=>r.action==='reconciled'&&r.reason==='safety');assert.ok(reconciled.length>=3);
       assert.ok(rows().every(r=>r.active===undefined||r.active<=2));
       stage('shared-observer',{source:bundle,owner,run:job.run,reportRun:reportJob.run,watchMode:'shared',perRunResidents:0,
+        watchers:[job.watcher,reportJob.watcher],
         droppedHints:['native blocked','native vanished','report file'],safetyMs:30000,reconciled,repairs,blockedNotes,
         vanishedStep,originalBinding:original,reportOnce:true,reportFolderRemoved:true,reportNativeReleased:true,consumerCap:2});
     } finally {

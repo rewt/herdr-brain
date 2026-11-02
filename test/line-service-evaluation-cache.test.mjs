@@ -66,7 +66,7 @@ test('pass residual partitions held admission and a yielded command with real wr
   for(const field of fields.filter(k=>k!=='unattributed_ms'))assert.ok(timing[field]>0,field);
   assert.ok(timing.lock_reacquire_wait_ms>=50,'contention is timed separately from the command and admission');
   assert.deepEqual(dispatches,['ENG-2']);assert.equal(pass.starts,1);
-  assert.ok(rows.some(r=>r.action==='hold'&&r.scope?.item==='ENG-1'));
+  assert.ok(rows.some(r=>r.action==='hold'&&r.boundary==='dispatch:ENG-1'&&r.scope?.subject==='ENG-1'));
   const effects=readSchedulingJournal(path.join(f.directory,'effects.json'));
   const launches=Object.entries(effects.actions).filter(([key])=>key.startsWith('dispatch:'));
   assert.equal(launches.length,1);assert.equal(launches[0][1].state,'complete');assert.equal(launches[0][1].commands.length,1);

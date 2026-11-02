@@ -154,13 +154,23 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
   for (const key of Object.keys(childEnv)) if (/^(HERDR_(ENV|PANE_ID|TAB_ID|WORKSPACE_ID)|CODEX_(SESSION_ID|THREAD_ID)|GIT_.*|LANE_CONFIG)$/.test(key)) delete childEnv[key];
   delete childEnv.ORG_GUARD_OVERRIDE; // A routine line never inherits an explicit judgment override.
   delete childEnv.HERDR_LINE_SUBJECT;delete childEnv.HERDR_LINE_SUBJECT_TOKEN;
-  let timings,commandTurn;
+  let timings,commandTurn,timingStage;
+  // Exclusive wall-time partition. Nested snapshots, commands, checkpoints and
+  // lock waits leave their enclosing scan/maintenance section while they run.
+  const changeTimingStage=(name,at=performance.now())=>{
+    if(!timingStage)return;
+    timings[timingStage.name]+=at-timingStage.at;
+    timingStage={name,at};
+  };
+  const inStage=(name,operation)=>{
+    const previous=timingStage?.name;
+    changeTimingStage(name);
+    try{return operation();}finally{if(previous)changeTimingStage(previous);}
+  };
   const invoke = (exe, args, { receipt = false, environment } = {}) => {
-    const started = performance.now();
     let r;
-    try { const options={ cwd: repo, env: environment?{...childEnv,...environment}:childEnv, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024,timeout:0 };
-      r = commandTurn ? commandTurn(exe,args,options) : command(exe,args,options); }
-    finally { if (timings) timings.effect_command_ms += performance.now() - started; }
+    const options={ cwd: repo, env: environment?{...childEnv,...environment}:childEnv, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024,timeout:0 };
+    r = commandTurn ? commandTurn(exe,args,options) : inStage('effect_command_ms',()=>command(exe,args,options));
     if (r.error || r.status !== 0) throw Object.assign(Error((r.stderr || r.stdout || r.error?.message || `exit ${r.status}`).trim()), { code:r.error?.code,receipt: { status: r.status, signal: r.signal, stdout: r.stdout, stderr: r.stderr,error:r.error?.code,...(r.activity?{activity:r.activity,signal_sent:r.signal_sent}:{}) } });
     return receipt ? { status: r.status, signal: r.signal ?? null, stdout: r.stdout ?? '', stderr: r.stderr ?? '' } : r.stdout?.trim() ?? '';
   };
@@ -173,8 +183,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
     const start=performance.now();
     try{return operation();}finally{if(timings)timings[name]=(timings[name]??0)+performance.now()-start;}
   };
-  const observe = ({ closeout = false,releaseOnly=false } = {}) => {
-    const started = performance.now();
+  const observe = ({ closeout = false,releaseOnly=false } = {}) => inStage('record_snapshot_ms',()=>{
     if (timings) timings.snapshots++;
     const live = timed('snapshot_identity_ms',()=>identify(repo));
     if (live.identity !== project.identity || live.canonical !== repo) throw Error('project identity changed');
@@ -185,9 +194,8 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
     const loaded = timed('snapshot_materialize_ms',()=>loadRecord(org));
     if (loaded.tornTail) throw Error('incomplete record tail');
     const result = { events: loaded.events, tornTail: loaded.tornTail, state: loaded.state };
-    if (timings) timings.record_snapshot_ms += performance.now() - started;
     return result;
-  };
+  });
   const guardRun = (id, { reported = true,current=true,workspace=true } = {}) => {
     const snapshot = observe(), run = snapshot.state.runs.get(id), item = run && snapshot.state.items.get(run.item);
     if (!run || run.abandoned || !item || current&&item.runs.at(-1) !== id) throw Error('unknown, abandoned or superseded run');
@@ -269,24 +277,29 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       let workStarted=workClock();const maintenanceStarted=workStarted,expired=()=>workClock()-workStarted>=passBudgetMs;
       timings = { closeout_ms,snapshots: 0, record_snapshot_ms: 0, effect_command_ms: 0, historical_intake_skipped: 0, historical_review_skipped: 0, closeout_retained: 0,outcome_decisions_deferred:0,effects_journal_writes:0,notice_record_attempts:0,
         pass_lock_ms:0,pass_lock_max_segment_ms:0,suspended_ms:0,effects_journal_bytes:0,effects_journal_serialize_ms:0,effects_journal_write_ms:0,
-        evaluation_cache_writes:0,evaluation_cache_bytes:0,evaluation_cache_serialize_ms:0,evaluation_cache_write_ms:0 };
-      effects = timed('journal_read_ms',()=>readSchedulingJournal(journal)) ?? { identity: project.identity, org, actions: {}, notices: {} };
+        evaluation_cache_writes:0,evaluation_cache_bytes:0,evaluation_cache_serialize_ms:0,evaluation_cache_write_ms:0,
+        source_scan_ms:0,admission_scan_ms:0,canonical_index_ms:0,maintenance_review_ms:0,
+        lock_reacquire_wait_ms:0,journal_cache_checkpoint_ms:0,notice_audit_ms:0,unattributed_ms:0 };
+      timingStage={name:'unattributed_ms',at:passStarted};
+      const checkpoint=(name,operation)=>inStage('journal_cache_checkpoint_ms',()=>timed(name,operation));
+      const scanChanges=options=>inStage('source_scan_ms',()=>discoverChanges(options));
+      effects = checkpoint('journal_read_ms',()=>readSchedulingJournal(journal)) ?? { identity: project.identity, org, actions: {}, notices: {} };
       if (effects.identity !== project.identity || effects.org !== org) throw Error('effect journal project binding changed');
-      const audit=path.join(directory,'passes.jsonl'),restored=replayNoticeAudit(audit,effects);let noticesDirty=false;
+      const audit=path.join(directory,'passes.jsonl'),restored=inStage('notice_audit_ms',()=>replayNoticeAudit(audit,effects));let noticesDirty=false;
       let cacheDirty=Boolean(effects.negative_evaluations)&&!fs.existsSync(evaluationCacheFile(journal));
       timings.notice_audit_replayed=restored.length;
       // Older unbound rows remain visible and unchanged; they grant no effect.
       timings.review_error_unbound=0;
       for(const [key,e]of Object.entries(effects.record_notices??{}))if(e.review){try{noticeBoundary(key,e);}catch{timings.review_error_unbound++;}}
       const accountWrite=(kind,result)=>{if(!result)return;timings[`${kind}_writes`]++;for(const k of ['bytes','serialize_ms','write_ms'])timings[`${kind}_${k}`]+=result[k];};
-      const save = () => {if(!release)throw Error('journal mutation requires the scheduling lock');effects.notice_audit_offset=passJournalSize(audit);accountWrite('effects_journal',writeEffectJournal(journal,effects));noticesDirty=false;};
-      checkpointCache=()=>{
+      const save = () => inStage('journal_cache_checkpoint_ms',()=>{if(!release)throw Error('journal mutation requires the scheduling lock');effects.notice_audit_offset=passJournalSize(audit);accountWrite('effects_journal',writeEffectJournal(journal,effects));noticesDirty=false;});
+      checkpointCache=()=>inStage('journal_cache_checkpoint_ms',()=>{
         if(!cacheDirty)return;
         if(!release)throw Error('cache checkpoint requires the scheduling lock');
         try{accountWrite('evaluation_cache',writeEvaluationCache(journal,effects));}
         catch(error){log({action:'evaluation-cache-write-held',reason:error.message});}
         cacheDirty=false;
-      };
+      });
       checkpointNotices=()=>{if(noticesDirty)save();};
       if(effects.pass_number!==undefined&&(!Number.isSafeInteger(effects.pass_number)||effects.pass_number<0))throw Error('service pass counter is inconsistent');
       effects.pass_number=(effects.pass_number??0)+1;save();
@@ -366,12 +379,14 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         finally{
           // This is allocation waiting, never a timeout or permission to stop A.
           // No journal write is allowed until the current writer hands it back.
-          while(!release)try{release=acquirePass({waitMs:1000,resume:true});}
-          catch(error){if(!error.message.startsWith('locked:'))throw error;}
+          inStage('lock_reacquire_wait_ms',()=>{
+            while(!release)try{release=acquirePass({waitMs:1000,resume:true});}
+            catch(error){if(!error.message.startsWith('locked:'))throw error;}
+          });
           lockedAt=performance.now();
-          const latest=timed('journal_read_ms',()=>readSchedulingJournal(journal));
+          const latest=checkpoint('journal_read_ms',()=>readSchedulingJournal(journal));
           if(!latest||latest.identity!==project.identity||latest.org!==org)throw Error('journal binding changed while scheduling was yielded');
-          timed('journal_refresh_ms',()=>refreshJournal(effects,latest));stale=true;noticesDirty=false;cacheDirty=false;parentCommand=previous;
+          checkpoint('journal_refresh_ms',()=>refreshJournal(effects,latest));stale=true;noticesDirty=false;cacheDirty=false;parentCommand=previous;
           timings.suspended_ms+=performance.now()-pausedAt;workStarted+=workClock()-pausedWork;
           // A helper publishes its result before replying. Missing completion
           // remains UNKNOWN and fences maintenance, without blocking other work.
@@ -380,7 +395,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         }
       };
       commandTurn=(exe,args,options)=>{
-        const execute=ref=>{const result=command(exe,args,{...options,commandReceipt:ref});finishCommand(ref,result);return result;};
+        const execute=ref=>{const result=inStage('effect_command_ms',()=>command(exe,args,{...options,commandReceipt:ref}));finishCommand(ref,result);return result;};
         if(release)return yieldWork(exe,args,execute);
         // A direct guarded operation can make several finite commands while
         // outside scheduling. Its still-pending parent fences maintenance.
@@ -513,8 +528,8 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         counts:evaluationCounts,log,dirty:()=>{cacheDirty=true;}});
       const evaluationPolicy={admissionPolicy,ordinaryPolicy,config,supervisor:childEnv.MONITOR_SUPERVISOR_AGENT??null};
       effects.review_admission.policy=admissionPolicy??null;
-      // Observations share the next stage/pre-effect checkpoint. They grant no
-      // effect and need no separate full snapshot before that boundary.
+      // Negative observations flush at lock handoff/release. They grant no
+      // effect; admission diagnostics still share stage/pre-effect checkpoints.
       effects.ordinary_admission={schema:'ordinary-admission-pass/v1',policy:ordinaryPolicy,held:[]};noticesDirty=true;
       const ordinaryHold=(item,state,stage,policy=ordinaryPolicy)=>{
         const hold=ordinaryAdmissionHold(policy,{item,state});
@@ -524,6 +539,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       // Summarize the entire excluded backlog once, including non-ready items
       // and rows beyond the start/cap limit. Item-level reasons remain available
       // in the read-only admission view; do not fsync a diagnostic per item.
+      changeTimingStage('admission_scan_ms');
       const exclusions=[],by_code={};
       for(const item of snapshot.state.items.values())if(ordinaryPolicy?.selected_only&&!item.closed&&item.kind!=='goal'){
         const held=ordinaryAdmissionHold(ordinaryPolicy,{item,state:snapshot.state});
@@ -531,6 +547,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       }
       effects.ordinary_admission.exclusions={count:exclusions.length,by_code,digest:digest(exclusions.sort(([a],[b])=>a.localeCompare(b)))};
       noticesDirty=true;log({action:'ordinary-admission-exclusions',...effects.ordinary_admission.exclusions});
+      changeTimingStage('unattributed_ms');
       const retainReviewAdmissionHold=row=>{
         effects.review_admission.held.push(row);noticesDirty=true;log({action:'review-admission-held',...row});
       };
@@ -541,6 +558,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         const row={stage,item:subject.item?.id,run:subject.run?.id,head:subject.target?.head??subject.item?.meta.review_target?.head,...reviewAdmissionSubject(subject),...hold};
         retainReviewAdmissionHold(row);return false;
       };
+      changeTimingStage('maintenance_review_ms');
       snapshot=current();
       // Saved timely proposals are idempotent record facts, independent of
       // prompt/review recovery and the phase-zero cutoff. Refusals stay final.
@@ -588,7 +606,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         }
       }catch(e){note('review-progress',e.message);}
       snapshot=current();
-      let discovered,index;try{index=canonicalReviewIndex({events:snapshot.events,state:snapshot.state,repo,org,identity:project.identity,boundary:cutoff});discovered=discoverChanges({events:snapshot.events,state:snapshot.state,repo,org,identity:project.identity,pendingOnly:true,index,heldCache:(item,run)=>evaluationCache.probe('source',{snapshot,item:item.id,run:run.id,policy:evaluationPolicy,extra:{canonical:sourceEvaluationInputs(index,item,run),boundary:cutoff}})});}catch(e){discovered={changes:[],holds:[{reason:e.message}]};}
+      let discovered,index;try{index=inStage('canonical_index_ms',()=>canonicalReviewIndex({events:snapshot.events,state:snapshot.state,repo,org,identity:project.identity,boundary:cutoff}));discovered=scanChanges({events:snapshot.events,state:snapshot.state,repo,org,identity:project.identity,pendingOnly:true,index,heldCache:(item,run)=>evaluationCache.probe('source',{snapshot,item:item.id,run:run.id,policy:evaluationPolicy,extra:{canonical:sourceEvaluationInputs(index,item,run),boundary:cutoff}})});}catch(e){discovered={changes:[],holds:[{reason:e.message}]};}
       for(const held of discovered.holds)note(`review-source:${held.run??'boundary'}:${held.head??''}`,held.reason,{item:held.item,run:held.run,head:held.head,review:true});
       let reviewSteps=0;
       for(const {item,run,target}of discovered.changes){
@@ -627,7 +645,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
             // A report arriving after selection may change evidence without
             // changing source. Defer before intent, so the next pass selects
             // the fresh target instead of retaining a command that never ran.
-            const checked=discoverChanges({events:fresh.events,state:fresh.state,repo,org,identity:project.identity,runId:run.id}).changes.find(c=>c.item.id===item.id&&JSON.stringify(c.target)===JSON.stringify(target));
+            const checked=scanChanges({events:fresh.events,state:fresh.state,repo,org,identity:project.identity,runId:run.id}).changes.find(c=>c.item.id===item.id&&JSON.stringify(c.target)===JSON.stringify(target));
             if(!checked){
               reviewSteps--; // A stale selection did not spend a queue step.
               note(key,'Review queue deferred: immutable landed target/evidence changed before queue intent; fresh selection is required.',{item:item.id,run:run.id,head:target.head,review:true},false,{action:'review-queue-deferred',key});
@@ -648,7 +666,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
             return JSON.parse(cli('bin/org.mjs',['queue-review',selector,'--head',target.head,'--base',target.base]));
           },target,'record-queue',true,false,fresh=>{
             if(!admit({selector,target},'queue-mutation',true))return false;
-            const checked=discoverChanges({events:fresh.events,state:fresh.state,repo,org,identity:project.identity}).unattributed?.find(c=>c.selector===selector&&JSON.stringify(c.target)===JSON.stringify(target));
+            const checked=scanChanges({events:fresh.events,state:fresh.state,repo,org,identity:project.identity}).unattributed?.find(c=>c.selector===selector&&JSON.stringify(c.target)===JSON.stringify(target));
             if(!checked){
               reviewSteps--; // A stale selection did not spend a queue step.
               note(key,'Review queue deferred: immutable canonical target/evidence changed before queue intent; fresh selection is required.',{head:target.head,review:true},false,{action:'review-queue-deferred',key});
@@ -887,6 +905,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         for(const reply of replies)effect(reply.id,()=>cli('supervisor/prompt-supervisor.mjs',[reply.to,reply.message,'--org',org,'--run',reply.correlation.run,'--id',reply.id],{environment:{SUPERVISOR_INPUT_WAIT_SECONDS:'0'}}));
         stale=true;snapshot=current();
       }catch(error){note('exception-intake',error.message);}
+      changeTimingStage('admission_scan_ms');
       const standing=queuePolicy(snapshot.state);
       // Productive cleanup is allowed to finish. It cannot consume READY work's
       // independent admission allowance. All actual effects still recount and
@@ -1078,6 +1097,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       const ordered=orderQueue(snapshot.state,[...snapshot.state.items.values()].filter(item=>!item.closed&&item.kind!=='goal'),standing,classify);
       log({action:'queue-order',policy:standing,candidates:ordered.map(item=>({item:item.id,class:classify(item)}))});
       if(config&&!policyHold&&!(sharedWatchHold&&config.dispatch?.watch_mode==='shared'))admitItems(ordered);
+      changeTimingStage('maintenance_review_ms');
       // Detached acknowledgements and review activity are not engineering
       // progress. This is the end of a completed pass, under the same lock.
       const latestAdmission=readAdmission('pass-end');
@@ -1119,11 +1139,13 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         effects.outcome_decisions??={};effects.outcome_decisions[key]??=queueOutcomeDecision({repo,org,env:childEnv,check:{key,subject:{item:key.split(':')[1],effect:key},failure:entry.failure??outcomeFailure(entry),receipt:entry.receipt,
           defect:key.startsWith('review:')?'Original review-queue command returned without a linked record item; no pending status producer is available.':undefined}});save();
       }catch(e){note(key,e.message);}
+      changeTimingStage('unattributed_ms');
       const finalEvents=current().events,waits=finalEvents.filter(e=>e.type==='closeout.waiting'&&e.identity===project.identity),
         statuses=waits.map(w=>({wait:w,status:closeoutWaitState(w,finalEvents)})),
         pending=statuses.filter(row=>!['complete','classified'].includes(row.status)).map(row=>row.wait);
       checkpointCache();
-      const duration_ms=performance.now()-passStarted;
+      const passEnded=performance.now(),duration_ms=passEnded-passStarted;
+      changeTimingStage('unattributed_ms',passEnded);timingStage=undefined;
       log({ action: 'pass-complete', starts,unknown_open:pending.length,unknown_oldest_min:pending.length?Math.max(0,...pending.map(w=>(Date.parse(now())-Date.parse(w.at))/60000)):0,
         unknown_settled:statuses.filter(row=>row.status==='complete').length,
         classified_retained:statuses.filter(row=>row.status==='classified').length,unknown_escalated:Object.keys(effects.outcome_decisions??{}).length,
@@ -1139,7 +1161,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         catch(error){log({action:'live-witness-held',reason:error.message});}
       }
       return { result: 'pass-complete', directory };
-    } finally {commandTurn=undefined;try{if(release){checkpointNotices?.();checkpointCache?.();}}finally{try{heartbeat('finished');}finally{if(release){
+    } finally {commandTurn=undefined;timingStage=undefined;try{if(release){checkpointNotices?.();checkpointCache?.();}}finally{try{heartbeat('finished');}finally{if(release){
       log({action:'schedule-unlocked',pass:passAt,pid:process.pid,duration_ms:performance.now()-lockedAt});release();release=null;
     }}} }
   }

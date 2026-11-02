@@ -186,6 +186,20 @@ diagnostic must attribute its child trees. Requested bytes are not physical disk
 bytes. `duration_ms` includes final bookkeeping and the final cache checkpoint;
 older rows stopped that clock before final bookkeeping, so compare with care.
 
+The residual `other_scan_and_guard_ms` has an exclusive wall-time partition:
+`source_scan_ms` (including fresh pre-effect rescans), `admission_scan_ms`
+(exclusions, ordering and admission), `canonical_index_ms`,
+`maintenance_review_ms` (binding/result/review/source-completion recovery,
+decisions, exception intake and halt bookkeeping), `notice_audit_ms`,
+`lock_reacquire_wait_ms`, and `journal_cache_checkpoint_ms` (read/refresh and
+effect/cache writes, including failed cache writes). `unattributed_ms` records
+everything outside those sections. These fields sum to the residual within
+floating-point rounding. Nested commands, record snapshots, checkpoints and
+re-acquire waits are excluded from their enclosing section. `effect_command_ms`
+now measures the command call itself, leaving its scheduling handoff and wait in
+the partition; older command timings could include that handoff/wait. Closeout
+runs before this partition and retains its separate `closeout-timing` row.
+
 A pass's start budget counts dispatch commands when they are issued, including
 failed or uncertain replies and guarded preflight continuations. A lost reply
 may already have started a session, so it cannot free a start for another
@@ -1804,7 +1818,7 @@ the large-copy rotation receipt. Never point the witness at the live service.
 ## Unchanged negative evaluations
 
 The general pass retains negative admission and source-discovery observations in
-`effects.json#negative_evaluations`. Entries bind the actual project/record and
+`negative-evaluations.json`. Entries bind the actual project/record and
 evaluator implementation bytes, direct dependency events and folded subjects, ancestors, linked
 prerequisites and review/question children, admission policy, brief/report/request
 files, and workspace/Git identity metadata. Fingerprinting uses filesystem reads,

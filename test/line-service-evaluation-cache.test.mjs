@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import {spawnSync} from 'node:child_process';
+import {spawn,spawnSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {createLineService,sourceRoot,serviceDirectory} from '../line-service/line-service.mjs';
 import {negativeEvaluationCache,sourceEvaluationInputs} from '../line-service/evaluation-cache.mjs';
@@ -37,6 +37,61 @@ function fixture(t){
 }
 const work=(id,extra={})=>({type:'item.added',id,role:'engineer',title:id,...extra});
 const summary=rows=>rows.findLast(r=>r.action==='pass-complete');
+
+test('pass residual partitions held admission and a yielded command with real writer contention',t=>{
+  const f=fixture(t);f.append([work('ENG-1',{meta:{hold:true}}),work('ENG-2')]);
+  const lock=path.join(f.directory,'pass.lock'),ready=path.join(f.root,'contender-ready'),dispatches=[];
+  const rows=f.pass({command:(_exe,args)=>{
+    assert.equal(fs.existsSync(lock),false,'commands run after the scheduling lock is yielded');
+    if(args[0].endsWith('/dispatch/dispatch.mjs')){
+      dispatches.push(args[1]);
+      // A separate real writer releases normally while this pass waits to return.
+      const script=`import fs from 'node:fs';import {noticeLock} from ${JSON.stringify(new URL('../supervisor/notice-lock.mjs',import.meta.url).href)};
+        const unlock=noticeLock(${JSON.stringify(lock)});fs.writeFileSync(${JSON.stringify(ready)},'ready');
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,150);unlock();`;
+      const child=spawn(process.execPath,['--input-type=module','-e',script],{env:f.env,stdio:'ignore'});
+      t.after(()=>{if(child.exitCode===null)child.kill();});
+      const setupDeadline=Date.now()+10000;
+      while(!fs.existsSync(ready)&&Date.now()<setupDeadline)Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,5);
+      assert.ok(fs.existsSync(ready),'fixture writer published its lock');
+    }
+    return{status:0,stdout:'{}',stderr:''};
+  }});
+  const pass=summary(rows),timing=pass.timing;
+  const fields=['source_scan_ms','admission_scan_ms','canonical_index_ms','maintenance_review_ms',
+    'lock_reacquire_wait_ms','journal_cache_checkpoint_ms','notice_audit_ms','unattributed_ms'];
+  for(const field of fields)assert.ok(Number.isFinite(timing[field])&&timing[field]>=0,field);
+  assert.ok(Math.abs(fields.reduce((n,k)=>n+timing[k],0)-timing.other_scan_and_guard_ms)<0.001);
+  assert.ok(Math.abs(timing.other_scan_and_guard_ms+timing.effect_command_ms+timing.record_snapshot_ms-timing.duration_ms)<0.001);
+  for(const field of fields.filter(k=>k!=='unattributed_ms'))assert.ok(timing[field]>0,field);
+  assert.ok(timing.lock_reacquire_wait_ms>=50,'contention is timed separately from the command and admission');
+  assert.deepEqual(dispatches,['ENG-2']);assert.equal(pass.starts,1);
+  assert.ok(rows.some(r=>r.action==='hold'&&r.scope?.item==='ENG-1'));
+  const effects=readSchedulingJournal(path.join(f.directory,'effects.json'));
+  const launches=Object.entries(effects.actions).filter(([key])=>key.startsWith('dispatch:'));
+  assert.equal(launches.length,1);assert.equal(launches[0][1].state,'complete');assert.equal(launches[0][1].commands.length,1);
+  assert.equal(fs.existsSync(lock),false,'normal lock release remains intact');
+  t.diagnostic(JSON.stringify({timing,dispatches,scope:'fixture commands; installed live witness unrun'}));
+});
+
+test('a service cache-write failure diagnoses the hold and preserves effect completion without replay',t=>{
+  const f=fixture(t);f.append([work('ENG-1',{meta:{hold:true}}),work('ENG-2')]);
+  const file=path.join(f.directory,'effects.json'),cache=evaluationCacheFile(file),foreign=path.join(f.root,'foreign-cache');
+  fs.writeFileSync(foreign,'preserve original target');fs.symlinkSync(foreign,cache);
+  const rows=f.pass(),pass=summary(rows);
+  assert.ok(rows.some(r=>r.action==='evaluation-cache-write-held'&&/redirected/.test(r.reason)));
+  assert.equal(pass.action,'pass-complete');assert.equal(pass.timing.evaluation_cache_writes,0);
+  assert.equal(fs.readFileSync(foreign,'utf8'),'preserve original target');assert.ok(fs.lstatSync(cache).isSymbolicLink());
+  const effects=JSON.parse(fs.readFileSync(file)),launch=Object.entries(effects.actions).find(([key])=>key.startsWith('dispatch:'));
+  assert.equal(Object.hasOwn(effects,'negative_evaluations'),false);
+  assert.equal(launch[1].state,'complete');assert.equal(launch[1].commands.length,1);
+  const original=structuredClone(launch[1]);assert.deepEqual(f.calls,['ENG-2']);
+  const next=f.pass();assert.ok(summary(next));
+  assert.equal(summary(next).evaluations.admission_evaluated,2,'failed cache checkpoint evaluates fresh');
+  assert.deepEqual(f.calls,['ENG-2'],'a cache failure cannot replay the completed effect');
+  assert.deepEqual(JSON.parse(fs.readFileSync(file)).actions[launch[0]],original);
+  assert.equal(fs.existsSync(path.join(f.directory,'pass.lock')),false);
+});
 
 test('held observations checkpoint once per lock turn and warm passes write no unchanged cache',t=>{
   const f=fixture(t);f.append([work('ENG-1',{meta:{hold:true}}),work('ENG-2',{meta:{hold:true}})]);

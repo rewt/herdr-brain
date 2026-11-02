@@ -439,7 +439,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       // Invalid effective policy holds selection for this pass, not independent
       // result intake/readbacks. Never interpret a failed read as default-off.
       let policyHold,config;
-      effects.review_admission={schema:'review-admission-pass/v1',policy:null,held:[]};
+      effects.review_admission={schema:'review-admission-pass/v1',policy:null,held:[]};noticesDirty=true;
       const holdPolicy=(error,stage)=>{
         policyHold={code:'REVIEW_ADMISSION_POLICY_INVALID',reason:error.message};
         effects.review_admission.policy_hold=policyHold;

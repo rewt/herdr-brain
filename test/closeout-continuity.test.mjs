@@ -309,7 +309,7 @@ test('flood backlog current refusal decisions stay owned while changed or unlink
   assert.match(obsoleteOutcomeDecision(item,view()),/no current defect/,'an unevaluated request has no defect to judge');
   const [refusal]=f.append([{type:'closeout.evaluated',key:entry.key,identity:f.common,run:'R-1',item:'ENG-1',source,revision:closeoutRevision(entry,events(f)),completed:false,reason:'EPERM native refusal'}]);
   transact(f.org,current=>({add:registerCloseoutWait(entry,refusal,current,entries)}),{actor:'fixture'});
-  assert.equal(obsoleteOutcomeDecision(item,view()),null,'a recorded native refusal keeps its decision owner');
+  assert.match(obsoleteOutcomeDecision(item,view()),/original owner evidence/,'a recorded native refusal keeps its effect owner without a zero-effect decision');
   assert.match(obsoleteOutcomeDecision({meta:{uncertain_outcome:{...decision,check:{...decision.check,subject:{...decision.check.subject,source:{seq:1,type:'item.closed'}}}}}},view()),/source binding changed/);
   assert.equal(obsoleteOutcomeDecision({meta:{uncertain_outcome:{key:'other',check:{key:'dispatch:ENG-9:input'}}}},view()),null,'non-cleanup outcome decisions keep their existing path');
 });

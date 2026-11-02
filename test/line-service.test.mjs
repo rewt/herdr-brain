@@ -544,14 +544,16 @@ test('engineering-idle keeps only exact saved judgment inputs and rechecks them 
   assert.deepEqual(retained[key],original);assert.deepEqual(retained['dispatch:DEC-2:stale-input'],original);
 });
 
-test('outcome retirement line pass never evaluates terminal proposals and still queues a current defect',t=>{
+test('outcome retirement line pass never creates cleanup judgments or evaluates terminal proposals',t=>{
   const f=fixture(t),service=f.service(),identity=gitProject(f.repo).identity,retired=[];
   const config=JSON.parse(fs.readFileSync(path.join(f.repo,'.lane.json')));config.routes.unblock={kind:'codex',model:'fixture',effort:'high'};
   fs.writeFileSync(path.join(f.repo,'.lane.json'),JSON.stringify(config));
   const release=noticeLock(path.join(service.directory,'pass.lock'));
   try{
-    for(const key of ['review:old','dispatch:old','closeout:unqueued'])retired.push(queueOutcomeDecision({repo:f.repo,org:f.org,env:f.env,
+    for(const key of ['review:old','dispatch:old'])retired.push(queueOutcomeDecision({repo:f.repo,org:f.org,env:f.env,
       check:{key,subject:{run:'R-1',key:'unqueued',source:{seq:1,type:'item.closed'}}}}).item);
+    assert.equal(queueOutcomeDecision({repo:f.repo,org:f.org,env:f.env,
+      check:{key:'closeout:unqueued',subject:{run:'R-1',key:'unqueued',source:{seq:1,type:'item.closed'}}}}).held,true);
     const source={seq:1,type:'item.closed'},key=closeoutKey(f.repo,'R-2','landed'),entry={schema:'closeout-entry/v2',common:identity,
       signal:'landed',run:'R-2',branch:'lane/cleanup',key,cwd:f.repo,gitDirectory:identity,org:f.org,project:f.repo,source,
       head:f.git(['rev-parse','HEAD']),worktreeIdentity:{},gitIdentity:{},panes:[]};
@@ -560,7 +562,7 @@ test('outcome retirement line pass never evaluates terminal proposals and still 
     transact(f.org,()=>({add:[prior,{type:'closeout.waiting',identity,key,source,run:'R-2',revision:1,wait_id:closeoutWaitId(entry,prior),
       waiting:{owner:'line-service',defect:'Original native refusal needs its owner',producers:[]}}]}));
     const live=queueOutcomeDecision({repo:f.repo,org:f.org,env:f.env,check:{key:`closeout:${key}`,subject:{run:'R-2',key,source}}});
-    assert.equal(f.show(live.item).meta.queue_selected,true);assert.equal(f.show(live.item).closed,null);
+    assert.equal(live.held,true);assert.equal(live.item,undefined);assert.match(live.reason,/original owner evidence/);
   }finally{release();}
   service.pass();
   const rows=fs.readFileSync(path.join(service.directory,'passes.jsonl'),'utf8').trim().split('\n').map(JSON.parse);
@@ -568,7 +570,7 @@ test('outcome retirement line pass never evaluates terminal proposals and still 
   assert.ok(!rows.some(r=>retired.includes(r.item)),'no admission probe, policy hold or dispatch for terminal proposals');
   const effects=readSchedulingJournal(path.join(service.directory,'effects.json'));
   for(const id of retired)assert.equal(effects.negative_evaluations.entries[`admission:${id}`],undefined,'not even a cached admission evaluation');
-  assert.ok(f.calls.some(c=>c.args[1]==='DEC-4'),'the real current defect keeps ordinary decision dispatch');
+  assert.equal(f.calls.some(c=>/^DEC-/.test(c.args[1]??'')),false,'the native refusal stays owned without a judgment session');
   assert.equal(loadEvents(f.org).events.some(e=>e.type==='closeout.effect'),false,'fixture never executes or clears the refused cleanup');
 });
 

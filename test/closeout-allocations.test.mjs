@@ -90,6 +90,37 @@ test('line finalizes only its exact pre-native run and the ordinary closer remov
   assert.deepEqual(fs.readFileSync(f.eventFile).subarray(0,before.length),before);
 });
 
+for(const session of [null,'session'])test(`typed STOP between launch and prompt finalizes its exact allocation; session=${session}`,t=>{
+  const f=stopped(t,{run:true,occupied:true});
+  const worker={agentName:'worker',pane:'w:p',workspaceId:'w',terminalId:'term',agentSessionId:session,cwd:f.lane};
+  f.append([{type:'run.updated',id:'R-1',meta:{agent:'worker',pane:'w:p',worker_workspace:'w',terminal_id:'term',agent_session_id:session}}]);
+  f.state.agents[0].agent_session=session?{value:session}:null;f.save();
+  Object.assign(f.job,{worker,launchProcess:{pid:2,identity:'native'},stage:'prompt',native_launch_attempted:true,
+    error:'STOP/HOLD prevents native dispatch effect',failure:{code:'DISPATCH_STOPPED',kind:'fence',stage:'prompt',native_launch_attempted:true}});
+  f.save();
+  f.append([{type:'dispatch.completed',project:f.common,journal:f.journal,attempt:'attempt',item:'ENG-1',run:'R-1',stage:'prompt',
+    exit_code:0,native_launch_attempted:true,request_sha256:createHash('sha256').update(fs.readFileSync(f.journal)).digest('hex'),failure:f.job.failure}]);
+  const stop=path.join(f.repo,'.lane/supervisor/STOP');fs.mkdirSync(path.dirname(stop),{recursive:true});fs.writeFileSync(stop,'stop');
+  assert.throws(f.dispose,/STOP\/HOLD/);assert.deepEqual(f.read().actions,[]);
+  fs.unlinkSync(stop);
+  const original=fs.readFileSync(f.eventFile),journal=fs.readFileSync(f.journal),result=f.dispose();
+  assert.equal(result.results[0].disposition,'NOT_PROMPTED',JSON.stringify(result));
+  const entry=currentCloseoutEntries(f.common,f.org,events(f))[0];
+  assert.equal(fold(events(f)).runs.get('R-1').abandoned.authorization.kind,'positive-unprompted-stopped-allocation');
+  if(!session){
+    assert.equal(f.drain({keys:[entry.key],retrySafe:true}).evaluated[0].completed,false);
+    assert.deepEqual(f.read().actions,[]);assert.equal(fs.existsSync(f.lane),true);
+    // The original occupant departs independently. No SID is reconstructed,
+    // and the finite closer uses its existing active-process observation path.
+    f.state.agents=[];f.state.panes=[];f.state.tabs=[];f.save();
+  }
+  const final=f.drain({keys:[entry.key],retrySafe:true});
+  assert.equal(final.evaluated[0].completed,true,JSON.stringify(final));assert.equal(fs.existsSync(f.lane),false);
+  assert.equal(events(f).some(e=>e.type==='run.session_bound'),false);
+  assert.equal(f.read().actions.some(a=>a[0]==='agent'&&a[1]==='prompt'),Boolean(session));
+  assert.deepEqual(fs.readFileSync(f.journal),journal);assert.deepEqual(fs.readFileSync(f.eventFile).subarray(0,original.length),original);
+});
+
 test('line wake invokes stopped allocation disposal with a viable original turn allowance',t=>{
   const f=stopped(t),{directory}=selectCurrentCleanup(f);
   fs.writeFileSync(path.join(directory,'closeout-turn.json'),JSON.stringify({schema:'line-closeout-turn/v1',identity:f.common,

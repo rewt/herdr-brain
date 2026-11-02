@@ -1,4 +1,4 @@
-// Missing completion producers and native refusals are ordinary record work.
+// Preserve missing-producer/refusal evidence without starting zero-effect work.
 import fs from 'node:fs';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
@@ -37,10 +37,9 @@ export function observeOutcomeDecisions({identity,org}) {
   };
 }
 
-// A queued cleanup decision launches only while its exact request still shows a
-// defect or failure. An owned progress stage, a completed or unqueued request or
-// a changed source binding makes the captured proposal obsolete: it is deferred,
-// never closed or rewritten here. Other subjects keep their recorded ownership.
+// Existing cleanup proposals are deferred, never closed or rewritten here.
+// Keep their exact reason and original effect owner; other subjects retain
+// their recorded ownership and supported decision path.
 export function obsoleteOutcomeDecision(item,{events,entries,evaluations}) {
   const check=item?.meta?.uncertain_outcome?.check;
   if(typeof check?.key!=='string'||!check.key.startsWith('closeout:'))return null;
@@ -52,7 +51,7 @@ export function obsoleteOutcomeDecision(item,{events,entries,evaluations}) {
   const next=prior&&closeoutNextStage(entry,prior,events,entries);
   if(next)return `owned ${next.stage} progress`;
   if(!['defect','failed'].includes(closeoutWaitState(prior&&closeoutWait(entry,prior,events),events)))return 'no current defect or failure for this cleanup request';
-  return null;
+  return 'cleanup hold requires original owner evidence; a zero-effect decision cannot clear it';
 }
 export function queueOutcomeDecision({repo,org,env,check,owner='pass'}) {
   if(owner!=='pass'&&(owner!=='closeout-turn'||!check.key.startsWith('closeout:')))throw Error('finite closeout owner may queue only closeout decisions');
@@ -74,14 +73,18 @@ export function queueOutcomeDecision({repo,org,env,check,owner='pass'}) {
     guard();
     const existing=find(state);
     if(existing)return {add:[],result:{item:existing.id,key}};
-    // Keep the captured proposal and deduplication owner, but never select work
-    // that admission already knows cannot run. Close the exact proposal using
-    // existing record events: later policy changes, source requeues or reopened
-    // ancestors must not revive it. A fresh, current defect remains ordinary work.
-    const reason=recordOnlyJudgment({meta:{uncertain_outcome:{check}}})
+    // Cleanup already has a durable original wait. Other retired judgments
+    // keep the existing exact-proposal record disposition.
+    const cleanup=check.key.startsWith('closeout:');
+    const reason=cleanup?obsoleteOutcomeDecision({meta:{uncertain_outcome:{check}}},
+        currentView(binding.identity,org,events,{keys:[check.subject.key]})):
+      recordOnlyJudgment({meta:{uncertain_outcome:{check}}})
       ? 'automatic review/dispatch outcome judgments are retired'
-      : !check.key.startsWith('closeout:')?null:obsoleteOutcomeDecision({meta:{uncertain_outcome:{check}}},
-        currentView(binding.identity,org,events,{keys:[check.subject.key]}));
+      : null;
+    // The original closeout wait/classification and grouped supervisor alarm
+    // already retain the hold and notice. Do not create another item/session
+    // whose acceptance forbids it from producing the missing effect.
+    if(cleanup)return{add:[],result:{key,held:true,reason}};
     const id=nextItemId(state,{kind:'work',role:'decision'});
     const mutation={add:[intentFirstCreation({type:'item.added',id,kind:'work',role:'decision',title:'Resolve a missing completion producer or recorded refusal',
       ...(state.items.has(check.subject.item)?{parent:check.subject.item}:{}),

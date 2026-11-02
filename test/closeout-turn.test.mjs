@@ -150,7 +150,7 @@ test('a recorded fence refusal with an empty drain yields to a newer report on a
   assert.equal(fs.existsSync(f.lane),true);
 });
 
-test('new defect decisions follow independent report cleanup and existing decisions spend no later decision slots',t=>{
+test('new cleanup defects retain their hold without decision sessions while independent report cleanup completes',t=>{
   const f=fixture(t);fs.writeFileSync(path.join(f.scratch,'.identity-root'),'fixture');
   fs.writeFileSync(f.file,JSON.stringify({...f.receipt,at:new Date().toISOString()}));f.report();
   const secondLane=f.lane+'-defect';f.git(['worktree','add','-qb','lane/defect',secondLane,f.head]);
@@ -167,14 +167,13 @@ test('new defect decisions follow independent report cleanup and existing decisi
   }});
   assert.equal(closed,true);assert.deepEqual(result.errors,[]);assert.equal(result.subjects[0].evaluations[0].completed,true);
   assert.equal(result.subjects[0].evaluations[0].resources.folder.status,'removed');
-  assert.deepEqual(result.decisions,{existing:0,attempted:1});assert.equal(decisions().length,1);
-  assert.equal(decisions()[0].meta.uncertain_outcome.check.subject.key,entry.key);
-  const next=runCloseoutTurn(f.args);assert.deepEqual(next.errors,[]);assert.deepEqual(next.decisions,{existing:1,attempted:0});
-  assert.equal(decisions().length,1);assert.equal(fs.existsSync(secondLane),true);
+  assert.deepEqual(result.decisions,{existing:0,attempted:0});assert.equal(decisions().length,0);
+  const next=runCloseoutTurn(f.args);assert.deepEqual(next.errors,[]);assert.deepEqual(next.decisions,{existing:0,attempted:0});
+  assert.equal(decisions().length,0);assert.equal(fs.existsSync(secondLane),true);
   assert.deepEqual(events(f).slice(0,original.length),original);assert.deepEqual(events(f).find(e=>e.seq===refusal.seq),refusal);
 });
 
-test('finite project HOLD defers allocations and new decisions quietly, then resumes them',t=>{
+test('finite project HOLD defers allocations quietly and cleanup defects never start decision sessions',t=>{
   const f=fixture(t);fs.writeFileSync(path.join(f.scratch,'.identity-root'),'fixture');
   fs.writeFileSync(f.file,JSON.stringify({...f.receipt,at:new Date().toISOString()}));f.report();
   const [entry]=currentCloseoutEntries(f.common,f.org,events(f));
@@ -189,13 +188,12 @@ test('finite project HOLD defers allocations and new decisions quietly, then res
   }},decisions=()=>[...fold(events(f)).items.values()].filter(i=>i.meta.uncertain_outcome);
   for(let turn=0;turn<4;turn++){
     const result=runCloseoutTurn(args);assert.deepEqual(result.errors,[]);
-    assert.deepEqual(result.decisions,{existing:0,attempted:0});assert.equal(result.continuation.decisions,1);
+    assert.deepEqual(result.decisions,{existing:0,attempted:0});assert.equal(result.continuation.decisions,0);
   }
   assert.equal(allocations,0);assert.equal(decisions().length,0);assert.deepEqual(f.read().actions,[]);
   fs.unlinkSync(hold);
   for(let turn=0;turn<4;turn++)assert.deepEqual(runCloseoutTurn(args).errors,[]);
-  assert.equal(allocations,1);assert.equal(decisions().length,1);
-  assert.deepEqual(decisions()[0].meta.uncertain_outcome.check.subject.source,entry.source);
+  assert.equal(allocations,1);assert.equal(decisions().length,0);
   assert.deepEqual(events(f).slice(0,original.length),original);assert.deepEqual(f.read().actions,[]);
   const checkpoint=path.join(f.directory,'closeout-turn.json'),state=JSON.parse(fs.readFileSync(checkpoint));
   state.turn=11;fs.writeFileSync(checkpoint,JSON.stringify(state));
@@ -438,7 +436,7 @@ test('a reaped general-pass owner recovers on wake while live and unidentified o
   assert.equal(wakeLineService({service,launch}).general.already_running,true);assert.equal(launches,1);
 });
 
-for(const registered of [true,false])test(`finite refusal decision is owned once across turns and general passes (${registered?'registered':'missing'} wait)`,t=>{
+for(const registered of [true,false])test(`finite refusal hold stays visible without decision sessions (${registered?'registered':'missing'} wait)`,t=>{
   const f=fixture(t);fs.writeFileSync(path.join(f.scratch,'.identity-root'),'fixture');
   fs.writeFileSync(f.file,JSON.stringify({...f.receipt,at:new Date().toISOString()}));f.report();
   const entry=currentCloseoutEntries(f.common,f.org,events(f))[0];
@@ -460,15 +458,10 @@ for(const registered of [true,false])test(`finite refusal decision is owned once
     }});
   for(let pass=0;pass<2;pass++)service.pass();
   const decisions=[...fold(events(f)).items.values()].filter(i=>i.role==='decision');
-  assert.equal(decisions.length,1);
-  assert.equal(decisions[0].meta.queue_selected,true);
-  assert.equal(decisions[0].closed,null);
-  assert.equal(decisions[0].meta.outcome_disposition,undefined);
-  assert.equal(decisions[0].meta.uncertain_outcome.check.key,`closeout:${entry.key}`);
-  assert.equal(decisions[0].meta.uncertain_outcome.check.status,'defect');
-  assert.deepEqual(decisions[0].meta.uncertain_outcome.check.subject.source,entry.source);
+  assert.equal(decisions.length,0);
+  const wait=events(f).find(e=>e.type==='closeout.waiting'&&e.key===entry.key);
+  assert.ok(wait.waiting.defect);assert.deepEqual(wait.source,entry.source);
   const rows=()=>fs.readFileSync(path.join(f.directory,'passes.jsonl'),'utf8').trim().split('\n').map(JSON.parse);
-  assert.equal(rows().some(r=>r.item===decisions[0].id&&r.code==='OBSOLETE_OUTCOME_DECISION'),false);
   const config=JSON.parse(fs.readFileSync(path.join(f.repo,'.lane.json')));
   config.routes={unblock:{kind:'codex',model:'fixture',effort:'high'}};
   fs.writeFileSync(path.join(f.repo,'.lane.json'),JSON.stringify(config));
@@ -476,12 +469,11 @@ for(const registered of [true,false])test(`finite refusal decision is owned once
     recordNotice:d=>({id:d.id,state:'record-only'}),command:(_exe,args)=>{
       commands.push(args);return{status:0,stdout:'{}',stderr:''};
     }}).pass();
-  assert.ok(commands.some(args=>args[0]===path.join(sourceRoot,'dispatch/dispatch.mjs')&&args[1]===decisions[0].id),'available capacity reaches ordinary dispatch');
-  assert.equal(rows().some(r=>r.item===decisions[0].id&&r.code==='OBSOLETE_OUTCOME_DECISION'),false);
+  assert.equal(commands.some(args=>args[0]===path.join(sourceRoot,'dispatch/dispatch.mjs')),false,'a zero-effect judgment cannot clear the native refusal');
   assert.deepEqual(f.read().actions,[]);
   assert.equal(commands.some(args=>args.includes('drain')),false,'a refusal never reaches a native executor');
   assert.deepEqual(fs.readFileSync(f.eventFile).subarray(0,original.length),original);
-  const check=decisions[0].meta.uncertain_outcome.check,options={repo:f.repo,org:f.org,env:f.env,owner:'closeout-turn',check};
+  const check={key:`closeout:${entry.key}`,subject:{key:entry.key,run:entry.run,source:entry.source}},options={repo:f.repo,org:f.org,env:f.env,owner:'closeout-turn',check};
   assert.throws(()=>queueOutcomeDecision(options),/actual owned closeout-turn lock/);
   const lock=path.join(f.directory,'closeout-turn.lock');fs.mkdirSync(lock);
   fs.writeFileSync(path.join(lock,'owner.json'),JSON.stringify({pid:process.pid,identity:'reused process birth'}));
@@ -489,7 +481,7 @@ for(const registered of [true,false])test(`finite refusal decision is owned once
   assert.throws(()=>queueOutcomeDecision({...options,check:{...check,key:'dispatch:foreign'}}),/only closeout decisions/);
 });
 
-test('finite refusal decision is owned once completed report target remains retired',t=>{
+test('finite refusal proposal stays held without a new item after its report target completes',t=>{
   const f=fixture(t);fs.writeFileSync(path.join(f.scratch,'.identity-root'),'fixture');f.report();
   const entry=currentCloseoutEntries(f.common,f.org,events(f))[0];
   assert.equal(entry.reportCloseout,true);
@@ -503,9 +495,9 @@ test('finite refusal decision is owned once completed report target remains reti
     fs.writeFileSync(path.join(entries,entry.key+'.json'),'{');
     assert.throws(()=>queueOutcomeDecision(options),/JSON|position|property/i,'subject corruption remains a refusal');
     fs.unlinkSync(path.join(entries,entry.key+'.json'));
-    const result=queueOutcomeDecision(options),item=fold(events(f)).items.get(result.item);
-    assert.equal(item.meta.queue_selected,false);assert.equal(item.closed.as,'dropped');
-    assert.equal(item.meta.outcome_disposition.reason,'cleanup request completed');
+    const result=queueOutcomeDecision(options);
+    assert.equal(result.held,true);assert.equal(result.item,undefined);
+    assert.equal(result.reason,'cleanup request completed');
   }finally{release();}
 });
 

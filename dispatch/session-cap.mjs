@@ -13,6 +13,7 @@ import { loadTimeout, ADMISSION_WAIT_MS } from '../lib/deadline.mjs';
 import { matchesDispatchStart } from './unlanded-cap.mjs';
 import {resolvedNotStarted} from './not-started.mjs';
 import {resolvedReviewJournal} from '../line-service/review-resolutions.mjs';
+import {selectCapacityAllocation} from './capacity-lineage.mjs';
 
 export const DEFAULT_SESSION_CAP = 7;
 export const DEFAULT_REVIEW_SESSION_CAP = 3;
@@ -233,7 +234,7 @@ function readJSON(directory, filter = name => name.endsWith('.json'), withJourna
   });
 }
 
-export function checkSessionCap({ config, org, kind='all', ...options }) {
+export function checkSessionCap({ config, org, kind='all', allocation, ...options }) {
   const buildCap = config.dispatch?.max_sessions ?? DEFAULT_SESSION_CAP;
   const reviewCap=config.dispatch?.max_review_sessions??DEFAULT_REVIEW_SESSION_CAP;
   if(!['all','build','review','decision'].includes(kind))throw Error('unknown session admission pool');
@@ -241,12 +242,12 @@ export function checkSessionCap({ config, org, kind='all', ...options }) {
   // Projects without a decision request/occupant keep their original totals. Legacy
   // kind=all callers retain their original combined max_sessions behavior.
   if (!positive(buildCap)||!positive(reviewCap)||config.dispatch?.max_total_sessions!==undefined&&!positive(config.dispatch.max_total_sessions)) throw Error('dispatch session/review/shared caps must be positive integers');
-  let sessions;
+  let sessions,journals,events;
   try {
     // Journal first, then record: never miss both sides of a start transition.
     const directory=path.join(org,'dispatch');
-    let journals=readJSON(directory, name => name.endsWith('.json') && !name.endsWith('.routes.json'), true);
-    const events=loadEvents(org).events;
+    journals=readJSON(directory, name => name.endsWith('.json') && !name.endsWith('.routes.json'), true);
+    events=loadEvents(org).events;
     journals=journals.filter(j=>{try{return !resolvedNotStarted({events,org,common:options.common,journal:j.journal})&&!resolvedReviewJournal({events,org,journal:j.journal});}catch{return true;}});
     sessions = countSessions({ ...options, events, state: fold(events), journals,
       reviewers: readJSON(path.join(org, 'retirement/occupants')) });
@@ -269,6 +270,13 @@ export function checkSessionCap({ config, org, kind='all', ...options }) {
     error.code = kind==='decision'&&sessions.length>=cap?'DISPATCH_DECISION_CAP':kind==='review'&&sessions.length>=cap?'DISPATCH_REVIEW_CAP':'DISPATCH_SESSION_CAP';
     error.sessions = evidence;
     throw error;
+  }
+  if(allocation){
+    // Optional evidence uses the already-read inputs and the caller's existing
+    // final admission lock. Missing historical proof never adds a capability
+    // requirement or changes the existing session admission decision.
+    try{evidence.capacity_allocation=selectCapacityAllocation({...allocation,events,journals,evidence});}
+    catch(error){evidence.capacity_lineage_unknown=error.message;}
   }
   return evidence;
 }

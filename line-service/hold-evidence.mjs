@@ -8,6 +8,7 @@ import {loadEvents} from '../lib/store.mjs';
 
 export const evidenceHash=value=>createHash('sha256').update(value).digest('hex');
 const recordHash=events=>evidenceHash(JSON.stringify(events));
+const RECORD_EVENTS=Symbol('original record fence events');
 const stat=s=>Object.fromEntries(['dev','ino','size','mtimeNs','ctimeNs'].map(k=>[k,String(s[k])]));
 function plain(file){
   const fd=fs.openSync(file,fs.constants.O_RDONLY|fs.constants.O_NOFOLLOW);
@@ -21,11 +22,13 @@ function plain(file){
 }
 function snapshot({project,org,env=process.env,now=()=>Date.now(),command=spawnSync},before){
   const result={errors:[]};
+  let capturedEvents;
   // Record fences enclose the filesystem observations, conservatively including
   // concurrent events. A transaction's wall clock never determines coverage.
   const record=()=>{
     const loaded=loadEvents(org),events=loaded.events;
     if(loaded.tornTail||events.some((e,i)=>e.seq!==i+1))throw Error('incomplete record fence');
+    capturedEvents=events;
     return{seq:events.at(-1)?.seq??0,sha256:recordHash(events),
       ...(before?{prefix_sha256:recordHash(events.filter(e=>e.seq<=before.record?.seq))}:{})};
   };
@@ -55,7 +58,33 @@ function snapshot({project,org,env=process.env,now=()=>Date.now(),command=spawnS
   }catch(e){result.errors.push(`main: ${e.message}`);}
   if(before)try{result.record=record();}catch(e){result.errors.push(e.message);}
   if(!before)result.at=new Date(now()).toISOString();
-  return result;
+  // Reuse this exact read for the normal-turn join; never serialize the full
+  // record into every proof or perform another full-record discovery pass.
+  return Object.defineProperty(result,RECORD_EVENTS,{value:capturedEvents});
+}
+function subjectLineage(subject,events,options,before,after){
+  const ref=e=>e?{seq:e.seq,type:e.type,at:e.at,...(e.effect?{effect:e.effect}:{})}:null;
+  const source=events?.find(e=>e.seq===subject.source?.seq&&e.type===subject.source.type),
+    target=source?.closeout_targets?.find(t=>t.key===subject.key&&t.run===subject.run&&t.common===options.project.identity&&t.org===options.org),
+    report=source?.type==='report.ingested'&&source.run===subject.run?source:null,
+    close=events?.find(e=>e.type==='item.closed'&&e.id===target?.item&&e.completed_run===subject.run&&e.as==='done');
+  const owns=e=>e.identity===options.project.identity&&e.run===subject.run&&e.key===subject.key&&
+    JSON.stringify(e.source)===JSON.stringify(subject.source);
+  return{allocation:target?.allocation??null,report:report?{...ref(report),sha256:report.sha256}:null,
+    item_close:ref(close),item_close_in_turn:Boolean(close&&close.seq>before.record?.seq&&close.seq<=after.record?.seq),
+    evaluations:(subject.evaluations??[]).map(row=>{
+      const evaluation=events?.find(e=>e.seq===row.seq&&e.type==='closeout.evaluated'&&owns(e)&&
+        e.seq>before.record?.seq&&e.seq<=after.record?.seq);
+      const effects=name=>{
+        const r=evaluation?.resources?.[name],refs=[...(r?.receipts??[]),...(r?.receipt?[r.receipt]:[])];
+        return refs.flatMap(r=>{
+          const effect=events?.find(e=>e.seq===r.seq&&e.type==='closeout.effect'&&e.effect===r.effect&&owns(e)&&
+            e.seq>before.record?.seq&&e.seq<evaluation.seq);
+          return effect?[ref(effect)]:[];
+        });
+      };
+      return{evaluation:ref(evaluation),session_effects:effects('session'),folder_effects:effects('folder'),report_effects:effects('author_packet')};
+    })};
 }
 export function beginHoldCloseout(options){return{id:randomUUID(),...snapshot(options)};}
 export function finishHoldCloseout(options,before,{turn,subjects,completed=false}={}){
@@ -63,10 +92,11 @@ export function finishHoldCloseout(options,before,{turn,subjects,completed=false
   // Keep only reflog fences and the appended history, not a growing copy of
   // the entire Git log in every journal frame.
   const slim=s=>{
-    if(!s.main)return s;
+    if(!s.main)return{...s};
     const {text,...log}=s.main.log;
     return{...s,main:{...s.main,log}};
   };
   return{schema:'brain.hold-closeout/v1',id:before.id,project:options.project.identity,org:options.org,
-    turn,completed,code:options.code??null,before:slim(before),after:slim(after),subjects:subjects??[]};
+    turn,completed,code:options.code??null,before:slim(before),after:slim(after),
+    subjects:(subjects??[]).map(subject=>({...subject,lineage:subjectLineage(subject,after[RECORD_EVENTS],options,before,after)}))};
 }

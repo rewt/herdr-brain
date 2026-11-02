@@ -257,11 +257,18 @@ function captureLaunchProcess() {
   job.launchProcess = null;
   try { job.launchProcess = observeNative().process; } catch {}
 }
-function admission(repo, org, common,kind=dispatchPool({job})) {
+function admission(repo, org, common,kind=dispatchPool({job}),allocate=false) {
   const { config } = loadDiscoveredRoutes({ cwd: repo });
   const evidence = checkSessionCap({ config, org, common, agent: name => herdr(['agent', 'get', name]).agent,
-    processInfo: pane => herdr(['pane', 'process-info', '--pane', pane]).process_info, excludeStartJournal: journal,excludePendingJournal:journal,kind });
-  if (job) job.sessionCap = evidence;
+    processInfo: pane => herdr(['pane', 'process-info', '--pane', pane]).process_info, excludeStartJournal: journal,excludePendingJournal:journal,kind,
+    ...(allocate?{allocation:{job,journal}}:{}) });
+  if (job) {
+    job.sessionCap = evidence;
+    if(allocate){
+      if(evidence.capacity_allocation)job.capacityAllocation=evidence.capacity_allocation;
+      else job.capacityLineageUnknown=evidence.capacity_lineage_unknown;
+    }
+  }
   return evidence;
 }
 function unlandedAdmission(request, { requireLink = false } = {}) {
@@ -805,7 +812,7 @@ async function main() {
       // after both memory waits and lane/record preparation have finished.
       releaseAdmission = timedMemoryWait({ journal, run: job.run, item: job.item, lane: job.lane, kind: 'admission_lock',
         wait: () => acquireSessionCapLock(common, { check: checkStop }), persist: syncTiming, onError: timingFailure });
-      admission(job.repo, job.org, common);
+      admission(job.repo, job.org, common,dispatchPool({job}),true);
       checkStop();
       if (job.workerBrief) validateLineExecution({ job, run, brief: fs.readFileSync(run.brief_path, 'utf8') });
       if (job.resumeDeliveryProtocol) {

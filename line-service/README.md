@@ -1818,3 +1818,51 @@ and separate window totals. Compare backlog, source revision, cache warmup and
 completion coverage alongside duration. Fixture reductions alone do not establish
 that a live line became faster. No installed service, runtime pin or watcher is
 changed by this cache.
+
+## Capacity and finite-turn producer receipts
+
+The final dispatcher recount, under its existing session-cap lock, selects a
+logical pool token and saves `capacityAllocation` in the original dispatch
+journal before native launch. `sessionCap.capacity_allocation` retains the same
+selection alongside the cap observation. The receipt binds project, record,
+pool, configured pool/shared limits, slot, original run/start/claim generation,
+attempt and journal. A first token has null `freeAt` and `freedBy`; it supplies no
+turnover witness. Reuse names its exact predecessor receipt/journal and original
+`report.ingested` sequence, run, digest and timestamp. This is the existing cap's
+**report-released logical capacity**, not physical session or folder retirement,
+proof that the pool was full, or a claim that release alone caused a scheduled
+wake. Native/shared limits and every existing admission guard still decide
+whether a launch may proceed. No occupancy delta supplies a predecessor.
+
+Capture the original journals, complete event prefix and `run.session_bound`
+input timestamps. `validateCapacityAllocation` in
+`dispatch/capacity-lineage.mjs` re-resolves receipt hashes, allocation generations,
+capacity identities, original report releases and successive predecessor links;
+it rejects missing/disconnected links and reuse by multiple successors. Journal
+selection is serialized with native admission, so a lost/uncertain launch keeps
+its original token. Missing legacy journals, changed claims/limits, process-death
+releases and unsupported reuse launches have no invented lineage. An unavailable
+join is saved as `capacityLineageUnknown` and never becomes a new required
+capability or blocks otherwise authorized admission. Packaging must retain those
+unknowns. Do not convert selection or command acknowledgement into event-to-wake
+latency; use the actual committed input observation for a release-to-input span.
+
+Every completed finite closeout already emits `brain.hold-closeout/v1` through
+`closeout-turn.mjs` and `hold-evidence.mjs`, including normal turns without HOLD.
+Its UUID, physical code binding and before/after record fences are retained in
+`closeout-turn.json`, `closeout-measurement.json` and the immutable measurement
+frames/rotated pass journal. Each subject's `lineage` now explicitly projects the
+original report digest, target allocation, exact `completed_run` item-close event,
+and evaluation-linked session/folder/report-preservation effect IDs and sequences.
+Effects must belong to that subject/source and fall inside that turn's fences.
+Absent references stay null/empty. `item_close_in_turn` distinguishes earlier
+source completion from an item close actually committed during physical cleanup;
+the producer never relabels the earlier close as a same-turn effect. HOLD/main
+capture errors remain visible and do not erase ordinary report/resource joins.
+
+The bounded dispatcher fixture demonstrates A→B→C with an intervening full-cap
+refusal, original report ingestion and native-input bindings. The guarded closer
+fixture demonstrates normal-turn joins. These are source producer receipts, not
+installed-candidate/live proof. SUPE-3 retains the real candidate rehearsal; the
+capture/A4 owner must verify the original bytes and consume these projections
+without replacing missing authority, shared-observer or endpoint evidence.

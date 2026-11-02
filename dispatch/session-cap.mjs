@@ -258,7 +258,7 @@ export function checkSessionCap({ config, org, kind='all', allocation, ...option
   if(kind==='review')sessions=total.filter(s=>s.kind==='reviewer');
   else if(kind==='build')sessions=total.filter(s=>s.kind==='worker');
   else if(kind==='decision')sessions=total.filter(s=>s.kind==='decision');
-  const evidence = { cap, count: sessions.length, sessions,kind,build_cap:buildCap,review_cap:reviewCap,decision_cap:DECISION_SESSION_CAP,native_cap:nativeCap,native_count:total.length,shared_cap_source:config.dispatch?.max_total_sessions!==undefined?'explicit shared ceiling':kind==='all'?'legacy combined ceiling':'sum of separate build, review and decision pools' };
+  const evidence = { cap, count: sessions.length, sessions,kind,build_cap:buildCap,review_cap:reviewCap,decision_cap:DECISION_SESSION_CAP,native_cap:nativeCap,native_count:total.length,shared_cap:config.dispatch?.max_total_sessions??null,shared_cap_source:config.dispatch?.max_total_sessions!==undefined?'explicit shared ceiling':kind==='all'?'legacy combined ceiling':'sum of separate build, review and decision pools' };
   if (sessions.length >= cap || total.length>=nativeCap) {
     const poolFull=sessions.length>=cap,held=poolFull?sessions:total,limit=poolFull?cap:nativeCap;
     const runs = list => [...new Set(list.flatMap(s => s.runs.filter(Boolean).length ? s.runs.filter(Boolean) : [`pending start ${s.journal ?? 'UNKNOWN'}`]))].sort((a,b)=>/^R-\d+$/.test(a)&&/^R-\d+$/.test(b)?Number(a.slice(2))-Number(b.slice(2)):a.localeCompare(b)).join(', ');

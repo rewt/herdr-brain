@@ -1825,8 +1825,12 @@ The final dispatcher recount, under its existing session-cap lock, selects a
 logical pool token and saves `capacityAllocation` in the original dispatch
 journal before native launch. `sessionCap.capacity_allocation` retains the same
 selection alongside the cap observation. The receipt binds project, record,
-pool, configured pool/shared limits, slot, original run/start/claim generation,
-attempt and journal. A first token has null `freeAt` and `freedBy`; it supplies no
+pool, configured build/review/decision limits and explicit shared ceiling (or
+null when absent), slot, original run/start/claim generation,
+attempt, journal and final-admission event fence. The observed `native_cap`
+remains in `sessionCap` and is not a durable identity: without an explicit shared
+ceiling it changes while a decision occupant is live. Configured limit changes
+start a distinct capacity identity. A first token has null `freeAt` and `freedBy`; it supplies no
 turnover witness. Reuse names its exact predecessor receipt/journal and original
 `report.ingested` sequence, run, digest and timestamp. This is the existing cap's
 **report-released logical capacity**, not physical session or folder retirement,
@@ -1840,7 +1844,15 @@ input timestamps. `validateCapacityAllocation` in
 capacity identities, original report releases and successive predecessor links;
 it rejects missing/disconnected links and reuse by multiple successors. Journal
 selection is serialized with native admission, so a lost/uncertain launch keeps
-its original token. Missing legacy journals, changed claims/limits, process-death
+its original token. An explicit `run.abandoned` after the holder claim permits
+the slot to start a new chain: `reset_after` names the old receipt and abandonment
+event, while predecessor, `freeAt` and `freedBy` stay null. This is no report
+turnover witness and never adds a release to the abandoned receipt. Mere process
+absence or an unreported live/unknown run cannot reset a token. Admission checks
+only the head link; the capture validator still walks its report chain. A release
+must fall within the saved final-admission event fence, which can be later than
+run start. Old receipts without that fence retain their original start boundary.
+Missing legacy journals, changed claims/limits, process-death
 releases and unsupported reuse launches have no invented lineage. An unavailable
 join is saved as `capacityLineageUnknown` and never becomes a new required
 capability or blocks otherwise authorized admission. Packaging must retain those

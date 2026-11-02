@@ -143,7 +143,7 @@ test('an abandoned holder re-roots its slot without inventing a report release, 
   const missing=context.events.filter(e=>e.seq!==r.reset_after.source.seq);
   assert.throws(()=>validateCapacityAllocation(r,{...context,events:missing}),/abandonment/);
   const changed=structuredClone(context.journals);changed.find(j=>j.run===a.run).ownership.generation++;
-  assert.throws(()=>validateCapacityAllocation(r,{...context,journals:changed}),/generation/);
+  assert.throws(()=>validateCapacityAllocation(r,{...context,journals:changed}),/original start\/claim\/allocation/);
   const fork=structuredClone(context.journals);fork.push({capacityAllocation:{id:'fork',reset_after:r.reset_after}});
   assert.throws(()=>validateCapacityAllocation(r,{...context,journals:fork}),/another allocation/);
   t.diagnostic(JSON.stringify({rehearsal:'abandoned A, new root B, report-released C',allocations:[a,b,c].map(j=>j.capacityAllocation)}));
@@ -195,5 +195,5 @@ test('admission validates only the head link while capture still rejects a broke
   const context={events:h.events,journals:h.journals,capacity:receipt.capacity};
   assert.equal(validateCapacityAllocation(receipt,context),receipt);
   const changed=structuredClone(h.journals);changed[0].ownership.generation++;
-  assert.throws(()=>validateCapacityAllocation(receipt,{...context,journals:changed}),/generation/);
+  assert.throws(()=>validateCapacityAllocation(receipt,{...context,journals:changed}),/original start\/claim\/allocation/);
 });

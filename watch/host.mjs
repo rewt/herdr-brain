@@ -21,25 +21,25 @@ export async function ensureObserver({repo,org,project,env=process.env,retry=fal
   const release=noticeLock(path.join(host,'line-host.lock'));
   const save=value=>writeFileAtomic(file,JSON.stringify(value)+'\n',0o600);
   const expected={repo,project,source,socket:herdrSocketPath(env)};
-  let attempt=readJson(file);
-  const hold=reason=>{
+  let attempt=readJson(file),launched=false;
+  const hold=(reason,{recheck=false}={})=>{
     attempt={...attempt,schema:'brain.line-observer/v1',id:attempt?.id??randomUUID(),state:'held',code:'SHARED_OBSERVER_HELD',
-      repo,org,source,reason,evidence:file,owner:'project-supervisor',next_event:'supervisor inspects original receipt and explicitly retries watch/host.mjs'};
+      repo,org,source,reason,recheck,evidence:file,owner:'project-supervisor',next_event:recheck?'next line pass rechecks the original host':'supervisor inspects original receipt and explicitly retries watch/host.mjs'};
     save(attempt);return attempt;
   };
   try {
     guard();
-    if(attempt?.state==='held'&&!retry)return attempt;
+    if(attempt?.state==='held'&&!attempt.recheck&&!retry)return attempt;
     const owner=readJson(path.join(host,'owner.json'));
     if(owner&&alive(owner)) {
       try { observerReceipt(org,expected,alive); }
-      catch(error){return hold(error.message);}
+      catch(error){return hold(error.message,{recheck:true});}
       const ready={...attempt,state:'ready',host:owner};save(ready);return ready;
     }
     // An interrupted launch without a proven dead child stays UNKNOWN. A
     // definite refusal is sticky; only an explicit supervisor retry can clear it.
     if(attempt?.state==='starting'&&!retry)return hold('original observer start has no ready receipt; retain its uncertain outcome');
-    if(attempt?.child&&alive(attempt.child))return hold('original observer child still owns startup; retain it');
+    if(attempt?.child&&alive(attempt.child))return hold('original observer child still owns startup; retain it',{recheck:true});
     guard();
     const previous=attempt;
     attempt={schema:'brain.line-observer/v1',id:randomUUID(),repo,org,source,state:'starting',at:new Date().toISOString(),
@@ -49,6 +49,7 @@ export async function ensureObserver({repo,org,project,env=process.env,retry=fal
     try {
       const childEnv={...env};
       for(const key of Object.keys(childEnv))if(/^(HERDR_(ENV|PANE_ID|TAB_ID|WORKSPACE_ID)|CODEX_(THREAD_ID|SESSION_ID)|GIT_.*|ORG_GUARD_OVERRIDE|LANE_CONFIG)$/.test(key))delete childEnv[key];
+      launched=true;
       child=start(process.execPath,[path.join(source,'watch/observer.mjs'),'--repo',repo,'--org',org],
         {cwd:repo,env:childEnv,detached:true,stdio:['ignore',fd,fd]});
       child.on('error',error=>{startError=error;});child.unref();
@@ -64,8 +65,8 @@ export async function ensureObserver({repo,org,project,env=process.env,retry=fal
         if(owner.pid===child.pid&&owner.identity===attempt.child?.identity){attempt={...attempt,state:'ready',host:owner};save(attempt);return attempt;}
       } catch {/* startup is bounded; no dispatch until the exact receipt exists */}
     } while(Date.now()<deadline);
-    return hold('observer readiness is uncertain; retain original child and inspect host.log');
-  } catch(error) {return hold(error.message);}
+    return hold('observer readiness is uncertain; retain original child and inspect host.log',{recheck:true});
+  } catch(error) {return hold(error.message,{recheck:!launched&&attempt?.state!=='starting'&&!(attempt?.state==='held'&&!attempt.recheck)});}
   finally {release();}
 }
 

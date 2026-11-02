@@ -433,6 +433,23 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         return entry;
       };
       const effect=(...args)=>withSubject(args[0],()=>effectBody(...args));
+      const supervisorNotice=(key,id,message,extra=[])=>{
+        let address;
+        try{address=projectExceptionAddress(repo,config,config.routes?.['engineer-xhigh']?'engineer-xhigh':'engineer',childEnv);}
+        catch(error){address={to:null,reason:error.message};}
+        // The inbox retains a concrete target; it cannot resolve a missing one
+        // later. Keep the same pending ID here until the binding exists.
+        if(!address.to)return{id,state:'pending',reason:address.reason??'recorded project supervisor binding is missing'};
+        effect(key,()=>{
+          try{return JSON.parse(cli('supervisor/prompt-supervisor.mjs',[address.to,message,'--org',org,...extra,'--id',id,'--project-supervisor'],{environment:{SUPERVISOR_INPUT_WAIT_SECONDS:'0'}}));}
+          catch(error){
+            let reply;try{reply=JSON.parse(error.receipt?.stdout);}catch{}
+            if(error.receipt?.status===3&&reply?.queued===true&&reply.id===id)return reply;
+            throw error;
+          }
+        });
+        return{id,state:effects.actions[key]?.state??'pending'};
+      };
       const sourceRevision=bundleRelease().commit??sourceGit(sourceRoot,['rev-parse','HEAD']);
       log({ action: 'pass-start', pid: process.pid, identity: project.identity, source: sourceRoot,source_head:sourceRevision });
       try { snapshot = current(); } catch (e) { log({ action: 'pass-held', reason: e.message }); return { held: e.message, directory }; }
@@ -466,13 +483,14 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         }
       }catch(error){sharedWatchHold={id:'host-command',code:'SHARED_OBSERVER_HELD',reason:error.message,evidence:path.join(org,'watch/observer/line-host.json')};}
       if(sharedWatchHold){
-        const owner=projectExceptionAddress(repo,config,config.routes?.['engineer-xhigh']?'engineer-xhigh':'engineer',childEnv).to;
-        effects.shared_watch={...sharedWatchHold,owner,wake_fact:'next pass after explicit original host recovery'};save();
+        const owner='project-supervisor',generation=(effects.shared_watch?.generation??0)+(effects.shared_watch?.state==='released'?1:0);
+        effects.shared_watch={...sharedWatchHold,owner,generation,wake_fact:'next pass after original host recovery'};save();
         note('shared-observer',sharedWatchHold.reason,{code:'SHARED_OBSERVER_HELD',owner,evidence:sharedWatchHold.evidence},true);
-        effect(`shared-observer-notice:${sharedWatchHold.id}`,()=>cli('supervisor/prompt-supervisor.mjs',[owner,
-          `[line-shared-observer-held] code=SHARED_OBSERVER_HELD owner=${owner}; evidence=${sharedWatchHold.evidence}; reason=${sharedWatchHold.reason}; held-action=new shared line starts; recover the original host with watch/host.mjs --retry, never fall back to process mode`,
-          '--org',org,'--id',`line-shared-observer:${digest([project.identity,sharedWatchHold.id])}`,'--project-supervisor'],{environment:{SUPERVISOR_INPUT_WAIT_SECONDS:'0'}}));
-      }else if(effects.shared_watch){effects.shared_watch={...effects.shared_watch,state:'released',released_at:now()};save();}
+        const notice=supervisorNotice(`shared-observer-notice:${sharedWatchHold.id}:${generation}`,
+          `line-shared-observer:${digest([project.identity,sharedWatchHold.id,generation])}`,
+          `[line-shared-observer-held] code=SHARED_OBSERVER_HELD owner=${owner}; evidence=${sharedWatchHold.evidence}; reason=${sharedWatchHold.reason}; held-action=new shared line starts; recover the original host with watch/host.mjs --retry, never fall back to process mode`);
+        effects.shared_watch.notice=notice;save();
+      }else if(effects.shared_watch&&effects.shared_watch.state!=='released'){effects.shared_watch={...effects.shared_watch,state:'released',released_at:now()};save();}
       const evaluationCounts={admission_evaluated:0,admission_skipped:0,source_evaluated:0,source_skipped:0};
       const evaluationCache=negativeEvaluationCache({store:()=>effects,identity:project.identity,org,repo,
         counts:evaluationCounts,log,dirty:()=>{noticesDirty=true;}});
@@ -801,11 +819,12 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
           if(status?.failure&&outcome.journal){
             const job=regularJSON(outcome.journal);
             if(job?.watchMode==='shared'&&status.stage==='watch'){
-              const owner=projectExceptionAddress(repo,config,config.routes?.['engineer-xhigh']?'engineer-xhigh':'engineer',childEnv).to;
+              const owner='project-supervisor';
               note(`shared-observer:${item}`,'SHARED_OBSERVER_HELD: original shared registration failed; retain run, claim and journal',{item,run:status.run,owner,journal:outcome.journal},true);
-              effect(`shared-watch-notice:${job.token}`,()=>cli('supervisor/prompt-supervisor.mjs',[owner,
+              const notice=supervisorNotice(`shared-watch-notice:${job.token}`,`line-shared-watch:${job.token}`,
                 `[line-shared-observer-held] run=${status.run} item=${item} code=SHARED_OBSERVER_HELD owner=${owner}; evidence=${outcome.journal}; held-action=original shared registration; restore its original host and use the original dispatch --retry, never replace the run or watcher mode`,
-                '--org',org,'--run',status.run,'--id',`line-shared-watch:${job.token}`,'--project-supervisor'],{environment:{SUPERVISOR_INPUT_WAIT_SECONDS:'0'}}));
+                ['--run',status.run]);
+              entry.shared_watch={code:'SHARED_OBSERVER_HELD',owner,evidence:outcome.journal,notice};save();
             }
           }
           if(status&&!entry.recorded_dispatch_status){entry.recorded_dispatch_status=status;save();log({action:'dispatch-linked-status',key,status});}
@@ -1028,11 +1047,11 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       const classify=queueClassifier(snapshot.state,standing);
       const ordered=orderQueue(snapshot.state,[...snapshot.state.items.values()].filter(item=>!item.closed&&item.kind!=='goal'),standing,classify);
       log({action:'queue-order',policy:standing,candidates:ordered.map(item=>({item:item.id,class:classify(item)}))});
-      if(config&&!policyHold&&!sharedWatchHold)admitItems(ordered);
+      if(config&&!policyHold&&!(sharedWatchHold&&config.dispatch?.watch_mode==='shared'))admitItems(ordered);
       // Detached acknowledgements and review activity are not engineering
       // progress. This is the end of a completed pass, under the same lock.
       const latestAdmission=readAdmission('pass-end');
-      if(config&&!sharedWatchHold&&latestAdmission&&(!latestAdmission.review.enabled||!latestAdmission.review.hold_ordinary))try {
+      if(config&&!(sharedWatchHold&&config.dispatch?.watch_mode==='shared')&&latestAdmission&&(!latestAdmission.review.enabled||!latestAdmission.review.hold_ordinary))try {
         snapshot=observe();
         const haltConfig={...config,ordinary_admission:latestAdmission.ordinary};
         const observation=haltObservation({...snapshot,org,identity:project.identity,config:haltConfig,actions:effects.actions,occupancy:latestOccupancy});

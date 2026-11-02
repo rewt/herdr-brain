@@ -269,16 +269,24 @@ receipt is reused. A proven dead host is restarted on the next ordinary pass.
 The observer checks the line's own STOP as well as project STOP/HOLD and its own
 STOP, and exits when the saved installation changes build. After a supported
 install/restart and cleared boundaries, the new installed line starts its host.
-Clearing a marker alone never starts a service. A live foreign build/birth,
-unknown launch or refusal is retained rather than replaced. Original duties,
+Clearing a marker alone never starts a service. A live foreign build/birth is
+rechecked without launching over it. A readiness timeout rechecks the original
+child for its exact receipt, and a pre-launch install/STOP refusal rechecks on
+the next pass. An unknown launch or definite child refusal stays held for
+explicit inspection/retry. Original duties,
 consumer failures and saved dispatches remain immutable; a build change does
 not migrate a prior build's registrations or authorize replay of their consumers.
 
-`SHARED_OBSERVER_HELD` blocks new starts before a dispatch is issued and records
+`SHARED_OBSERVER_HELD` blocks new shared starts before a dispatch is issued and records
 its project-supervisor owner, original evidence and next action in
 `watch/observer/line-host.json` and the line's effects/diagnostics. The line submits
-one stable notice through the existing durable project-supervisor inbox; pending,
-refused and uncertain delivery stays with that original notice. There is no
+one stable notice per outage through the existing durable project-supervisor inbox.
+Without a recorded supervisor address the role-owned hold keeps that notice ID
+pending and queues nothing; subsequent passes recheck the binding. A queued
+receipt is recorded as queued, while refused and uncertain delivery stays with
+that original notice and is never replayed. A later outage after recovery gets
+a new generation and notice. Explicit process selection still allows new process
+starts while old shared duties retain their hold and notice. There is no
 process-watcher fallback. A registration race after launch retains the original
 run/claim/journal and also sends a stable supervisor notice.
 

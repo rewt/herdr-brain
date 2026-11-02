@@ -52,3 +52,28 @@ test('shared watch host rechecks STOP at startup and retains the original child 
   assert.equal(held.code,'SHARED_OBSERVER_HELD');assert.match(held.reason,/STOP/);assert.equal(f.launches,1);
   assert.equal((await f.run()).id,held.id);assert.equal(f.launches,1);
 });
+
+test('shared watch host rechecks a foreign live owner and starts only after its proven death',async t=>{
+  const f=fixture(t),file=path.join(f.directory,'owner.json');
+  fs.writeFileSync(file,JSON.stringify({pid:77,identity:'foreign-birth',source:'/previous-build'}));
+  const held=await f.run();assert.equal(held.state,'held');assert.equal(held.recheck,true);assert.equal(f.launches,0);
+  assert.equal((await f.run()).id,held.id);assert.equal(f.launches,0);
+  const ready=await f.run({alive:owner=>owner.pid!==77});assert.equal(ready.state,'ready');assert.equal(f.launches,1);
+  assert.equal(ready.previous.id,held.id);
+});
+
+test('shared watch host accepts a late exact readiness receipt without retry or another launch',async t=>{
+  const f=fixture(t),file=path.join(f.directory,'owner.json');let original;
+  const held=await f.run({wait:async()=>{if(fs.existsSync(file)){original=fs.readFileSync(file);fs.unlinkSync(file);}}});
+  assert.equal(held.state,'held');assert.equal(held.recheck,true);assert.equal(f.launches,1);assert.ok(original);
+  assert.equal((await f.run()).state,'held');assert.equal(f.launches,1,'live uncertain child is retained');
+  fs.writeFileSync(file,original);
+  const ready=await f.run();assert.equal(ready.state,'ready');assert.equal(ready.id,held.id);assert.equal(f.launches,1);
+  assert.equal(ready.host.pid,held.child.pid);assert.equal(ready.host.identity,held.child.identity);
+});
+
+test('shared watch host rechecks a guard refusal before launch when the install or STOP boundary clears',async t=>{
+  const f=fixture(t),held=await f.run({guard:()=>{throw Error('installation starting or STOP');}});
+  assert.equal(held.state,'held');assert.equal(held.recheck,true);assert.equal(f.launches,0);
+  assert.equal((await f.run()).state,'ready');assert.equal(f.launches,1);
+});

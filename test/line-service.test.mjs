@@ -1179,22 +1179,101 @@ for(const mode of [undefined,'process','shared'])test(`shared watch line choice 
   assert.equal(hosts,mode==='shared'?1:0);
 });
 
-test('shared watch line hold reaches the supervisor once and releases only after host recovery',t=>{
+test('shared watch missing binding stays pending, binds once, and releases after host recovery',t=>{
   const f=fixture(t),file=path.join(f.repo,'.lane.json'),config=JSON.parse(fs.readFileSync(file));
   config.dispatch.watch_mode='shared';fs.writeFileSync(file,JSON.stringify(config));f.add('Waiting for observer');
-  let ready=false;const notices=[];
+  let ready=false;const notices=[],commands=[];
   const command=(exe,args,options)=>{
+    commands.push(args);
     if(args[0]===path.join(sourceRoot,'watch/host.mjs'))return{status:0,stdout:JSON.stringify(ready?{state:'ready'}:
       {id:'original-host',state:'held',code:'SHARED_OBSERVER_HELD',reason:'observer refused',evidence:'original-host.json'})};
-    if(args[0]===path.join(sourceRoot,'supervisor/prompt-supervisor.mjs')){notices.push(args);return{status:0,stdout:'{"queued":true,"delivered":false}'};}
+    if(args[0]===path.join(sourceRoot,'supervisor/prompt-supervisor.mjs')){notices.push(args);return{status:3,stdout:JSON.stringify({queued:true,delivered:false,id:args[args.indexOf('--id')+1]})};}
     return f.command(exe,args,options);
   };
   const service=()=>f.service({command});service().pass();service().pass();
-  assert.equal(f.calls.length,0,'no dispatch or process fallback while shared host is held');assert.equal(notices.length,1);
-  assert.ok(notices[0].includes('--project-supervisor'));assert.match(notices[0][2],/SHARED_OBSERVER_HELD/);
   const effects=()=>JSON.parse(fs.readFileSync(path.join(service().directory,'effects.json')));
-  assert.equal(effects().shared_watch.code,'SHARED_OBSERVER_HELD');assert.ok(effects().shared_watch.owner);
+  assert.equal(f.calls.length,0,'no dispatch or process fallback while shared host is held');assert.equal(notices.length,0);
+  assert.equal(effects().shared_watch.code,'SHARED_OBSERVER_HELD');assert.equal(effects().shared_watch.owner,'project-supervisor');
+  assert.equal(effects().shared_watch.notice.state,'pending');const id=effects().shared_watch.notice.id;
+  assert.ok(commands.every(args=>args.every(value=>value!==null&&value!=='null')));
+  assert.ok(Object.values(effects().record_notices).some(n=>n.scope.code==='SHARED_OBSERVER_HELD'&&n.inspection_due));
+  f.env.MONITOR_SUPERVISOR_AGENT='supervisor-test';service().pass();service().pass();
+  assert.equal(notices.length,1);assert.equal(notices[0][1],'supervisor-test');
+  assert.ok(notices[0].includes('--project-supervisor'));assert.match(notices[0][2],/owner=project-supervisor/);
+  assert.equal(effects().shared_watch.notice.id,id);assert.equal(effects().shared_watch.notice.state,'complete');
+  const action=Object.values(effects().actions).find(a=>a.result?.id===id);assert.equal(action.state,'complete');
   ready=true;service().pass();assert.equal(f.calls.length,1);assert.equal(effects().shared_watch.state,'released');
+  const released=effects().shared_watch.released_at;service().pass();assert.equal(effects().shared_watch.released_at,released);
+});
+
+for(const status of [3,1])test(`shared watch supervisor exit ${status} is retained without replay`,t=>{
+  const f=fixture(t),file=path.join(f.repo,'.lane.json'),config=JSON.parse(fs.readFileSync(file));
+  config.dispatch.watch_mode='shared';fs.writeFileSync(file,JSON.stringify(config));f.env.MONITOR_SUPERVISOR_AGENT='supervisor-test';
+  let notices=0;
+  const command=(exe,args,options)=>{
+    if(args[0]===path.join(sourceRoot,'watch/host.mjs'))return{status:0,stdout:'{"id":"held","state":"held","reason":"observer refused"}'};
+    if(args[0]===path.join(sourceRoot,'supervisor/prompt-supervisor.mjs')){notices++;return{status,stdout:JSON.stringify({queued:status===3,delivered:false,id:args[args.indexOf('--id')+1]})};}
+    return f.command(exe,args,options);
+  };
+  const service=()=>f.service({command});service().pass();service().pass();
+  const effects=JSON.parse(fs.readFileSync(path.join(service().directory,'effects.json')));
+  assert.equal(notices,1);assert.equal(effects.shared_watch.notice.state,status===3?'complete':'held');
+  const action=Object.entries(effects.actions).find(([key])=>key.startsWith('shared-observer-notice:'))[1];
+  assert.equal(action.state,status===3?'complete':'held');
+  if(status===1)assert.equal(action.receipt.status,1);
+});
+
+test('shared watch second host-command outage sends a new notice after recovery',t=>{
+  const f=fixture(t),file=path.join(f.repo,'.lane.json'),config=JSON.parse(fs.readFileSync(file));
+  config.dispatch.watch_mode='shared';fs.writeFileSync(file,JSON.stringify(config));f.env.MONITOR_SUPERVISOR_AGENT='supervisor-test';
+  let ready=false;const notices=[];
+  const command=(exe,args,options)=>{
+    if(args[0]===path.join(sourceRoot,'watch/host.mjs'))return ready?{status:0,stdout:'{"state":"ready"}'}:{status:1,stderr:'host unavailable'};
+    if(args[0]===path.join(sourceRoot,'supervisor/prompt-supervisor.mjs')){notices.push(args);return{status:3,stdout:JSON.stringify({queued:true,id:args[args.indexOf('--id')+1]})};}
+    return f.command(exe,args,options);
+  };
+  const service=()=>f.service({command});service().pass();service().pass();assert.equal(notices.length,1);
+  ready=true;service().pass();ready=false;service().pass();service().pass();
+  assert.equal(notices.length,2);assert.notEqual(notices[0][notices[0].indexOf('--id')+1],notices[1][notices[1].indexOf('--id')+1]);
+  const effects=JSON.parse(fs.readFileSync(path.join(service().directory,'effects.json')));
+  assert.equal(effects.shared_watch.generation,1);assert.equal(effects.shared_watch.id,'host-command');
+});
+
+test('shared watch held saved duties notify without blocking selected process starts',t=>{
+  const f=fixture(t),registry=path.join(f.org,'watch/shared');fs.mkdirSync(registry,{recursive:true});
+  fs.writeFileSync(path.join(registry,'R-9.json'),'{}');f.add('Process work while old shared duty is held');
+  f.env.MONITOR_SUPERVISOR_AGENT='supervisor-test';let notices=0;
+  f.service({command:(exe,args,options)=>{
+    if(args[0]===path.join(sourceRoot,'watch/host.mjs'))return{status:0,stdout:'{"id":"held","state":"held","reason":"observer refused"}'};
+    if(args[0]===path.join(sourceRoot,'supervisor/prompt-supervisor.mjs')){notices++;return{status:3,stdout:JSON.stringify({queued:true,id:args[args.indexOf('--id')+1]})};}
+    return f.command(exe,args,options);
+  }}).pass();
+  assert.equal(notices,1);assert.equal(f.calls.length,1);assert.equal(f.calls[0].args[f.calls[0].args.indexOf('--watch-mode')+1],'process');
+});
+
+test('shared watch original registration failure retains role owner and pending notice without a binding',t=>{
+  const f=fixture(t),item=f.add('Original shared registration failure'),service=f.service(),common=gitProject(f.repo).identity;
+  const key=`dispatch:${item}:${f.show(item).created.seq}:ordinary`,journal=path.join(f.org,'dispatch/original-shared.json');
+  fs.mkdirSync(path.dirname(journal),{recursive:true});
+  fs.writeFileSync(journal,JSON.stringify({token:'original-shared',watchMode:'shared'}));
+  const status={type:'dispatch.completed',project:common,journal,attempt:'original-shared',item,run:'R-1',stage:'watch',exit_code:1,
+    failure:{code:'DISPATCH_FAILED',kind:'error',stage:'watch'}};
+  transact(f.org,()=>({add:[status]}));
+  const original={state:'held',original_outcome:{status:'dispatch-complete',journal,run:'R-1',producer:{attempt:'original-shared'}},recorded_dispatch_status:status};
+  const file=path.join(service.directory,'effects.json');fs.writeFileSync(file,JSON.stringify({identity:common,org:f.org,actions:{[key]:original}}));
+  service.pass();f.service().pass();
+  const effects=JSON.parse(fs.readFileSync(file)),hold=effects.actions[key].shared_watch;
+  assert.equal(hold.owner,'project-supervisor');assert.equal(hold.notice.state,'pending');assert.equal(hold.notice.id,'line-shared-watch:original-shared');
+  assert.equal(hold.evidence,journal);assert.equal(f.calls.length,0);
+  assert.ok(Object.values(effects.record_notices).some(n=>n.scope.item===item&&n.scope.owner==='project-supervisor'&&n.inspection_due));
+  const bytes=fs.readFileSync(journal,'utf8'),notices=[];f.env.MONITOR_SUPERVISOR_AGENT='supervisor-test';
+  const command=(exe,args,options)=>{
+    if(args[0]===path.join(sourceRoot,'supervisor/prompt-supervisor.mjs')){notices.push(args);return{status:3,stdout:JSON.stringify({queued:true,id:args[args.indexOf('--id')+1]})};}
+    return f.command(exe,args,options);
+  };
+  f.service({command}).pass();f.service({command}).pass();
+  assert.equal(notices.length,1);assert.equal(notices[0][1],'supervisor-test');assert.ok(notices[0].includes('--project-supervisor'));
+  assert.equal(JSON.parse(fs.readFileSync(file)).actions[key].shared_watch.notice.state,'complete');assert.equal(fs.readFileSync(journal,'utf8'),bytes);
 });
 
 test('shared watch invalid project choice holds instead of selecting process',t=>{

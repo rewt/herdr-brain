@@ -25,13 +25,13 @@ test('actual serialized dispatcher selects report-released A to B to C and rejec
     fs.writeFileSync(file,`---\nrun: ${job.run}\noutcome: done\nsummary: Fixture source complete\nheadline: Fixture source complete\n---\n`);
     f.rec(['ingest',file]);
   };
-  const a=launch(f.item,'a');assert.equal(a.capacityAllocation.freedBy,null);
+  const a=launch(f.item,'turnover-a');assert.equal(a.capacityAllocation.freedBy,null);
   const itemB=f.rec(['add','B consumes A capacity','--role','engineer']).match(/ENG-\d+/)[0];
-  const held=f.dispatch([itemB,'--lane','b','--route','engineer','--brief',f.brief]);
+  const held=f.dispatch([itemB,'--lane','turnover-b','--route','engineer','--brief',f.brief]);
   assert.notEqual(held.status,0);assert.match(held.stderr,/cap 1 reached/);
   assert.equal(journals(f).filter(j=>j.run).length,1,'no start or lineage fabricated while full');
-  finish(a);const b=launch(itemB,'b');finish(b);
-  const itemC=f.rec(['add','C consumes B capacity','--role','engineer']).match(/ENG-\d+/)[0],c=launch(itemC,'c');
+  finish(a);const b=launch(itemB,'turnover-b');finish(b);
+  const itemC=f.rec(['add','C consumes B capacity','--role','engineer']).match(/ENG-\d+/)[0],c=launch(itemC,'turnover-c');
   const all=events(f),jobs=journals(f),capacity=c.capacityAllocation.capacity;
   for(const [parent,child]of [[a,b],[b,c]]){
     const r=child.capacityAllocation,p=parent.capacityAllocation;

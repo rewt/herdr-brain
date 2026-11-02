@@ -43,11 +43,15 @@ const fileGroup = argv.includes('--file-group');
 const outputDrainMs = 5_000;
 async function copyOutput(source, output) {
   // A pipeline into shared stdio retains destination listeners after each
-  // file. Await each write callback instead: it handles backpressure and
-  // errors without adding listeners or ending the shared destination.
-  for await (const bytes of source) {
-    await new Promise((resolve, reject) => output.write(bytes, error => error ? reject(error) : resolve()));
-  }
+  // file. Await write callbacks for backpressure and errors, and consume the
+  // accompanying error event until the copy settles. Never end shared stdio.
+  const onError = () => {};
+  output.on('error', onError);
+  try {
+    for await (const bytes of source) {
+      await new Promise((resolve, reject) => output.write(bytes, error => error ? reject(error) : resolve()));
+    }
+  } finally { output.off('error', onError); }
 }
 const selected = new Set(JSON.parse(process.env.MONITOR_PROMOTION_TEST_FILES ?? '[]'));
 const files = argv.filter(arg => !arg.startsWith('--')).filter(file => !argv.some(arg => arg.startsWith('--test-name-pattern=')) || !selected.has(file));

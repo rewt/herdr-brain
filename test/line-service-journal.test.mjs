@@ -8,7 +8,7 @@ import {readServiceJournal} from '../line-service/review.mjs';
 import {refreshJournal} from '../line-service/scheduling.mjs';
 
 function fixture(t){
-  const directory=fs.mkdtempSync(path.join(os.tmpdir(),'line-journal-'));
+  const directory=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'line-journal-')));
   t.after(()=>fs.rmSync(directory,{recursive:true,force:true}));
   const file=path.join(directory,'effects.json');
   const effects={identity:'/own/.git',org:'/own/.org',actions:{original:{state:'started',attempt:'original',commands:[{receipt:'original-result'}]}},

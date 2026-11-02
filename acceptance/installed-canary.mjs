@@ -384,13 +384,17 @@ export async function runCanary(c) {
       assert.ok(rows().some(r=>r.action==='safety-repair'&&r.run===job.run&&r.current.state==='blocked'));
       // Vanish the native worker without changing its original binding.
       const original=native().workspaces[job.worker.workspaceId].agent;
+      const originalJournal=fs.readFileSync(job.file),originalDuty=fs.readFileSync(job.watcher.shared);
       changeNative(n=>{delete n.workspaces[job.worker.workspaceId].agent;});
       await until(()=>events().some(e=>e.type==='note.added'&&e.id===job.run&&e.text.includes('gone')),'lost vanished hint recovered');
-      // The fatal missing-worker observation correctly retains its original
-      // duty. A report for a separate shared run proves report + cleanup.
-      await until(()=>JSON.parse(fs.readFileSync(step)).phase==='failed'&&
-        fs.existsSync(path.join(org,'watch/observer/held',job.run+'.json')),'vanished original consumer failure durably held');
-      const vanishedStep=JSON.parse(fs.readFileSync(step));assert.equal(vanishedStep.phase,'failed');
+      // A delivered missing-worker notice completes the finite step; it does
+      // not authorize finality or cleanup of the original allocation. Genuine
+      // consumer errors, rather than a vanished worker, require a held duty.
+      await until(()=>JSON.parse(fs.readFileSync(step)).phase==='complete'&&
+        rows().some(r=>r.action==='consumer-finished'&&r.run===job.run&&r.result.code===0),
+        'vanished original consumer notice durably completed');
+      const vanishedBytes=fs.readFileSync(step),vanishedStep=JSON.parse(vanishedBytes);
+      assert.equal(fs.existsSync(path.join(org,'watch/observer/held',job.run+'.json')),false);
       const reportItem=record(['add','Shared report and cleanup control','--role','engineer']).match(/ENG-\d+/)[0];service(1).pass();
       const reportJob=journals().find(j=>j.item===reportItem);assert.ok(reportJob,audit());sharedHost(reportJob);
       await settled(path.join(org,'watch/steps',reportJob.run+'.json'),'report shared consumer durably waiting and observer idle');
@@ -405,10 +409,16 @@ export async function runCanary(c) {
       assert.ok(repairs.some(r=>r.run===reportJob.run&&r.current.report!=='missing'&&r.previous.report==='missing'));
       const reconciled=rows().filter(r=>r.action==='reconciled'&&r.reason==='safety');assert.ok(reconciled.length>=3);
       assert.ok(rows().every(r=>r.active===undefined||r.active<=2));
+      const goneNotes=events().filter(e=>e.type==='note.added'&&e.id===job.run&&e.text.includes('gone'));
+      assert.equal(goneNotes.length,1);assert.deepEqual(fs.readFileSync(step),vanishedBytes);
+      assert.deepEqual(fs.readFileSync(job.file),originalJournal);assert.deepEqual(fs.readFileSync(job.watcher.shared),originalDuty);
+      assert.equal(state().runs.get(job.run).report,null);assert.ok(fs.existsSync(job.worker.cwd));assert.equal(prompts(job).length,1);
+      assert.equal(rows().some(r=>r.run===job.run&&['consumer-held','observation-held'].includes(r.action)),false);
       stage('shared-observer',{source:bundle,owner,run:job.run,reportRun:reportJob.run,watchMode:'shared',perRunResidents:0,
         watchers:[job.watcher,reportJob.watcher],
         droppedHints:['native blocked','native vanished','report file'],safetyMs:30000,reconciled,repairs,blockedNotes,
-        vanishedStep,originalBinding:original,reportOnce:true,reportFolderRemoved:true,reportNativeReleased:true,consumerCap:2});
+        vanishedStep,goneNotes,originalDutyUnchanged:true,originalJournalUnchanged:true,vanishedAllocationRetained:true,
+        completedStepNotReplayed:true,originalBinding:original,reportOnce:true,reportFolderRemoved:true,reportNativeReleased:true,consumerCap:2});
     } finally {
       if(fs.existsSync(path.join(root,'shared-watch')))fs.unlinkSync(path.join(root,'shared-watch'));
       if(observer.exitCode===null&&observer.signalCode===null){const closed=new Promise(resolve=>observer.once('close',resolve));observer.kill('SIGTERM');await closed;}

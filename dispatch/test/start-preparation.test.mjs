@@ -5,7 +5,7 @@ import path from 'node:path';
 import { configFixture } from '../../test/helpers/config-home-fixture.mjs';
 import { transact } from '../../lib/store.mjs';
 import { retirementLock } from '../../lib/retire-lock.mjs';
-import { publishCloseoutEvents, readCloseoutEntries, unpublishedCloseoutSources } from '../../lib/closeout.mjs';
+import { bindCloseoutSources, currentCloseoutEntries, publishCloseoutEvents, readCloseoutEntries } from '../../lib/closeout.mjs';
 import { fixture, RECORD, promptCalls } from './dispatch-fixture.mjs';
 
 const rows = f => fs.readFileSync(path.join(f.org, 'events.jsonl'), 'utf8').trim().split('\n').map(JSON.parse);
@@ -15,16 +15,16 @@ test('a busy closeout queue permits one original start and binding, with deferre
   const f = fixture(t);
   fs.symlinkSync(f.org, path.join(f.repo, '.org'));
   const config = path.join(f.repo, '.lane.json'), settings = JSON.parse(fs.readFileSync(config));
-  settings.retirement = { closeout_queue: false };
+  settings.retirement = { closeout_queue: true };
   fs.writeFileSync(config, JSON.stringify(settings));
-  // A real earlier abandoned allocation supplies a lost-publication target on
-  // session binding. No native occupant or cleanup authority is invented.
+  // Commit an earlier allocation's real abandonment envelope without queue
+  // publication. Session binding may refresh only that original bound source.
   const priorLane = path.join(f.root, 'prior');
   f.git(['worktree', 'add', '-b', 'lane/prior', priorLane]);
   const priorRun = f.rec(['start', f.item, '--workspace', priorLane]).match(/^(R-\d+) started/m)[1];
-  f.rec(['abandon', priorRun]);
-  settings.retirement.closeout_queue = true;
-  fs.writeFileSync(config, JSON.stringify(settings));
+  const abandoned = transact(f.org, events => bindCloseoutSources({ cwd: f.repo, org: f.org, env: f.env, events,
+    mutation: { add: [{ type: 'run.abandoned', id: priorRun }] } })).added[0];
+  assert.ok(abandoned.closeout_targets.some(target => target.run === priorRun));
   const common = f.git(['rev-parse', '--path-format=absolute', '--git-common-dir']);
   const lock = path.join(common, 'closeout/queue.lock'), release = retirementLock(lock);
   t.after(release);
@@ -46,14 +46,14 @@ test('a busy closeout queue permits one original start and binding, with deferre
   const binding = events.find(e => e.type === 'run.session_bound' && e.run === job.run);
   assert.ok(binding.closeout_targets.some(target => target.run === priorRun));
   assert.deepEqual(readCloseoutEntries(common), []);
-  const sources = unpublishedCloseoutSources(common, f.org, events);
-  assert.ok(sources.some(e => e.seq === binding.seq), 'the committed source remains discoverable without a supervisor');
+  assert.ok(currentCloseoutEntries(common, f.org, events).some(e => e.source.seq === binding.seq && e.run === priorRun),
+    'the normal next-turn reader sees the record-backed source while publication is deferred');
   release();
   // This is the existing next-turn publication recovery, not dispatch replay.
   const before = fs.readFileSync(path.join(f.org, 'events.jsonl'));
-  publishCloseoutEvents({ cwd: f.repo, org: f.org, env: f.env, added: sources, start: false });
-  assert.ok(readCloseoutEntries(common).some(e => e.source.seq === binding.seq && e.run === priorRun));
-  assert.deepEqual(unpublishedCloseoutSources(common, f.org, rows(f)), []);
+  const recovered = publishCloseoutEvents({ cwd: f.repo, org: f.org, env: f.env, added: [binding], start: false });
+  assert.ok(recovered.some(e => e.source.seq === binding.seq && e.run === priorRun));
+  assert.deepEqual(readCloseoutEntries(common), [], 'record-backed closeout needs no duplicate queue file');
   assert.deepEqual(fs.readFileSync(path.join(f.org, 'events.jsonl')), before);
   assert.equal(promptCalls(f).length, 1);
 });

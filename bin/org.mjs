@@ -1109,7 +1109,7 @@ function brief(argv) {
     // original facts, never the start mutation or its authority checks.
     const reopen = ctx.events.find(e => e.seq === source.seq - 1 && e.type === 'item.reopened' &&
       e.id === run.item && e.note === `reopened by starting ${run.id}`);
-    publishCloseoutEvents({ org: ctx.dir, added: [...(reopen ? [reopen] : []), source] });
+    publishCloseoutEvents({ org: ctx.dir, added: [...(reopen ? [reopen] : []), source], deferBusy: true });
     if (reopen) requestRetirement({ org: ctx.dir, eventSeq: source.seq, source: 'record start' });
     fs.mkdirSync(path.dirname(run.report_path), { recursive: true });
   }

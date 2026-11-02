@@ -59,7 +59,7 @@ export function sessionBindCommand(argv) {
       process.stdout.write(JSON.stringify({ schema: 'dispatch-session-binding/v1', outcome: 'refused', code: 'SESSION_BIND_REFUSED' }) + '\n');
     throw error;
   }
-  publishCloseoutEvents({ cwd: process.cwd(), org, added: result.added });
+  publishCloseoutEvents({ cwd: process.cwd(), org, added: result.added, deferBusy: true });
   const bound = result.added.find(e => e.type === 'run.session_bound') ?? result.result;
   process.stdout.write(JSON.stringify({ schema: 'dispatch-session-binding/v1', outcome: 'bound',
     run: bound.run, journal, attempt: bound.dispatch.attempt, session: bound.session,

@@ -4,10 +4,59 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { configFixture } from '../../test/helpers/config-home-fixture.mjs';
 import { transact } from '../../lib/store.mjs';
+import { retirementLock } from '../../lib/retire-lock.mjs';
+import { publishCloseoutEvents, readCloseoutEntries, unpublishedCloseoutSources } from '../../lib/closeout.mjs';
 import { fixture, RECORD, promptCalls } from './dispatch-fixture.mjs';
 
 const rows = f => fs.readFileSync(path.join(f.org, 'events.jsonl'), 'utf8').trim().split('\n').map(JSON.parse);
 const saved = f => JSON.parse(fs.readFileSync(f.jobs()[0]));
+
+test('a busy closeout queue permits one original start and binding, with deferred sources recoverable', t => {
+  const f = fixture(t);
+  fs.symlinkSync(f.org, path.join(f.repo, '.org'));
+  const config = path.join(f.repo, '.lane.json'), settings = JSON.parse(fs.readFileSync(config));
+  settings.retirement = { closeout_queue: false };
+  fs.writeFileSync(config, JSON.stringify(settings));
+  // A real earlier abandoned allocation supplies a lost-publication target on
+  // session binding. No native occupant or cleanup authority is invented.
+  const priorLane = path.join(f.root, 'prior');
+  f.git(['worktree', 'add', '-b', 'lane/prior', priorLane]);
+  const priorRun = f.rec(['start', f.item, '--workspace', priorLane]).match(/^(R-\d+) started/m)[1];
+  f.rec(['abandon', priorRun]);
+  settings.retirement.closeout_queue = true;
+  fs.writeFileSync(config, JSON.stringify(settings));
+  const common = f.git(['rev-parse', '--path-format=absolute', '--git-common-dir']);
+  const lock = path.join(common, 'closeout/queue.lock'), release = retirementLock(lock);
+  t.after(release);
+  const owner = fs.readFileSync(path.join(lock, 'owner.json'));
+  const result = f.start();
+  assert.equal(result.status, 0, result.stderr + result.stdout);
+  const job = saved(f), events = rows(f);
+  assert.equal(job.stage, 'complete');
+  assert.equal(job.startPreparation.status, 'complete');
+  assert.equal(job.sessionBinding.status, 'bound');
+  assert.equal(job.sessionBinding.commit_attempts.length, 1);
+  assert.equal(job.sessionBinding.commit_receipt.recorded, true);
+  assert.equal(events.filter(e => e.type === 'run.started' && e.id === job.run).length, 1);
+  assert.equal(events.filter(e => e.type === 'run.claimed' && e.run === job.run).length, 1);
+  assert.equal(events.filter(e => e.type === 'run.session_bound' && e.run === job.run).length, 1);
+  assert.equal(f.calls().filter(c => c.type === 'lane' && c.a[0] === 'dispatch').length, 1);
+  assert.equal(promptCalls(f).length, 1);
+  assert.deepEqual(fs.readFileSync(path.join(lock, 'owner.json')), owner, 'live lock was neither stolen nor released');
+  const binding = events.find(e => e.type === 'run.session_bound' && e.run === job.run);
+  assert.ok(binding.closeout_targets.some(target => target.run === priorRun));
+  assert.deepEqual(readCloseoutEntries(common), []);
+  const sources = unpublishedCloseoutSources(common, f.org, events);
+  assert.ok(sources.some(e => e.seq === binding.seq), 'the committed source remains discoverable without a supervisor');
+  release();
+  // This is the existing next-turn publication recovery, not dispatch replay.
+  const before = fs.readFileSync(path.join(f.org, 'events.jsonl'));
+  publishCloseoutEvents({ cwd: f.repo, org: f.org, env: f.env, added: sources, start: false });
+  assert.ok(readCloseoutEntries(common).some(e => e.source.seq === binding.seq && e.run === priorRun));
+  assert.deepEqual(unpublishedCloseoutSources(common, f.org, rows(f)), []);
+  assert.deepEqual(fs.readFileSync(path.join(f.org, 'events.jsonl')), before);
+  assert.equal(promptCalls(f).length, 1);
+});
 
 test('closeout publication moves outside start locks and its failure retains pending preparation', t => {
   const f = fixture(t), hook = path.join(f.root, 'publication.mjs');

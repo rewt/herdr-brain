@@ -25,8 +25,12 @@ The bundled record CLI uses `start --defer-preparation`: its reply follows the
 committed start, before closeout publication or brief rendering. Dispatch saves
 and claims that run, releases start admission, then calls
 `brief R-n --prepare-start` to publish the original closeout facts and materialize
-the complete brief and report directory before native launch. Preparation failure
-retains the same run and journal; continuation never repeats a committed start.
+the complete brief and report directory before native launch. A busy closeout
+queue defers only post-commit publication in preparation and session binding;
+the next guarded closeout turn reads the committed revisions and reconciles
+unpublished source envelopes. It never replays start, binding or native delivery.
+Other preparation failures retain the same run and journal; continuation never
+repeats a committed start.
 An explicit `--org-cli` keeps the custom CLI's synchronous start contract, and
 older saved journals keep their original preparation behavior.
 The frozen snapshot contains routing fields only, including with an explicit

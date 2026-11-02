@@ -52,7 +52,7 @@ async function successorFixture(t,{currentRecovery=false,incompatibleCandidate=f
     {
       // Retain exact admitted readers; changing the canonical writer does not
       // self-register a new reader profile in this fixture or in production.
-      const reader=legacy?'ab671e89865ccf85d6d7d6d410688703d019d8ca':'726ba8b8f42056be25e839a7da31c13aee26d66d';
+      const reader=legacy?'ab671e89865ccf85d6d7d6d410688703d019d8ca':'bb50836ee56b56ed720a902035ec7e8cbe5699e4';
       const exact=path.join(f.scratch,'exact-'+name);fs.mkdirSync(exact);
       const tar=spawnSync('git',['archive',reader],{cwd:product,maxBuffer:128*1024*1024});assert.equal(tar.status,0,tar.stderr?.toString());
       const extracted=spawnSync('/usr/bin/tar',['-xf','-','-C',exact],{input:tar.stdout});assert.equal(extracted.status,0,extracted.stderr?.toString());

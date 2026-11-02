@@ -9,12 +9,46 @@ import {sessionBindFact} from '../../test/helpers/session-bind.mjs';
 import {gitProject} from '../../lib/project.mjs';
 import {outstandingEffects,readOwnedRun} from '../../lib/run-owner.mjs';
 import {registrationFile,stepFile,readWatchSubject} from '../shared.mjs';
+import {usageStopFile} from '../usage-stop.mjs';
 
 import {fixture,reportText,source} from './step-fixture.mjs';
 import {EventEmitter} from 'node:events';
 import {createObserver} from '../observer.mjs';
 import {enqueueSupervisor,readInbox} from '../../supervisor/prompt-supervisor.mjs';
 function ok(f){const r=f.step();assert.equal(r.status,0,r.stderr||r.stdout);return r;}
+function host(f){
+  const directory=path.join(f.org,'watch/observer');fs.mkdirSync(directory,{recursive:true});
+  fs.writeFileSync(path.join(directory,'owner.json'),JSON.stringify({schema:'brain.run-observer-owner/v1',org:f.org,repo:f.repo,
+    project:gitProject(f.repo).identity,source,socket:herdrSocketPath(),pid:process.pid,identity:ownerIdentity(process.pid),log:path.join(directory,'observations.jsonl')}));
+}
+
+test('session-less shared registration receives its prompt and uses only the later bound session through usage stop and report',t=>{
+  const f=fixture(t,{sessionless:true}),file=registrationFile(f.org,'R-1');fs.unlinkSync(file);host(f);
+  assert.equal(f.register().status,0);const original=fs.readFileSync(file);
+  assert.equal(JSON.parse(original).native.session,undefined);
+  assert.equal(loadRecord(f.org).state.runs.get('R-1').meta.agent_session_id,undefined);
+  ok(f);assert.equal(f.state().phase,'waiting');assert.equal(fs.existsSync(usageStopFile(f.org,'R-1')),false);
+  assert.equal(f.prompt().status,0);const native=f.getNative();
+  ok(f);assert.equal(f.state().phase,'waiting');assert.equal(f.notices().length,0,'native session alone grants no binding');
+  const {state}=loadRecord(f.org);transact(f.org,()=>({add:[sessionBindFact(state.runs.get('R-1'),state,{session:native.agent_session.value})]}));
+  ok(f);assert.equal(f.state().state.observedWorking,true);
+  f.setNative({...native,agent_status:'idle'});ok(f);
+  const usage=fs.readFileSync(usageStopFile(f.org,'R-1'));
+  assert.equal(JSON.parse(usage).binding.session,native.agent_session.value);
+  fs.writeFileSync(f.report,reportText());const notices=f.notices().length;
+  f.setNative({...native,agent_status:'done',agent_session:{value:'foreign-session'}});ok(f);
+  assert.equal(f.state().phase,'waiting');assert.equal(f.notices().length,notices);
+  assert.deepEqual(fs.readFileSync(usageStopFile(f.org,'R-1')),usage,'a replacement cannot change usage recovery');
+  f.setNative({...native,agent_status:'done'});ok(f);assert.equal(f.state().phase,'complete');
+  assert.equal(f.notices().filter(n=>n.text.includes('[org-report]')).length,1);
+  assert.deepEqual(fs.readFileSync(file),original,'late binding never rewrites registration');
+});
+
+for(const field of ['name','pane_id','workspace_id','terminal_id','cwd'])test(`session-less registration still refuses changed ${field}`,t=>{
+  const f=fixture(t,{sessionless:true}),file=registrationFile(f.org,'R-1');fs.unlinkSync(file);host(f);
+  f.setNative({...f.native,[field]:'foreign'});const r=f.register();
+  assert.equal(r.status,1);assert.match(r.stderr,/exact original native worker binding required/);assert.equal(fs.existsSync(file),false);
+});
 
 test('finite watcher validates a working report without final delivery, then hands the stopped report off once',t=>{
   const f=fixture(t);fs.writeFileSync(f.report,reportText());ok(f);

@@ -56,7 +56,8 @@ else if (group === 'agent' && verb === 'start') {
   if (!w || !inside(w.cwd)) throw Error('foreign native start');
   w.agent = { name: target, agent: option('--kind'), pane_id: w.pane.pane_id, tab_id: w.tab.tab_id,
     workspace_id: w.workspace_id, cwd: w.cwd, terminal_id: w.pane.terminal_id,
-    agent_session: { value: w.workspace_id + '-session' }, agent_status: 'idle' };
+    ...(option('--kind')==='codex'&&fs.existsSync(path.join(root,'sessionless-start'))?{}:
+      {agent_session: { value: w.workspace_id + '-session' }}), agent_status: 'idle' };
   w.agentProcess = birth(`[${w.agent.agent}]`, w.shellProcess.pid);
   changed = true; result = { name: target, pane_id: w.pane.pane_id };
 } else if (group === 'agent' && verb === 'get') { if (!agent) missing(); result = { agent }; }
@@ -64,6 +65,8 @@ else if (group === 'agent' && verb === 'list') result = { agents: all.flatMap(w 
 else if (group === 'agent' && verb === 'prompt') {
   if (!agent) missing();
   if (args[3] !== '/exit') {
+    // Codex establishes its session only when the original first prompt lands.
+    agent.agent_session??={value:workspace.workspace_id+'-session'};
     const events = fs.readFileSync(path.join(state.repo, '.org/events.jsonl'), 'utf8').trim().split('\n').map(JSON.parse);
     const binding = events.findLast(e => e.type === 'run.session_bound' && e.session === agent.agent_session.value);
     fs.appendFileSync(path.join(root, 'evidence/native-input.jsonl'), JSON.stringify({ agent: agent.name,

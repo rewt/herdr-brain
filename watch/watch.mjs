@@ -19,7 +19,7 @@ import { bundleRelease, continueRelease, forwardRelease } from '../lib/releases.
 import { acquireWatcherLock } from './lock.mjs';
 import { reconcileUsageStop } from './usage-stop.mjs';
 import { createRunEventTail } from './record-tail.mjs';
-import {registrationFile, stepFile, readJson, nativeBinding, sameNative, observerReceipt, digest, readWatchSubject} from './shared.mjs';
+import {registrationFile, stepFile, readJson, nativeBinding, resolvedNativeBinding, sameNative, observerReceipt, digest, readWatchSubject} from './shared.mjs';
 import {herdrSocketPath} from '../lanes/board/herdr-client.mjs';
 import { readReport } from '../lib/report.mjs';
 import { BRAIN_CONTROLLER, readOwnedRun, requireController, assertOwner, fenceOwner, continueOwnerRelease } from '../lib/run-owner.mjs';
@@ -147,7 +147,7 @@ function readRun() {
   return jsonResult(org(['show', runId, '--json', ...(opt.step ? ['--compact'] : [])]), `org show ${runId}`);
 }
 
-function agentStatus(agent) {
+function agentStatus(agent, current) {
   let result = run(opt.herdr, ['agent', 'get', agent]);
   if(sharedRegistration&&result.status!==0){
     try{if(JSON.parse(result.stderr||result.stdout).error?.code==='agent_not_found')result=run(opt.herdr,['agent','get',sharedRegistration.native.pane]);}catch{}
@@ -158,7 +158,7 @@ function agentStatus(agent) {
     if (body.error?.code === 'agent_not_found') return { state: null };
     if (body.error) return { state: 'unavailable', error: `${body.error.code}: ${body.error.message}` };
     const native = (body.result ?? body).agent;
-    if (sharedRegistration && !sameNative(sharedRegistration.native, native)) return {state:'unavailable',error:'original native occupant changed; retained for the recorded stuck owner'};
+    if (sharedRegistration && !sameNative(resolvedNativeBinding(sharedRegistration.native,current), native)) return {state:'unavailable',error:'original native occupant changed or session binding pending; retained for the recorded stuck owner'};
     const state = native?.agent_status;
     return state ? { state, native, sequence: native.state_change_seq, completion: native.completion_seq } : { state: 'unavailable', error: 'Herdr returned no agent state' };
   } catch (error) {
@@ -521,7 +521,7 @@ async function watch() {
   };
 
   if (dry) {
-    const status = agentStatus(agent);
+    const status = agentStatus(agent, current);
     const state = status.state ?? 'gone';
     const report = reportState(reportPath);
     log(`[dry-run] worker=${state} report=${report.kind}${status.error ? ` error=${status.error}` : ''}; no wait or delivery performed`);
@@ -536,10 +536,7 @@ async function watch() {
     let owned;
     try { owned = assertOwner(readOwnedRun(opt.org, runId), ownership); } catch (error) { log(`${error.message}; stopping without delivery`); return; }
     current = readRun();
-    if(opt.step){
-      const m=current.meta,n=sharedRegistration.native;
-      if(m.identity_conflict||m.agent!==n.agent||m.pane!==n.pane||m.worker_workspace!==n.workspace||m.terminal_id!==n.terminal||current.workspace!==n.cwd||m.agent_session_id&&m.agent_session_id!==n.session)throw Error('original record/native worker binding changed; retain shared duty');
-    }
+    if(opt.step)resolvedNativeBinding(sharedRegistration.native,current);
     if (owned.abandoned || current.abandoned) {
       log(`${runId} was abandoned; stopping`);
       return;
@@ -562,7 +559,7 @@ async function watch() {
         if(!hint.error&&hint.status===0)availableHash=hash;}
     }catch{/* The original watcher continues; the finite line reconciles lost hints. */}};
     if(!opt.step)publishAvailable();
-    const status = agentStatus(agent);
+    const status = agentStatus(agent, current);
     const observedAt = new Date().toISOString();
     const state = status.state;
     if(opt.step&&state!=='unavailable')publishAvailable();
@@ -727,7 +724,10 @@ function registerShared() {
     if(current.meta?.watcher_pid||fs.existsSync(watchReceipt))throw Error('existing watcher/receipt retained; live watcher migration is excluded');
     const native=jsonResult(run(opt.herdr,['agent','get',opt.agent??current.meta?.agent]),'original worker').agent;
     const binding=nativeBinding(native),m=current.meta??{};
-    if(!sameNative(binding,native)||binding.agent!==m.agent||binding.pane!==m.pane||binding.workspace!==m.worker_workspace||binding.terminal!==m.terminal_id||binding.cwd!==current.workspace||m.agent_session_id&&binding.session!==m.agent_session_id)throw Error('exact original native worker binding required');
+    try {
+      resolvedNativeBinding(binding,current);
+      if(m.agent_session_id&&binding.session!==m.agent_session_id)throw Error('session mismatch');
+    } catch {throw Error('exact original native worker binding required');}
     const argv=watcherArgs('--shared');
     fenceOwner(opt.org,runId,ownership,()=>{
       fs.mkdirSync(path.dirname(file),{recursive:true});

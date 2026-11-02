@@ -358,7 +358,8 @@ export async function runCanary(c) {
     git(['add','.lane.json']);git(['commit','-qm','Select shared observation in scratch project']);
     const existingItems=new Set(state().items.keys()),savedDrop=env.INSTALLED_CYCLE_DROP_HINTS;
     env.INSTALLED_CYCLE_DROP_HINTS='1';
-    const ownerFile=path.join(org,'watch/observer/owner.json');
+    const ownerFile=path.join(org,'watch/observer/owner.json'),sessionlessStart=path.join(root,'sessionless-start');
+    fs.writeFileSync(sessionlessStart,'Codex session is established by the first prompt\n');
     let owner;
     try {
       service(0).pass();
@@ -375,6 +376,12 @@ export async function runCanary(c) {
         const duty=JSON.parse(fs.readFileSync(job.watcher.shared));
         assert.equal(duty.run,job.run);assert.equal(duty.source,bundle);
         assert.deepEqual(duty.ownership,job.ownership);
+        assert.equal(duty.native.session,undefined,'registration precedes the first Codex session');
+        assert.equal(state().runs.get(job.run).meta.agent_session_id,undefined,'original launch receipt has no session');
+        const binding=events().find(e=>e.type==='run.session_bound'&&e.run===job.run);
+        assert.ok(binding,'the original dispatch commits its late session binding');
+        assert.equal(binding.session,native().workspaces[job.worker.workspaceId].agent.agent_session.value);
+        assert.equal(job.sessionBinding.status,'bound');assert.equal(prompts(job).length,1);
       };
       const sharedItem=record(['add','Shared installed observation control','--role','engineer']).match(/ENG-\d+/)[0];service(1).pass();
       const job=journals().find(j=>j.item===sharedItem);assert.ok(job,audit());sharedHost(job);
@@ -426,10 +433,12 @@ export async function runCanary(c) {
       assert.equal(rows().some(r=>r.run===job.run&&['consumer-held','observation-held'].includes(r.action)),false);
       stage('shared-observer',{source:bundle,owner,run:job.run,reportRun:reportJob.run,watchMode:'shared',perRunResidents:0,
         watchers:[job.watcher,reportJob.watcher],
+        sessionlessRegistration:true,sessionBindings:events().filter(e=>e.type==='run.session_bound'&&[job.run,reportJob.run].includes(e.run)),
         droppedHints:['native blocked','native vanished','report file'],safetyMs:30000,reconciled,repairs,blockedNotes,
         vanishedStep,goneNotes,originalDutyUnchanged:true,originalJournalUnchanged:true,vanishedAllocationRetained:true,
         completedStepNotReplayed:true,originalBinding:original,reportOnce:true,reportFolderRemoved:true,reportNativeReleased:true,consumerCap:2});
     } finally {
+      fs.rmSync(sessionlessStart,{force:true});
       if(savedDrop===undefined)delete env.INSTALLED_CYCLE_DROP_HINTS;else env.INSTALLED_CYCLE_DROP_HINTS=savedDrop;
       // Fixture teardown uses the supported line STOP boundary.
       fs.writeFileSync(path.join(directory,'STOP'),'Shared canary teardown\n');

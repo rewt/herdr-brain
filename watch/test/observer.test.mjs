@@ -29,7 +29,8 @@ function fixture(t,{count=1,consume,alive=()=>false,timers=globalThis}={}){
     const d={schema:'brain.shared-watch/v1',run,org,repo,project:project.identity,cwd:repo,source,ownership,native:nativeBinding(native),
       report:path.join(root,`${run}.md`),to:'supervisor-test',argv:[run,'--org',org,'--cwd',repo,'--to','supervisor-test'],
       consumer:'watch/watch.mjs --step',wake_fact:'native lifecycle, report/record change or coarse-safety-reconciliation',stuck_owner:'supervisor-test'};
-    duties.push(d);fs.writeFileSync(path.join(sharedDirectory(org),run+'.json'),JSON.stringify(d));record.set(run,{generation:2,owner:ownership.owner,report:null,abandoned:null});
+    duties.push(d);fs.writeFileSync(path.join(sharedDirectory(org),run+'.json'),JSON.stringify(d));record.set(run,{generation:2,owner:ownership.owner,report:null,abandoned:null,
+      workspace:repo,meta:{agent:native.name,pane:native.pane_id,worker_workspace:native.workspace_id,terminal_id:native.terminal_id,agent_session_id:native.agent_session.value}});
   }
   let clock=100_000;
   class Client extends EventEmitter{
@@ -47,6 +48,30 @@ function fixture(t,{count=1,consume,alive=()=>false,timers=globalThis}={}){
   return {repo,org,socket,project,client,agents,duties,rows,calls,record,save,build,get observer(){return observer;},advance:ms=>clock+=ms};
 }
 async function drain(f){await f.observer.idle();await new Promise(resolve=>setImmediate(resolve));await f.observer.idle();}
+
+test('observer resolves a session-less original duty only after run.session_bound and refuses replacement counters',async t=>{
+  const f=workerFixture(t,{sessionless:true}),rows=[];
+  class Client extends EventEmitter{async snapshot(){return {protocol:22,agents:[f.getNative()],panes:[{pane_id:f.native.pane_id}]};}subscribe(){}close(){}}
+  const observer=createObserver({repo:f.repo,org:f.org,client:new Client(),consume:()=>({code:f.step().status}),log:r=>rows.push(r)});
+  t.after(()=>observer.close());const original=fs.readFileSync(path.join(sharedDirectory(f.org),'R-1.json'));
+  await observer.reconcile('registration');await observer.idle();
+  assert.equal(rows.findLast(r=>r.action==='observation').bound,false);assert.equal(f.state().phase,'waiting');
+  assert.equal(f.prompt().status,0);await observer.reconcile('prompt');await observer.idle();
+  assert.equal(rows.findLast(r=>r.action==='observation').bound,false,'native session alone is not the recorded binding');
+  const {state}=loadRecord(f.org),session=f.getNative().agent_session.value;
+  transact(f.org,()=>({add:[sessionBindFact(state.runs.get('R-1'),state,{session})]}));
+  await observer.reconcile('record-binding');await observer.idle();
+  const bound=rows.findLast(r=>r.action==='observation');assert.equal(bound.bound,true);assert.equal(bound.state_change_seq,1);
+  assert.equal(bound.record.meta.agent_session_id,session);assert.equal(bound.record.meta.identity_conflict,false);
+  f.setNative({...f.getNative(),agent_session:{value:'replacement'},state_change_seq:99});
+  await observer.reconcile('replacement');await observer.idle();
+  const refused=rows.findLast(r=>r.action==='observation');assert.equal(refused.bound,false);assert.equal(refused.state_change_seq,null);
+  assert.equal(f.state().phase,'waiting');assert.equal(observer.counters.consumer_failures,0);
+  f.setNative({...f.getNative(),agent_session:{value:session},state_change_seq:2});
+  await observer.reconcile('original-restored');await observer.idle();
+  assert.equal(rows.findLast(r=>r.action==='observation').bound,true);assert.equal(f.state().state.observedWorking,true);
+  assert.deepEqual(fs.readFileSync(path.join(sharedDirectory(f.org),'R-1.json')),original);
+});
 
 test('one observer binds counters and consumes duplicate/reversed hints once without per-run residents',async t=>{
   const f=fixture(t,{count:8});await f.observer.reconcile('startup');await drain(f);

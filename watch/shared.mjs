@@ -39,6 +39,18 @@ export function nativeBinding(agent) {
   return {agent:agent?.name,pane:agent?.pane_id,workspace:agent?.workspace_id,
     terminal:agent?.terminal_id,session:agent?.agent_session?.value,cwd:agent?.cwd};
 }
+// Registration can precede Codex's first prompt. Keep that original tuple
+// immutable; only the checked record projection supplies a later session.
+export function resolvedNativeBinding(registered, current) {
+  const m=current?.meta??{},binding={agent:m.agent,pane:m.pane,workspace:m.worker_workspace,
+    terminal:m.terminal_id,session:m.agent_session_id,cwd:current?.workspace};
+  if(m.identity_conflict||['agent','pane','workspace','terminal','cwd'].some(k=>
+      typeof registered?.[k]!=='string'||!registered[k]||registered[k]!==binding[k])||
+      registered.session!=null&&registered.session!==''&&
+        (typeof registered.session!=='string'||binding.session&&registered.session!==binding.session))
+    throw Error('original record/native worker binding changed; retain shared duty');
+  return binding;
+}
 export function sameNative(expected, agent) {
   const actual = nativeBinding(agent);
   return ['agent','pane','workspace','terminal','session','cwd'].every(k =>

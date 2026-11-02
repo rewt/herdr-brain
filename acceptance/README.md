@@ -187,6 +187,9 @@ are retained in the durable archive before disposable scratch is removed.
 
 The shared case starts the candidate's actual `watch/observer.mjs`, dispatches
 with `--watch-mode shared`, and uses original finite `watch --step` consumers.
+Its Codex workers have no session at registration; the first prompt establishes
+one and the real dispatch commits `run.session_bound` before observation and
+report cleanup use that session. The original registration remains unchanged.
 Native snapshots/subscription acknowledgement use a declared in-memory protocol
 22 seam, while native and file hints are deliberately dropped. The unchanged
 30-second safety timer must recover blocked, vanished and report observations;

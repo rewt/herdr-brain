@@ -15,7 +15,8 @@ import {promptSupervisor} from '../supervisor/prompt-supervisor.mjs';
 import {readProjectPolicy} from '../lib/config-policy.mjs';
 import {noticeLock} from '../supervisor/notice-lock.mjs';
 import {parseArgs,isMain} from '../lib/cli-help.mjs';
-import {sharedDirectory,observerDirectory,stepFile,readJson,stamp,digest,nativeBinding,sameNative} from './shared.mjs';
+import {effectiveWorkerIdentity} from '../lib/worker-identity.mjs';
+import {sharedDirectory,observerDirectory,stepFile,readJson,stamp,digest,nativeBinding,resolvedNativeBinding,sameNative} from './shared.mjs';
 
 export const SAFETY_RECONCILIATION_MS=30_000;
 const lifecycle=['pane.closed','pane.exited','pane.agent_detected','pane.moved'];
@@ -45,7 +46,10 @@ export function createObserver({repo,org,socket=herdrSocketPath(),client=new Her
       if(reader.tornTail)throw Error('incomplete record prevents observation');
       const result=new Map(duties.map(d=>{
         const r=reader.state.runs.get(d.run);
-        return [d.run,r?{generation:r.owner_generation,owner:r.owner,abandoned:r.abandoned,report:r.report}:null];
+        const selected=Object.fromEntries(['workerReceipts','sessionBindings'].map(key=>
+          [key,new Map([[d.run,reader.state[key].get(d.run)]])]));
+        return [d.run,r?{generation:r.owner_generation,owner:r.owner,abandoned:r.abandoned,report:r.report,
+          workspace:r.workspace,meta:effectiveWorkerIdentity(r,selected)}:null];
       }));return result;
     }finally{reader.close();}
   });
@@ -154,7 +158,12 @@ export function createObserver({repo,org,socket=herdrSocketPath(),client=new Her
           if(faults.has(d.run))continue;
           const step=steps.get(d.run);
           const native=snapshot?.agents.find(a=>a.name===d.native.agent||a.pane_id===d.native.pane);
-          const bound=sameNative(d.native,native),record=records.get(d.run);
+          const record=records.get(d.run);
+          let binding;
+          // Invalid record identity never attributes native counters. Its
+          // original finite consumer still owns the authoritative refusal.
+          try {binding=resolvedNativeBinding(d.native,record);} catch {}
+          const bound=sameNative(binding,native);
           const observation={server,protocol:snapshot?.protocol,version:snapshot?.version,unavailable,
             native:nativeBinding(native),bound,state:native?.agent_status,
             state_change_seq:bound?native.state_change_seq:null,completion_seq:bound?native.completion_seq:null,

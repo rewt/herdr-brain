@@ -9,13 +9,16 @@ import {sharedWatcherDischarged} from '../lib/shared-watcher-release.mjs';
 import {createRetirement} from '../lib/retire-runtime.mjs';
 import {runCloseoutTurn} from '../line-service/closeout-turn.mjs';
 import {events,setup,selectCurrentCleanup,effects} from './helpers/closeout-fixture.mjs';
+import {sessionBindFact} from './helpers/session-bind.mjs';
 
-function fixture(t,{recordOnly=true,phase='complete'}={}) {
+function fixture(t,{recordOnly=true,phase='complete',sessionless=false}={}) {
   const f=setup(t,{direct:true,bound:true,merged:true}),binding=selectCurrentCleanup(f),run='R-1',
     owner={controller:'brain',legacy:false,release:{id:'source',commit:null,root:f.repo,identity:f.common}};
+  const originalBind=events(f).find(e=>e.type==='run.session_bound');
+  if(sessionless)fs.writeFileSync(f.eventFile,events(f).filter(e=>e.type!=='run.session_bound').map(e=>JSON.stringify(e)+'\n').join(''));
   f.append([{type:'run.claimed',run,record:f.org,project:f.common,owner},
     {type:'run.updated',id:run,meta:{watcher_pid:901,watcher_identity:'shared-host-birth'}}]);
-  const [source]=f.report(),state=fold(events(f)),r=state.runs.get(run),worker=effectiveWorkerIdentity(r,state),
+  const state=fold(events(f)),r=state.runs.get(run),worker=effectiveWorkerIdentity(r,state),
     ownership={owner,generation:r.owner_generation},id=`watch:${run}:final`;
   const duty={schema:'brain.shared-watch/v1',run,org:f.org,project:f.common,repo:f.repo,cwd:f.repo,source:f.repo,ownership,
     native:{agent:worker.agent,pane:worker.pane,workspace:worker.worker_workspace,terminal:worker.terminal_id,session:worker.agent_session_id,cwd:f.lane},
@@ -35,12 +38,30 @@ function fixture(t,{recordOnly=true,phase='complete'}={}) {
     fs.mkdirSync(path.dirname(receipt.inbox),{recursive:true});fs.writeFileSync(receipt.inbox,[n,...tail].map(e=>JSON.stringify(e)+'\n').join(''));
   };
   if(!recordOnly)inbox();
+  if(sessionless){const s=fold(events(f));f.append([sessionBindFact(s.runs.get(run),s,{session:originalBind.session})]);}
+  const [source]=f.report();
   const proof=()=>{const all=events(f),s=fold(all);return{run:s.runs.get(run),state:s,events:all,scope:{run,cwd:f.lane},org:f.org,common:f.common,project:f.repo};};
   const original=f.options.readOwner;f.options.readOwner=o=>o.pid===901?true:original(o);
   const cli=(_file,argv)=>argv[0]==='refresh'?'{}':JSON.stringify(f.drain({keys:JSON.parse(argv[argv.indexOf('--keys')+1]),retrySafe:true}));
   return{...f,...binding,source,ownership,duty,host,step,receipt,files,put,proof,notice,owned,inbox,
     args:{project:gitProject(f.repo),org:f.org,env:f.env,guard:()=>{},measure:()=>{},maxSteps:1,cli}};
 }
+
+test('session-less shared duty requires its later bound session before guarded closeout releases the original worker',t=>{
+  const f=fixture(t,{sessionless:true}),p=f.proof(),original=fs.readFileSync(f.files.duty);
+  assert.equal(p.run.meta.agent_session_id,undefined,'launch receipt remains session-less');
+  assert.equal(f.duty.native.session,undefined);assert.equal(p.state.sessionBindings.get('R-1').length,1);
+  const pending=structuredClone(p);pending.state.sessionBindings.delete('R-1');
+  assert.equal(sharedWatcherDischarged(pending),false,'unbound completion cannot discharge');
+  assert.equal(sharedWatcherDischarged(p),true);
+  f.put(f.files.duty,{...f.duty,native:{...f.duty.native,session:'replacement'}});
+  assert.equal(sharedWatcherDischarged(f.proof()),false,'known session mismatch still refuses');f.put(f.files.duty,f.duty);
+  const result=runCloseoutTurn(f.args),row=events(f).findLast(e=>e.type==='closeout.evaluated'&&e.run==='R-1');
+  assert.deepEqual(result.errors,[]);assert.equal(row.completed,true);
+  assert.equal(row.resources.session.status,'closed');assert.equal(row.resources.folder.status,'removed');
+  assert.equal(fs.existsSync(f.lane),false);assert.deepEqual(fs.readFileSync(f.files.duty),original);
+  assert.ok(effects(f).some(e=>e.action==='closed'));
+});
 
 test('shared host separation requires the exact completed duty and original final callback',t=>{
   const f=fixture(t);assert.equal(sharedWatcherDischarged(f.proof()),true);

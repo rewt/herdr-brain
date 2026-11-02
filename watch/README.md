@@ -212,6 +212,14 @@ effect holds. Failed consumers retain a held receipt under
 | Claim change, abandonment, ingestion and STOP/HOLD | Fresh record/ownership guards before effects; held state and original registrations survive |
 | Report-to-review and resource closeout | Existing finite line intake and single record queue-review/guarded closer; observer grants no lifecycle authority |
 
+Shared registration permits an absent session before Codex receives its first
+prompt, while agent, pane, workspace, terminal and cwd must already match the
+record exactly. The original registration stays immutable. The observer and
+finite watcher resolve the effective session from the existing checked
+`run.session_bound` fact; a native session alone grants no bound observation or
+usage-stop recovery. Closeout also requires that bound session, and any recorded
+session conflict or replacement native session retains the original duty.
+
 Each invalid, foreign, changed or unreadable registration holds only its own duty.
 The first held receipt and original registration/step files are retained. One stable
 exception plan and receipt under watch/observer/exceptions use the existing durable

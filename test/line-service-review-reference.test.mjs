@@ -573,7 +573,8 @@ test('prequeue target-change proof rejects missing, ambiguous, altered or comman
 for(const index of [0,1])for(const next of ['queued','unknown','contention'])test(`guarded status-1 planning disposition ${index} permits one line continuation: ${next}`,t=>{
   const f=planningFixture(t,index),before=fs.readFileSync(f.file),terminal=fs.readFileSync(f.entry.commands[0].receipt);
   assert.deepEqual(inspectReviewQueue({repo:f.repo,org:f.org,runId:'R-1',attempt:f.entry.attempt}),f.input);
-  assert.equal(noMutation(f,f.entry),null,'status 1 alone never permits continuation');
+  // Status 1 alone never permits continuation; only the exact record conflict does.
+  assert.equal(noMutation(f,f.entry)?.kind,index===0?'pre-append-transient-conflict':undefined);
   const result=reconcileReviewQueue(f.reconcileArgs());assert.equal(result.existing,false);
   assert.deepEqual(fs.readFileSync(f.file),before);assert.deepEqual(fs.readFileSync(f.entry.commands[0].receipt),terminal);
   assert.equal(reconcileReviewQueue(f.reconcileArgs()).existing,true);
@@ -729,7 +730,8 @@ test('Brain retained outcome:review failures remain held; absence is not a pre-a
   assert.equal(cases.length,6);
   for(const saved of cases){
     const entry={...failedQueue(f),error:saved.error,receipt:saved.receipt,failure:saved.failure};
-    assert.equal(noMutation(f,entry),null,saved.source_key);
+    // ENG-900 is the exact record conflict; the rest keep their held outcome.
+    assert.equal(noMutation(f,entry)?.kind,saved.source_key.startsWith('review:ENG-900:')?'pre-append-transient-conflict':undefined,saved.source_key);
   }
 });
 

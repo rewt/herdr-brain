@@ -640,8 +640,9 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
           if(retained&&resolutionSeq<=(effects.review_reference_reconsidered?.[key]?.resolution_seq??0))continue;
           // An original with no proof to continue stays held and is never
           // replayed, so it spends no step, inventory scan or record reload.
+          // A changed target still takes the inventory once to save its marker.
           const held=effects.actions[key];
-          if(held&&held.state!=='complete'&&!reviewQueueNoMutation({entry:held,key,...snapshot,repo,org,identity:project.identity,item,run,target})){retainEffect(key,held);continue;}
+          if(held&&held.state!=='complete'&&JSON.stringify(held.review_target)===JSON.stringify(target)&&!reviewQueueNoMutation({entry:held,key,...snapshot,repo,org,identity:project.identity,item,run,target})){retainEffect(key,held);continue;}
           const attempt=reviewAttempt(item,{org,identity:project.identity,events:snapshot.events,state:snapshot.state,repo,effects,cache:reviewCache,target,capturedRun:run.id,ignoreService});
           if(attempt){
             if(retained){effects.review_reference_reconsidered??={};effects.review_reference_reconsidered[key]={resolution_seq:resolutionSeq,target,attempt};}

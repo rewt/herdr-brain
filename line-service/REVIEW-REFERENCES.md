@@ -223,9 +223,12 @@ held. `retained review scope is UNKNOWN`, an existing review or a conflict that
 
 A retained review effect spends no review step, and only an issued queue-review
 counts toward `maxStepsPerStage`, so held entries never block a later pending
-change. The retention is read from the pass's snapshot before the inventory scan.
+change. The retention is read from the pass's snapshot before the inventory scan,
+unless the saved target differs from the current one, which still takes the
+inventory once to save its marker.
 
-Two historical status-1 planner exits have a separate, explicit owner writer:
+Two historical status-1 planner exits have a separate, explicit owner writer
+(the record-observation one now also fits the transient retry above):
 the exact Node 20.19.4 record-observation stack from ENG-1141/R-1546 and the
 source-selection stack from ENG-1150/R-1543 (DEC-445/R-1567). The complete
 diagnostics, including stack locations, are fingerprinted in

@@ -131,6 +131,60 @@ A discharge can establish accepted outcome while preserving the original FAIL.
 The release owner still judges whether the specific Major control proves its
 correction and runs final-release/live coverage.
 
+### Retained landing with a later proof report
+
+`record reconcile-correction --file PLAN.json` is the explicit append-only
+resolution path when the correction's immutable report is blocked or its proof
+was captured separately from the retained source. Only the actual native project
+supervisor named by canonical promotion policy may apply it. STOP/HOLD, ancestor
+holds/reservations, current correction run, record write guards and completion
+fingerprints still apply. The command never runs a control or launches a review.
+
+The version 1 plan names `id` (stable across retries), `org`, `project` (real Git
+common directory), `why`, `review_key`, `correction`, `landing`, `expected`,
+`findings` and optional `duplicates`. Each run reference names `item`, `run`,
+`claim_generation` and `report_sha256`. `landing` additionally names the original
+landing event `seq`, `base` and `head`. `expected` is the current correction's
+`completionFingerprint(state, item)` from `lib/completion.mjs`; every duplicate
+has its own explicit `item`, `expected` and `why`.
+
+Each finding retains its immutable declaration's `key`, exact `command` and
+`requirement`, and supplies `result: PASS`, the independent checked `head`, gate
+`evidence`/`sha256`, and a `proof` run reference. It also supplies `manifest`,
+`log` and `execution_receipt`, each as `{evidence: ABSOLUTE_PATH, sha256: HASH}`.
+The manifest is a nonempty basename-to-SHA256 map in the owning evidence archive.
+All entries and the original gate/log/execution bytes must agree. The shared
+discharge validator checks the original lane inventory, branch, run interval,
+main ancestry, executed green result and actual execution sidecar. The retained
+producer's real claim and landing remain separate. The original patch must also
+reverse-apply at each checked head, so ancestry cannot hide a revert. Ordinary
+file patches are supported; unsupported source forms refuse without mutation.
+
+For a Major with `correction_supporting_checks` in its immutable report, every
+named command also needs a green control under that finding's `supporting_checks`
+array, using the same evidence/proof shape. A later repair run can own a control;
+its report and claim are verified independently. Old red/pre-rebase evidence is
+retained and cannot be relabelled as new-head green. Missing proof stays unresolved.
+
+Success appends an existing `correction.discharged` event with
+`resolution_kind: retained-landing/v1`, all report/claim/finding/proof bindings and
+the original retained landing. Guarded completion then records ordinary closures.
+A duplicate must be an unstarted engineer obligation under that same source item,
+with its existing dependency link retained; an attempted item cannot be silently
+retired. A failure appends nothing. After correcting missing proof, retry the same
+supported command. Exact repeated application returns the original receipt with
+no second mutation; a reused ID with changed inputs refuses.
+
+Completion and acceptance recognize that explicit receipt while retaining the
+original blocked report bytes, outcome and blockers as history. SourceDelivered
+still requires the current run's own landing. A reopened/superseded correction or
+an outstanding live question does not gain acceptance. Original FAIL verdicts and
+negative-review holds remain unchanged; the existing release owner retains their
+disposition. For ENG-1216 the supervisor applies the exact retained R-1083 landing
+and R-1624 manifest/gate once, then reconciles ENG-766 in that transaction. Formal
+discharge, installed/live projection and release are unproven until their owners
+record those effects.
+
 An evidence-only correction needs no invented source landing. Its finding and
 gate must name the same exact existing commit and tree, already an ancestor of
 the owning project's `refs/heads/main`. Intake verifies the gate against the

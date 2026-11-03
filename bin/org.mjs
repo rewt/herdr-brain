@@ -30,6 +30,7 @@ import { DISPATCH_TEMPLATE, intentFirstCreation } from '../lib/dispatch-template
 import { renderToday, todayJson } from '../lib/today.mjs';
 import { loadDiscoveredRoutes, readRoutesSnapshot, resolveRoute } from '../lanes/routes.mjs';
 import { completeBatchCommand } from '../lib/completion.mjs';
+import { reconcileCorrectionCommand } from '../lib/retained-correction.mjs';
 import { releasesCommand } from '../lib/release-record.mjs';
 import { handoffsCommand } from '../lib/handoffs-command.mjs';
 import { protectRecordMutation } from '../lib/record-guard.mjs';
@@ -91,6 +92,7 @@ Questions for the operator
                                           facts are fixed (e.g. record set R-3 tokens_in=48210)
   record close <ID> [--dropped] [--note T] [--if-current-run R-n]
   record complete-batch --file JSON       supervisor-attested batch reconciliation (all members)
+  record reconcile-correction --file JSON verify retained landing and original correction proof
     [--accept-delta SHA256 --why TEXT]    accept inspected plain notes without completing
   record reopen <ID> [--note T] [--if-current-run R-n]
 
@@ -221,12 +223,12 @@ function mutate(ctx, fn, authority, { deferCloseout = false } = {}) {
   }
   // Event derivation and read-only guards precede the append lock. Intake and
   // queue-review defer their immutable/native effects to the final commit hook.
-  const planned = new Set(['add', 'block', 'unblock', 'note', 'amend-accept', 'ask', 'answer', 'set', 'close', 'reopen', 'start', 'worker', 'abandon', 'lesson', 'ingest', 'sync', 'queue-review', 'messages', 'nudge', 'witness']);
+  const planned = new Set(['add', 'block', 'unblock', 'note', 'amend-accept', 'ask', 'answer', 'set', 'close', 'reopen', 'start', 'worker', 'abandon', 'lesson', 'ingest', 'sync', 'queue-review', 'messages', 'nudge', 'witness', 'reconcile-correction']);
   // Only event derivation may refresh on a race. Commit hooks never replay;
   // the store permits one refresh after a committed, idempotent config audit.
   // Message preparation includes its fresh native sender observation. It may
   // precede acquisition, but a record/file race must never replay that lookup.
-  const replaySafe = process.argv[2] !== 'messages' &&
+  const replaySafe = !['messages', 'reconcile-correction'].includes(process.argv[2]) &&
     !(process.argv[2] === 'answer' && process.argv.includes('--relay-operator')) && !process.env.ORG_GUARD_OVERRIDE;
   const transaction = planned.has(process.argv[2]) ? planTransaction : transact;
   const res = transaction(ctx.dir, (events, state) => {
@@ -1203,6 +1205,7 @@ const COMMANDS = {
   witness: async argv => (await import('../measurement/witness-command.mjs')).witnessCommand(argv, { openOrg, mutate, out }),
   lesson, lessons,
   'complete-batch': argv => completeBatchCommand(argv, { openOrg, mutate, out }),
+  'reconcile-correction': argv => reconcileCorrectionCommand(argv, { openOrg, mutate, out }),
   releases: argv => releasesCommand(argv, { openOrg, out }),
   handoffs: argv => handoffsCommand(argv, { openOrg, mutate, out }),
   init, add, 'queue-review': queueReview,

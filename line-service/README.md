@@ -960,8 +960,10 @@ release still requires actual Major correction checks.
 Its bound immutable target/evidence is checked again before every native effect.
 New source dispatch uses a registered `review-` worktree at that exact head.
 Routine work uses the project's normal review selection (the portable default
-is `review`, Claude Opus high), without requiring an other-family policy or a
-declared producer family. Set source item `meta.judgment_heavy=true` or
+is `review`, Claude Opus high). Brain selects `review-codex` (Sol xhigh) for new
+reviews and Claude Opus for new engineering under operator direction 2026-11-02.
+Routine selection does not require an other-family policy or a declared producer
+family. Set source item `meta.judgment_heavy=true` or
 `meta.outward=true` for work requiring other-family review; an explicit
 `meta.review_other_family=true` also requires it. New queue items capture this
 requirement, and routing also checks the source flags before dispatch.

@@ -215,10 +215,10 @@ denominator for automatic tier movement.
 - The operator's 2026-10-21 09:5x standing direction, relayed by the main chat: “Ensure everything defaults to Sol, and Astra is used only for graphical situations and UI/UX design.”
 - The operator's 2026-10-20 standing direction: “Let's update routing for all dispatched engineering to use Sol 6.1 Max instead of Astra. And let's reserve Astra for more of the UX UI type of tasks or site layouts or organization and keep difficult engineering efforts on Soul 6.1 max fast”.
 - Sol (`gpt-6.1-sol`) is the default Codex model. The explicit `chore` and `monitor` routes keep their cheaper models for mechanical and read-only work (main chat, 2026-10-21 10:1x).
-- Difficult engineering and escalations use `engineer-max` (`gpt-6.1-sol`, max).
+- Operator direction 2026-11-02 supersedes the earlier engineering defaults for new Brain starts: `engineer` uses Claude Opus high, `engineer-xhigh` and legacy `engineer-max` use Claude Opus xhigh, and `engineer-escalate` uses Claude Opus max after a documented failed high/xhigh attempt or stop-rule reframe. New routine reviews select `review-codex` (Sol xhigh); `review` remains Claude Opus high for Codex producers. Decisions and existing attempts retain their settings.
 - Astra (`gpt-6-astra`, via `research-astra-max`) is for graphical and UI/UX design only.
 - Authority and ruling reviews use `review-sol-max`.
-- The operator's parent `.lane.json` layer defines these routes; this appendix names routes only and does not duplicate their settings.
+- The operator's parent `.lane.json` layer supplies identity defaults; Brain's project `.lane.json` overrides the new-start engineering and review selections above.
 
 ## Appendix: bch-cloak
 

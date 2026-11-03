@@ -27,17 +27,16 @@ home-bound policy retains the existing audited home publication path. Verify
 the effective value and its config history once, then carry those receipts.
 Do not overwrite the UNKNOWN address captured by existing runs or their watchers.
 
-The inspected source configuration has real `review`, `review-max` and
-`review-sol-max` routes. The selected queue-review route is currently
-`review-sol-max`; this packet does not relabel it as another family. For NEW
-judgment-heavy/outward work requiring another family, the owner must select the
-existing appropriate reviewer route through `record routes policy --value JSON`
-(or `record config set selection_policy.by_task_class.review '"review-max"'`),
-preserving the other effective policy entries and using the inspected revision.
-`review-max` is currently the configured Claude route; verify the actual route
-before selection. This affects new requests only, never an existing/UNKNOWN
-review attempt. No second review is dispatched here. A reframe similarly needs
-a real owner-selected route; no dedicated reframe selection was recorded.
+Brain's project `.lane.json` selects `review-codex` (Sol xhigh) for new routine
+queue reviews and Claude Opus for new engineering under operator direction
+2026-11-02. `review` remains Claude Opus high for Codex producers; other-family
+selection maps Codex producers to `review` and Claude producers to `review-codex`.
+The legacy `review-max` and `review-sol-max` routes remain configured. Verify the
+actual producer family and route before selecting an independent reviewer for
+judgment-heavy/outward work. These defaults affect new requests only, never an
+existing/UNKNOWN review attempt. No second review is dispatched here. A reframe
+similarly needs a real owner-selected route; no dedicated reframe selection was
+recorded.
 
 ## BCH owner
 

@@ -12,7 +12,7 @@
     "line_service_cleanup": true
   },
   "settle": {
-    "review_route": "review-sol-max",
+    "review_route": "review-codex",
     "review_round_cap": 1,
     "timeout": 0
   },
@@ -21,7 +21,7 @@
   },
   "selection_policy": {
     "by_task_class": {
-      "review": "review",
+      "review": "review-codex",
       "review-other-family": {
         "codex": "review",
         "claude": "review-codex"
@@ -30,32 +30,32 @@
   },
   "routes": {
     "engineer": {
-      "kind": "codex",
-      "model": "gpt-6.1-sol",
+      "kind": "claude",
+      "model": "opus",
       "effort": "high",
       "args": [],
-      "use": "Default new routine engineering. Explicit Sol high; operator policy 2026-10-27."
+      "use": "Default new routine engineering on Claude Opus high; operator direction 2026-11-02."
     },
     "engineer-xhigh": {
-      "kind": "codex",
-      "model": "gpt-6.1-sol",
+      "kind": "claude",
+      "model": "opus",
       "effort": "xhigh",
       "args": [],
-      "use": "New cross-package, concurrency or harder engineering; explicit Sol xhigh."
+      "use": "New cross-package, concurrency or harder engineering on Claude Opus xhigh; operator direction 2026-11-02."
     },
     "engineer-max": {
-      "kind": "codex",
-      "model": "gpt-6.1-sol",
+      "kind": "claude",
+      "model": "opus",
       "effort": "xhigh",
       "args": [],
-      "use": "Legacy engineering name aligned with BCH: Sol xhigh for new work. Maximum reasoning is engineer-escalate only after a documented failed high/xhigh attempt."
+      "use": "Legacy engineering name aligned with BCH: Claude Opus xhigh for new work; operator direction 2026-11-02. Maximum reasoning is engineer-escalate only after a documented failed high/xhigh attempt."
     },
     "engineer-escalate": {
-      "kind": "codex",
-      "model": "gpt-6.1-sol",
+      "kind": "claude",
+      "model": "opus",
       "effort": "max",
       "args": [],
-      "use": "Problem-solving escalation ONLY after a documented failed high/xhigh attempt or stop-rule reframe. Never a routine build or review default."
+      "use": "Claude Opus max problem-solving escalation ONLY after a documented failed high/xhigh attempt or stop-rule reframe; operator direction 2026-11-02. Never a routine build or review default."
     },
     "review-sol-max": {
       "kind": "claude",
@@ -69,14 +69,14 @@
       "model": "opus",
       "effort": "high",
       "args": [],
-      "use": "Default independent Claude Opus high post-code review of Sol engineering; no reviewer suites."
+      "use": "Independent Claude Opus high review of Codex producers, including review-other-family; no reviewer suites. Retained under operator direction 2026-11-02."
     },
     "review-codex": {
       "kind": "codex",
       "model": "gpt-6.1-sol",
       "effort": "xhigh",
       "args": [],
-      "use": "Independent other-family judgment and outward review of Claude producers."
+      "use": "Default independent Codex Sol xhigh post-code review of Claude producers, including other-family judgment and outward review; no reviewer suites. Operator direction 2026-11-02."
     },
     "review-max": {
       "kind": "claude",

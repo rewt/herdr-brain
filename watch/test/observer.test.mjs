@@ -260,7 +260,7 @@ test('shared install replacement invokes the original finite consumer and preser
   const b=await host.start(sourceB);assert.notEqual(b.owner.pid,a.owner.pid);assert.equal(f.state().phase,'waiting');
   fs.writeFileSync(f.report,reportText());f.setNative({...f.native,agent_status:'done',state_change_seq:2});
   await b.observer.reconcile('original-report');await b.observer.idle();
-  assert.equal(f.state().phase,'complete');assert.equal(b.observer.counters.consumer_failures,0);
+  assert.equal(f.state().phase,'complete',JSON.stringify({step:f.state(),rows:host.rows,log:fs.readFileSync(path.join(f.org,'watch/observer/R-1.log'),'utf8')}));assert.equal(b.observer.counters.consumer_failures,0);
   assert.equal(f.notices().filter(n=>n.text.includes('[org-report]')).length,1);
   const completed=fs.readFileSync(stepFile(f.org,'R-1'));await b.observer.reconcile('duplicate');await b.observer.idle();
   assert.deepEqual(fs.readFileSync(stepFile(f.org,'R-1')),completed);assert.deepEqual(fs.readFileSync(duty),original);

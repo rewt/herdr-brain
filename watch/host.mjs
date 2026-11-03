@@ -23,13 +23,14 @@ export async function ensureObserver({repo,org,project,env=process.env,retry=fal
   const expected={repo,project,source:sourceRoot,socket:herdrSocketPath(env)};
   let attempt=readJson(file),launched=false;
   const hold=(reason,{recheck=false}={})=>{
-    attempt={...attempt,schema:'brain.line-observer/v1',id:attempt?.id??randomUUID(),state:'held',code:'SHARED_OBSERVER_HELD',
+    const first=attempt?.first_hold??(attempt?.state==='held'?attempt:null);
+    attempt={...attempt,...(first?{first_hold:first}:{}),schema:'brain.line-observer/v1',id:attempt?.id??randomUUID(),state:'held',code:'SHARED_OBSERVER_HELD',
       repo,org,source:sourceRoot,reason,recheck,evidence:file,owner:'project-supervisor',next_event:recheck?'next line pass rechecks the original host':'supervisor inspects original receipt and explicitly retries watch/host.mjs'};
     save(attempt);return attempt;
   };
   const ready=owner=>{
     const {code,reason,recheck,next_event,...prior}=attempt??{};
-    attempt={...prior,...(attempt?.state==='held'?{resolved_hold:attempt}:{}),state:'ready',host:owner};save(attempt);return attempt;
+    attempt={...prior,...(attempt?.state==='held'?{resolved_hold:attempt.first_hold??attempt,last_hold:attempt}:{}),state:'ready',host:owner};save(attempt);return attempt;
   };
   try {
     guard();

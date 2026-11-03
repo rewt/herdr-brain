@@ -59,7 +59,7 @@ test('session-less shared duty requires its later bound session before guarded c
   f.put(f.files.duty,{...f.duty,native:{...f.duty.native,session:'replacement'}});
   assert.equal(sharedWatcherDischarged(f.proof()),false,'known session mismatch still refuses');f.put(f.files.duty,f.duty);
   const result=runCloseoutTurn(f.args),row=events(f).findLast(e=>e.type==='closeout.evaluated'&&e.run==='R-1');
-  assert.deepEqual(result.errors,[]);assert.equal(row.completed,true);
+  assert.deepEqual(result.errors,[]);assert.equal(row.completed,true,JSON.stringify(row));
   assert.equal(row.resources.session.status,'closed');assert.equal(row.resources.folder.status,'removed');
   assert.equal(fs.existsSync(f.lane),false);assert.deepEqual(fs.readFileSync(f.files.duty),original);
   assert.ok(effects(f).some(e=>e.action==='closed'));
@@ -142,7 +142,7 @@ for(const install of [false,true])test(`shared ${install?'install':'restart'} cl
   // Use the currently installed closeout consumer, retaining the original claim.
   f.put(f.file,{...installation,phase:'installed'});
   const result=runCloseoutTurn(f.args),row=events(f).findLast(e=>e.type==='closeout.evaluated'&&e.run==='R-1');
-  assert.deepEqual(result.errors,[]);assert.equal(row.completed,true);
+  assert.deepEqual(result.errors,[]);assert.equal(row.completed,true,JSON.stringify({row,result,diagnostics:f.proof()}));
   assert.equal(row.resources.session.status,'closed');assert.equal(row.resources.folder.status,'removed');
   assert.equal(fs.existsSync(f.lane),false);assert.deepEqual(fs.readFileSync(f.files.duty),originalDuty);
   t.diagnostic(JSON.stringify({witness:install?'shared-install-closeout':'shared-restart-closeout',original:a.owner,replacement:b.owner,

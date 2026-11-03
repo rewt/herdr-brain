@@ -16,7 +16,7 @@ const command = 'node test/helpers/run.mjs --test-name-pattern="^exact required 
 // Synthetic historical receipts exercise the writer. They execute no old
 // correction control and are never offered as live product acceptance proof.
 function fixture(t) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'retained-writer-'));
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'retained-writer-')));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   process.env.HERDR_MONITOR_FLEET = path.join(root, 'fleet');
   const repo = path.join(root, 'repo'), org = path.join(root, '.org');
@@ -90,7 +90,7 @@ function fixture(t) {
   save();
   report('R-4', { outcome: 'blocked', blockers: ['Current-run source binding unavailable'], correction_discharge: {
     run: 'R-4', claim_generation: generation, review_key: `ENG-1:${base}`, findings: [structuredClone(check)] } });
-  add({ type: 'item.added', id: 'ENG-5', role: 'engineer', parent: 'ENG-1' });
+  add({ type: 'item.added', id: 'ENG-5', role: 'engineer', parent: 'ENG-1', meta: {} });
   add({ type: 'link.added', blocker: 'ENG-5', blocked: 'ENG-1' });
   add({ type: 'item.added', id: 'ENG-6', role: 'engineer' });
   add({ type: 'link.added', blocker: 'ENG-4', blocked: 'ENG-6', requires: 'accepted' });

@@ -383,7 +383,7 @@ test('upgrade adds the job class to an older saved plist, a keyed plist upgrades
 
 test('saved plist accepts the job class in supported shapes, replaces it with the current value and refuses anything else',t=>{
   const scratch=fs.mkdtempSync(path.join(fs.realpathSync(process.env.TMPDIR??'/tmp'),'job-class-'));t.after(()=>fs.rmSync(scratch,{recursive:true,force:true}));
-  const c={repo:'/project',org:'/record',directory:path.join(scratch,'line')},file=path.join(scratch,'service.plist'),installation={node:process.execPath,source:'/root/current',file};
+  const c={repo:scratch,org:'/record',directory:path.join(scratch,'line')},file=path.join(scratch,'service.plist'),installation={node:process.execPath,source:'/root/current',file};
   const current=launchPlist({label:'dev.herdr.line.line',repo:c.repo,org:c.org,to:'fixture-supervisor',herdr:'/saved/bin/herdr',socket:'/saved/native.sock',directory:c.directory,node:process.execPath,source:installation.source,interval:47,searchPath:'/usr/bin:/bin'});
   const job='<key>ProcessType</key><string>Interactive</string>\n<key>Nice</key><integer>5</integer>\n';assert.ok(current.includes(job));
   const accepted=[current,current.replace(job,''),current.replace('<integer>5</integer>','<integer>10</integer>')];
@@ -426,6 +426,8 @@ async function offeredFromHistoricalPin(t){
   const sealed=spawnSync(process.execPath,[path.resolve('herdr/releases.mjs'),'manifest',old,summary],{cwd:f.cwd,env:f.env,encoding:'utf8'});assert.equal(sealed.status,0,sealed.stderr);
   const pin=id=>{fs.writeFileSync(path.join(f.cwd,'.herdr-release.json'),JSON.stringify({release:id})+'\n');f.git('add','.herdr-release.json');f.git('commit','-qm','Select '+id);};
   pin('bch-pin');
+  // The pin's own generator wrote this job, and its strict reader refuses a job class.
+  fs.writeFileSync(f.file,fs.readFileSync(f.file,'utf8').replace('<key>ProcessType</key><string>Interactive</string>\n<key>Nice</key><integer>5</integer>\n',''));
   const {main:oldMain}=await import(pathToFileURL(path.join(old,'line-service/launchd.mjs')).href);
   const migrate=['migrate','--repo',f.cwd,'--org',f.org,'--id','historical-move'];
   oldMain([...migrate,'--expected-plan',oldMain([...migrate,'--dry-run'],f.args).archive.sha256],f.args);
@@ -466,6 +468,7 @@ test('a forward preview reports the rollback result and the offered release retu
   for(const gap of ['capability:report.ingested/v1','capability:report.completion/v1','capability:change.landed/v1','event:change.landed'])assert.ok(preview.established.includes(gap),gap);
   assert.ok(preview.refuses_once_written.includes('capability:native.intent/v1'));assert.ok(!preview.refuses_once_written.includes('capability:report.ingested/v1'));
   f.adopt();const adopted=fs.readFileSync(f.installationFile,'utf8');
+  assert.doesNotMatch(before.plist,/ProcessType/);assert.match(fs.readFileSync(f.file,'utf8'),/<key>ProcessType<\/key><string>Interactive<\/string>/);
   assert.equal(f.main(['restart','--repo',f.cwd,'--org',f.org],f.args).restarted,true);
   f.main(['stop','--repo',f.cwd,'--org',f.org],f.args);
   // Further work of a kind the pin already ran on keeps the rollback admitted.

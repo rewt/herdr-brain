@@ -160,8 +160,10 @@ All entries and the original gate/log/execution bytes must agree. The shared
 discharge validator checks the original lane inventory, branch, run interval,
 main ancestry, executed green result and actual execution sidecar. The retained
 producer's real claim and landing remain separate. The original patch must also
-reverse-apply at each checked head, so ancestry cannot hide a revert. Ordinary
-file patches are supported; unsupported source forms refuse without mutation.
+reverse-apply at each checked head, so ancestry cannot hide a revert. The
+reviewed head must be an ancestor of the landing's base, so a landing already
+inside the reviewed source cannot be credited. Ordinary file patches are
+supported; unsupported source forms refuse without mutation.
 
 For a Major with `correction_supporting_checks` in its immutable report, every
 named command also needs a green control under that finding's `supporting_checks`
@@ -183,7 +185,9 @@ original blocked report bytes, outcome and blockers as history. SourceDelivered
 still requires the current run's own landing. A reopened/superseded correction or
 an outstanding live question does not gain acceptance. Original FAIL verdicts and
 negative-review holds remain unchanged; the existing release owner retains their
-disposition. For ENG-1216 the supervisor applies the exact retained R-1083 landing
+disposition. The stable-offer check accepts this receipt only while the fold still
+verifies it and Accepted is True, the packet commit contains its retained landing
+and every proof head for that Major, and `majors.corrections` names the item. For ENG-1216 the supervisor applies the exact retained R-1083 landing
 and R-1624 manifest/gate once, then reconciles ENG-766 in that transaction. Formal
 discharge, installed/live projection and release are unproven until their owners
 record those effects.

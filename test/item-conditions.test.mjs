@@ -210,6 +210,7 @@ test('discharge diagnostics name the first missing proof, preserve Unknown and d
   assert.equal(notes[0].type, 'note.added');
   assert.equal(notes[0].id, f.run.id);
   assert.match(notes[0].text, /gate head differs from final head.*rebase/);
+  assert.doesNotMatch(notes[0].text, /durable gate evidence/);
   extendFold(f.s, notes.map(e => ({ ...e, seq: f.s.eventCount + 1 })));
   assert.deepEqual(intake(), []);
   fs.unlinkSync(f.finding.evidence);

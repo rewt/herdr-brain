@@ -5,9 +5,10 @@ import os from 'node:os';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { fold, itemConditions, itemStatus, dependencyReleases } from '../lib/state.mjs';
+import { fold, itemConditions, itemStatus, dependencyReleases, retainedCorrectionResolution } from '../lib/state.mjs';
 import { completionFingerprint } from '../lib/completion.mjs';
 import { retainedCorrectionEvents, reconcileCorrectionCommand } from '../lib/retained-correction.mjs';
+import { requireCorrectedMajors } from '../lib/consumer-offer.mjs';
 import { reviewFindingKey } from '../line-service/review-findings.mjs';
 
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -15,7 +16,7 @@ const command = 'node test/helpers/run.mjs --test-name-pattern="^exact required 
 
 // Synthetic historical receipts exercise the writer. They execute no old
 // correction control and are never offered as live product acceptance proof.
-function fixture(t) {
+function fixture(t, { supportingChecks } = {}) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'retained-writer-')));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   process.env.HERDR_MONITOR_FLEET = path.join(root, 'fleet');
@@ -23,6 +24,10 @@ function fixture(t) {
   fs.mkdirSync(repo); fs.mkdirSync(path.join(org, 'reports'), { recursive: true });
   const git = (...args) => execFileSync('git', ['-C', repo, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
   git('init', '-b', 'main'); git('config', 'user.name', 'Fixture'); git('config', 'user.email', 'fixture@example.test');
+  fs.writeFileSync(path.join(repo, 'seed'), 'seed\n'); git('add', '.'); git('commit', '-m', 'Seed');
+  const seed = git('rev-parse', 'HEAD');
+  fs.writeFileSync(path.join(repo, 'older'), 'older\n'); git('add', '.'); git('commit', '-m', 'Earlier landing');
+  const earlier = git('rev-parse', 'HEAD');
   fs.writeFileSync(path.join(repo, 'source'), 'broken\n');
   fs.writeFileSync(path.join(repo, '.promote.json'), JSON.stringify({ to: 'supervisor-fixture' }));
   git('add', '.'); git('commit', '-m', 'Reviewed source');
@@ -89,7 +94,8 @@ function fixture(t) {
   };
   save();
   report('R-4', { outcome: 'blocked', blockers: ['Current-run source binding unavailable'], correction_discharge: {
-    run: 'R-4', claim_generation: generation, review_key: `ENG-1:${base}`, findings: [structuredClone(check)] } });
+    run: 'R-4', claim_generation: generation, review_key: `ENG-1:${base}`, findings: [structuredClone(check)] },
+    ...(supportingChecks ? { correction_supporting_checks: supportingChecks } : {}) });
   add({ type: 'item.added', id: 'ENG-5', role: 'engineer', parent: 'ENG-1', meta: {} });
   add({ type: 'link.added', blocker: 'ENG-5', blocked: 'ENG-1' });
   add({ type: 'item.added', id: 'ENG-6', role: 'engineer' });
@@ -102,9 +108,24 @@ function fixture(t) {
     landing: { ...reference('R-3'), seq: landing.seq, head, base }, findings: [check],
     duplicates: [{ item: 'ENG-5', expected: completionFingerprint(state(), 'ENG-5'), why: 'The same retained fixture correction fulfills this obligation' }] };
   const authority = { project, org, native_caller: { name: 'supervisor-fixture' } };
+  // An independent control with its own gate, log, execution sidecar and manifest.
+  const control = (name, controlCommand, patch = {}) => {
+    const saved = path.join(archive, name), output = path.join(directory, `${name}.log`), sidecar = `${output}.execution.json`, text = `ok 1 - ${name}\n`;
+    fs.mkdirSync(saved, { recursive: true }); fs.writeFileSync(output, text);
+    fs.writeFileSync(sidecar, JSON.stringify({ command_started: true, exit_code: 0, signal: null, attempts: 1 }));
+    const record = { ...gate, key: hash(name), command: controlCommand, log: output, log_hash: hash(JSON.stringify(text)), execution_receipt: sidecar, ...patch };
+    fs.writeFileSync(path.join(directory, `${record.key}.json`), JSON.stringify(record));
+    const files = { gate: path.join(saved, 'gate.json'), log: path.join(saved, 'run.log'), execution: path.join(saved, 'execution.json') };
+    fs.writeFileSync(files.gate, JSON.stringify(record)); fs.copyFileSync(output, files.log); fs.copyFileSync(sidecar, files.execution);
+    const ref = file => ({ evidence: file, sha256: hash(fs.readFileSync(file)) });
+    const entries = Object.fromEntries(Object.values(files).map(file => [path.basename(file), ref(file).sha256]));
+    fs.writeFileSync(path.join(saved, 'manifest.json'), JSON.stringify(entries));
+    return { result: 'PASS', head: checked, command: controlCommand, ...ref(files.gate), log: ref(files.log), execution_receipt: ref(files.execution),
+      manifest: ref(path.join(saved, 'manifest.json')), proof: reference('R-4') };
+  };
   const intake = () => retainedCorrectionEvents({ state: state(), events: rows, plan, org, authority });
   const apply = () => { const result = intake(); result.add.forEach(add); return result; };
-  return { root, repo, org, project, rows, state, add, report, start, reference, plan, authority, intake, apply, gate, check, save, git, log, execution, base, head, checked };
+  return { root, repo, org, project, rows, state, add, report, start, reference, plan, authority, intake, apply, gate, check, save, git, log, execution, base, head, checked, seed, earlier, control };
 }
 
 test('retained writer resolves immutable blocked proof, closes duplicate work and keeps ownership and negative hold distinct', t => {
@@ -202,4 +223,75 @@ test('record entry requires actual supervisor authority and STOP/HOLD; refusal a
   fs.writeFileSync(path.join(f.repo, '.lane/supervisor/HOLD'), 'hold'); assert.throws(invoke, /STOP\/HOLD/); assert.equal(calls, 0);
   fs.unlinkSync(path.join(f.repo, '.lane/supervisor/HOLD')); invoke(); assert.equal(calls, 1);
   invoke(); assert.equal(calls, 2); assert.equal(f.rows.filter(e => e.type === 'correction.discharged').length, 1);
+});
+
+test('writer refuses a retained landing that does not follow the reviewed head', t => {
+  const f = fixture(t), generation = f.state().runs.get('R-3').owner_generation;
+  const earlier = f.add({ type: 'change.landed', item: 'ENG-1', run: 'R-3', project: f.project, head: f.earlier, base: f.seed,
+    producer: { ownership_generation: generation } });
+  f.plan.landing = { ...f.plan.landing, seq: earlier.seq, head: f.earlier, base: f.seed };
+  assert.throws(f.intake, /does not follow the reviewed head/);
+});
+
+test('every named supporting check needs its own green control, which an offer also has to contain', t => {
+  const vm = 'node test/helpers/run.mjs test/vm-control.test.mjs';
+  // The real report shape: the witness and a red control listed side by side.
+  const f = fixture(t, { supportingChecks: [{ name: 'witness-green', command, exit_code: 0 }, { name: 'vm-control-red', command: vm, exit_code: 1 }] });
+  assert.throws(f.intake, /required supporting control is missing/);
+  f.plan.findings[0].supporting_checks = [f.control('vm', vm, { exit_code: 1, outcome: 'red' })];
+  assert.throws(f.intake, /gate is unrun, failed/);
+  f.plan.findings[0].supporting_checks = [f.control('vm', 'node unrelated-green.mjs')];
+  assert.throws(f.intake, /required supporting control is missing/);
+  f.plan.findings[0].supporting_checks = [f.control('vm', vm)];
+  const receipt = f.apply().result.receipt;
+  assert.deepEqual(receipt.findings.map(row => row.command), [command, vm]);
+  assert.equal(receipt.proofs.length, 2);
+  assert.equal(itemConditions(f.state(), 'ENG-4').Accepted.status, 'True');
+  const offer = () => requireCorrectedMajors(f.state(), { commit: f.checked, majors: { corrections: [{ item: 'ENG-4' }] } }, f.repo);
+  offer();
+  const later = f.git('commit-tree', `${f.checked}^{tree}`, '-p', f.checked, '-m', 'Later supporting proof');
+  f.rows.find(e => e.type === 'correction.discharged').findings[1].head = later;
+  assert.throws(offer, /unresolved or unaccounted recorded Major: ENG-4/);
+});
+
+test('offer check accepts a verified retained correction and refuses unproven forms', t => {
+  const refused = /unresolved or unaccounted recorded Major: ENG-4/;
+  const offer = (f, commit = f.checked, items = ['ENG-4']) =>
+    requireCorrectedMajors(f.state(), { commit, majors: { corrections: items.map(item => ({ item })) } }, f.repo);
+  const f = fixture(t);
+  assert.throws(() => offer(f), refused);
+  f.apply();
+  assert.equal(f.state().runs.get('R-4').report.outcome, 'blocked'); assert.equal(f.state().runs.get('R-4').landings, undefined);
+  offer(f);
+  assert.throws(() => offer(f, f.checked, []), refused);
+  assert.throws(() => offer(f, f.head), refused);
+  assert.throws(() => offer(f, f.base), refused);
+  const receipt = f.rows.find(e => e.type === 'correction.discharged'), original = structuredClone(receipt);
+  // A real landing of the producer outside the packet commit, otherwise fully verified.
+  const side = f.git('commit-tree', `${f.base}^{tree}`, '-p', f.base, '-m', 'Unrelated side landing');
+  const outside = f.add({ type: 'change.landed', item: 'ENG-1', run: 'R-3', project: f.project, head: side, base: f.base,
+    producer: { ownership_generation: f.state().runs.get('R-3').owner_generation } });
+  receipt.retained_landing = { ...receipt.retained_landing, seq: outside.seq, head: side };
+  const held = () => { const s = f.state(), item = s.items.get('ENG-4'); return retainedCorrectionResolution(s, item, s.runs.get('R-4')); };
+  assert.ok(held());
+  assert.throws(() => offer(f), refused);
+  Object.assign(receipt, structuredClone(original));
+  receipt.resolution_sha256 = 'not-a-verified-resolution';
+  assert.equal(held(), undefined);
+  assert.throws(() => offer(f), refused);
+  Object.assign(receipt, structuredClone(original));
+  offer(f);
+  f.add({ type: 'item.reopened', id: 'ENG-4' });
+  assert.ok(held());
+  assert.throws(() => offer(f), refused);
+
+  // The ordinary done same-run discharge keeps its own path.
+  const g = fixture(t), generation = g.start('R-8', 'ENG-4', 'proof');
+  g.add({ type: 'change.landed', item: 'ENG-4', run: 'R-8', project: g.project, head: g.checked, base: g.head, producer: { ownership_generation: generation } });
+  const done = g.report('R-8', { outcome: 'done' }), binding = g.state().items.get('ENG-4').finding_bindings[0];
+  g.add({ type: 'correction.discharged', item: 'ENG-4', run: 'R-8', report_sha256: done.sha256, claim_generation: generation,
+    review_key: `ENG-1:${g.base}`, findings: [{ key: binding.finding_key, head: g.checked, finding_seq: binding.seq }] });
+  offer(g);
+  assert.throws(() => offer(g, g.checked, []), refused);
+  assert.throws(() => offer(g, g.head), refused);
 });

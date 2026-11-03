@@ -15,7 +15,7 @@ function fixture({ parent = {}, ancestor = {}, child = {} } = {}) {
 }
 
 test('completed work ancestors leave direct and nested follow-ups dispatchable without changing ancestry', () => {
-  for (const role of ['decision', 'engineer', 'architect', 'planner', null]) {
+  for (const role of ['decision', 'engineer', 'architect', 'planner', 'review', 'reviewer', null]) {
     const state = fixture({ parent: { role } }), before = structuredClone(state);
     assert.equal(state.items.get('ENG-2').created.run, null, 'legacy direct filings have no proposing run');
     assert.equal(itemLaunchHold(state, 'ENG-2'), null, role);
@@ -26,19 +26,35 @@ test('completed work ancestors leave direct and nested follow-ups dispatchable w
   }
 });
 
-test('completion never authorizes a closed target, closed goal, dropped ancestor or completed review', () => {
+test('completion never authorizes a closed target, closed goal or dropped ancestor', () => {
   const cases = [
     ['ENG-2', state => { state.items.get('ENG-2').closed = { as: 'done' }; }],
     ['ENG-2', state => { state.items.get('ENG-2').closed = { as: 'dropped' }; }],
     ['G-1', state => { state.items.get('G-1').closed = { as: 'done' }; }],
     ['ENG-1', state => { state.items.get('ENG-1').closed = { as: 'dropped' }; }],
     ['DEC-1', state => { state.items.get('DEC-1').closed = { as: 'dropped' }; }],
-    ['ENG-1', state => { state.items.get('ENG-1').role = 'reviewer'; }],
-    ['DEC-1', state => { state.items.get('DEC-1').role = 'review'; }],
+    ['ENG-1', state => { state.items.get('ENG-1').role = 'reviewer'; state.items.get('ENG-1').closed.as = 'dropped'; }],
   ];
   for (const [subject, change] of cases) {
     const state = fixture(); change(state);
     assert.equal(itemLaunchHold(state, 'ENG-2', [])?.subject, subject);
+  }
+});
+
+test('ordinary proposals retain completed review ancestry and recover only when explicit holds clear', () => {
+  for (const role of ['engineer', 'decision', 'architect', 'planner', 'reviewer']) {
+    const state = fixture({ parent: { role: 'reviewer' }, ancestor: { role: 'review' }, child: { role } });
+    const before = structuredClone(state);
+    assert.equal(itemLaunchHold(state, 'ENG-2', []), null, role);
+    for (const subject of ['ENG-2', 'ENG-1', 'DEC-1', 'G-1']) {
+      for (const flag of ['hold', 'held', 'reserved', 'operator_reserved']) {
+        state.items.get(subject).meta[flag] = true;
+        assert.equal(itemLaunchHold(state, 'ENG-2', [])?.subject, subject, `${role} ${subject} ${flag}`);
+        delete state.items.get(subject).meta[flag];
+        assert.equal(itemLaunchHold(state, 'ENG-2', []), null, 'clearing the explicit hold restores admission');
+      }
+    }
+    assert.deepEqual(state, before, 'no reparent, reopen or other selection mutation');
   }
 });
 
@@ -60,4 +76,7 @@ test('completion does not bypass missing ancestry, cycles or a misplaced formal 
   assert.match(itemLaunchHold(cycle, 'ENG-2').reason, /ancestor cycle at ENG-1/);
   const formal = fixture({ child: { meta: { review_fix_of: 'ENG-9:captured-head' } } });
   assert.equal(itemLaunchHold(formal, 'ENG-2', [])?.subject, 'ENG-1');
+  formal.items.get('ENG-1').closed = null;
+  formal.items.get('DEC-1').role = 'reviewer';
+  assert.equal(itemLaunchHold(formal, 'ENG-2', [])?.subject, 'DEC-1', 'an intervening open parent cannot bypass the typed review exception');
 });

@@ -56,8 +56,29 @@ test('formal correction under its own completed review is admitted with its immu
   assert.equal(state.items.get('REV-1').closed.as, 'done', 'completed review stays closed');
   assert.deepEqual(itemLaunchHold(state, 'ENG-2'), { subject: 'REV-1', reason: 'item/ancestor REV-1 is closed/held/reserved' },
     'callers without the event log keep the strict closed-ancestor refusal');
-  assert.equal(itemLaunchHold(state, 'ENG-3', events).subject, 'REV-1', 'parent completion never authorizes unrelated work');
-  refused(f, { ...f.job({ correction }), item: 'ENG-3' }, 'REV-1');
+  assert.equal(itemLaunchHold(state, 'ENG-3', events), null, 'ordinary follow-ups outlive the completed review');
+  assert.equal(checkDispatchEligibility({ ...f.job(), item: 'ENG-3' }, 'offline-ordinary-boundary').item, 'ENG-3');
+  assert.deepEqual(f.read().actions, [], 'no native effects');
+});
+
+test('selected ordinary proposal passes the fresh dispatch fence without reparenting after review completion', t => {
+  const f = formalFixture(t);
+  transact(f.org, () => ({ add: [{ type: 'item.updated', id: 'ENG-3', fields: { meta: { queue_selected: true } } }] }));
+  const original = f.current().state.items.get('ENG-3'), job = { ...f.job(), item: 'ENG-3' };
+  for (const subject of ['ENG-3', 'REV-1', 'G-1']) for (const flag of ['hold', 'held', 'reserved', 'operator_reserved']) {
+    transact(f.org, () => ({ add: [{ type: 'item.updated', id: subject, fields: { meta: { [flag]: true } } }] }));
+    refused(f, job, subject);
+    transact(f.org, () => ({ add: [{ type: 'item.updated', id: subject, fields: { meta: { [flag]: false } } }] }));
+    const bytes = fs.readFileSync(f.eventFile);
+    for (const boundary of ['launch', 'prompt'])
+      assert.equal(checkDispatchEligibility(job, 'offline-ordinary-boundary', { boundary }).item, 'ENG-3');
+    assert.deepEqual(fs.readFileSync(f.eventFile), bytes, 'eligibility appends nothing');
+  }
+  const { state } = f.current();
+  assert.equal(state.items.get('ENG-3').parent, original.parent, 'proposal keeps its review parent');
+  assert.deepEqual(state.items.get('ENG-3').created, original.created, 'proposal keeps its original attribution');
+  assert.equal(state.items.get('ENG-3').meta.queue_selected, true);
+  assert.equal(state.items.get('REV-1').closed.as, 'done');
   assert.deepEqual(f.read().actions, [], 'no native effects');
 });
 

@@ -15,12 +15,49 @@ import {fixture,reportText,source} from './step-fixture.mjs';
 import {EventEmitter} from 'node:events';
 import {createObserver} from '../observer.mjs';
 import {enqueueSupervisor,readInbox} from '../../supervisor/prompt-supervisor.mjs';
+import {usageNative,retained,localReset} from './usage-fixture.mjs';
 function ok(f){const r=f.step();assert.equal(r.status,0,r.stderr||r.stdout);return r;}
 function host(f){
   const directory=path.join(f.org,'watch/observer');fs.mkdirSync(directory,{recursive:true});
   fs.writeFileSync(path.join(directory,'owner.json'),JSON.stringify({schema:'brain.run-observer-owner/v1',org:f.org,repo:f.repo,
     project:gitProject(f.repo).identity,source,socket:herdrSocketPath(),pid:process.pid,identity:ownerIdentity(process.pid),log:path.join(directory,'observations.jsonl')}));
 }
+
+test('usage holds notify the recorded owner once per state across finite restarts without worker input',t=>{
+  const f=fixture(t,{lateSession:true}),n=usageNative(f);
+  ok(f);ok(f);assert.equal(f.notices().length,1);
+  assert.equal(JSON.parse(fs.readFileSync(usageStopFile(f.org,'R-1'))).reset_at,localReset);
+  assert.match(f.notices()[0].text,/reason=.*waiting for native reset time/);
+  n.screen('■ Usage limit reached; reset time unavailable');ok(f);ok(f);assert.equal(f.notices().length,2);
+  assert.match(f.notices()[1].text,/reset=unknown.*reason=/);
+  const file=usageStopFile(f.org,'R-1');
+  for(const phase of ['offering','refused','uncertain','delivered']){
+    fs.writeFileSync(file,JSON.stringify({...JSON.parse(fs.readFileSync(file)),phase,reason:`${phase}; consumption unknown`}));
+    const count=f.notices().length;ok(f);ok(f);assert.equal(f.notices().length,count+1);
+    assert.match(f.notices().at(-1).text,new RegExp(`phase=${phase}.*reset=unknown.*reason=`));
+  }
+  assert.equal(n.prompts(),0);
+  f.setNative({...f.getNative(),state_change_seq:3,completion_seq:2});ok(f);
+  assert.equal(JSON.parse(fs.readFileSync(file)).phase,'completed');
+  assert.match(f.notices().at(-1).text,/watch-no-report/);assert.equal(n.prompts(),0);
+  const notices=loadRecord(f.org).events.filter(e=>e.type==='note.added'&&e.watch_notice_id);
+  assert.equal(new Set(notices.map(n=>n.watch_notice_id)).size,notices.length);
+});
+
+for(const input of ['refused','uncertain'])test(`finite usage adapter preserves a nonzero ${input} acknowledgement without replay`,t=>{
+  const f=fixture(t,{lateSession:true}),n=usageNative(f);n.input(input);
+  n.screen(retained.replace('Nov 4th, 2026 12:36 AM','Nov 4th, 2000 12:36 AM'));
+  ok(f);assert.equal(JSON.parse(fs.readFileSync(usageStopFile(f.org,'R-1'))).phase,input);
+  assert.equal(n.prompts(),1);ok(f);assert.equal(n.prompts(),1);assert.equal(f.notices().length,1);
+});
+
+test('finite usage diagnostic failure retains observation and one durable error notice',t=>{
+  const f=fixture(t,{lateSession:true}),n=usageNative(f);ok(f);
+  const file=usageStopFile(f.org,'R-1'),saved=JSON.parse(fs.readFileSync(file));
+  fs.writeFileSync(file,JSON.stringify({...saved,binding:{...saved.binding,session:'different'}}));
+  ok(f);ok(f);assert.equal(f.state().phase,'waiting');
+  assert.equal(f.notices().filter(n=>n.text.includes('watch-worker-stop-error')).length,1);assert.equal(n.prompts(),0);
+});
 
 test('session-less shared registration receives its prompt and uses only the later bound session through usage stop and report',t=>{
   const f=fixture(t,{sessionless:true}),file=registrationFile(f.org,'R-1');fs.unlinkSync(file);host(f);

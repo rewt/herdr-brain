@@ -506,10 +506,15 @@ async function watch() {
   }), 'done', `watch:${runId}:final`, {allowQueued:true});
   let lastUsageLog;
   const usageStop = async native => {
+    try {
     const result = await reconcileUsageStop({org:opt.org,current,ownership,canonical,native,herdr:opt.herdr,
       call:(command,args)=>{
         const reply=run(command,args);
-        if(reply.error || reply.status!==0)throw Error(reply.error?.message || reply.stderr || 'native observation/input failed');
+        if(reply.error)throw reply.error;
+        if(reply.status!==0){
+          let detail;try{detail=JSON.parse(reply.stderr||reply.stdout).error;}catch{}
+          throw Object.assign(Error(detail?.message || reply.stderr || reply.stdout || 'native observation/input failed'),{code:detail?.code});
+        }
         return reply.stdout;
       }});
     if(result.receipt){
@@ -518,6 +523,11 @@ async function watch() {
       lastUsageLog=message;
     }
     return result;
+    }catch(error){
+      log(`usage-stop reconciliation failed: ${error.message}; continuing to watch`);
+      await sendOnce(`[watch-worker-stop-error] run=${runId} item=${item} worker=${agent} reason=${JSON.stringify(error.message)} reset=unknown; original recovery receipt retained`);
+      return {handled:true,wait_ms:30000};
+    }
   };
 
   if (dry) {
@@ -625,6 +635,15 @@ async function watch() {
     if (report.kind === 'missing' && (state === 'idle' || state === 'done')) {
       const recovery=await usageStop(status.native);
       if(recovery.handled){
+        if(recovery.receipt?.kind==='usage-limit'){
+          const r=recovery.receipt;
+          const state={attempt:r.attempt,kind:r.kind,phase:r.phase,reset:r.reset_at,reason:r.reason};
+          const id=`watch:${runId}:usage-stop:${digest(state)}`;
+          // Stable state IDs use the existing durable delivery path. Adopt any
+          // queued/refused/uncertain notice instead of replacing or replaying it.
+          const prior=readInbox(path.resolve(opt.inbox??inboxPath({org:opt.org,cwd:opt.cwd}))).find(entry=>entry.id===id);
+          if(!prior)await sendOnce(`[watch-worker-stop] run=${runId} item=${item} worker=${agent} kind=${r.kind} phase=${r.phase} reset=${r.reset_at??'unknown'} reason=${JSON.stringify(r.reason)}; owner must inspect this hold; no speculative retry before native reset`,undefined,{id});
+        }
         if(recovery.receipt?.kind==='sign-in-required'){
           const id=`watch:${runId}:sign-in-required:${recovery.receipt.attempt}`;
           // Adopt the original payload/ID after a restart, including queued,

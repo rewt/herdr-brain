@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
-import { readJson, sameNative } from './shared.mjs';
+import { readJson, sameNative, readWatchSubject } from './shared.mjs';
 import { writeFileAtomic, withRecordGuard } from '../lib/store.mjs';
 import { assertOwner, readOwnedRun } from '../lib/run-owner-guard.mjs';
 import { effectiveWorkerIdentity } from '../lib/worker-identity.mjs';
@@ -39,7 +39,7 @@ export function classifyUsageStop(screen) {
       reason:'native sign-in failed; supervisor must restore sign-in in the original worker, verify its run/claim/native binding, then continue that same run; no automatic input'};
   const limited = /(?:usage|rate|account|request|message|weekly|credit|quota).{0,50}(?:limit|quota|exhaust|exceed|reached)|(?:hit|reached|exceeded).{0,40}(?:limit|quota)|(?:out of|insufficient|not enough)\s+credits/i.test(error);
   if (!limited) return {kind:'unclassified-stop',reset_at:null,reason:'terminal worker without a valid report; native stop reason/reset unknown'};
-  const resetText = /(?:try again at|resets? (?:at|on))\s+(.+?)(?:\.(?:\s|$)|$)/i.exec(error)?.[1]?.trim();
+  const resetText = /(?:try\s+again\s+at|resets?\s+(?:at|on))\s+(.+?)(?:\.(?:\s|$)|$)/i.exec(error)?.[1]?.trim();
   // Native absolute dates use the host's local timezone. Relative/ambiguous
   // clocks are deliberately held, never guessed into an early resume.
   const normalized = resetText?.replace(/(\d)(?:st|nd|rd|th)\b/g, '$1');
@@ -74,7 +74,11 @@ export function recoveryFence({org, current, ownership, canonical, binding}, act
 
 export async function reconcileUsageStop({org,current,ownership,canonical,native,herdr,call,
   now=Date.now,offer=offerQuiet,fence=recoveryFence,confirmSeconds=3}) {
-  const file=usageStopFile(org,current.id), binding=bindingFor(current);
+  // Resolve the side-table binding locally; raw runs are completion inputs and
+  // must never be enriched with a late session.
+  const subject=readWatchSubject(org,current.id);
+  if(subject.meta.identity_conflict)throw Error('original worker identity_conflict; retain usage-stop duty');
+  const file=usageStopFile(org,current.id), binding=bindingFor(subject);
   let saved=readJson(file);
   if (saved && (JSON.stringify(saved.ownership)!==JSON.stringify(ownership) ||
       JSON.stringify(saved.binding)!==JSON.stringify(binding)))
@@ -94,6 +98,16 @@ export async function reconcileUsageStop({org,current,ownership,canonical,native
     return {handled:false};
   }
   if (!['idle','done'].includes(native?.agent_status)) return {handled:false};
+  const counters={state_change_seq:native.state_change_seq,completion_seq:native.completion_seq};
+  const advanced=saved && Object.keys(counters).some(key=>Number.isSafeInteger(counters[key]) &&
+    Number.isSafeInteger(saved.native_counters?.[key]) && counters[key]>saved.native_counters[key]);
+  // A finite observer may miss the entire working interval. A later terminal
+  // sequence ends this hold, but does not grant permission to replay input.
+  if(saved?.kind==='usage-limit' && (saved.phase==='completed' || saved.phase!=='working' && advanced)){
+    if(saved.phase!=='completed')save({...saved,phase:'completed',native_counters:counters,
+      reason:'original native lifecycle advanced without observed working; owner must inspect the new terminal result'});
+    return {handled:false,receipt:saved};
+  }
   // No complete immutable record/native tuple means no input authority.
   if (saved && ['offering','delivered','refused','uncertain'].includes(saved.phase))
     return {handled:true,wait_ms:30000,receipt:saved};
@@ -105,13 +119,14 @@ export async function reconcileUsageStop({org,current,ownership,canonical,native
   }
   const observation=classifyUsageStop(screen);
   if (!saved || saved.screen_sha256!==hash(screen) || saved.phase==='working')
-    save({attempt:saved?.attempt??0,observed_at:new Date(now()).toISOString(),screen_sha256:hash(screen),...observation,phase:'held'});
+    save({attempt:saved?.attempt??0,observed_at:new Date(now()).toISOString(),screen_sha256:hash(screen),native_counters:counters,...observation,phase:'held'});
   if(observation.kind==='sign-in-required')return {handled:true,wait_ms:30000,receipt:saved};
   if(observation.kind!=='usage-limit')return {handled:false,receipt:saved};
   if(!observation.reset_at)return {handled:true,wait_ms:30000,receipt:saved};
   const remaining=Date.parse(observation.reset_at)-now();
   if(remaining>0)return {handled:true,wait_ms:Math.min(remaining+1000,30000),receipt:saved};
   const context={org,current,ownership,canonical,binding};
+  let fenceRejected=false;
   try {
     fence(context,()=>{});
     const result=await offer({text:`[usage-limit-resume] Continue the existing run ${current.id} in this session after the account reset. Preserve the original claim, folder and any unlanded commit; inspect existing evidence and do not replay completed checks or effects.`,
@@ -120,13 +135,13 @@ export async function reconcileUsageStop({org,current,ownership,canonical,native
       beforePrompt:()=>{
         // Save before entering the source fence to avoid nesting record locks.
         save({...saved,phase:'offering',offered_at:new Date(now()).toISOString(),reason:'input intent saved; acknowledgement pending'});
-        fence(context,()=>{});
+        try {fence(context,()=>{});}catch(error){fenceRejected=true;throw error;}
       }},
     {call,confirmSeconds});
     save({...saved,phase:result.state==='pending'?'held':result.state,reason:result.reason});
   }catch(error){
     // A crash or failure after intent never authorizes another offer.
-    save({...saved,phase:saved.phase==='offering'?'uncertain':'held',reason:error.message});
+    save({...saved,phase:!fenceRejected && saved.phase==='offering'?'uncertain':'held',reason:error.message});
   }
   return {handled:true,wait_ms:30000,receipt:saved};
 }

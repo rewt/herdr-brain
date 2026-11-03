@@ -50,6 +50,14 @@ interval, plus native/record lookup and quiet-confirmation time. No service or
 supervisor turn is required. The existing finite/shared watcher checkpoints that
 same deadline; resident watchers retain their own timers and receipts.
 
+Recovery resolves the checked late session binding from the record's identity
+side tables in both process and finite mode, leaving the raw run unchanged.
+Each distinct usage-limit hold/offer state sends one durable notice, including
+its reason and reset time (or `unknown`), to the watcher's recorded recipient.
+The existing inbox or record-only delivery path retains its stable state ID
+across restarts; pending, refused and uncertain notices are never replaced.
+These are ordinary watcher notices, not operator messages or new run events.
+
 After reset, the existing `offerQuiet` adapter confirms the original idle/done
 occupant and empty composer before one continuation message. Fresh checks retain
 the original claim, dispatch source/Git identity, open current run, ancestor
@@ -58,7 +66,18 @@ unreadable worker receives no input. An intent saved before input survives a
 watcher crash: offering, acknowledged, refused and uncertain receipts cannot
 offer again until the same worker has actually been observed working. Acknowledged
 input is not proof of model consumption; a worker that never resumes stays held
-with that reason. The native read-to-input race remains the existing adapter's
+with that reason and an owner notice. An advanced native completion or state-change
+sequence can reveal an entire working interval missed between finite polls. It
+ends the hold and surfaces the new terminal result through the normal watcher
+path, without authorizing another prompt. A rejected final source fence before
+input returns to held; a known native refusal remains refused.
+
+The retained incident resumed earlier than its displayed reset, but contains no
+machine-readable proof of what restored availability. A quiet composer or an
+unchanged stale limit screen does not prove an early reset. The watcher keeps
+the named, visible hold until the displayed reset or observed native activity;
+the owner may investigate restored availability in the original run. No periodic
+speculative worker prompts are sent. The native read-to-input race remains the existing adapter's
 boundary. No old watcher, saved runtime, callback or recipient is migrated.
 Candidate installation and a real account-limit/reset witness remain with the
 line's authorized candidate/soak owner; offline controls do not prove live recovery.

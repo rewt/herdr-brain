@@ -20,7 +20,7 @@ import {completionRows,completedInstallation} from './probation-completion.mjs';
 export const runtimeRoot=fs.realpathSync(fileURLToPath(new URL('../',import.meta.url)));
 export const digest=bytes=>createHash('sha256').update(bytes).digest('hex');
 
-export function acceptedRuntime(repo,{root=runtimeRoot,home=releaseHome(),verifyFiles=true}={}) {
+export function acceptedRuntime(repo,{root=runtimeRoot,home=releaseHome(),verifyFiles=true,admission}={}) {
   root=fs.realpathSync(root);
   const trial=probationRuntime(repo,{root,home});
   if(trial)return trial;
@@ -31,7 +31,7 @@ export function acceptedRuntime(repo,{root=runtimeRoot,home=releaseHome(),verify
   const release=checkRelease(home,pin.release,{verifyFiles});
   requireReadyAcceptance(release,home);
   const org=findOrgDir({cwd:repo,env:{...process.env,ORG_DIR:''}});
-  if(org){const loaded=loadEvents(org);if(loaded.tornTail)throw Error('incomplete record prevents runtime admission');requireRecordCompatibility(root,loaded.events);}
+  if(org){const loaded=loadEvents(org);if(loaded.tornTail)throw Error('incomplete record prevents runtime admission');requireRecordCompatibility(root,loaded.events,admission);}
   return release;
 }
 

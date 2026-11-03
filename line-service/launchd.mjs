@@ -31,7 +31,7 @@ export {launchPlist} from './plist.mjs';
 
 export function main(argv = process.argv.slice(2), { command = spawnSync,call:nativeCall,home,cwd=process.cwd(),env=process.env } = {}) {
   const { positionals, values: v } = parseArgs({ args: argv, allowPositionals: true,
-    usage: 'launchd.mjs install|register-login|migrate|upgrade|probation-authorize|probation-switch|probation-successor|probation-withdraw|probation-complete|retarget|restart|status|stop|revert --repo CANONICAL [--org RECORD --id HANDOFF --trial ORIGINAL_TRIAL --development-recovery --authority NOTE_SEQ --from-root CURRENT --target-root TARGET --rollback --dry-run --expected-plan SHA256 --to SUPERVISOR --herdr ABS_PATH --socket ABS_PATH --interval 30 --commit SHA]', options: {
+    usage: 'launchd.mjs install|register-login|migrate|upgrade|probation-authorize|probation-switch|probation-successor|probation-withdraw|probation-complete|retarget|restart|status|stop|revert --repo CANONICAL [--org RECORD --id HANDOFF --trial ORIGINAL_TRIAL --development-recovery --authority NOTE_SEQ --from-root CURRENT --target-root TARGET --rollback --accept-unread --dry-run --expected-plan SHA256 --to SUPERVISOR --herdr ABS_PATH --socket ABS_PATH --interval 30 --commit SHA]', options: {
       repo: { type: 'string' }, org: { type: 'string' }, to: { type: 'string' }, herdr: { type: 'string' }, socket: { type: 'string' },
       interval: { type: 'string' }, commit: { type: 'string', multiple: true },
       id:{type:'string'},'dry-run':{type:'boolean'},
@@ -39,7 +39,7 @@ export function main(argv = process.argv.slice(2), { command = spawnSync,call:na
       authority:{type:'string'},
       'recovery-authority':{type:'string'},
       trial:{type:'string'},'development-recovery':{type:'boolean'},emergency:{type:'boolean'},
-      'from-root':{type:'string'},'target-root':{type:'string'},rollback:{type:'boolean'},
+      'from-root':{type:'string'},'target-root':{type:'string'},rollback:{type:'boolean'},'accept-unread':{type:'boolean'},
     } });
   const action = positionals[0];
   if(v.emergency&&action!=='probation-withdraw')throw Error('--emergency applies only to probation-withdraw');
@@ -68,7 +68,7 @@ export function main(argv = process.argv.slice(2), { command = spawnSync,call:na
   if (positionals.length !== 1 || !['install','migrate','upgrade','retarget', 'restart', 'status', 'stop', 'revert'].includes(action) || !v.repo) throw Error('name install|migrate|upgrade|retarget|restart|status|stop|revert and --repo CANONICAL');
   if(!['install','migrate','upgrade'].includes(action)&&(v.id||v['expected-plan']))throw Error('--id/--expected-plan apply only to install/migrate/upgrade');
   if(!['install','migrate','upgrade','retarget'].includes(action)&&v['dry-run'])throw Error('--dry-run applies only to install/migrate/upgrade/retarget');
-  if(action!=='upgrade'&&(v['from-root']||v['target-root']||v.rollback))throw Error('--from-root/--target-root/--rollback apply only to upgrade');
+  if(action!=='upgrade'&&(v['from-root']||v['target-root']||v.rollback||v['accept-unread']))throw Error('--from-root/--target-root/--rollback/--accept-unread apply only to upgrade');
   if(action==='install'&&(bundleRelease().commit||v['dry-run']||v.id||v['expected-plan'])){
     if(v.commit)throw Error('install does not accept revert commits');
     return installRelease({repo:v.repo,org:v.org??findOrgDir({cwd:v.repo,env:{...env,ORG_DIR:''}}),id:v.id,to:v.to,herdr:v.herdr,socket:v.socket,interval:v.interval,
@@ -80,7 +80,7 @@ export function main(argv = process.argv.slice(2), { command = spawnSync,call:na
   }
   if(action==='upgrade'){
     if(v.to||v.herdr||v.socket||v.interval||v.commit)throw Error('upgrade preserves saved bindings; no install/revert options');
-    return upgradeRuntime({repo:v.repo,org:v.org??findOrgDir({cwd:v.repo,env:{...env,ORG_DIR:''}}),id:v.id,fromRoot:v['from-root'],targetRoot:v['target-root'],rollback:v.rollback,
+    return upgradeRuntime({repo:v.repo,org:v.org??findOrgDir({cwd:v.repo,env:{...env,ORG_DIR:''}}),id:v.id,fromRoot:v['from-root'],targetRoot:v['target-root'],rollback:v.rollback,acceptUnread:v['accept-unread'],
       dryRun:v['dry-run'],expectedPlan:v['expected-plan'],command,call:nativeCall,home,cwd,env});
   }
   if(action==='migrate'){

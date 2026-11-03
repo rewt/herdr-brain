@@ -724,6 +724,10 @@ PLAN_SHA256=EXACT_64_CHARACTER_DRY_RUN_DIGEST
 "$NODE" "$TARGET_ROOT/line-service/launchd.mjs" status --repo /OWN/CANONICAL --org /OWN/RECORD
 ```
 
+The forward dry-run also reports `rollback`: the tool that can return, the current
+root, whether that return is admitted now, and which later events would refuse it.
+It reports and never blocks; the project owner decides whether to adopt.
+
 Dry-run may recover a dead pass owner with the append-only receipts described
 above; it leaves runtime files intact. Apply rechecks native identity, payloads, pin, STOP,
 record and saved bytes under the existing control/pass/promotion/record locks.
@@ -762,6 +766,23 @@ remain available. This also supports returning to the first migrated release,
 which predates upgrade support. Qualification and live acceptance remain the
 release coordinator's obligation; fixture bootstrap/pass controls do not
 authorize a real project upgrade or count as live acceptance.
+
+A release older than record admission cannot read an offer and can refuse a newer
+release's inventory first, so only the successor's tool can return to it. That target already
+ran on the record up to the handoff, so its gaps there do not refuse; events since
+then that it has never met do. Choose the fallback in this order:
+
+1. Plain rollback, while nothing since the handoff is new to the target.
+2. If it refuses, and the target predating admission is still wanted, review the
+   named events and repeat preview and apply with `--accept-unread`. The target
+   will not read those events. The exact list goes into the plan digest and archive,
+   so a bare apply or a moved record refuses. A newer target applies its own
+   admission at restart and cannot accept this.
+3. Otherwise restore the successor's pin and restart it, or keep STOP and fix forward.
+   A refused preview changes nothing.
+
+A login registration or retarget after the handoff still needs its existing owner
+disposition, because rollback must follow the upgrade directly.
 
 ### Brain-only probation for one routine candidate
 

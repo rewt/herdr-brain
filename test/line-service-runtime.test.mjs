@@ -3,10 +3,11 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
-import {spawnSync} from 'node:child_process';
+import {execFileSync,spawnSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {configFixture} from './helpers/config-home-fixture.mjs';
 import {loadEvents,transact} from '../lib/store.mjs';
+import {copyProduct} from '../lib/product-files.mjs';
 import {gitProject} from '../lib/project.mjs';
 import {lineDirectory} from '../line-service/cutoff.mjs';
 import {launchPlist} from '../line-service/plist.mjs';
@@ -375,6 +376,113 @@ test('rollback rejects a historical fold that would silently discard current acc
   assert.deepEqual(retained(f),before);assert.deepEqual(fs.readFileSync(path.join(f.org,'dispatch/retained.json')),jobs);
   assert.equal(fs.existsSync(path.join(f.directory,'upgrades/incompatible-rollback.json')),false);
   assert.equal(f.calls.some(c=>['bootstrap','bootout'].includes(c.args[0])),false);
+});
+
+// The real pin BCH runs, on a consumer whose service was migrated by that pin's
+// own tool, with an offered routine successor only the newer tool can read.
+async function offeredFromHistoricalPin(t){
+  const f=await fixture(t),commit='98002dc75cb064dd639e79c922ddeb98d3781bc2';
+  const archive=path.join(f.scratch,'historical'),old=path.join(f.installationHome,'releases','bch-pin');
+  fs.mkdirSync(archive);
+  execFileSync('tar',['-x','-C',archive],{input:execFileSync('git',['archive',commit],{maxBuffer:64*1024*1024})});
+  copyProduct(archive,old);
+  fs.writeFileSync(path.join(old,'.release-commit'),commit+'\n');
+  const summary=path.join(old,'.release-acceptance.json');
+  fs.writeFileSync(summary,JSON.stringify({ready:true,candidateCommit:commit,elapsedSeconds:1,counts:{PASS:1,FAIL:0,PENDING:0,SKIP:0}}));
+  const sealed=spawnSync(process.execPath,[path.resolve('herdr/releases.mjs'),'manifest',old,summary],{cwd:f.cwd,env:f.env,encoding:'utf8'});assert.equal(sealed.status,0,sealed.stderr);
+  const pin=id=>{fs.writeFileSync(path.join(f.cwd,'.herdr-release.json'),JSON.stringify({release:id})+'\n');f.git('add','.herdr-release.json');f.git('commit','-qm','Select '+id);};
+  pin('bch-pin');
+  const {main:oldMain}=await import(pathToFileURL(path.join(old,'line-service/launchd.mjs')).href);
+  const migrate=['migrate','--repo',f.cwd,'--org',f.org,'--id','historical-move'];
+  oldMain([...migrate,'--expected-plan',oldMain([...migrate,'--dry-run'],f.args).archive.sha256],f.args);
+  // BCH's own record: the old pin wrote these and refuses neither in practice.
+  transact(f.org,()=>({add:[{type:'item.added',id:'ENG-1',title:'Pinned consumer work',role:'engineer'},
+    {type:'report.ingested',run:'R-1',report:{outcome:'done'}},{type:'change.landed',run:'R-1'}]}));
+  const next=f.release('offered',{commit:'2'.repeat(40)}),manifestFile=path.join(next,'.release-manifest.json');
+  const manifest=JSON.parse(fs.readFileSync(manifestFile));manifest.release={kind:'routine',fullCoverage:'UNRUN'};manifest.acceptance={ran:false,ready:false};fs.writeFileSync(manifestFile,JSON.stringify(manifest));
+  const sha=bytes=>createHash('sha256').update(bytes).digest('hex'),evidence=[{file:manifestFile,sha256:'a'.repeat(64)}];
+  const unsigned={schema:'consumer-release-offer/v1',commit:'2'.repeat(40),manifestSha256:sha(fs.readFileSync(manifestFile)),coordinatorItem:'ENG-OFFER',
+    canary:{status:'PASS',scope:'Fixture canary',evidence:['installed','probation','soak'].map(stage=>({stage,...evidence[0]}))},
+    landing:{status:'PASS',scope:'Fixture landing',evidence},majors:{scope:'None in fixture',unresolved:[],corrections:[]}};
+  const attestationDigest=sha(JSON.stringify(unsigned)),packet={...unsigned,attestationDigest,attestationSeq:1},bytes=Buffer.from(JSON.stringify(packet));
+  fs.mkdirSync(path.join(f.installationHome,'offers'),{recursive:true});
+  fs.writeFileSync(path.join(f.installationHome,'offers/offered.json'),JSON.stringify({schema:'consumer-release-offer-record/v1',release:'offered',commit:'2'.repeat(40),manifestSha256:unsigned.manifestSha256,
+    packetSha256:sha(bytes),packetBase64:bytes.toString('base64'),packet,fullSuite:{status:'UNRUN',details:'No full-suite run supplied; background information only.'},coordinator:'fixture-coordinator',
+    disposition:{seq:1,type:'note.added',decision:true,by:'fixture-coordinator',id:'ENG-OFFER',text:`Consumer release offer reconciled: ${attestationDigest}`}}));
+  pin('offered');
+  const {main}=await import(pathToFileURL(path.join(next,'line-service/launchd.mjs')).href);
+  const forward=['upgrade','--repo',f.cwd,'--org',f.org,'--id','offer-adoption','--from-root',old,'--target-root',next];
+  const back=['upgrade','--repo',f.cwd,'--org',f.org,'--id','offer-rollback','--from-root',next,'--target-root',old,'--rollback'];
+  const adopt=()=>{main([...forward,'--expected-plan',main([...forward,'--dry-run'],f.args).archive.sha256],f.args);};
+  const oldPass=async()=>{
+    const {createLineService}=await import(pathToFileURL(path.join(old,'line-service/line-service.mjs')).href);
+    return createLineService({repo:f.cwd,org:f.org,to:'fixture-supervisor',runtimeHome:f.installationHome,env:{...f.env,HERDR_ENV:'',HERDR_PANE_ID:''},haltAfter:100,
+      command:()=>({status:0,stdout:'{"created":[]}'}),capacity:()=>({count:0,cap:2})}).pass();
+  };
+  return {...f,old,next,pin,main,oldMain,forward,back,adopt,oldPass};
+}
+
+test('a forward preview reports the rollback result and the offered release returns to the real historical pin',async t=>{
+  const f=await offeredFromHistoricalPin(t),before=retained(f);
+  // The original premise: the old pin's tool cannot read the offered release.
+  assert.throws(()=>f.oldMain([...f.forward,'--dry-run'],f.args),/incomplete release offered: inventory/);
+  const preview=f.main([...f.forward,'--dry-run'],f.args).rollback;
+  assert.deepEqual(retained(f),before);
+  assert.equal(preview.admitted,true);assert.equal(preview.tool,f.next);assert.equal(preview.target,f.old);assert.equal(preview.accept_unread,true);
+  for(const gap of ['capability:report.ingested/v1','capability:report.completion/v1','capability:change.landed/v1','event:change.landed'])assert.ok(preview.established.includes(gap),gap);
+  assert.ok(preview.refuses_once_written.includes('capability:native.intent/v1'));assert.ok(!preview.refuses_once_written.includes('capability:report.ingested/v1'));
+  f.adopt();const adopted=fs.readFileSync(f.installationFile,'utf8');
+  assert.equal(f.main(['restart','--repo',f.cwd,'--org',f.org],f.args).restarted,true);
+  f.main(['stop','--repo',f.cwd,'--org',f.org],f.args);
+  // Further work of a kind the pin already ran on keeps the rollback admitted.
+  transact(f.org,()=>({add:[{type:'report.ingested',run:'R-2',report:{outcome:'done'}},{type:'change.landed',run:'R-2'}]}));
+  f.pin('bch-pin');
+  const plan=f.main([...f.back,'--dry-run'],f.args);
+  assert.deepEqual(plan.unread,[]);assert.ok(plan.established.includes('event:change.landed'));
+  assert.notEqual(fs.readFileSync(f.installationFile,'utf8'),before.installation);
+  assert.equal(f.main([...f.back,'--expected-plan',plan.archive.sha256],f.args).direction,'rollback');
+  assert.equal(fs.readFileSync(f.installationFile,'utf8'),before.installation);assert.equal(fs.readFileSync(f.file,'utf8'),before.plist);
+  assert.notEqual(adopted,before.installation);
+  assert.equal(f.oldMain(['restart','--repo',f.cwd,'--org',f.org],f.args).restarted,true);
+  assert.equal((await f.oldPass()).result,'pass-complete');
+});
+
+test('events the historical pin never met refuse rollback, keep the adopted runtime, and need the owner bound acceptance',async t=>{
+  const f=await offeredFromHistoricalPin(t);f.adopt();
+  const adopted=retained(f);
+  f.pin('bch-pin');
+  transact(f.org,()=>({add:[{type:'review.finding-linked',item:'ENG-1',run:'R-2'},{type:'closeout.effect',run:'R-2',outcome:{action:'agent-exit-requested'}}]}));
+  assert.throws(()=>f.main([...f.back,'--dry-run'],f.args),/record-incompatible:.*review\.finding-linked.*native\.intent\/v1/);
+  assert.equal(fs.readFileSync(f.installationFile,'utf8'),adopted.installation);assert.equal(fs.readFileSync(f.file,'utf8'),adopted.plist);
+  assert.equal(fs.existsSync(path.join(f.directory,'upgrades/offer-rollback.json')),false);
+  // Recovery without accepting anything: the adopted runtime still starts.
+  f.pin('offered');assert.equal(f.main(['restart','--repo',f.cwd,'--org',f.org],f.args).restarted,true);
+  f.main(['stop','--repo',f.cwd,'--org',f.org],f.args);f.pin('bch-pin');
+  const accept=[...f.back,'--accept-unread'],plan=f.main([...accept,'--dry-run'],f.args);
+  assert.deepEqual(plan.unread,['capability:native.intent/v1','event:review.finding-linked']);
+  // The acceptance is bound to the plan: neither a bare apply nor a moved record can use it.
+  assert.throws(()=>f.main([...f.back,'--expected-plan',plan.archive.sha256],f.args),/record-incompatible/);
+  transact(f.org,()=>({add:[{type:'correction.discharged',item:'ENG-1'}]}));
+  assert.throws(()=>f.main([...accept,'--expected-plan',plan.archive.sha256],f.args),/plan changed/);
+  const current=f.main([...accept,'--dry-run'],f.args);assert.ok(current.unread.includes('event:correction.discharged'));
+  assert.equal(f.main([...accept,'--expected-plan',current.archive.sha256],f.args).direction,'rollback');
+  assert.deepEqual(JSON.parse(fs.readFileSync(current.archive.file)).unread_accepted,current.unread);
+  assert.equal(f.oldMain(['restart','--repo',f.cwd,'--org',f.org],f.args).restarted,true);
+  assert.equal((await f.oldPass()).result,'pass-complete');
+});
+
+test('a forward preview reports a refused rollback without blocking the upgrade, and acceptance needs a target predating admission',async t=>{
+  const f=await successor(t);
+  transact(f.org,()=>({add:[{type:'item.added',id:'ENG-1',title:'Current contract',accept:['Original']},
+    {type:'item.acceptance-amended',id:'ENG-1',accept:['Current'],why:'Scratch compatibility control'}]}));
+  const old=spawnSync('git',['show','a96eaa9c47:lib/state.mjs'],{encoding:'utf8'});assert.equal(old.status,0,old.stderr);
+  fs.writeFileSync(path.join(f.bundle,'lib/state.mjs'),old.stdout);
+  const manifest=spawnSync(process.execPath,[path.resolve('herdr/releases.mjs'),'manifest',f.bundle,path.join(f.bundle,'.release-acceptance.json')],{env:f.env,encoding:'utf8'});assert.equal(manifest.status,0,manifest.stderr);
+  const preview=f.plan().rollback;
+  assert.equal(preview.admitted,false);assert.match(preview.refusal,/item\.acceptance-amended/);assert.equal(preview.target,f.bundle);
+  assert.throws(()=>f.main([...f.argv,'--accept-unread','--dry-run'],f.args),/only to --rollback/);
+  const g=await successor(t);g.upgrade();g.pin('compatible');
+  assert.throws(()=>g.main(['upgrade','--repo',g.cwd,'--org',g.org,'--id','fixture-rollback','--from-root',g.next,'--target-root',g.bundle,'--rollback','--accept-unread','--dry-run'],g.args),/predating record admission/);
 });
 
 test('upgrade refuses foreign owners, mismatched roots and records, STOP/HOLD, live locks, loaded service and changed native CAS',async t=>{

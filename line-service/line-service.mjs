@@ -15,6 +15,7 @@ import { itemStatus, sortItems } from '../lib/state.mjs';
 import { effectiveWorkerIdentity, workerReceipt } from '../lib/worker-identity.mjs';
 import { readOwnedRun, requireController, assertOwner } from '../lib/run-owner.mjs';
 import { loadDiscoveredRoutes, resolveLaunchRoute, selectRoute } from '../lanes/routes.mjs';
+import {reframeDisposition,reframeEvents} from './reframe-route.mjs';
 import { correctionSource } from '../lib/report-closeout.mjs';
 import { directCloseoutObservation, currentCloseoutEntries, closeoutEvaluation } from '../lib/closeout.mjs';
 import { checkSessionCap,dispatchPool } from '../dispatch/session-cap.mjs';
@@ -1096,6 +1097,24 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
           note(`dispatch:${item.id}`, e.message);
         }
       }};
+      // A reported reframe request picks its route or holds before any admission.
+      const reframeRoutes=()=>{
+        snapshot=current();
+        const disposition=(item,{state,events})=>reframeDisposition({item,state,events,config,defaultRoute:()=>{try{return routeFor({...item,meta:{...item.meta,route:undefined}},config);}catch{return null;}}});
+        for(const item of [...snapshot.state.items.values()]){
+          const seen=disposition(item,snapshot);
+          if(!seen||!queueSelected(item,snapshot.state,ordinaryPolicy)||reserved(item)||itemLaunchHold(snapshot.state,item.id,snapshot.events))continue;
+          let owner=to;try{owner=projectExceptionAddress(repo,config,config.routes?.['engineer-xhigh']?'engineer-xhigh':'engineer',childEnv).to??to;}catch{/* The line's own recipient stays the named owner. */}
+          transact(org,(events,state)=>{
+            const fresh=disposition(state.items.get(item.id),{state,events});
+            return{add:JSON.stringify(fresh)===JSON.stringify(seen)?reframeEvents(seen,{owner}):[]};
+          },{actor:'line-service',strictTail:true});
+          stale=true;snapshot=current();
+          log({action:`reframe-${seen.action}`,...seen,owner});
+          if(seen.action==='hold')note(`reframe:${item.id}`,seen.reason,{item:item.id,owner},true);
+        }
+      };
+      if(config&&!policyHold&&!(sharedWatchHold&&config.dispatch?.watch_mode==='shared'))try{reframeRoutes();}catch(error){note('reframe-route',error.message);}
       const classify=queueClassifier(snapshot.state,standing);
       const ordered=orderQueue(snapshot.state,[...snapshot.state.items.values()].filter(item=>!item.closed&&item.kind!=='goal'),standing,classify);
       log({action:'queue-order',policy:standing,candidates:ordered.map(item=>({item:item.id,class:classify(item)}))});

@@ -35,8 +35,10 @@ The legacy `review-max` and `review-sol-max` routes remain configured. Verify th
 actual producer family and route before selecting an independent reviewer for
 judgment-heavy/outward work. These defaults affect new requests only, never an
 existing/UNKNOWN review attempt. No second review is dispatched here. A reframe
-similarly needs a real owner-selected route; no dedicated reframe selection was
-recorded.
+requested in a run's report selects
+`selection_policy.by_task_class["reframe-other-family"]`: Codex stops use
+`engineer-escalate`, Claude stops use `engineer-reframe-codex`. An unavailable
+route holds the item; see the [line service page](../line-service/README.md#one-other-family-reframe).
 
 ## BCH owner
 

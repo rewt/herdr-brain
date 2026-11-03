@@ -354,6 +354,33 @@ alternate executor or edit the journal. Only the project owner executes this
 control; the worker supplies source/affected evidence. This is not permission to
 restart either stopped line service.
 
+## One other-family reframe
+
+A worker that stops under the new-issue rule names its request for one fresh
+other-family reframe in a report blocker or decision. Before admission, the line
+reads that request on selected work whose latest report is `failed` or `blocked`.
+Summaries, learnings and challenges are retrospective and never count.
+
+The requesting run's recorded harness is the family to leave. The line keeps an
+explicit other-family `meta.route`, otherwise selects
+`selection_policy.by_task_class["reframe-other-family"][family]`, otherwise the
+role's default route when it is already other-family. It records that route and
+`meta.reframe` on the item, adds a note for the new brief and restarts the item,
+including a `blocked` report with no other changed input.
+
+When no route qualifies, the family is unknown or the one reframe was already
+spent, the item holds with `meta.hold_reason`, `meta.owner` (the project
+supervisor) and `meta.next_action`, and the line records an inspection-due
+notice. No session is started to discover the mismatch. To recover, the owner
+configures a route or an other-family `meta.route` and clears `meta.hold`; the
+next pass routes it. Clearing the hold with no route is the owner's choice to
+continue, recorded by `meta.reframe_hold`. A reshape of the title or acceptance,
+or a `done` report, ends the request. Unselected, reserved and held items are left alone, and no
+executor is ever synthesized.
+
+This adds only `item.updated` and `note.added` events, so older folds and the
+sealed recovery root read the result as ordinary metadata.
+
 ## Phase1 source contract
 
 For a fresh second project, read the

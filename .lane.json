@@ -25,6 +25,10 @@
       "review-other-family": {
         "codex": "review",
         "claude": "review-codex"
+      },
+      "reframe-other-family": {
+        "codex": "engineer-escalate",
+        "claude": "engineer-reframe-codex"
       }
     }
   },
@@ -56,6 +60,13 @@
       "effort": "max",
       "args": [],
       "use": "Claude Opus max problem-solving escalation ONLY after a documented failed high/xhigh attempt or stop-rule reframe; operator direction 2026-11-02. Never a routine build or review default."
+    },
+    "engineer-reframe-codex": {
+      "kind": "codex",
+      "model": "gpt-6.1-sol",
+      "effort": "xhigh",
+      "args": [],
+      "use": "Codex Sol xhigh for the ONE other-family reframe after a Claude engineering stop; the line selects it from the run's own recorded request. Never a routine build default."
     },
     "review-sol-max": {
       "kind": "claude",

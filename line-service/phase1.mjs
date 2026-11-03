@@ -25,6 +25,7 @@ import {additionalTarget,supplementalTarget,canonicalTarget,canonicalSelector,va
 import {reviewCorrectionEvents} from './review-findings.mjs';
 import {conditionalMinorDeferrals} from '../lib/review-live-trigger.mjs';
 import {batchedMinorSection,batchedMinorKey} from '../lib/batched-minors.mjs';
+import {routedReframe} from './reframe-route.mjs';
 
 export function reviewCompletionPlan({events,state,runId}){
   const run=state.runs.get(runId),item=state.items.get(run?.item),key=item?.meta.review_key;
@@ -325,8 +326,9 @@ export function blockedChangeKey({events,state,item,run,brief}) {
     // An explicit non-declined answer to an unlinked question asked under the subject.
     e.type==='item.closed'&&(q=>q?.parent===item.id&&roleIs(q,'HUM')&&q.meta.answer!=null&&q.meta.answered_by!=='auto'&&!isDeclined(q))(state?.items.get(e.id))));
   const original=events.find(e=>e.type==='report.ingested'&&e.run===run.id)?.brief_sha256;
-  if(!answer&&!reframe&&!inputs.length&&!(original&&brief&&original!==brief))return null;
-  return hash(JSON.stringify([run.report.sha256,inputs.map(e=>e.seq),brief??null,...(answer?[answer.key]:[]),...(reframe?[reframe.key,reframe.seq]:[])]));
+  const routed=routedReframe({events,item,run});
+  if(!answer&&!reframe&&!routed&&!inputs.length&&!(original&&brief&&original!==brief))return null;
+  return hash(JSON.stringify([run.report.sha256,inputs.map(e=>e.seq),brief??null,...(answer?[answer.key]:[]),...(reframe?[reframe.key,reframe.seq]:[]),...(routed?['reframe-route',routed.seq]:[])]));
 }
 
 // Existing original requests keep their exact immutable partial scopes. This

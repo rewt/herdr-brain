@@ -7,12 +7,13 @@ import {spawnSync} from 'node:child_process';
 import {EventEmitter} from 'node:events';
 import {enqueueSupervisor,readInbox} from '../../supervisor/prompt-supervisor.mjs';
 import {digest} from '../shared.mjs';
-import {fixture as workerFixture} from './step-fixture.mjs';
+import {fixture as workerFixture,reportText} from './step-fixture.mjs';
 import {transact,loadRecord} from '../../lib/store.mjs';
 import {sessionBindFact} from '../../test/helpers/session-bind.mjs';
 import {createObserver,SAFETY_RECONCILIATION_MS} from '../observer.mjs';
 import {sharedDirectory,stepFile,nativeBinding,observerReceipt} from '../shared.mjs';
 import {gitProject} from '../../lib/project.mjs';
+import {observerHost} from '../../test/helpers/shared-observer-host.mjs';
 
 const source=path.resolve(import.meta.dirname,'../..');
 function fixture(t,{count=1,consume,alive=()=>false,timers=globalThis}={}){
@@ -238,4 +239,31 @@ test('shared watch observer follows the line STOP and installed-source boundarie
   fs.writeFileSync(path.join(directory,'installation.json'),JSON.stringify({source:'/successor-build'}));
   assert.equal(f.observer.stoppedByProject(),true);assert.equal(f.calls.length,0);
   assert.deepEqual(fs.readFileSync(path.join(sharedDirectory(f.org),'R-1.json')),original);
+});
+
+test('shared install replacement invokes the original finite consumer and preserves foreign duties',async t=>{
+  const f=workerFixture(t),project=gitProject(f.repo),line=path.join(f.org,'line-service',digest(project.identity).slice(0,20)),
+    installation=path.join(line,'installation.json'),sourceB=path.join(f.root,'build-B');
+  fs.mkdirSync(line,{recursive:true});fs.writeFileSync(installation,JSON.stringify({repo:f.repo,org:f.org,source,phase:'installed'}));
+  class Client extends EventEmitter {async snapshot(){return {protocol:22,agents:[f.getNative()],panes:[{pane_id:f.native.pane_id}]};}subscribe(){}close(){}}
+  const host=observerHost(t,{repo:f.repo,org:f.org,client:()=>new Client(),
+    notify:(to,message,options)=>({...enqueueSupervisor(to,message,options),queued:true,delivered:false})});
+  const a=await host.start(source),duty=path.join(sharedDirectory(f.org),'R-1.json'),original=fs.readFileSync(duty);
+  assert.equal(f.state().phase,'waiting');
+  const good=JSON.parse(original),foreign=[];
+  for(const [i,key]of ['source','project','org'].entries()){
+    const d=structuredClone(good);d.run=`R-${i+2}`;d[key]+='/foreign';
+    const file=path.join(sharedDirectory(f.org),d.run+'.json');fs.writeFileSync(file,JSON.stringify(d));foreign.push([file,fs.readFileSync(file)]);
+  }
+  fs.writeFileSync(installation,JSON.stringify({repo:f.repo,org:f.org,source:sourceB,phase:'installed'}));
+  assert.equal(a.observer.stoppedByProject(),true);await host.exit();
+  const b=await host.start(sourceB);assert.notEqual(b.owner.pid,a.owner.pid);assert.equal(f.state().phase,'waiting');
+  fs.writeFileSync(f.report,reportText());f.setNative({...f.native,agent_status:'done',state_change_seq:2});
+  await b.observer.reconcile('original-report');await b.observer.idle();
+  assert.equal(f.state().phase,'complete');assert.equal(b.observer.counters.consumer_failures,0);
+  assert.equal(f.notices().filter(n=>n.text.includes('[org-report]')).length,1);
+  const completed=fs.readFileSync(stepFile(f.org,'R-1'));await b.observer.reconcile('duplicate');await b.observer.idle();
+  assert.deepEqual(fs.readFileSync(stepFile(f.org,'R-1')),completed);assert.deepEqual(fs.readFileSync(duty),original);
+  for(const[file,bytes]of foreign){assert.deepEqual(fs.readFileSync(file),bytes);assert.ok(fs.existsSync(path.join(f.org,'watch/observer/held',path.basename(file))));}
+  assert.equal(readInbox(path.join(f.org,'supervisor/inbox.log')).length,3);
 });

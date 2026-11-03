@@ -415,6 +415,20 @@ export async function runCanary(c) {
       const reportItem=record(['add','Shared report and cleanup control','--role','engineer']).match(/ENG-\d+/)[0];service(1).pass();
       const reportJob=journals().find(j=>j.item===reportItem);assert.ok(reportJob,audit());sharedHost(reportJob);
       await settled(path.join(org,'watch/steps',reportJob.run+'.json'),'report shared consumer durably waiting and observer idle');
+      // Cross a real supported line STOP with an original duty still waiting.
+      // The ordinary line pass starts B; no dispatch retry or watcher re-arm.
+      const beforeRestart=owner,reportDuty=fs.readFileSync(reportJob.watcher.shared),reportJournal=fs.readFileSync(reportJob.file),
+        lineStop=path.join(directory,'STOP');
+      fs.writeFileSync(lineStop,'Shared canary in-flight line STOP\n');
+      await until(()=>!ownerAlive(beforeRestart),'original shared observer exits on line STOP');
+      fs.unlinkSync(lineStop);service(0).pass();
+      await until(()=>{
+        owner=JSON.parse(fs.readFileSync(ownerFile));
+        return owner.pid!==beforeRestart.pid&&ownerAlive(owner);
+      },'ordinary line pass starts replacement observer');
+      assert.equal(owner.source,bundle);assert.deepEqual(fs.readFileSync(reportJob.watcher.shared),reportDuty);
+      assert.deepEqual(fs.readFileSync(reportJob.file),reportJournal);assert.equal(prompts(reportJob).length,1);
+      await settled(path.join(org,'watch/steps',reportJob.run+'.json'),'replacement retains original waiting consumer');
       report(reportJob,[]);
       await until(()=>events().some(e=>e.type==='note.added'&&e.id===reportJob.run&&e.watch_notice_id===`watch:${reportJob.run}:final`),'lost report hint recovered by original finite watcher');
       service(0).pass();await until(()=>!fs.existsSync(reportJob.worker.cwd)&&!native().workspaces[reportJob.worker.workspaceId],
@@ -432,6 +446,8 @@ export async function runCanary(c) {
       assert.equal(state().runs.get(job.run).report,null);assert.ok(fs.existsSync(job.worker.cwd));assert.equal(prompts(job).length,1);
       assert.equal(rows().some(r=>r.run===job.run&&['consumer-held','observation-held'].includes(r.action)),false);
       stage('shared-observer',{source:bundle,owner,run:job.run,reportRun:reportJob.run,watchMode:'shared',perRunResidents:0,
+        lineStopCrossed:true,originalObserver:beforeRestart,replacementObserver:owner,
+        candidateInstallCrossing:'UNRUN: this shared case has one frozen candidate; release coordinator owns a second compatible candidate install',
         watchers:[job.watcher,reportJob.watcher],
         sessionlessRegistration:true,sessionBindings:events().filter(e=>e.type==='run.session_bound'&&[job.run,reportJob.run].includes(e.run)),
         droppedHints:['native blocked','native vanished','report file'],safetyMs:30000,reconciled,repairs,blockedNotes,

@@ -504,13 +504,16 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       };
       const admission=readAdmission('pass-start'),admissionPolicy=admission?.review,ordinaryPolicy=admission?.ordinary;
       if(admission)try{({config}=loadDiscoveredRoutes({cwd:repo,env:childEnv}));}catch(error){holdPolicy(error,'pass-start');}
-      let sharedWatchHold;
+      let sharedWatchHold,sharedWatchChecked=false;
       if(config&&!policyHold)try{
         if(config.dispatch?.watch_mode==='shared'||pendingSharedDuties(org)){
         checkpointNotices();
-        const host=outside('shared-observer-host','shared-observer-host',()=>JSON.parse(cli('watch/host.mjs',['--repo',repo,'--org',org])));
+        // The foreground helper owns its terminal command receipt if this line
+        // caller dies. Do not wrap it in an unfinishable in-process parent.
+        const host=withSubject('shared-observer-host',()=>JSON.parse(cli('watch/host.mjs',['--repo',repo,'--org',org])));
+        sharedWatchChecked=Boolean(host);
         if(!host||host.state!=='ready'){
-          sharedWatchHold=host??{id:'unknown',code:'SHARED_OBSERVER_HELD',reason:'observer host is already owned or unknown',evidence:path.join(org,'watch/observer/line-host.json')};
+          sharedWatchHold=host??{id:'unknown',code:'SHARED_OBSERVER_HELD',reason:'original observer host command is active or UNKNOWN; inspect its retained command receipt before any recovery',evidence:path.join(directory,'active-commands')};
         }
         }
       }catch(error){sharedWatchHold={id:'host-command',code:'SHARED_OBSERVER_HELD',reason:error.message,evidence:path.join(org,'watch/observer/line-host.json')};}
@@ -520,9 +523,9 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         note('shared-observer',sharedWatchHold.reason,{code:'SHARED_OBSERVER_HELD',owner,evidence:sharedWatchHold.evidence},true);
         const notice=supervisorNotice(`shared-observer-notice:${sharedWatchHold.id}:${generation}`,
           `line-shared-observer:${digest([project.identity,sharedWatchHold.id,generation])}`,
-          `[line-shared-observer-held] code=SHARED_OBSERVER_HELD owner=${owner}; evidence=${sharedWatchHold.evidence}; reason=${sharedWatchHold.reason}; held-action=new shared line starts; recover the original host with watch/host.mjs --retry, never fall back to process mode`);
+          `[line-shared-observer-held] code=SHARED_OBSERVER_HELD owner=${owner}; evidence=${sharedWatchHold.evidence}; reason=${sharedWatchHold.reason}; held-action=new shared line starts; ${sharedWatchHold.id==='unknown'?'inspect the original command intent and terminal receipt; do not replay an UNKNOWN command':'recover the original host with watch/host.mjs --retry, never fall back to process mode'}`);
         effects.shared_watch.notice=notice;save();
-      }else if(effects.shared_watch&&effects.shared_watch.state!=='released'){effects.shared_watch={...effects.shared_watch,state:'released',released_at:now()};save();}
+      }else if(sharedWatchChecked&&effects.shared_watch&&effects.shared_watch.state!=='released'){effects.shared_watch={...effects.shared_watch,state:'released',released_at:now()};save();}
       const evaluationCounts={admission_evaluated:0,admission_skipped:0,source_evaluated:0,source_skipped:0};
       const evaluationCache=negativeEvaluationCache({store:()=>effects,identity:project.identity,org,repo,
         counts:evaluationCounts,log,dirty:()=>{cacheDirty=true;}});

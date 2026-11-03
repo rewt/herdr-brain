@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {EventEmitter} from 'node:events';
 import {ensureObserver} from '../host.mjs';
+import {startObserver} from '../observer.mjs';
 
 function fixture(t){
   const root=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'line-observer-host-'))),org=path.join(root,'.org'),repo=root;
@@ -31,6 +32,18 @@ test('shared watch host starts once, reuses the exact live birth and restarts af
   const old=first.host.pid;
   const second=await f.run({alive:owner=>owner.pid!==old});assert.equal(second.state,'ready');assert.equal(f.launches,2);
   assert.equal(second.previous.host.pid,old);
+});
+
+test('shared watch host starts a same-source replacement after line STOP clears without retry',async t=>{
+  const f=fixture(t),first=await f.run(),stop=path.join(f.options.org,'line-STOP'),
+    guard=()=>{if(fs.existsSync(stop))throw Error('line STOP');};
+  fs.writeFileSync(stop,'Routine line STOP\n');
+  const held=await f.run({guard});assert.equal(held.state,'held');assert.equal(held.recheck,true);assert.equal(f.launches,1);
+  fs.unlinkSync(stop);
+  const replacement=await f.run({guard,alive:owner=>owner.pid!==first.host.pid});
+  assert.equal(replacement.state,'ready');assert.equal(f.launches,2);
+  assert.equal(replacement.host.source,first.host.source);assert.notEqual(replacement.host.pid,first.host.pid);
+  assert.equal(replacement.previous.host.identity,first.host.identity);
 });
 
 test('shared watch host refuses once, preserves its hold and recovers only on explicit retry',async t=>{
@@ -70,10 +83,24 @@ test('shared watch host accepts a late exact readiness receipt without retry or 
   fs.writeFileSync(file,original);
   const ready=await f.run();assert.equal(ready.state,'ready');assert.equal(ready.id,held.id);assert.equal(f.launches,1);
   assert.equal(ready.host.pid,held.child.pid);assert.equal(ready.host.identity,held.child.identity);
+  for(const key of ['code','reason','recheck','next_event'])assert.equal(Object.hasOwn(ready,key),false,key);
+  assert.deepEqual(ready.resolved_hold,held,'original outage remains inspectable');
 });
 
 test('shared watch host rechecks a guard refusal before launch when the install or STOP boundary clears',async t=>{
   const f=fixture(t),held=await f.run({guard:()=>{throw Error('installation starting or STOP');}});
   assert.equal(held.state,'held');assert.equal(held.recheck,true);assert.equal(f.launches,0);
   assert.equal((await f.run()).state,'ready');assert.equal(f.launches,1);
+});
+
+test('shared startup publishes the exact host after hints attach while the first snapshot is still pending',async t=>{
+  const f=fixture(t);let finish,attached=false,finished=false;
+  const slow=new Promise(resolve=>{finish=resolve;});
+  const observer={start:()=>{attached=true;return slow;},stoppedByProject:()=>false},file=path.join(f.directory,'owner.json'),
+    owner={repo:f.options.repo,org:f.options.org,project:f.options.project,source:path.resolve(import.meta.dirname,'../..'),
+      socket:f.options.env.HERDR_SOCKET_PATH,pid:77,identity:'slow-snapshot-host'};
+  const startup=startObserver(observer,file,owner).then(()=>{finished=true;});
+  assert.equal(attached,true);assert.equal(finished,false);
+  const ready=await f.run();assert.equal(ready.state,'ready');assert.equal(f.launches,0);assert.deepEqual(ready.host,owner);
+  finish();await startup;assert.equal(finished,true);
 });

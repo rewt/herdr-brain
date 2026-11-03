@@ -1287,6 +1287,51 @@ test('shared watch invalid project choice holds instead of selecting process',t=
   f.service().pass();assert.equal(f.calls.length,0);
 });
 
+function sharedLineFixture(t){
+  const f=fixture(t),fleet=process.env.HERDR_MONITOR_FLEET;
+  process.env.HERDR_MONITOR_FLEET=f.env.HERDR_MONITOR_FLEET=path.join(f.repo,'scratch-fleet');
+  t.after(()=>{if(fleet===undefined)delete process.env.HERDR_MONITOR_FLEET;else process.env.HERDR_MONITOR_FLEET=fleet;});
+  const policy=path.join(f.repo,'.lane.json'),config=JSON.parse(fs.readFileSync(policy));
+  config.dispatch.watch_mode='shared';fs.writeFileSync(policy,JSON.stringify(config));
+  return {...f,policy,config};
+}
+
+test('shared watch host command has one recoverable foreground receipt and retains a true UNKNOWN',t=>{
+  const f=sharedLineFixture(t);let calls=0,original,bytes;
+  const command=(exe,args,options)=>{
+    if(args[0]!==path.join(sourceRoot,'watch/host.mjs'))return f.command(exe,args,options);
+    calls++;original=options.commandReceipt;bytes=fs.readFileSync(original.file);
+    const intent=JSON.parse(bytes);
+    assert.equal(intent.subject,'shared-observer-host');assert.equal(intent.parent,undefined,'no caller-only line-operation parent');
+    return {status:0,stdout:'{"state":"ready"}'};
+  };
+  const line=()=>f.service({command});line().pass();assert.equal(calls,1);
+  // A completed helper whose dead caller never removed its marker is readable
+  // on the next pass; the terminal result and original bytes are retained.
+  const first=original,firstBytes=bytes,terminal=fs.readFileSync(first.receipt);fs.writeFileSync(first.file,firstBytes);
+  line().pass();assert.equal(calls,2);assert.deepEqual(fs.readFileSync(first.receipt),terminal);assert.deepEqual(fs.readFileSync(first.file),firstBytes);
+  const unresolved=commandIntent(line().directory,{exe:process.execPath,args:[path.join(sourceRoot,'watch/host.mjs'),'--repo',f.repo,'--org',f.org],
+    cwd:f.repo,subject:'shared-observer-host',key:'shared-observer-host',stuck_owner:'project-supervisor'}),saved=fs.readFileSync(unresolved.file);
+  line().pass();assert.equal(calls,2,'missing terminal evidence is not replay authority');assert.deepEqual(fs.readFileSync(unresolved.file),saved);
+  const effects=readSchedulingJournal(path.join(line().directory,'effects.json'));
+  assert.equal(effects.shared_watch.id,'unknown');assert.match(effects.shared_watch.reason,/command receipt/);
+});
+
+test('shared watch policy failure preserves the original outage until an observed recovery',t=>{
+  const f=sharedLineFixture(t);f.env.MONITOR_SUPERVISOR_AGENT='supervisor-test';let ready=false,hosts=0,notices=0;
+  const command=(exe,args,options)=>{
+    if(args[0]===path.join(sourceRoot,'watch/host.mjs')){hosts++;return{status:0,stdout:JSON.stringify(ready?{state:'ready'}:{id:'outage',state:'held',reason:'original host outage'})};}
+    if(args[0]===path.join(sourceRoot,'supervisor/prompt-supervisor.mjs')){notices++;return{status:3,stdout:JSON.stringify({queued:true,id:args[args.indexOf('--id')+1]})};}
+    return f.command(exe,args,options);
+  };
+  const line=()=>f.service({command}),effects=()=>readSchedulingJournal(path.join(line().directory,'effects.json'));
+  line().pass();const original=effects().shared_watch;assert.equal(notices,1);
+  fs.writeFileSync(f.policy,JSON.stringify({...f.config,dispatch:{...f.config.dispatch,watch_mode:'invalid'}}));
+  line().pass();assert.equal(hosts,1);assert.deepEqual(effects().shared_watch,original);
+  fs.writeFileSync(f.policy,JSON.stringify(f.config));line().pass();assert.equal(notices,1);assert.equal(effects().shared_watch.generation,original.generation);
+  ready=true;line().pass();assert.equal(effects().shared_watch.state,'released');
+});
+
 test('shared watch saved duties keep their observer when the new-start choice is process',t=>{
   const f=fixture(t),registry=path.join(f.org,'watch/shared');fs.mkdirSync(registry,{recursive:true});
   fs.writeFileSync(path.join(registry,'R-9.json'),'{}');f.add('Deliberate process choice');let hosts=0;

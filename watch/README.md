@@ -281,9 +281,19 @@ Clearing a marker alone never starts a service. A live foreign build/birth is
 rechecked without launching over it. A readiness timeout rechecks the original
 child for its exact receipt, and a pre-launch install/STOP refusal rechecks on
 the next pass. An unknown launch or definite child refusal stays held for
-explicit inspection/retry. Original duties,
-consumer failures and saved dispatches remain immutable; a build change does
-not migrate a prior build's registrations or authorize replay of their consumers.
+explicit inspection/retry. Original duties, consumer failures and saved dispatches
+remain immutable. After a same-build restart or an install, the replacement
+observer resumes a prior duty only with its exact recorded claim and original
+release root, invoking `d.source/watch/watch.mjs --step`. The finite entry retains
+all original ownership, native, source and STOP/HOLD guards. Completed steps and
+held failures are never replayed. Keep the original release on disk until its
+duties finish. Closeout checks the original completed step and final callback;
+it permits a replacement same-project/record host, including the project's
+installed new source, without rewriting the saved host or registration.
+Host readiness is published once native/file hints are attached, before the
+first potentially slow snapshot. Finite consumers still wait for reconciliation
+and their own guards. A ready receipt drops the prior outage's diagnostic fields;
+the saved previous attempt retains its history.
 
 `SHARED_OBSERVER_HELD` blocks new shared starts before a dispatch is issued and records
 its project-supervisor owner, original evidence and next action in

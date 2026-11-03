@@ -16,6 +16,7 @@ import {readProjectPolicy} from '../lib/config-policy.mjs';
 import {noticeLock} from '../supervisor/notice-lock.mjs';
 import {parseArgs,isMain} from '../lib/cli-help.mjs';
 import {effectiveWorkerIdentity} from '../lib/worker-identity.mjs';
+import {sameOwner} from '../lib/run-owner-guard.mjs';
 import {sharedDirectory,observerDirectory,stepFile,readJson,stamp,digest,nativeBinding,resolvedNativeBinding,sameNative} from './shared.mjs';
 
 export const SAFETY_RECONCILIATION_MS=30_000;
@@ -23,7 +24,7 @@ const lifecycle=['pane.closed','pane.exited','pane.agent_detected','pane.moved']
 const source=fileURLToPath(new URL('../',import.meta.url)).replace(/\/$/,'');
 
 export function createObserver({repo,org,socket=herdrSocketPath(),client=new HerdrClient({socketPath:socket}),
-  now=Date.now,consume,subjects,timers=globalThis,notify=promptSupervisor,log=()=>{},alive=ownerAlive,safetyMs=SAFETY_RECONCILIATION_MS,maxConsumers=2}={}) {
+  sourceRoot=source,now=Date.now,consume,subjects,timers=globalThis,notify=promptSupervisor,log=()=>{},alive=ownerAlive,safetyMs=SAFETY_RECONCILIATION_MS,maxConsumers=2}={}) {
   const project=gitProject(repo);
   repo=project.canonical;org=fs.realpathSync(org);
   if(!Number.isSafeInteger(safetyMs)||safetyMs<1||!Number.isSafeInteger(maxConsumers)||maxConsumers<1)throw Error('invalid observer bounds');
@@ -38,7 +39,7 @@ export function createObserver({repo,org,socket=herdrSocketPath(),client=new Her
   const line=path.join(org,'line-service',digest(project.identity).slice(0,20));
   const stoppedByProject=()=>{const installed=readJson(path.join(line,'installation.json'));return[path.join(repo,'.lane/supervisor/STOP'),path.join(repo,'.lane/supervisor/HOLD'),
     path.join(org,'STOP'),path.join(directory,'STOP'),path.join(line,'STOP')].some(f=>fs.existsSync(f)) ||
-    Boolean(installed?.source&&installed.source!==source);};
+    Boolean(installed?.source&&installed.source!==sourceRoot);};
   const emit=(action,detail={})=>log({schema:'brain.run-observer/v1',at:new Date(now()).toISOString(),action,project:project.identity,org,...detail});
   const readSubjects=subjects??(duties=>{
     const reader=openRecordReader(path.join(org,'events.jsonl'));
@@ -95,7 +96,7 @@ export function createObserver({repo,org,socket=herdrSocketPath(),client=new Her
     }catch(failure){emit('exception-held',{run:id,reason:failure.message});}
   }
   function validate(d,id){
-    if(d?.schema!=='brain.shared-watch/v1'||d.run!==id||d.org!==org||d.repo!==repo||d.project!==project.identity||d.source!==source||
+    if(d?.schema!=='brain.shared-watch/v1'||d.run!==id||d.org!==org||d.repo!==repo||d.project!==project.identity||!path.isAbsolute(d.source??'')||
       d.consumer!=='watch/watch.mjs --step'||!Array.isArray(d.argv)||!d.stuck_owner||!d.native)throw Error('foreign/malformed original observation registration; retain it');
   }
   function pump(){
@@ -159,6 +160,12 @@ export function createObserver({repo,org,socket=herdrSocketPath(),client=new Her
           const step=steps.get(d.run);
           const native=snapshot?.agents.find(a=>a.name===d.native.agent||a.pane_id===d.native.pane);
           const record=records.get(d.run);
+          // An install replaces the observer, never the run's source or claim.
+          // Only the recorded original release can supply a prior-build consumer;
+          // its own finite entry still rechecks authority at every effect.
+          if(d.source!==sourceRoot&&(!sameOwner(record?.owner,d.ownership?.owner)||
+              record?.generation!==d.ownership?.generation||record?.owner?.legacy!==false||
+              record?.owner?.release?.root!==d.source))throw Error('foreign original consumer source or claim; retain it');
           let binding;
           // Invalid record identity never attributes native counters. Its
           // original finite consumer still owns the authoritative refusal.
@@ -225,6 +232,19 @@ export function createObserver({repo,org,socket=herdrSocketPath(),client=new Her
   return {start,reconcile,tick,nextDelay,wait,interrupt:()=>waiter?.('stop'),close,counters,directory,stoppedByProject,idle:async()=>{do{await scan;await Promise.all([...active.values()]);await new Promise(resolve=>setImmediate(resolve));}while(scan||active.size||queue.size||wake.pending);}};
 }
 
+export async function startObserver(observer,file,owner) {
+  // start() attaches file/native hints synchronously. Publish that live host
+  // before the potentially slow first snapshot; new registrations are caught
+  // by those hints and the startup reconciliation's revision check.
+  const started=observer.start();
+  try {
+    if(observer.stoppedByProject())throw Error('STOP/HOLD prevents observer readiness');
+    writeFileAtomic(file,JSON.stringify(owner)+'\n');
+  } catch(error) {await started;throw error;}
+  await started;
+  if(observer.stoppedByProject())throw Error('STOP/HOLD prevents observer readiness');
+}
+
 export async function main(argv=process.argv.slice(2)){
   const {values:v}=parseArgs({args:argv,usage:'observer.mjs --repo CANONICAL --org RECORD [--once | --status]',options:{repo:{type:'string'},org:{type:'string'},once:{type:'boolean'},status:{type:'boolean'}}});
   if(!v.repo)throw Error('--repo CANONICAL required');
@@ -240,10 +260,8 @@ export async function main(argv=process.argv.slice(2)){
   try{
     observer=createObserver({repo,org,log:emit});
     if(observer.stoppedByProject())throw Error('STOP/HOLD prevents observer start');
-    await observer.start();
-    if(observer.stoppedByProject())throw Error('STOP/HOLD prevents observer readiness');
-    writeFileAtomic(file,JSON.stringify({schema:'brain.run-observer-owner/v1',org,repo,project:project.identity,source,socket:herdrSocketPath(),
-      release:bundleRelease(),pid:process.pid,identity:ownerIdentity(process.pid),log,at:new Date().toISOString()})+'\n');
+    await startObserver(observer,file,{schema:'brain.run-observer-owner/v1',org,repo,project:project.identity,source,socket:herdrSocketPath(),
+      release:bundleRelease(),pid:process.pid,identity:ownerIdentity(process.pid),log,at:new Date().toISOString()});
     while(!v.once&&!stopping&&!observer.stoppedByProject()){
       if(await observer.wait()==='deadline')await observer.tick();
     }

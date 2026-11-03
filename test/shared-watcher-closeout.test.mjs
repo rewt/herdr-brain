@@ -10,6 +10,8 @@ import {createRetirement} from '../lib/retire-runtime.mjs';
 import {runCloseoutTurn} from '../line-service/closeout-turn.mjs';
 import {events,setup,selectCurrentCleanup,effects} from './helpers/closeout-fixture.mjs';
 import {sessionBindFact} from './helpers/session-bind.mjs';
+import {EventEmitter} from 'node:events';
+import {observerHost} from './helpers/shared-observer-host.mjs';
 
 function fixture(t,{recordOnly=true,phase='complete',sessionless=false}={}) {
   const f=setup(t,{direct:true,bound:true,merged:true}),binding=selectCurrentCleanup(f),run='R-1',
@@ -81,7 +83,7 @@ test('shared host separation requires the exact completed duty and original fina
   }
   const files=[
     ['duty',d=>{d.run='R-2';}],['duty',d=>{d.source+='/other';}],['duty',d=>{d.native.session='replacement';}],
-    ['duty',d=>{d.ownership.generation++;}],['host',d=>{d.pid++;}],['host',d=>{d.identity='replacement';}],
+    ['duty',d=>{d.ownership.generation++;}],['host',d=>{d.pid=0;}],['host',d=>{d.identity='';}],
     ['host',d=>{d.project+='/other';}],['step',d=>{d.ownership.generation++;}],['step',d=>{d.run='R-2';}],
     ...['running','waiting','held','failed'].map(phase=>['step',d=>{d.phase=phase;}]),
     ['step',d=>{d.signature='unknown';}],['step',d=>{d.error='original failure';}],
@@ -97,6 +99,54 @@ test('shared host separation requires the exact completed duty and original fina
   f.put(f.files.duty,null);assert.equal(sharedWatcherDischarged(f.proof()),false,'malformed registration cannot fall back to per-run mode');
   f.put(f.files.duty,f.duty);fs.renameSync(f.files.step,f.files.step+'.saved');fs.symlinkSync(f.files.step+'.saved',f.files.step);
   assert.equal(sharedWatcherDischarged(f.proof()),false,'redirected completion keeps the original');
+});
+
+for(const install of [false,true])test(`shared ${install?'install':'restart'} closes the original run after the line host replaces observer A`,async t=>{
+  const f=fixture(t,{phase:'waiting',recordOnly:false}),originalDuty=fs.readFileSync(f.files.duty),
+    installation=JSON.parse(fs.readFileSync(f.file)),sourceA=f.duty.source,sourceB=install?path.resolve(import.meta.dirname,'..'):sourceA;
+  let completed=false;
+  fs.unlinkSync(f.files.receipt);
+  class Client extends EventEmitter {async snapshot(){return {protocol:22,agents:[],panes:[]};}subscribe(){}close(){}}
+  const host=observerHost(t,{repo:f.repo,org:f.org,client:()=>new Client(),
+    subjects:()=>new Map([['R-1',{owner:f.ownership.owner,generation:f.ownership.generation}]]),
+    consume:async d=>{
+      assert.equal(d.source,sourceA);assert.deepEqual(d.ownership,f.ownership);
+      f.put(f.files.step,{...f.step,phase:completed?'complete':'waiting'});
+      if(completed)f.put(f.files.receipt,f.receipt);
+      return {code:0};
+    }});
+  f.put(f.file,{...installation,source:sourceA,phase:'installed'});
+  const a=await host.start(sourceA);
+  f.append([{type:'run.updated',id:'R-1',meta:{watcher_pid:null,watcher_identity:null,watcher_shared:f.files.duty,watcher_host:JSON.stringify(a.owner)}}]);
+  assert.equal(sharedWatcherDischarged(f.proof()),false,'pending step retains the duty');
+  const stop=path.join(f.directory,'STOP');
+  if(install)f.put(f.file,{...installation,source:sourceB,phase:'installed'});
+  else fs.writeFileSync(stop,'Routine line STOP\n');
+  assert.equal(a.observer.stoppedByProject(),true);await host.exit();
+  if(!install)fs.unlinkSync(stop);
+  const b=await host.start(sourceB);assert.notEqual(b.owner.pid,a.owner.pid);assert.equal(host.hosts.length,2);
+  assert.equal(sharedWatcherDischarged(f.proof()),false,'replacement alone cannot complete a pending duty');
+  completed=true;await b.observer.reconcile('original-report');
+  // A report fingerprint change is the normal wake; make it visible to this
+  // fixture's observer without changing the saved registration or run claim.
+  fs.mkdirSync(path.dirname(f.duty.report),{recursive:true});fs.writeFileSync(f.duty.report,'Original final report\n');
+  await b.observer.reconcile('report-file');await b.observer.idle();
+  assert.equal(sharedWatcherDischarged(f.proof()),true);
+  for(const change of [h=>{h.project+='/foreign';},h=>{h.repo+='/foreign';},h=>{h.org+='/foreign';},h=>{h.source+='/foreign';}]){
+    const foreign=structuredClone(b.owner);change(foreign);f.put(f.files.host,foreign);
+    assert.equal(sharedWatcherDischarged(f.proof()),false,'foreign host retains original duty');f.put(f.files.host,b.owner);
+  }
+  f.put(f.files.held,{run:'R-1',reason:'original held duty'});assert.equal(sharedWatcherDischarged(f.proof()),false);fs.unlinkSync(f.files.held);
+  f.put(f.files.step,{...f.step,phase:'waiting'});assert.equal(sharedWatcherDischarged(f.proof()),false);f.put(f.files.step,{...f.step,phase:'complete'});
+  await host.exit();
+  // Use the currently installed closeout consumer, retaining the original claim.
+  f.put(f.file,{...installation,phase:'installed'});
+  const result=runCloseoutTurn(f.args),row=events(f).findLast(e=>e.type==='closeout.evaluated'&&e.run==='R-1');
+  assert.deepEqual(result.errors,[]);assert.equal(row.completed,true);
+  assert.equal(row.resources.session.status,'closed');assert.equal(row.resources.folder.status,'removed');
+  assert.equal(fs.existsSync(f.lane),false);assert.deepEqual(fs.readFileSync(f.files.duty),originalDuty);
+  t.diagnostic(JSON.stringify({witness:install?'shared-install-closeout':'shared-restart-closeout',original:a.owner,replacement:b.owner,
+    originalDutyUnchanged:true,reportNativeReleased:true,reportFolderRemoved:true}));
 });
 
 test('retirement diagnoses a failed intermediate shared callback and recovers without weakening the hold',t=>{

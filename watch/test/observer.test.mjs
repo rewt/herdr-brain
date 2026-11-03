@@ -8,10 +8,10 @@ import {EventEmitter} from 'node:events';
 import {enqueueSupervisor,readInbox} from '../../supervisor/prompt-supervisor.mjs';
 import {digest} from '../shared.mjs';
 import {fixture as workerFixture,reportText} from './step-fixture.mjs';
-import {transact,loadRecord} from '../../lib/store.mjs';
+import {transact,loadRecord,writeFileAtomic} from '../../lib/store.mjs';
 import {sessionBindFact} from '../../test/helpers/session-bind.mjs';
 import {createObserver,SAFETY_RECONCILIATION_MS} from '../observer.mjs';
-import {sharedDirectory,stepFile,nativeBinding,observerReceipt} from '../shared.mjs';
+import {sharedDirectory,stepFile,nativeBinding,observerReceipt,readJson} from '../shared.mjs';
 import {gitProject} from '../../lib/project.mjs';
 import {observerHost} from '../../test/helpers/shared-observer-host.mjs';
 
@@ -281,4 +281,19 @@ test('shared install completion rechecks a report hint observed during its activ
   await f.observer.reconcile('report-during-consumer');assert.equal(calls,1);
   finish();await f.observer.idle();assert.equal(calls,2);assert.equal(JSON.parse(fs.readFileSync(stepFile(f.org,'R-1'))).phase,'complete');
   await f.observer.reconcile('duplicate');await f.observer.idle();assert.equal(calls,2,'completed step is not replayed');
+});
+
+test('shared install checkpoint reader accepts an atomic replacement and rejects stable redirects',t=>{
+  const f=fixture(t),file=stepFile(f.org,'R-1');fs.writeFileSync(file,'{"phase":"running"}');
+  const open=fs.openSync;let replaced=false;
+  fs.openSync=(name,...args)=>{
+    if(name===file&&!replaced){replaced=true;writeFileAtomic(file,'{"phase":"waiting"}');}
+    return open(name,...args);
+  };
+  try {assert.equal(readJson(file).phase,'waiting');assert.equal(replaced,true);}
+  finally {fs.openSync=open;}
+  fs.renameSync(file,file+'.saved');fs.symlinkSync(file+'.saved',file);
+  assert.throws(()=>readJson(file),/redirected\/oversized/);fs.unlinkSync(file);
+  fs.linkSync(file+'.saved',file);assert.throws(()=>readJson(file),/redirected\/oversized/);fs.unlinkSync(file);
+  fs.writeFileSync(file,' '.repeat(1024*1024+1));assert.throws(()=>readJson(file),/redirected\/oversized/);
 });

@@ -26,9 +26,22 @@ export function readWatchSubject(org, run) {
 }
 export function readJson(file) {
   try {
-    const stat = fs.lstatSync(file);
-    if (!stat.isFile() || stat.nlink !== 1 || fs.realpathSync(file) !== file || stat.size > 1024 * 1024) throw Error(`redirected/oversized observation metadata: ${file}`);
-    return JSON.parse(fs.readFileSync(file, 'utf8'));
+    for(let attempt=0;attempt<2;attempt++){
+      const named=fs.lstatSync(file),resolved=fs.realpathSync.native(file);
+      if(!named.isFile())throw Error(`redirected/oversized observation metadata: ${file}`);
+      const fd=fs.openSync(file,fs.constants.O_RDONLY|fs.constants.O_NOFOLLOW);
+      try {
+        const opened=fs.fstatSync(fd),current=fs.lstatSync(file),same=(a,b)=>a.dev===b.dev&&a.ino===b.ino;
+        // The original finite writer atomically replaces checkpoints. Retry
+        // only a positively observed replacement, never a stable redirect.
+        if(!same(named,opened)||!same(opened,current)){
+          if(attempt===0)continue;
+          throw Error(`observation metadata changed during read: ${file}`);
+        }
+        if(!opened.isFile()||opened.nlink!==1||resolved!==file||opened.size>1024*1024)throw Error(`redirected/oversized observation metadata: ${file}`);
+        return JSON.parse(fs.readFileSync(fd,'utf8'));
+      } finally {fs.closeSync(fd);}
+    }
   } catch (error) { if (error.code === 'ENOENT') return null; throw error; }
 }
 export function stamp(file) {

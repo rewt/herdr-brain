@@ -179,12 +179,15 @@ export function createObserver({repo,org,socket=herdrSocketPath(),client=new Her
           if(changed){
             if(reason==='safety'&&prior){counters.repairs++;emit('safety-repair',{run:d.run,previous:prior.observation,current:observation});}
             emit('observation',{run:d.run,claim:d.ownership.generation,...observation});
-            cache.set(d.run,{fingerprint,observation});
           }
           const due=step?.next_at!==null&&step?.next_at!==undefined&&step.next_at<=now();
           // An original finite consumer surviving a host restart still owns its
           // run. Unknown birth/liveness throws; it never permits a replacement.
           if(active.has(d.run)||step?.phase==='running'&&alive(step))continue;
+          // Keep the last handed-off fingerprint while a consumer is active.
+          // Its completion wake must see any report/native change observed
+          // during that step, even if the step returns a future waiting deadline.
+          if(changed)cache.set(d.run,{fingerprint,observation});
           if(changed||due||!step)queue.set(d.run,{d,observed_at:now()});
         }catch(error){await hold(d.run,d,error);}
       }

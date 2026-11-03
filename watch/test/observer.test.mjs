@@ -267,3 +267,18 @@ test('shared install replacement invokes the original finite consumer and preser
   for(const[file,bytes]of foreign){assert.deepEqual(fs.readFileSync(file),bytes);assert.ok(fs.existsSync(path.join(f.org,'watch/observer/held',path.basename(file))));}
   assert.equal(readInbox(path.join(f.org,'supervisor/inbox.log')).length,3);
 });
+
+test('shared install completion rechecks a report hint observed during its active finite step',async t=>{
+  let finish,started;const began=new Promise(resolve=>{started=resolve;}),pending=new Promise(resolve=>{finish=resolve;});
+  let calls=0;
+  const f=fixture(t,{consume:async(d,{save})=>{
+    if(++calls===1){started();await pending;save(d.run,'waiting',{next_at:Date.now()+3600000});}
+    else save(d.run,'complete');
+    return {code:0};
+  }});
+  await f.observer.reconcile('startup');await began;
+  fs.writeFileSync(f.duties[0].report,'Original final report');f.agents[0].agent_status='done';f.agents[0].state_change_seq++;
+  await f.observer.reconcile('report-during-consumer');assert.equal(calls,1);
+  finish();await f.observer.idle();assert.equal(calls,2);assert.equal(JSON.parse(fs.readFileSync(stepFile(f.org,'R-1'))).phase,'complete');
+  await f.observer.reconcile('duplicate');await f.observer.idle();assert.equal(calls,2,'completed step is not replayed');
+});

@@ -142,7 +142,7 @@ for(const install of [false,true])test(`shared ${install?'install':'restart'} cl
   // Use the currently installed closeout consumer, retaining the original claim.
   f.put(f.file,{...installation,phase:'installed'});
   const result=runCloseoutTurn(f.args),row=events(f).findLast(e=>e.type==='closeout.evaluated'&&e.run==='R-1');
-  assert.deepEqual(result.errors,[]);assert.equal(row.completed,true,JSON.stringify({row,result,diagnostics:f.proof()}));
+  assert.deepEqual(result.errors,[]);assert.equal(row.completed,true,JSON.stringify({reason:row.reason,resources:row.resources}));
   assert.equal(row.resources.session.status,'closed');assert.equal(row.resources.folder.status,'removed');
   assert.equal(fs.existsSync(f.lane),false);assert.deepEqual(fs.readFileSync(f.files.duty),originalDuty);
   t.diagnostic(JSON.stringify({witness:install?'shared-install-closeout':'shared-restart-closeout',original:a.owner,replacement:b.owner,

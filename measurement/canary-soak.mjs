@@ -201,7 +201,7 @@ export function evaluateSoak({events, trial, verifiedEvidence = []}) {
     timing.report_to_session_release.push(sessionMs);
     need(o?.queue, 'queue-evidence', id);
     const allocation = capacity.valid.get(id);
-    const allocationProved = allocation && capacity.lineageComplete && equal(o?.queue?.allocation, allocation) &&
+    const allocationProved = allocation && capacity.lineageProved(id) && equal(o?.queue?.allocation, allocation) &&
       equal(o?.queue?.freedBy, allocation.freedBy) && o?.queue?.freeAt === allocation.freeAt;
     if (!allocationProved) missing('capacity-run', 'complete original allocation and exact native queue release required', id);
     const eligible = timestamp(o?.queue?.eligibleAt), free = timestamp(o?.queue?.freeAt), input = timestamp(o?.queue?.inputAt);
@@ -218,7 +218,7 @@ export function evaluateSoak({events, trial, verifiedEvidence = []}) {
       }
     }
     const turn = diagnoseTurns({trial, events: selected, verified, row: {run: id, lifecycle: b, observation: o}});
-    if (!turn.same_offer_turn || !turn.claimed_turns_match) missing('turn-binding', 'original finite-turn fences must join item close and typed resource effects', id);
+    if (!turn.claimed_offer_turn) missing('turn-binding', 'original finite-turn fences must join item close and typed resource effects', id);
     if (o?.source && turn.source_close_before_original_verdict !== true) missing('source-review-order', 'run-attributed source closure before original verdict unproved', id);
     const review = o?.review;
     if (kind === 'ordinary' && (o?.source || review?.required !== false)) {
@@ -265,7 +265,7 @@ export function evaluateSoak({events, trial, verifiedEvidence = []}) {
     for (const row of ordinary) {
       const allocation = capacity.valid.get(row.run), q = row.observation?.queue;
       const previous = ordinary.find(r => r.run === allocation?.freedBy?.run), parent = capacity.valid.get(previous?.run);
-      if (!allocation || !parent || !previous || !qualifies(row) || !qualifies(previous) || !capacity.lineageComplete ||
+      if (!allocation || !parent || !previous || !qualifies(row) || !qualifies(previous) || !capacity.lineageProved(row.run) ||
           !equal(q?.allocation, allocation) || !equal(q?.freedBy, allocation.freedBy) || q?.freeAt !== allocation.freeAt ||
           allocation.predecessor?.id !== parent.id || allocation.predecessor?.journal !== parent.allocation.journal ||
           !equal(allocation.capacity, parent.capacity) || allocation.slot !== parent.slot) continue;
@@ -294,7 +294,7 @@ export function evaluateSoak({events, trial, verifiedEvidence = []}) {
       known: timing.eligible_free_to_input.filter(ms => ms !== null).length,
       exceeded: timing.eligible_free_to_input.filter(ms => ms > 120000).length, unknown: timing.eligible_free_to_input.filter(ms => ms === null).length}},
     learning: {schema: 'brain.soak-learning/v1', purpose: processLearning ? 'process-learning' : 'offer-assessment',
-      sharedCoverage: processLearning ? 'UNPROVED' : (issues.some(i => i.code.startsWith('shared')) ? 'INCOMPLETE' : 'PROVED'),
+      sharedCoverage: processLearning || !rows.length ? 'UNPROVED' : (issues.some(i => i.code.startsWith('shared')) ? 'INCOMPLETE' : 'PROVED'),
       operational_completed_ordinary: ordinary.filter(operational).length, turnover_links: Object.fromEntries(operationalLinks),
       process: rows.filter(r => r.observation?.process).map(r => ({run: r.run, watcher: r.observation.runtime?.watcher ?? null, ...r.observation.process})),
       turns: rows.map(row => diagnoseTurns({trial, events: selected, verified, row}))},

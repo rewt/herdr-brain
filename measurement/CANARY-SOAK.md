@@ -213,6 +213,20 @@ row retains `run`, `allocation` ID, exact `capacity`, `startedAt` and observed
 `session/tab/folder` states (`present`, `absent` or `unknown`). Unknown origin,
 identity, pool, inventory or retirement coverage withholds a complete audit.
 
+The capture lists every journal from the first allocated start onward, plus each
+pre-window start that lacks a typed retirement. A carry-in has a census row whether
+or not it holds an allocation: an unallocated one uses `allocation: null` and no
+`capacity`. Only a start that never named a `dispatch_journal` has nothing to
+inventory. A carry-in the census proves absent stays listed in `capacity.carry_ins`
+with no coverage gap, including an abandoned run, which can never show a typed
+retirement. `present`, `unknown` or a missing row lowers coverage to a lower-bound
+peak for that start. It takes no credit from other runs.
+
+Lineage is per run. A run needs its own valid chain, plus a capture that could
+show any sibling consuming it. A gap in the inventory, a saved job, the config or
+the census frame, or an allocation-era start missing from the inventory, withholds
+every run. A gap naming one run withholds that run and the chains through it.
+
 The adapter parses only hash-verified original jobs. The shared native
 `validateCapacityAllocation` validates receipt hashes, start/claim/journal and
 attempt bindings, admission fences, original report release and full ancestor /
@@ -227,7 +241,8 @@ ratios, run/allocation IDs, known oldest ages and per-resource endpoints; debt
 also records created/resolved counts. Carry-in/held/failed/review resources stay
 visible. Unknown coverage marks the peak as a lower bound. Physical overlap
 above a logical cap is descriptive; an actual logical over-admission remains
-adverse. Directory absence alone proves no retirement timestamp.
+adverse. A logical slot is held from `selected_at` until the run's report or
+abandonment. Directory absence alone proves no retirement timestamp.
 
 ## Process learning and unchanged offer proof
 
@@ -242,12 +257,15 @@ Missing shared offer evidence remains in the full issues, status and
 IDs/counts, positive aggregate RSS, absence of a per-run resident and exact tuple.
 
 `turnEvidence` names original hash-verified `brain.hold-closeout/v1` witness
-packets. The reader joins project/run/source/key and typed effects within their
+packets. A packet counts only when `completed` is true and its `org` is the run's
+original record. The reader joins project/run/source/key and typed effects within their
 original sequence/time fences. Diagnostics expose item.closed and resource
 closeout.evaluated separately, resource-turn versus offer-turn results and the
-run-attributed source-close/original-verdict sequence. Supplied matching labels
-or coincident times are insufficient. The offer still requires item closure,
-session release and folder removal in the same finite turn. Its reserved
+run-attributed source-close/original-verdict sequence. That verdict counts only
+through a `change.reviewed` event naming this review run, source run and item.
+Supplied matching labels or coincident times are insufficient. The offer still
+requires item closure, session release and folder removal in the same finite turn,
+on the one witness the run's `turns` IDs name. Its reserved
 amendment is not implemented. `corrections.complete/pending` remains a verified
 producer declaration: the evaluator does not infer a complete Major discharge
 inventory or exact-candidate applicability for the packet owner.

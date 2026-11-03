@@ -8,7 +8,7 @@ import {copyProduct} from '../lib/product-files.mjs';
 import {evaluateSoak, digest} from '../measurement/canary-soak.mjs';
 import {probationChain} from '../measurement/probation-chain.mjs';
 import {successorFixture} from './helpers/soak-successor-fixture.mjs';
-import {at, proof, fixture, bindSavedEvidence, saveSoakOriginals} from './helpers/soak-fixture.mjs';
+import {project, at, proof, fixture, bindSavedEvidence, saveSoakOriginals} from './helpers/soak-fixture.mjs';
 const output = process.env.SOAK_CONTROL_OUTPUT;
 function retain(name, f, result) {
   if (!output) return;
@@ -196,19 +196,20 @@ test('logical turnovers survive physical overlap and expose carry-in debt withou
   assert.equal(r.capacity.coverage.complete, true); assert.equal(r.issues.some(i => i.code === 'capacity-admission'), false);
 });
 
+const moveFirstReport = (f, release) => {
+  const times = {'report.available': release - 2, 'report.ingested': release, 'item.closed': release + 2, 'closeout.effect': release + 3, 'closeout.evaluated': release + 4};
+  for (const e of f.events) if ((e.run ?? e.completed_run) === 'R-1' && times[e.type]) {
+    e.at = at(times[e.type]); if (e.type === 'report.available') e.observed_at = e.at;
+  }
+};
+
 test('equal release/start wall times use the immutable event sequence', () => {
-  const move = (f, release) => {
-    const times = {'report.available': release - 2, 'report.ingested': release, 'item.closed': release + 2, 'closeout.effect': release + 3, 'closeout.evaluated': release + 4};
-    for (const e of f.events) if ((e.run ?? e.completed_run) === 'R-1' && times[e.type]) {
-      e.at = at(times[e.type]); if (e.type === 'report.available') e.observed_at = e.at;
-    }
-  };
-  let f = fixture(); move(f, 240);
+  let f = fixture(); moveFirstReport(f, 240);
   f = rebind(f); const r = assess('equal-report-start', f);
   assert.equal(r.counts.turnover_links['R-2'], 'R-1');
   // Original release is after the start but before allocator selection: valid
   // admission proof, without the requested start-after-report turnover.
-  f = fixture(); move(f, 241);
+  f = fixture(); moveFirstReport(f, 241);
   f = rebind(f); const later = assess('post-start-release', f);
   assert.equal(later.issues.some(i => i.code === 'capacity-allocation'), false);
   assert.equal(later.counts.turnover_links['R-2'], undefined);
@@ -335,6 +336,161 @@ test('physical overlap is descriptive but actual logical over-admission stays ad
   originalJob(f, 'R-2', job => Object.assign(job.capacityAllocation, {predecessor: null, freeAt: null, freedBy: null}));
   const r = assess('logical-admission-violation', f);
   assert.equal(r.status, 'FAIL'); assert.ok(r.issues.some(i => i.code === 'capacity-admission'));
+});
+
+// A real pre-window start, rebuilt through the native allocator. Its own pool
+// keeps it out of the build chain the scored runs turn over in.
+function carryIn(f, {abandoned = false} = {}) {
+  let seq = f.events.at(-1).seq;
+  f.events.push({seq: ++seq, at: at(-151), type: 'item.added', id: 'DEC-old', role: 'decision'},
+    {seq: ++seq, at: at(-150), type: 'run.started', id: 'R-old', item: 'DEC-old', workspace: '/lane/R-old', by: 'line-service', meta: {dispatch_project: project}},
+    {seq: ++seq, at: at(-149), type: 'run.claimed', run: 'R-old'},
+    ...(abandoned ? [{seq: ++seq, at: at(-140), type: 'run.abandoned', id: 'R-old'}] : []));
+  f = rebind(f);
+  if (!abandoned) originalJob(f, 'R-old', job => delete job.capacityAllocation, false);
+  return f;
+}
+const oldJob = f => f.trial.capacity.journalRefs.map(ref => JSON.parse(f.trial.capacity.saved[ref.evidence])).find(job => job.run === 'R-old');
+function census(f, state) {
+  const a = oldJob(f).capacityAllocation;
+  savedPacket(f, f.trial.capacity.censusEvidence, c => c.resources.push({run: 'R-old', allocation: a?.id ?? null, ...(a ? {capacity: a.capacity} : {}), startedAt: at(-150),
+    session: state, tab: state, folder: state}));
+  return f;
+}
+const codes = (r, ...list) => r.issues.filter(i => list.includes(i.code));
+
+for (const [name, abandoned] of [['pre-allocator', false], ['abandoned allocated', true]]) {
+  test(name + ' carry-in the census proves absent stays listed without a new penalty', () => {
+    const f = census(carryIn(fixture(), {abandoned}), 'absent');
+    assert.equal(Boolean(oldJob(f).capacityAllocation), abandoned);
+    const r = assess(name.replace(' ', '-') + '-absent', f);
+    assert.equal(r.status, 'PASS', JSON.stringify(r.issues)); assert.deepEqual(codes(r, 'capacity-run', 'timing-unknown', 'capacity-coverage'), []);
+    assert.equal(r.counts.turnover_links['R-2'], 'R-1'); assert.equal(r.counts.turnover_links['R-3'], 'R-2');
+    assert.equal(r.inputTargets.eligible_free_to_input.known, evaluateSoak(fixture()).inputTargets.eligible_free_to_input.known);
+    assert.equal(r.inputTargets.eligible_free_to_input.unknown, 0);
+    assert.deepEqual(r.capacity.carry_ins, [{run: 'R-old', allocation: oldJob(f).capacityAllocation?.id ?? null, pool: abandoned ? 'decision' : null, abandoned,
+      session: 'absent', tab: 'absent', folder: 'absent'}]);
+    assert.equal(r.capacity.coverage.complete, true); assert.equal(r.capacity.coverage.peak_lower_bound, false);
+  });
+  for (const state of ['present', 'unknown']) test(name + ' carry-in with census ' + state + ' lowers coverage while units stay per run', () => {
+    const r = assess(name.replace(' ', '-') + '-' + state, census(carryIn(fixture(), {abandoned}), state));
+    assert.equal(r.status, 'INCOMPLETE'); assert.equal(r.offerEligible, false);
+    assert.equal(r.capacity.coverage.complete, false); assert.equal(r.capacity.coverage.peak_lower_bound, true);
+    assert.ok(r.capacity.coverage.unknown.every(u => u.run === 'R-old'), JSON.stringify(r.capacity.coverage.unknown));
+    assert.equal(r.capacity.carry_ins[0].session, state);
+    assert.equal(r.counts.completed_ordinary, 10); assert.equal(r.learning.operational_completed_ordinary, 10);
+    assert.equal(r.learning.turnover_links['R-2'], 'R-1'); assert.equal(r.learning.turnover_links['R-3'], 'R-2');
+    assert.deepEqual(codes(r, 'capacity-run', 'timing-unknown'), []);
+  });
+}
+
+test('a carry-in that named no journal needs only the census, and a row it does not match stays a gap', () => {
+  const f = carryIn(fixture());
+  delete f.events.find(e => e.type === 'run.started' && e.id === 'R-old').meta.dispatch_journal;
+  f.trial.capacity.journalRefs = f.trial.capacity.journalRefs.filter(ref => JSON.parse(f.trial.capacity.saved[ref.evidence]).run !== 'R-old');
+  savedPacket(f, f.trial.capacity.inventoryEvidence, i => i.journals = f.trial.capacity.journalRefs.map(ref => ref.journal));
+  savedPacket(f, f.trial.capacity.censusEvidence, c => c.resources.push({run: 'R-old', allocation: null, startedAt: at(-150), session: 'absent', tab: 'absent', folder: 'absent'}));
+  assert.equal(assess('no-journal-carry-in', f).status, 'PASS');
+  const g = census(carryIn(fixture()), 'absent');
+  savedPacket(g, g.trial.capacity.censusEvidence, c => c.resources[0].startedAt = at(-1));
+  assert.ok(codes(assess('mismatched-carry-in-row', g), 'capacity-coverage').some(i => i.run === 'R-old'));
+});
+
+test('a missing allocated ancestor of an in-window chain is coverage, with no link and no invented contradiction', () => {
+  const drop = (f, run) => {
+    const ref = f.trial.capacity.journalRefs.find(ref => JSON.parse(f.trial.capacity.saved[ref.evidence]).run === run);
+    f.trial.capacity.journalRefs = f.trial.capacity.journalRefs.filter(r => r !== ref);
+    savedPacket(f, f.trial.capacity.inventoryEvidence, i => i.journals = i.journals.filter(j => j !== ref.journal));
+  };
+  const f = fixture(); drop(f, 'R-1');
+  const r = assess('missing-ancestor', f);
+  assert.equal(r.status, 'INCOMPLETE', JSON.stringify(r.issues.filter(i => i.severity === 'FAIL')));
+  assert.ok(codes(r, 'capacity-coverage').some(i => i.run === 'R-2'));
+  assert.equal(codes(r, 'capacity-allocation').length, 0); assert.deepEqual(r.counts.turnover_links, {}); assert.deepEqual(r.learning.turnover_links, {});
+  // A job missing from an inventory declared incomplete earns nothing for its chain.
+  const g = fixture(); g.trial.capacity.complete = false; drop(g, 'R-2');
+  const incomplete = assess('missing-from-incomplete', g);
+  assert.ok(codes(incomplete, 'capacity-coverage').some(i => i.run === 'R-2')); assert.ok(codes(incomplete, 'capacity-run').some(i => i.run === 'R-2'));
+  for (const links of [incomplete.counts.turnover_links, incomplete.learning.turnover_links]) { assert.equal(links['R-2'], undefined); assert.equal(links['R-3'], undefined); }
+});
+
+test('duplicate sibling consumption stays a failure beside a listed historical start', () => {
+  const f = census(carryIn(fixture()), 'absent');
+  originalJob(f, 'R-10', job => {
+    const a = f.trial.runs[1].queue.allocation;
+    Object.assign(job.capacityAllocation, {predecessor: a.predecessor, freedBy: a.freedBy, freeAt: a.freeAt});
+  });
+  const r = assess('duplicate-sibling-with-history', f); assert.equal(r.status, 'FAIL');
+  assert.ok(codes(r, 'capacity-allocation').some(i => /already selected/.test(i.reason)));
+});
+
+test('a real abandon-then-reset chain frees its cap-1 slot without any turnover credit', () => {
+  let f = fixture();
+  const ended = new Set(['report.available', 'report.ingested', 'item.closed', 'closeout.effect', 'closeout.evaluated']);
+  f.events = f.events.filter(e => !((e.run ?? e.completed_run ?? e.source_run) === 'R-1' && (ended.has(e.type) || e.type === 'change.reviewed')));
+  f.events.push({seq: f.events.at(-1).seq + 1, at: at(125), type: 'run.abandoned', id: 'R-1'});
+  f.trial.runs = f.trial.runs.filter(r => r.run !== 'R-1');
+  f = rebind(f);
+  const job = run => f.trial.capacity.journalRefs.map(ref => JSON.parse(f.trial.capacity.saved[ref.evidence])).find(j => j.run === run);
+  const a = job('R-1').capacityAllocation, b = job('R-2').capacityAllocation;
+  assert.equal(b.reset_after.id, a.id); assert.equal(b.predecessor, null); assert.equal(b.slot, a.slot); assert.equal(a.capacity.cap, 1);
+  const r = assess('abandon-then-reset', f);
+  assert.deepEqual(codes(r, 'capacity-admission', 'capacity-allocation'), []);
+  assert.deepEqual([...new Set(r.issues.filter(i => i.severity === 'FAIL').map(i => i.code))], ['failed-unit']);
+  assert.equal(r.counts.turnover_links['R-2'], undefined); assert.equal(r.learning.turnover_links['R-2'], undefined);
+});
+
+test('a start waiting before its selection is not admitted while the pool is full', () => {
+  let f = fixture(); moveFirstReport(f, 241); f = rebind(f);
+  const start = f.events.find(e => e.type === 'run.started' && e.id === 'R-2'), report = f.events.find(e => e.type === 'report.ingested' && e.run === 'R-1');
+  assert.ok(start.seq < report.seq); assert.ok(Date.parse(f.trial.runs[1].queue.allocation.selected_at) > Date.parse(report.at));
+  const r = assess('waiting-start', f);
+  assert.deepEqual(codes(r, 'capacity-admission', 'capacity-allocation'), []);
+});
+
+test('turn proof needs one completed witness from this record that holds the claim and the item close', () => {
+  const witness = (f, id, mutate) => {
+    const packet = f.trial.turnWitnesses.find(p => p.evidence[0] === id), w = JSON.parse(packet.bytes); mutate(w);
+    packet.bytes = JSON.stringify(w); f.trial.evidence[id].sha256 = digest(packet.bytes);
+    return w;
+  };
+  for (const [name, mutate] of [['unfinished', w => w.completed = false], ['missing-completed', w => delete w.completed], ['other-record', w => w.org = '/foreign'], ['no-record', w => delete w.org]]) {
+    const f = fixture(); witness(f, 'turn-R-1', mutate);
+    const r = assess('turn-' + name, f);
+    assert.equal(r.learning.turns[0].same_resource_turn, false, name); assert.ok(codes(r, 'turn-binding').some(i => i.run === 'R-1'), name);
+  }
+  // Two overlapping packets: the claim names one and the other holds the close.
+  const f = fixture(), closed = f.events.find(e => e.completed_run === 'R-1');
+  const w = witness(f, 'turn-R-1', w => { w.before.record.seq = closed.seq; w.before.at = closed.at; });
+  const other = JSON.stringify({...w, id: 'other', before: {record: {seq: closed.seq - 1}, at: closed.at}}), id = 'turn-other';
+  f.trial.evidence[id] = {path: id + '.json', sha256: digest(other)}; f.verifiedEvidence.push(id);
+  f.trial.turnWitnesses.push({bytes: other, evidence: [id]});
+  const r = assess('turn-split-across-packets', f), turn = r.learning.turns[0];
+  assert.equal(turn.claimed_turns_match, true); assert.equal(turn.same_offer_turn, true); assert.equal(turn.claimed_offer_turn, false);
+  assert.ok(codes(r, 'turn-binding').some(i => i.run === 'R-1'));
+});
+
+test('a verdict counts for source order only through the recorded review of this source run', () => {
+  for (const [name, mutate] of [
+    ['unrelated-review', f => f.trial.runs[0].review.run = 'R-12'],
+    ['other-source', f => f.events.find(e => e.type === 'change.reviewed' && e.source_run === 'R-1').source_run = 'R-9'],
+    ['other-item', f => f.events.find(e => e.type === 'change.reviewed' && e.source_run === 'R-1').item = 'ENG-9'],
+    ['no-join', f => { f.events = f.events.filter(e => !(e.type === 'change.reviewed' && e.source_run === 'R-1')); }]
+  ]) {
+    const f = fixture(); mutate(f);
+    const r = assess('verdict-' + name, f);
+    assert.equal(r.learning.turns[0].source_close_before_original_verdict, null, name);
+    assert.ok(codes(r, 'source-review-order').some(i => i.run === 'R-1'), name); assert.equal(r.offerEligible, false);
+  }
+  assert.equal(evaluateSoak(fixture()).learning.turns[0].source_close_before_original_verdict, true);
+});
+
+test('shared coverage claims no proof for a window with no starts', () => {
+  const f = fixture(); assert.equal(evaluateSoak(f).learning.sharedCoverage, 'PROVED');
+  const started = new Set(f.events.filter(e => e.type === 'run.started' && Date.parse(e.at) >= Date.parse(f.trial.window.from)).map(e => e.id));
+  f.events = f.events.filter(e => !started.has(e.run ?? e.id)); f.trial.runs = []; f.trial.window.through_seq = f.events.at(-1).seq;
+  const r = assess('shared-no-starts', f);
+  assert.equal(r.counts.all_started, 0); assert.equal(r.learning.sharedCoverage, 'UNPROVED'); assert.equal(r.offerEligible, false);
 });
 
 test('incomplete or unverified correction declarations never discharge offer obligations', () => {

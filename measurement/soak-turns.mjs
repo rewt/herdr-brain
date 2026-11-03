@@ -4,12 +4,13 @@ import {createHash} from 'node:crypto';
 const hash = b => createHash('sha256').update(b).digest('hex');
 export function diagnoseTurns({trial, events, verified, row}) {
   const run = row.run, b = row.lifecycle, close = b?.item_closed, results = [];
+  const started = events.find(e => e.type === 'run.started' && e.id === run), claimed = row.observation?.turns;
   for (const packet of trial.turnWitnesses ?? []) {
     const id = packet.evidence?.[0];
     if (!verified.has(id) || typeof packet.bytes !== 'string' || hash(packet.bytes) !== trial.evidence?.[id]?.sha256) continue;
     let w; try { w = JSON.parse(packet.bytes); } catch { continue; }
     const lo = w.before?.record?.seq, hi = w.after?.record?.seq;
-    if (w.schema !== 'brain.hold-closeout/v1' || w.project !== trial.project || !w.id || !Number.isSafeInteger(lo) || !Number.isSafeInteger(hi) ||
+    if (w.schema !== 'brain.hold-closeout/v1' || w.project !== trial.project || w.completed !== true || !w.org || w.org !== started?.meta?.dispatch_record || !w.id || !Number.isSafeInteger(lo) || !Number.isSafeInteger(hi) ||
         lo >= hi || hi > trial.window.through_seq || timestamp(w.before?.at) === null || timestamp(w.after?.at) === null ||
         timestamp(w.before.at) > timestamp(w.after.at) || timestamp(w.after.at) > timestamp(trial.window.cutoff)) continue;
     for (const subject of w.subjects ?? []) {
@@ -33,8 +34,13 @@ export function diagnoseTurns({trial, events, verified, row}) {
       }
     }
   }
-  const verdict = events.find(e => e.type === 'report.ingested' && e.run === row.observation?.review?.run);
+  // The review counts only through the record's own join to this source run.
+  const reviewRun = row.observation?.review?.run;
+  const reviewed = reviewRun && events.some(e => e.type === 'change.reviewed' && e.review_run === reviewRun && e.source_run === run && e.item === started?.item);
+  const verdict = reviewed ? events.find(e => e.type === 'report.ingested' && e.run === reviewRun) : null;
+  const named = w => w.id === claimed?.close && w.id === claimed?.session && w.id === claimed?.folder;
   return {run, item_closed: close ?? null, resource_evaluated: events.filter(e => e.type === 'closeout.evaluated' && e.run === run),
-    witnesses: results, claimed_turns_match: results.some(w => w.id === row.observation?.turns?.close && w.id === row.observation?.turns?.session && w.id === row.observation?.turns?.folder), same_resource_turn: results.length > 0, same_offer_turn: results.some(w => w.item_close_in_turn),
+    witnesses: results, claimed_turns_match: results.some(named), same_resource_turn: results.length > 0, same_offer_turn: results.some(w => w.item_close_in_turn),
+    claimed_offer_turn: results.some(w => named(w) && w.item_close_in_turn),
     source_close_before_original_verdict: close && verdict ? close.seq < verdict.seq && timestamp(close.at) <= timestamp(verdict.at) : null};
 }

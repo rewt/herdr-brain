@@ -25,6 +25,7 @@ export function fixture({order = Array.from({length: 13}, (_, i) => i + 1)} = {}
     const session = {at: at(t + 24), type: 'closeout.effect', run, identity: project, key: run, effect: 'session', outcome: {action: 'closed', tab_id: `tab-${run}`}};
     const folder = {at: at(t + 25), type: 'closeout.effect', run, identity: project, key: run, effect: 'folder', outcome: {action: 'worktree-removed'}};
     const evaluation = {at: at(t + 26), type: 'closeout.evaluated', run, identity: project, key: run};
+    if (review) events.push({at: at(t + 27), type: 'change.reviewed', item: `ENG-${i - 10}`, review_item: item, review_run: run, source_run: `R-${i - 10}`, verdict: 'PASS'});
     events.push({at: at(t - 2), type: 'item.added', id: item, role: review ? 'review' : 'engineer'}, start, claim,
       {at: at(t + 3), type: 'dispatch.completed', run}, {at: at(t + 4), type: 'run.session_bound', run, session: `native-${run}`, prompted_at: at(t + 2)}, report, ingest,
       {at: at(t + 23), type: 'item.closed', id: item, completed_run: run, as: 'done'}, session, folder, evaluation);
@@ -91,7 +92,7 @@ export function bindSavedEvidence(f) {
     Object.assign(claim, {project, record: org});
     const job = {run: start.id, common: project, org, token, workspace: start.workspace, ownership: {generation: claim.seq}};
     const role = events.find(e => e.type === 'item.added' && e.id === start.item)?.role;
-    job.sessionCap = {kind: role === 'review' ? 'review' : 'build', cap: 1, build_cap: 1, review_cap: 1, decision_cap: 1};
+    job.sessionCap = {kind: ['review', 'decision'].includes(role) ? role : 'build', cap: 1, build_cap: 1, review_cap: 1, decision_cap: 1};
     job.capacityAllocation = selectCapacityAllocation({job, journal, events: events.filter(e => e.seq <= claim.seq), journals,
       evidence: job.sessionCap,
       now: () => new Date(Date.parse(start.at) + 1500).toISOString()});
@@ -107,7 +108,7 @@ export function bindSavedEvidence(f) {
   trial.turnEvidence = [];
   trial.turnWitnesses = trial.runs.map(row => {
     const h = events.filter(e => e.run === row.run), report = h.find(e => e.type === 'report.ingested'), evaluation = h.find(e => e.type === 'closeout.evaluated');
-    const witness = {schema: 'brain.hold-closeout/v1', id: row.run, project, org,
+    const witness = {schema: 'brain.hold-closeout/v1', id: row.run, project, org, completed: true,
       before: {record: {seq: report.seq}, at: report.at}, after: {record: {seq: evaluation.seq}, at: evaluation.at},
       subjects: [{run: row.run, key: row.run, source: {seq: report.seq, type: report.type}}]};
     const id = save('turn-' + row.run, witness); trial.turnEvidence.push(id);

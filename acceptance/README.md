@@ -233,8 +233,10 @@ pin; retain this limitation alongside the combined case evidence.
 
 `rollback-launchd.mjs` runs the offered-release round trip on scratch consumers
 with the real `launchctl` of this login session: the old release runs, adopts the
-offered one, runs, returns and runs again. Each run is a job launchd itself started,
-checked through `launchctl print` and its own pass line. A second consumer covers
+offered one, runs, returns, runs again and adopts it once more. The journal is over
+the 16 MiB rotation limit from the first adoption, so the job's own first write rotates
+it and both handoffs have to convert the saved offset. Each run is a job launchd itself
+started, checked through `launchctl print` and its own pass line. A second consumer covers
 the failure and recovery: events the old release never met refuse, the adopted
 release still starts, and the owner's bound `--accept-unread` returns. Herdr is a
 recording stand-in, so no job can reach a real pane, and no BCH path is read.

@@ -847,15 +847,15 @@ disposition, because rollback must follow the upgrade directly.
 
 What that target does with work the successor left open, witnessed for BCH's pin
 in `test/rollback-in-flight.test.mjs`. The previews name unread events, not these
-outcomes, and a rotated journal alone leaves the rollback admitted with nothing unread:
+outcomes:
 
-- **Line passes stop once the journal has rotated.** The successor rotates
-  `passes.jsonl` at 16 MiB and saves an offset that counts retired bytes. The pin
-  refuses every general pass with `notice audit checkpoint is inconsistent`, so it
-  starts and reviews nothing, while restart still succeeds and closeouts still run.
-  A journal already over the limit rotates on the successor's first pass, so this
-  applies before any real work. Restoring the successor's pin recovers it. No
-  supported repair exists yet, and a pin offset is not a row boundary on return.
+- **A rotated journal is converted by the handoff, in both directions.** The
+  successor rotates `passes.jsonl` at 16 MiB and saves an offset that counts retired
+  bytes; the pin knows only the live file. Unconverted, it refuses every general pass
+  with `notice audit checkpoint is inconsistent`, and on return the successor refuses
+  the pin's offset with `is not a row boundary`. See
+  [Rollback across rotation](#rollback-across-rotation). Under the pin, retired
+  history is out of its sight until the return, including from `--digest`.
 - **A review queued but not started** stays held as an existing attempt, and starts
   once the successor returns.
 - **A review report not yet recorded** is recorded by the pin, including its
@@ -1931,8 +1931,35 @@ an interrupted raw retirement. Repeating a completed rotation with a small live
 file is a no-op. Old compression temporaries from a crash remain recoverable and
 are outside this journal's retention policy. No archived history expires here.
 
+#### Rollback across rotation
+
+A release without `pass-journal.mjs` reads that offset as a position in the live
+file and never rotates. `upgrade`, in either direction between such a release and a
+later one, converts the one number once any bytes are retired, and does nothing
+before that. The journal itself stays as it is. Only the later release's tool knows
+to do this, and both documented directions run it. An older tool's own upgrade would
+leave the offset unconverted, and the later release then refuses it:
+
+- Toward the older release, the offset becomes `offset - retired`. A write since the
+  last checkpoint can rotate with no pass, closeout measurement included, leaving
+  the offset inside retired bytes. Those unread rows are then replayed into
+  `effects.json`, as the next pass would have, and the offset becomes the live size.
+- Toward the later release, the offset becomes `offset + retired`.
+
+The preview reports it as `journal_offset`, and the archive binds the exact change
+and both `effects.json` digests. A checkpoint that moved since the preview refuses
+before any effect, as does an offset outside the file, one that is not a row
+boundary, or a closeout turn still running. An interrupted rotation is finished
+first. Like any interrupted handoff, one interrupted here stays refused: the
+installation is written last, and the archive names the offset that was intended.
+
+Not rotating until a rollback is impossible would need no conversion, and was not
+chosen. A consumer's rollback target stays the older release until its next upgrade,
+so its journal would stay unbounded for exactly that time, every append would have to
+read installation history, and a journal already rotated would still need this.
+
 Focused checks for this seam: `test/pass-journal.test.mjs`,
-`test/line-service-producer.test.mjs`, `test/line-service.test.mjs`,
+`test/rollback-in-flight.test.mjs`, `test/line-service-producer.test.mjs`, `test/line-service.test.mjs`,
 `test/closeout-measurement.test.mjs`, `test/halt-repair.test.mjs` and
 `test/consumer-lifecycle.test.mjs`, in runner groups of at most four. Set
 `HERDR_TEST_PASS_JOURNAL_WITNESS` to an owned evidence directory with a real journal

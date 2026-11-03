@@ -182,6 +182,14 @@ function* rows(view,offset){
 }
 export function withPassJournal(file,consume){return withLock(file,()=>{const view=snapshot(file);return consume({size:view.size,rows:(offset=0)=>rows(view,offset)});});}
 export function passJournalSize(file){return withPassJournal(file,view=>view.size);}
+export function passJournalExtent(file){return withLock(file,()=>{const index=readIndex(file);return {retired:index.pending?.end??index.segments.at(-1)?.end??0,size:snapshot(file).size};});}
+export function activeJournalWriters(file){
+  return ['closeout-turn.lock','closeout-measurement.lock'].filter(name=>{
+    const owner=path.join(path.dirname(file),name,'owner.json');
+    if(!fs.existsSync(owner))return false;
+    try{process.kill(JSON.parse(fs.readFileSync(owner,'utf8')).pid,0);return true;}catch(error){return error.code!=='ESRCH';}
+  });
+}
 export function* readPassJournal(file,{offset=0}={}){
   const release=noticeLock(file+'.lock',{waitMs:30000});
   try{yield* rows(snapshot(file),offset);}finally{release();}

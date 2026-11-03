@@ -16,7 +16,10 @@ import {gitProject} from '../lib/project.mjs';
 import {requireCorrectedMajors} from '../lib/consumer-offer.mjs';
 import {readCloseoutEntries,unresolvedCloseoutEffect} from '../lib/closeout.mjs';
 import {sourceRoot,serviceDirectory} from '../line-service/line-service.mjs';
-import {PASS_JOURNAL_LIMIT,passJournalSize} from '../line-service/pass-journal.mjs';
+import {PASS_JOURNAL_LIMIT,appendPassJournal,passJournalExtent,passJournalSize,readPassJournal,rotatePassJournal} from '../line-service/pass-journal.mjs';
+import {planJournalHandoff,applyJournalHandoff} from '../line-service/journal-handoff.mjs';
+import {recordCloseoutTurn} from '../line-service/closeout-measurement.mjs';
+import {canonical} from '../messages/schema.mjs';
 import {setup,selectCurrentCleanup,events,effects} from './helpers/closeout-fixture.mjs';
 
 const PIN='98002dc75cb064dd639e79c922ddeb98d3781bc2',hash=b=>createHash('sha256').update(b).digest('hex');
@@ -83,28 +86,96 @@ async function reportedReview(f,recorder){
   return recorder?f.pass(recorder):null;
 }
 
-test('the pin refuses every general pass once its successor rotates the journal at the real limit, until the checkpoint is inside the live file',async t=>{
+// The real handoff's conversion, which the real rollback path applies in line-service-runtime.test.mjs.
+function handoff(f,fromRoot,targetRoot){
+  const args={directory:f.directory,fromRoot,targetRoot},plan=planJournalHandoff(args);
+  applyJournalHandoff({...args,expected:plan.receipt});
+  return plan.receipt;
+}
+test('the pin refuses every general pass on a rotated journal until the handoff converts its checkpoint, and the successor needs the conversion back',async t=>{
   const f=fixture(t),pin=historical(f),audit=path.join(f.directory,'passes.jsonl');
   assert.equal((await f.pass(pin)).result.result,'pass-complete');
   // BCH's journal is far over this limit, so its first successor pass rotates it.
   fs.appendFileSync(audit,JSON.stringify({action:'fixture-history',pad:'x'.repeat(PASS_JOURNAL_LIMIT)})+'\n');
   assert.equal((await f.pass(sourceRoot)).result.result,'pass-complete');
-  const live=()=>fs.statSync(audit).size;
+  const live=()=>fs.statSync(audit).size,logical=journal(f).notice_audit_offset;
   assert.ok(fs.existsSync(audit+'.segments/index.json'));
-  assert.ok(journal(f).notice_audit_offset>PASS_JOURNAL_LIMIT&&live()<PASS_JOURNAL_LIMIT,'the saved offset now counts retired bytes too');
+  assert.ok(logical>PASS_JOURNAL_LIMIT&&live()<PASS_JOURNAL_LIMIT,'the saved offset now counts retired bytes too');
   // No retry helps: the failure comes before the pin can rewrite its checkpoint.
   const saved=journal(f),starts=()=>f.rows().filter(r=>r.action==='pass-start').length,started=starts();
   for(let n=0;n<2;n++)await assert.rejects(f.pass(pin),/notice audit checkpoint is inconsistent/);
   assert.deepEqual(journal(f),saved);assert.equal(starts(),started,'no general work, no pass row and no notice from the pin');
   // Recovery without changing anything: the successor still reads its own journal.
   assert.equal((await f.pass(sourceRoot)).result.result,'pass-complete');
-  // Not a supported step: this names what a rollback repair has to establish.
-  fs.writeFileSync(path.join(f.directory,'effects.json'),JSON.stringify({...journal(f),notice_audit_offset:live()},null,2)+'\n');
+  const down=handoff(f,sourceRoot,pin);
+  assert.equal(down.basis,'live-file');assert.equal(journal(f).notice_audit_offset,down.offset_before-down.retired_bytes);assert.deepEqual(down.notices_folded,[]);
   assert.equal((await f.pass(pin)).result.result,'pass-complete');
-  // The pin saved a physical offset, so a return needs the opposite repair.
+  assert.ok(f.rows().filter(r=>r.action==='pass-start').length>started,'the pin runs general passes again');
+  // The pin saved a physical offset, so a return needs the opposite conversion.
   await assert.rejects(f.pass(sourceRoot),/notice audit checkpoint is not a row boundary/);
-  fs.writeFileSync(path.join(f.directory,'effects.json'),JSON.stringify({...journal(f),notice_audit_offset:passJournalSize(audit)},null,2)+'\n');
+  const physical=journal(f).notice_audit_offset,up=handoff(f,pin,sourceRoot);
+  assert.equal(up.basis,'whole-journal');assert.equal(journal(f).notice_audit_offset,physical+up.retired_bytes);
   assert.equal((await f.pass(sourceRoot)).result.result,'pass-complete');
+  // A second rotation and a second trip use the larger retired size.
+  fs.appendFileSync(audit,JSON.stringify({action:'fixture-history',pad:'x'.repeat(PASS_JOURNAL_LIMIT)})+'\n');
+  assert.equal((await f.pass(sourceRoot)).result.result,'pass-complete');
+  assert.ok(handoff(f,sourceRoot,pin).retired_bytes>up.retired_bytes);
+  assert.equal((await f.pass(pin)).result.result,'pass-complete');
+  handoff(f,pin,sourceRoot);assert.equal((await f.pass(sourceRoot)).result.result,'pass-complete');
+  assert.equal(passJournalSize(audit),[...readPassJournal(audit)].reduce((sum,row)=>sum+Buffer.byteLength(JSON.stringify(row))+1,0),'no retired or live byte was lost');
+});
+
+test('a closeout write alone rotates the journal, and the rollback folds in the unread rows it retired',async t=>{
+  const f=fixture(t),pin=historical(f),audit=path.join(f.directory,'passes.jsonl'),project=gitProject(f.cwd);
+  assert.equal((await f.pass(sourceRoot)).result.result,'pass-complete');
+  const boundary='dispatch:ENG-1',reason='retained failure',scope={item:'ENG-1'},key=hash(canonical([boundary,reason,scope]));
+  const entry={id:`line-record-${key}`,boundary,reason,scope,count:1,first_at:'2026-11-03T00:00:00Z'};
+  // BCH's saved offset is behind its journal's end, so its unread rows retire with the rest.
+  appendPassJournal(audit,{action:'hold',boundary,notice_record:{key,entry}});
+  fs.appendFileSync(audit,JSON.stringify({action:'fixture-history',pad:'x'.repeat(PASS_JOURNAL_LIMIT)})+'\n');
+  const saved=fs.readFileSync(path.join(f.directory,'effects.json'));
+  recordCloseoutTurn({project,org:f.org,source:{id:'fixture',root:sourceRoot},historical:[],collect:()=>({coverage:{native:true,git:true,process:true},errors:[],workspaces:[],panes:[],worktrees:[],branches:[],processes:[]})});
+  assert.ok(fs.existsSync(audit+'.segments/index.json'),'no pass ran and the journal rotated');
+  assert.deepEqual(fs.readFileSync(path.join(f.directory,'effects.json')),saved);
+  await assert.rejects(f.pass(pin),/notice audit checkpoint is inconsistent/);
+  const {retired,size}=passJournalExtent(audit),before=journal(f).notice_audit_offset;assert.ok(before<retired);
+  const down=handoff(f,sourceRoot,pin);
+  assert.deepEqual(down.notices_folded,[key]);assert.equal(down.offset_after,size-retired);
+  assert.equal(journal(f).record_notices[key].count,1,'nothing the pin would have replayed is lost');
+  assert.equal((await f.pass(pin)).result.result,'pass-complete');
+  handoff(f,pin,sourceRoot);assert.equal((await f.pass(sourceRoot)).result.result,'pass-complete');
+  assert.equal(journal(f).record_notices[key].count,1);
+});
+
+test('the conversion refuses what it cannot place, finishes an interrupted rotation, and is nothing without a rotation',async t=>{
+  const f=fixture(t),pin=historical(f),audit=path.join(f.directory,'passes.jsonl'),file=path.join(f.directory,'effects.json'),args={directory:f.directory,fromRoot:sourceRoot,targetRoot:pin};
+  assert.equal(planJournalHandoff(args),null,'no effects yet');
+  assert.equal((await f.pass(sourceRoot)).result.result,'pass-complete');
+  assert.equal(planJournalHandoff(args),null,'nothing rotated, so both releases read the same number');
+  assert.equal(planJournalHandoff({...args,targetRoot:sourceRoot}),null,'both releases rotate');
+  assert.throws(()=>rotatePassJournal(audit,{maxBytes:1,fault:phase=>{if(phase==='renamed')throw Error('interrupted');}}),/interrupted/);
+  const interrupted=planJournalHandoff(args).receipt,bytes=fs.readFileSync(file);
+  assert.ok(interrupted.offset_before<interrupted.retired_bytes);assert.equal(interrupted.offset_after,interrupted.journal_bytes-interrupted.retired_bytes);
+  // A closeout turn outliving its job could rotate past this plan.
+  const lock=path.join(f.directory,'closeout-turn.lock');fs.mkdirSync(lock);fs.writeFileSync(path.join(lock,'owner.json'),JSON.stringify({pid:process.pid}));
+  assert.throws(()=>planJournalHandoff(args),/active writer \(closeout-turn.lock\)/);
+  assert.throws(()=>applyJournalHandoff({...args,expected:interrupted}),/active writer/);
+  fs.rmSync(lock,{recursive:true});
+  // A changed journal or checkpoint needs a fresh plan.
+  fs.writeFileSync(file,JSON.stringify({...JSON.parse(bytes),pass_number:99},null,2)+'\n');
+  assert.throws(()=>applyJournalHandoff({...args,expected:interrupted}),/changed since its handoff plan/);
+  fs.writeFileSync(file,bytes);
+  applyJournalHandoff({...args,expected:interrupted});
+  assert.equal(JSON.parse(fs.readFileSync(audit+'.segments/index.json')).pending,null);
+  assert.equal(journal(f).notice_audit_offset,interrupted.offset_after);
+  assert.equal((await f.pass(pin)).result.result,'pass-complete');
+  // A saved offset outside what the pin could have written stays as found.
+  const physical=fs.readFileSync(file),up={...args,fromRoot:pin,targetRoot:sourceRoot};
+  fs.writeFileSync(file,JSON.stringify({...JSON.parse(physical),notice_audit_offset:passJournalSize(audit)},null,2)+'\n');
+  assert.throws(()=>planJournalHandoff(up),/outside the pass journal/);
+  // One byte into a row is refused at the preview, not on the first pass after restart.
+  fs.writeFileSync(file,JSON.stringify({...JSON.parse(physical),notice_audit_offset:1},null,2)+'\n');
+  assert.throws(()=>planJournalHandoff(up),/not a row boundary/);
 });
 
 test('the pin holds a review its successor queued until the successor returns, while it launches a review it queued itself',async t=>{

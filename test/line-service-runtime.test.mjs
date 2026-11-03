@@ -553,25 +553,72 @@ test('owner acceptance covers only the unread work it previewed, including later
   assert.equal((await f.oldPass()).result,'pass-complete');
 });
 
-test('a rollback previews nothing unread after the offered release rotates its journal, and the real pin then refuses every general pass',async t=>{
+test('a sealed rollback and return convert the rotated journal both ways, so each release keeps running general passes',async t=>{
   const f=await offeredFromHistoricalPin(t);f.adopt();
+  const audit=path.join(f.directory,'passes.jsonl'),effects=path.join(f.directory,'effects.json'),offset=()=>JSON.parse(fs.readFileSync(effects)).notice_audit_offset;
   const passWith=async root=>{
     const {createLineService}=await import(pathToFileURL(path.join(root,'line-service/line-service.mjs')).href);
     return createLineService({repo:f.cwd,org:f.org,to:'fixture-supervisor',runtimeHome:f.installationHome,env:{...f.env,HERDR_ENV:'',HERDR_PANE_ID:''},haltAfter:100,maxStarts:0,closeoutMeasure:()=>{},
       command:()=>({status:0,stdout:'{"created":[]}',stderr:''}),capacity:()=>({count:0,cap:2})}).pass();
   };
+  const {PASS_JOURNAL_LIMIT,passJournalExtent,readPassJournal}=await import(pathToFileURL(path.join(f.next,'line-service/pass-journal.mjs')).href);
   assert.equal(f.main(['restart','--repo',f.cwd,'--org',f.org],f.args).restarted,true);
   assert.equal((await passWith(f.next)).result,'pass-complete');
-  const {rotatePassJournal}=await import(pathToFileURL(path.join(f.next,'line-service/pass-journal.mjs')).href);
-  assert.equal(rotatePassJournal(path.join(f.directory,'passes.jsonl'),{maxBytes:1}).rotated,true);
+  // The real limit, as on a consumer whose journal is already over it.
+  fs.appendFileSync(audit,JSON.stringify({action:'fixture-history',pad:'x'.repeat(PASS_JOURNAL_LIMIT)})+'\n');
   assert.equal((await passWith(f.next)).result,'pass-complete');
+  const {retired}=passJournalExtent(audit),logical=offset();
+  assert.ok(retired>PASS_JOURNAL_LIMIT&&logical>retired&&fs.statSync(audit).size<PASS_JOURNAL_LIMIT);
   f.main(['stop','--repo',f.cwd,'--org',f.org],f.args);f.pin('bch-pin');
   const plan=f.main([...f.back,'--dry-run'],f.args);
-  assert.deepEqual(plan.unread,[]);
+  assert.deepEqual(plan.unread,[]);assert.ok(plan.changes.includes('effects.notice_audit_offset'));
+  assert.deepEqual([plan.journal_offset.basis,plan.journal_offset.offset_before,plan.journal_offset.offset_after],['live-file',logical,logical-retired]);
+  assert.equal(offset(),logical,'the preview changes nothing');
+  // Failure: a checkpoint that moved since the preview refuses before any effect.
+  const saved=fs.readFileSync(effects);
+  fs.writeFileSync(effects,JSON.stringify({...JSON.parse(saved),pass_number:999},null,2)+'\n');
+  assert.throws(()=>f.main([...f.back,'--expected-plan',plan.archive.sha256],f.args),/plan changed/);
+  assert.equal(fs.existsSync(path.join(f.directory,'upgrades/offer-rollback.json')),false);
+  fs.writeFileSync(effects,saved);
   assert.equal(f.main([...f.back,'--expected-plan',plan.archive.sha256],f.args).direction,'rollback');
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(f.directory,'upgrades/offer-rollback.json'))).journal_offset,plan.journal_offset,'the archive binds the conversion');
+  assert.equal(offset(),logical-retired);
   assert.equal(f.oldMain(['restart','--repo',f.cwd,'--org',f.org],f.args).restarted,true);
-  // The restart looks healthy. Only its general passes fail, and every one does.
-  for(let n=0;n<2;n++)await assert.rejects(f.oldPass(),/notice audit checkpoint is inconsistent/);
+  for(let n=0;n<2;n++)assert.equal((await f.oldPass()).result,'pass-complete');
+  f.oldMain(['stop','--repo',f.cwd,'--org',f.org],f.args);
+  // The return reverses it from what the old release actually saved.
+  const physical=offset(),again=['upgrade','--repo',f.cwd,'--org',f.org,'--id','offer-return','--from-root',f.old,'--target-root',f.next];
+  f.pin('offered');
+  const forward=f.main([...again,'--dry-run'],f.args);
+  assert.ok(physical>logical-retired,'the old release advanced its own checkpoint');
+  assert.deepEqual([forward.journal_offset.basis,forward.journal_offset.offset_before,forward.journal_offset.offset_after],['whole-journal',physical,physical+retired]);
+  assert.equal(f.main([...again,'--expected-plan',forward.archive.sha256],f.args).direction,'upgrade');
+  assert.equal(offset(),physical+retired);
+  assert.equal(f.main(['restart','--repo',f.cwd,'--org',f.org],f.args).restarted,true);
+  assert.equal((await passWith(f.next)).result,'pass-complete');
+  assert.ok(offset()>=physical+retired);
+  assert.ok([...readPassJournal(audit)].some(row=>row.action==='fixture-history'),'retired history survives the trip');
+});
+
+test('an interrupted journal handoff stays refused, with the conversion named in its archive',async t=>{
+  for(const point of ['record','journal']){
+    const f=await offeredFromHistoricalPin(t);f.adopt();
+    const audit=path.join(f.directory,'passes.jsonl'),effects=path.join(f.directory,'effects.json');
+    const {rotatePassJournal}=await import(pathToFileURL(path.join(f.next,'line-service/pass-journal.mjs')).href);
+    fs.writeFileSync(audit,JSON.stringify({action:'fixture-history'})+'\n');
+    fs.writeFileSync(effects,JSON.stringify({identity:gitProject(f.cwd).identity,org:f.org,actions:{},notices:{},notice_audit_offset:fs.statSync(audit).size},null,2)+'\n');
+    assert.equal(rotatePassJournal(audit,{maxBytes:1}).rotated,true);
+    f.pin('bch-pin');
+    const {upgradeRuntime}=await import(pathToFileURL(path.join(f.next,'line-service/upgrade-runtime.mjs')).href);
+    const args={...f.args,repo:f.cwd,org:f.org,id:'offer-rollback',fromRoot:f.next,targetRoot:f.old,rollback:true};
+    const plan=upgradeRuntime({...args,dryRun:true}),before=fs.readFileSync(effects,'utf8');
+    assert.throws(()=>upgradeRuntime({...args,expectedPlan:plan.archive.sha256,fault:phase=>{if(phase===point)throw Error('interrupted handoff');}}),/interrupted handoff/);
+    assert.equal(JSON.parse(fs.readFileSync(f.installationFile)).source,f.next,'the old release still cannot start');
+    assert.throws(()=>f.oldMain(['restart','--repo',f.cwd,'--org',f.org],f.args),/cutover binding|drifted/);
+    const archived=JSON.parse(fs.readFileSync(path.join(f.directory,'upgrades/offer-rollback.json'))).journal_offset;
+    assert.equal(JSON.parse(fs.readFileSync(effects)).notice_audit_offset,point==='journal'?archived.offset_after:archived.offset_before);
+    if(point==='record')assert.equal(fs.readFileSync(effects,'utf8'),before);
+  }
 });
 
 test('a forward preview reports a refused rollback without blocking the upgrade, and acceptance needs a target predating admission',async t=>{

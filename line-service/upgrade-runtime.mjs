@@ -17,6 +17,7 @@ import {installationPhaseProof,settledInstallation} from './runtime-phase.mjs';
 import {recoveryContract,requireRecordCompatibility} from '../lib/record-compatibility.mjs';
 import {probationRuntime} from './probation.mjs';
 import {completionFile} from './probation-completion.mjs';
+import {planJournalHandoff,applyJournalHandoff} from './journal-handoff.mjs';
 
 const git=(repo,args)=>execFileSync('git',['--no-optional-locks','-C',repo,...args],{encoding:'utf8',stdio:['ignore','pipe','pipe'],timeout:10000}).trim();
 const same=(a,b)=>canonical(a)===canonical(b);
@@ -122,10 +123,13 @@ export function upgradeRuntime({repo,org,id,fromRoot,targetRoot,rollback=false,a
   const settlement=rollback?null:installationPhaseProof(saved,savedBytes,{target,service:snapshot.service,stop_sha256:snapshot.stop_sha256});
   const nextPlist=rollback?state.previous.plist:replacement,after=rollback?state.previous.installation:settledInstallation({...saved,source:targetRoot,runtime:snapshot.runtime},settlement);
   if(after.source!==targetRoot||!same(after.runtime,snapshot.runtime))throw Error('previous accepted runtime binding changed');
+  const journalArgs={directory:c.directory,fromRoot,targetRoot},journal=planJournalHandoff(journalArgs)?.receipt;
+  const convertJournal=()=>{if(journal){applyJournalHandoff({...journalArgs,expected:journal});fault('journal');}};
   const archiveFile=path.join(c.directory,'upgrades',id+'.json');
   const archive={schema:'line-runtime-upgrade/v1',id,repo:c.repo,org:c.org,identity:c.identity,direction,source:targetRoot,previous_source:fromRoot,previous_seq:state.last.seq,
     owner,canonical_head:snapshot.head,stop_sha256:snapshot.stop_sha256,runtime:snapshot.runtime,...(settlement?{phase_settlement:settlement}:{}),
     ...(acceptUnread?{unread_accepted:admitted.unread,unread_events_accepted:admitted.unread_events}:{}),
+    ...(journal?{journal_offset:journal}:{}),
     before:{installation:savedBytes,plist:plistBytes},after:{installation:JSON.stringify(after),plist:nextPlist}};
   const bytes=json(archive),ref={id,file:archiveFile,sha256:digest(bytes)},nextInstallation=json(rollback?after:{...after,upgrade:ref});
   const validate=()=>{
@@ -138,17 +142,19 @@ export function upgradeRuntime({repo,org,id,fromRoot,targetRoot,rollback=false,a
       validate();
       return {dry_run:true,id,direction,target,archive:ref,previous:snapshot.previous,runtime:snapshot.runtime,stopped:true,runtime_started:false,
         ...(rollback?{established:admitted.established??[],unread:admitted.unread??[],unread_events:admitted.unread_events??[]}:{rollback:rollbackPreview({c,events:loaded.events,fromRoot,targetRoot,home})}),
-        changes:['installation.source','installation.runtime','installation.upgrade','service.ProgramArguments[1]','service.ProcessType','service.Nice'],preserved:['migration archive/event','cutover','phase0','STOP','node','transport','saved jobs/watchers','claims','queue attempts']};
+        ...(journal?{journal_offset:journal}:{}),
+        changes:['installation.source','installation.runtime','installation.upgrade','service.ProgramArguments[1]','service.ProcessType','service.Nice',...(journal?['effects.notice_audit_offset']:[])],preserved:['migration archive/event','cutover','phase0','STOP','node','transport','saved jobs/watchers','claims','queue attempts']};
     }
     const result=transact(c.org,events=>{
       const current=requireRecordCompatibility(targetRoot,events,admission);
       if(acceptUnread&&!same(current.unread_events,admitted.unread_events))throw Error('rollback unread events changed; preview and accept the new plan');
+      if(JSON.stringify(planJournalHandoff(journalArgs)?.receipt)!==JSON.stringify(journal))throw Error('pass journal changed since its handoff plan; plan again');
       if(!same(initial(),snapshot)||readPlainFile(installationFile)!==savedBytes||readPlainFile(file)!==plistBytes||fs.existsSync(archiveFile)||
           history(events).last.seq!==state.last.seq)throw Error('service upgrade source/record/native CAS changed');
       plainDirectory(path.dirname(archiveFile));
       const fd=fs.openSync(archiveFile,'wx',0o444);try{fs.writeFileSync(fd,bytes);fs.fsyncSync(fd);}finally{fs.closeSync(fd);}
       fault('intent');writeFileAtomic(file,nextPlist,0o600);fault('plist');
-      if(!rollback){writeFileAtomic(installationFile,nextInstallation,0o600);fault('installation');}
+      if(!rollback){convertJournal();writeFileAtomic(installationFile,nextInstallation,0o600);fault('installation');}
       if(inspectService(target,c.repo,command).loaded||digest(readPlainFile(stop))!==snapshot.stop_sha256||readPlainFile(file)!==nextPlist||
           !rollback&&readPlainFile(installationFile)!==nextInstallation)throw Error('upgrade completion service/configuration changed; original intent retained');
       return {add:[...(settlement?[{type:'line-service.installation-settled',id,project:c.identity,repo:c.repo,org:c.org,
@@ -159,7 +165,7 @@ export function upgradeRuntime({repo,org,id,fromRoot,targetRoot,rollback=false,a
     // An older runtime cannot recognize a pending upgrade intent. Publish
     // the rollback event before restoring its legacy-readable receipt;
     // until then its saved source mismatches and startup must refuse.
-    if(rollback){fault('record');writeFileAtomic(installationFile,nextInstallation,0o600);fault('installation');}
+    if(rollback){fault('record');convertJournal();writeFileAtomic(installationFile,nextInstallation,0o600);fault('installation');}
     return result;
   });
 }

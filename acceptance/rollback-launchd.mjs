@@ -25,6 +25,7 @@ import {checkRelease,releaseAcceptance,releaseHome} from '../lib/releases.mjs';
 import {gitProject} from '../lib/project.mjs';
 import {ROUTE_PRESET} from '../lanes/preset.mjs';
 import {lineDirectory} from '../line-service/cutoff.mjs';
+import {PASS_JOURNAL_LIMIT} from '../line-service/pass-journal.mjs';
 
 export const SCHEMA='brain.rollback-launchd/v1';
 const HOME_LINE="export const releaseHome = () => path.join(os.userInfo().homedir, '.local/share/herdr-monitor');";
@@ -206,15 +207,21 @@ async function migrated(scratch,name,context){
 }
 function routes(c,oldRoot,candidateRoot){
   return {forward:['upgrade','--id','offer-adoption','--from-root',oldRoot,'--target-root',candidateRoot],
-    back:['upgrade','--id','offer-rollback','--from-root',candidateRoot,'--target-root',oldRoot,'--rollback']};
+    back:['upgrade','--id','offer-rollback','--from-root',candidateRoot,'--target-root',oldRoot,'--rollback'],
+    again:['upgrade','--id','offer-return','--from-root',oldRoot,'--target-root',candidateRoot]};
 }
 
-// Success: old release runs, adopts the offered one, runs, returns, runs again.
+// Success: old release runs, adopts the offered one, runs, returns, runs again, and
+// adopts it once more. The journal is over the rotation limit from the first adoption,
+// as on a long-running consumer, so the job's own first write rotates it.
 async function roundTrip(scratch,context){
-  const {oldRoot,candidateRoot}=context,c=await migrated(scratch,'round-trip',context),legs={},{forward,back}=routes(c,oldRoot,candidateRoot);
+  const {oldRoot,candidateRoot}=context,c=await migrated(scratch,'round-trip',context),legs={},{forward,back,again}=routes(c,oldRoot,candidateRoot);
   const consumerName=c.name;context.consumers.push(c);
   const before=receipts(c);
   legs.old_before=await runLeg(c,oldRoot,{process_type:false});
+  const journal=path.join(c.directory,'passes.jsonl');
+  fs.appendFileSync(journal,JSON.stringify({action:'scratch-history',pad:'x'.repeat(PASS_JOURNAL_LIMIT)})+'\n');
+  const journalBytes=fs.statSync(journal).size;
   const oldToolRefusal=c.tool(oldRoot,[...forward,'--dry-run'],/incomplete release|acceptance-not-ready/).refused;
   c.pin(path.basename(candidateRoot));
   const preview=plan(c,candidateRoot,forward).rollback;
@@ -226,12 +233,20 @@ async function roundTrip(scratch,context){
     c.pin(path.basename(oldRoot));
     return c.tool(candidateRoot,[...back,'--dry-run'],/remains loaded/).refused;
   }});
+  const segments=()=>JSON.parse(read(journal+'.segments/index.json')).segments;
+  if(!fs.existsSync(journal+'.segments/index.json')||!segments().length||fs.statSync(journal).size>=PASS_JOURNAL_LIMIT)throw Error('the adopted job did not rotate a journal over the limit');
   const rollback=apply(c,candidateRoot,back);
   if(rollback.result.direction!=='rollback')throw Error('rollback did not report its direction');
   const restored=same(receipts(c),before);
   if(!restored)throw Error('rollback did not restore the exact installation and plist bytes');
   legs.old_after=await runLeg(c,oldRoot,{process_type:false});
-  return {consumer:consumerName,status:'PASS',old_tool_refusal:oldToolRefusal,preview,unread:rollback.planned.unread,restored_exact_bytes:restored,legs};
+  if(rollback.planned.journal_offset?.basis!=='live-file')throw Error('rollback plan carries no conversion of the rotated journal');
+  c.pin(path.basename(candidateRoot));
+  const returned=apply(c,candidateRoot,again);
+  if(returned.planned.journal_offset?.basis!=='whole-journal')throw Error('return plan carries no conversion of the rotated journal');
+  legs.returned=await runLeg(c,candidateRoot,{process_type:true});
+  return {consumer:consumerName,status:'PASS',old_tool_refusal:oldToolRefusal,preview,unread:rollback.planned.unread,restored_exact_bytes:restored,
+    journal:{bytes_before_adoption:journalBytes,segments:segments().length,rollback:rollback.planned.journal_offset,return:returned.planned.journal_offset},legs};
 }
 
 // Failure: events the old release never met refuse, leaving everything in place.

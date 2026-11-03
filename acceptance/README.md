@@ -177,7 +177,8 @@ of scratch policy/pin commits are separately accounted. S3/S5 retain lost and
 refused original input, missing-folder evidence and scripted legacy UNKNOWN
 qualification/reused-lane/session controls using the installed implementation.
 The legacy facts are visibly synthetic, not historical success receipts.
-S4 places independent selection, promotion and report-cleanup STOP/HOLD controls.
+S4 places independent selection and promotion STOP/HOLD controls. At the report
+boundary STOP holds the ingested allocation and HOLD lets the closer release it.
 S6 runs real proposal intake/disposition and an exhausted original finite turn.
 S7 uses the existing archived upgrade/rollback intent with a live captured
 producer/watcher, plus a refused missing-target control. S8 uses supported

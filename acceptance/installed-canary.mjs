@@ -142,19 +142,41 @@ export async function runCanary(c) {
   // must happen while its one original review has no verdict or worker.
   const proposals=[{role:'engineer',title:'Ordinary retained canary proposal',why:'Scripted intake control'},
     {role:'engineer',title:'Reserved retained canary proposal',why:'Scripted reserved control',operator_reserved:true}];
+  // The watcher only raises a hint. The finite turn it wakes ingests the report
+  // and then releases the allocation, with no fence yet written. Keep that turn
+  // from the closer so STOP always meets an ingested allocation it can refuse.
+  const {retirementLock}=await module('lib/retire-lock.mjs');
+  const turnLock=path.join(directory,'closeout-turn.lock');
+  let releaseTurns;
+  await until(()=>{
+    try{releaseTurns=retirementLock(turnLock);return true;}
+    catch(error){if(error.message.startsWith('locked:'))return false;throw error;}
+  },'A report boundary acquired the closeout turn');
   report(producer,[`source: ${head}; base: ${base}`],'',proposals);
   const reportAt=performance.now();await until(()=>available(producer),'A watcher availability');
   const noticeMs=performance.now()-reportAt;
-  for(const name of ['STOP','HOLD']) {
-    const file=path.join(repo,'.lane/supervisor',name);fs.writeFileSync(file,'Fixture-owned report cleanup boundary\n');
-    assert.match(service(0).pass().held,/STOP\/HOLD/);assert.ok(fs.existsSync(lane));
-    assert.equal(native().workspaces[producer.worker.workspaceId].agent.name,producer.worker.agentName);fs.unlinkSync(file);
-  }
-  // Folder removal precedes branch deletion and empty-workspace closure.
-  // Observe the original closer through completion before asserting its effects.
-  service(0).pass();await until(()=>finished(producer)&&!fs.existsSync(lane)&&
-    !native().workspaces[producer.worker.workspaceId]&&events().some(e=>e.type==='closeout.evaluated'&&
-      e.run===producer.run&&e.reportCloseout&&e.completed),'A source, native and physical cleanup before review');
+  // Availability is not the ingest. A wake can lose the intake lock to a scan
+  // that predates this report, so run the line's own intake until it commits.
+  const ingested=()=>state().runs.get(producer.run).report;
+  await until(()=>ingested()||(service(0).intake(),ingested()),'A report ingest');
+  // STOP refuses the eligible allocation: its lane and session both stay.
+  const fence=name=>path.join(repo,'.lane/supervisor',name);
+  fs.writeFileSync(fence('STOP'),'Fixture-owned report cleanup boundary\n');releaseTurns();
+  assert.match(service(0).pass().held,/STOP\/HOLD/);assert.ok(fs.existsSync(lane));
+  assert.equal(native().workspaces[producer.worker.workspaceId].agent.name,producer.worker.agentName);
+  // HOLD permits original reported allocations, so the closer releases this one
+  // while the general pass stays held. Folder removal precedes branch deletion
+  // and empty-workspace closure: observe the whole turn before its effects.
+  fs.writeFileSync(fence('HOLD'),'Fixture-owned report cleanup boundary\n');fs.unlinkSync(fence('STOP'));
+  assert.match(service(0).pass().held,/STOP\/HOLD/);
+  await until(()=>!fs.existsSync(lane)&&!native().workspaces[producer.worker.workspaceId]&&
+    events().some(e=>e.type==='closeout.evaluated'&&e.run===producer.run&&e.reportCloseout&&e.completed)&&
+    !fs.existsSync(turnLock),'A native and physical release under HOLD');
+  assert.ok(fs.existsSync(fence('HOLD')),'closeout does not clear HOLD');
+  const holdTurn=JSON.parse(fs.readFileSync(path.join(directory,'closeout-turn.json')));
+  fs.unlinkSync(fence('HOLD'));
+  // Item close and the original review stay with the ordinary pass HOLD refused.
+  service(0).pass();await until(()=>finished(producer),'A source close before review');
   assert.ok(noticeMs<=60000,'report availability exceeds declared 60 s observation');
   assert.ok(performance.now()-reportAt<=120000,'report cleanup exceeds declared 120 s observation');
   const reviewItems=()=>[...state().items.values()].filter(i=>i.meta.review_source_run===producer.run);
@@ -167,7 +189,7 @@ export async function runCanary(c) {
   stage('S1',{item,run:producer.run,base,head,report_to_cleanup_ms:performance.now()-reportAt,
     review:review.id,reviewRuns:0,sourceClosed:true,nativeReleased:true,folderRemoved:true,sourceReadableAfterRemoval:true,
     watcherNoticeMs:noticeMs,closeout:events().filter(e=>e.run===producer.run&&e.type.startsWith('closeout.')),
-    firstTurn:JSON.parse(fs.readFileSync(path.join(directory,'closeout-turn.json'))),cleanupHeldAtReportBoundary:['STOP','HOLD']});
+    holdTurn,cleanupHeldAtReportBoundary:['STOP'],cleanupReleasedUnderHold:true});
 
   // Exhaust the original finite allowance. The production turn may neither
   // register a wait nor issue another command; subsequent ordinary scheduling

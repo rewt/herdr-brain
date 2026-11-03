@@ -251,7 +251,8 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
     return notices;
   }
   function pass(options) {
-    observeRecovery();
+    // A changed identity is a fence refusal like STOP/HOLD: logged, no effect.
+    try{observeRecovery();}catch(e){log({action:'pass-held',reason:e.message});return{held:e.message,directory};}
     // pass.lock serializes scans, but is deliberately yielded for foreground
     // effects. Keep at most two whole passes (one slow owner plus independent
     // admission) instead of retaining a full record for every scheduled wake.
@@ -1102,8 +1103,9 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
           },undefined,undefined,Boolean(retryAdmission),Boolean(retryAdmission),fresh=>{
             // Defer readiness races before saving a one-shot recovery intent.
             const current = fresh.state.items.get(item.id);
+            // Policy first: a selection it no longer admits keeps its visible held row.
+            if(current&&!admit({item:current,state:fresh.state},'launch-mutation',true))return false;
             if (!current || !queueSelected(current,fresh.state,readOrdinaryAdmission(repo,childEnv)) || obsoleteDecision(current,fresh) || itemLaunchHold(fresh.state,item.id,fresh.events) || disposition(current,fresh) || dispatchInput({...fresh,item:current,org,identity:project.identity}) !== input || reserved(current) || (!continuation&&(reviewTarget ? reviewQueueRoute(config, current, fresh.state) : routeFor(current, config)) !== route)) throw Error('dispatch readiness or route changed');
-            if(!admit({item:fresh.state.items.get(item.id),state:fresh.state},'launch-mutation',true))return false;
             if(queueSelection(fresh.state)===selection)return true;
             log({action:'queue-selection-changed',item:item.id,stage:'after-capacity'});
             return false;

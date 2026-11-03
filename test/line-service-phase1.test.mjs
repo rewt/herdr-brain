@@ -888,28 +888,31 @@ test('phase1 creates one queue item per whole producer change with immutable evi
   }finally{process.chdir(before);}
 });
 
-for(const changed of [false,true])test(`phase1 service queue recheck scopes producer evidence and retains changed-source refusal: ${changed}`,t=>{
+for(const changed of [false,'before-intent','after-intent'])test(`phase1 service queue recheck scopes producer evidence and retains changed-source refusal: ${changed}`,t=>{
   const f=fixture(t);independentProducer(f);
-  const env=installedService(f),calls=[],unrelated=[],selected=[],read=fs.readFileSync,write=fs.writeFileSync;
-  let active,changedSource=false;
+  const env=installedService(f),calls=[],unrelated=[],selected=[],read=fs.readFileSync,write=fs.writeFileSync,rename=fs.renameSync;
+  const key=`review:ENG-1:${f.heads[1]}`,lock=`review-change-${hash(JSON.stringify(['ENG-1',f.heads[1]]))}.lock`;
+  let active=false,changedSource=false;
+  const change=()=>{if(!changedSource){changedSource=true;write(f.file,f.report+'changed immutable source\n');}};
+  // The fresh check runs once this producer's change lock is held and ends in
+  // its intent or deferral. A stale selected report must stop its own queue there.
+  const locked=t.mock.method(fs,'renameSync',(from,file,...args)=>{
+    const result=rename(from,file,...args);
+    if(file===path.join(f.directory,lock)){active=true;if(changed==='before-intent')change();}
+    return result;
+  });
   const written=t.mock.method(fs,'writeFileSync',(file,bytes,...args)=>{
     const result=write(file,bytes,...args);
-    // Observe the durable effect boundary, after general discovery selected
-    // both producers. A stale selected report must still stop its own command.
     if(typeof file==='number'&&typeof bytes==='string'&&bytes.startsWith('{')){
       let row;try{row=JSON.parse(bytes);}catch{}
-      if(row?.action==='effect-intent'){
-        active=row.key;
-        if(changed&&!changedSource&&active===`review:ENG-1:${f.heads[1]}`){
-          changedSource=true;write(f.file,f.report+'changed immutable source\n');
-        }
+      if(row?.key===key&&['effect-intent','review-queue-deferred'].includes(row.action)){
+        active=false;if(changed==='after-intent'&&row.action==='effect-intent')change();
       }
-      if(row?.action==='effect')active=null;
     }
     return result;
   });
   const reads=t.mock.method(fs,'readFileSync',(file,...args)=>{
-    if(active===`review:ENG-1:${f.heads[1]}`){
+    if(active){
       if(file===path.join(f.org,'reports/R-3.md')){unrelated.push(file);throw Error('unrelated producer source read');}
       if(file===f.file)selected.push(file);
     }
@@ -917,16 +920,28 @@ for(const changed of [false,true])test(`phase1 service queue recheck scopes prod
   });
   try{
     createLineService({repo:f.cwd,org:f.org,to:'supervisor-test',env,maxStarts:0,recordNotice:d=>({id:d.id}),
-      command:(_exe,args)=>{calls.push(args);return{status:0,stdout:JSON.stringify({result:'review_queued',review_item:'REV-100'}),stderr:''};}
+      command:(exe,args,options)=>{
+        calls.push(args);
+        // After intent the real command owns the refusal, under its own guards.
+        if(changed==='after-intent'&&args[1]==='queue-review')return spawnSync(exe,args,options);
+        return{status:0,stdout:JSON.stringify({result:'review_queued',review_item:'REV-100'}),stderr:''};
+      }
     }).pass({reconcileCloseout:false});
-  }finally{reads.mock.restore();written.mock.restore();}
+  }finally{reads.mock.restore();written.mock.restore();locked.mock.restore();}
   assert.deepEqual(unrelated,[],'an exact queue effect cannot re-read the other selected producer');
-  assert.ok(selected.length>0,'the selected report is freshly checked after its intent');
+  assert.ok(selected.length>0,'the selected report is freshly checked before its intent');
+  assert.equal(changedSource,Boolean(changed));
   const queued=calls.filter(args=>args[1]==='queue-review').map(args=>args[2]);
-  assert.deepEqual(queued,changed?['R-3']:['R-1','R-3'],'independent source remains eligible after the selected source changes');
-  const effects=JSON.parse(fs.readFileSync(path.join(f.directory,'effects.json'))),entry=effects.actions[`review:ENG-1:${f.heads[1]}`];
-  assert.equal(entry.state,changed?'held':'complete');
-  if(changed)assert.match(entry.error,/immutable landed target\/evidence changed/);
+  assert.deepEqual(queued,changed==='before-intent'?['R-3']:['R-1','R-3'],'independent source remains eligible after the selected source changes');
+  const effects=JSON.parse(fs.readFileSync(path.join(f.directory,'effects.json'))),entry=effects.actions[key];
+  if(changed==='before-intent'){
+    assert.equal(entry,undefined,'a stale selection records no attempt');
+    assert.ok(diagnostics(f).some(r=>r.action==='review-queue-deferred'&&r.key===key&&/immutable landed target\/evidence changed before queue intent/.test(r.reason)));
+  }else if(changed==='after-intent'){
+    assert.equal(entry.state,'held');assert.match(entry.error,/immutable/);
+    const reviews=[...f.context().state.items.values()].filter(i=>i.role==='reviewer');
+    assert.deepEqual(reviews.map(i=>i.meta.review_source_item),['ENG-2'],'the changed source queues nothing');
+  }else assert.equal(entry.state,'complete');
 });
 
 test('phase1 named producer queue validation leaves unrelated report evidence unread while preserving the global ownership index',t=>{

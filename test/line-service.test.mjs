@@ -728,11 +728,12 @@ test('engineering-idle shares closeout deferrals and excludes current cleanup de
 });
 
 test('engineering-idle excludes held ancestry reserved work and unchanged blocked reports while independent work still dispatches',t=>{
-  const f=fixture(t),held=f.add('Explicit hold'),parent=f.record(['add','Closed review ancestry','--role','reviewer']).split(' ')[0],child=f.add('Selected child',99,['--parent',parent]),blocked=f.add('Unchanged blocked report');
+  const f=fixture(t),held=f.add('Explicit hold'),parent=f.record(['add','Dropped review ancestry','--role','reviewer']).split(' ')[0],child=f.add('Selected child',99,['--parent',parent]),blocked=f.add('Unchanged blocked report');
   const reserved=f.add('Reserved publication'),ancestor=f.add('Reserved ancestor'),descendant=f.add('Reserved descendant',99,['--parent',ancestor]);
   transact(f.org,()=>({add:[
     {type:'item.updated',id:held,fields:{meta:{hold:true}}},
-    {type:'item.closed',id:parent,as:'done'},
+    // Only completed work releases ordinary children; dropped work closes its subtree.
+    {type:'item.closed',id:parent,as:'dropped'},
     {type:'item.updated',id:child,fields:{meta:{queue_selected:true}}},
     {type:'item.updated',id:reserved,fields:{meta:{category:'publish'}}},
     {type:'item.updated',id:ancestor,fields:{meta:{operator_reserved:true}}},
@@ -949,7 +950,8 @@ function selectedFormalCorrection(f) {
     {type:'report.ingested',run:'R-9001',sha256:'review-report',report:{outcome:'done'}},
     {type:'item.added',id:'ENG-9001',role:'engineer',title:'Selected formal correction',parent:'REV-9000',from_run:'R-9001',meta:{queue_selected:true,review_fix_of:key,review_source_item:'ENG-9000',review_source_run:'R-9000',review_finding_keys:[finding]}},
     {type:'review.finding-linked',correction_item:'ENG-9001',finding_key:finding,finding:{severity:'major',text:'exact correction'},review_item:'REV-9000',review_run:'R-9001',source_item:'ENG-9000',head,base:head},
-    {type:'item.added',id:'ENG-9002',role:'engineer',title:'Unrelated review child',parent:'REV-9000',from_run:'R-9001',meta:{queue_selected:true}},
+    {type:'item.added',id:'ENG-9002',role:'engineer',title:'Correction with no linked finding',parent:'REV-9000',from_run:'R-9001',meta:{queue_selected:true,review_fix_of:key,review_source_item:'ENG-9000',review_source_run:'R-9000'}},
+    {type:'item.added',id:'ENG-9003',role:'engineer',title:'Ordinary review proposal',parent:'REV-9000',from_run:'R-9001',meta:{queue_selected:true}},
     {type:'item.closed',id:'REV-9000',as:'done'},
   ]}));
   return {head,finding};
@@ -958,10 +960,10 @@ function selectedFormalCorrection(f) {
 test('line admission dispatches a selected formal correction beneath its completed review and observes it as eligible engineering',t=>{
   const f=fixture(t),{head}=selectedFormalCorrection(f),events=loadEvents(f.org).events,state=fold(events);
   const observation=haltObservation({state,events,org:f.org,identity:gitProject(f.repo).identity,config:{}});
-  assert.deepEqual(observation.ready,['ENG-9001'],'idle diagnosis uses the same typed correction exemption');
+  assert.deepEqual(observation.ready.toSorted(),['ENG-9001','ENG-9003'],'idle diagnosis uses the same typed correction exemption');
   f.service().pass();f.service().pass();
-  assert.deepEqual(f.calls.map(c=>c.args[1]),['ENG-9001'],'one ordinary dispatch, with unrelated review children still held');
-  const args=f.calls[0].args;
+  assert.deepEqual(f.calls.map(c=>c.args[1]).toSorted(),['ENG-9001','ENG-9003'],'one dispatch each, with the unlinked correction still held');
+  const args=f.calls.find(c=>c.args[1]==='ENG-9001').args;
   assert.equal(args[args.indexOf('--base')+1],head);
   assert.match(fs.readFileSync(args[args.indexOf('--brief')+1],'utf8'),/exact correction/);
   const after=loadEvents(f.org).events;
@@ -971,14 +973,17 @@ test('line admission dispatches a selected formal correction beneath its complet
 
 test('line admission rechecks the formal finding at its fresh effect boundary',t=>{
   const f=fixture(t),{head,finding}=selectedFormalCorrection(f);let changed=false;
+  transact(f.org,()=>({add:[{type:'item.updated',id:'ENG-9003',fields:{meta:{queue_selected:false}}}]}));
   f.service({capacity:()=>{
     if(!changed){changed=true;transact(f.org,()=>({add:[{type:'review.finding-linked',correction_item:'ENG-9002',finding_key:finding,review_item:'REV-9000',review_run:'R-9001',source_item:'ENG-9000',head,base:head}]}));}
     return {count:0,cap:2};
   }}).pass();
   assert.equal(changed,true,'the correction reached ordinary capacity admission');
   assert.deepEqual(f.calls,[],'changed typed linkage refuses before native dispatch');
-  const actions=JSON.parse(fs.readFileSync(path.join(f.service().directory,'effects.json'))).actions;
-  assert.ok(Object.entries(actions).some(([key,value])=>key.startsWith('dispatch:ENG-9001:')&&value.state==='held'&&/readiness/.test(value.error)));
+  const {directory}=f.service(),actions=JSON.parse(fs.readFileSync(path.join(directory,'effects.json'))).actions;
+  assert.equal(Object.keys(actions).some(key=>key.startsWith('dispatch:ENG-9001:')),false,'readiness defers before spending an attempt');
+  const rows=fs.readFileSync(path.join(directory,'passes.jsonl'),'utf8').trim().split('\n').map(JSON.parse);
+  assert.ok(rows.some(r=>r.action==='hold'&&r.boundary==='dispatch:ENG-9001'&&/readiness/.test(r.reason)));
 });
 
 for(const change of ['standing order','candidate class','inherited class','selection'])test(`admission defers ${change} changed during capacity without spending an effect`,t=>{
@@ -1066,11 +1071,19 @@ for(const fence of ['STOP','HOLD','identity'])test(`wake closeout failure leaves
   if(fence==='identity')changed=true;
   else if(fence==='STOP')fs.writeFileSync(path.join(s.directory,'STOP'),'original stop');
   else{fs.mkdirSync(path.join(f.repo,'.lane/supervisor'),{recursive:true});fs.writeFileSync(path.join(f.repo,'.lane/supervisor/HOLD'),'original hold');}
-  const reason=fence==='identity'?/identity changed/:/STOP\/HOLD/;
   const wake=wakeLineService({service:s,launch:()=>s.pass()});
-  assert.match(wake.closeout.held,reason);assert.match(wake.general.held,reason);
-  assert.equal(f.calls.length,0);assert.equal(f.refreshes.length,0);
-  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(s.directory,'effects.json'))).actions,{});
+  assert.match(wake.general.held,fence==='identity'?/identity changed/:/STOP\/HOLD/);
+  // A proving HOLD stops new work, not finished resource release; the closer
+  // keeps its own effect fences. STOP and a changed identity hold closeout too.
+  if(fence==='HOLD')assert.equal(wake.closeout.held,undefined);
+  else assert.match(wake.closeout.held,fence==='identity'?/identity changed/:/^STOP prevents line closeout$/);
+  assert.equal(f.calls.length,0);if(fence!=='HOLD')assert.equal(f.refreshes.length,0);
+  const journal=path.join(s.directory,'effects.json');
+  // A changed identity refuses before this project's journal is even opened.
+  if(fence==='identity')assert.equal(fs.existsSync(journal),false);
+  else assert.deepEqual(JSON.parse(fs.readFileSync(journal)).actions,{});
+  const rows=fs.readFileSync(path.join(s.directory,'passes.jsonl'),'utf8').trim().split('\n').map(JSON.parse);
+  assert.ok(rows.some(r=>r.action==='pass-held'&&r.reason===wake.general.held),'the refusal stays in the pass log');
 });
 test('wake closeout failure keeps an original native refusal while admitting independent work', t => {
   const f=fixture(t),refused=f.add('Refused own effect',20),s=f.service({closeoutMeasure:()=>{}});

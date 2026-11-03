@@ -98,16 +98,26 @@ test(`release-only preserves ${kind} under service STOP`,t=>{
   }
 });
 
-test('a fresh project STOP at drain admission retains its original held evaluation after the marker clears',t=>{
+test('a fresh project STOP at drain admission retains its original held evaluation and resumes only after the marker clears',t=>{
   const f=fixture(t);f.report();const marker=path.join(f.repo,'.lane/supervisor/STOP');
   // The executor rechecks after ownership admission, independently of turn selection.
   const entry=currentCloseoutEntries(f.common,f.org,events(f))[0];
   const held=f.drain({keys:[entry.key],releaseOnly:true,onClaim:()=>fs.writeFileSync(marker,'late STOP')});
-  assert.equal(held.evaluated[0].completed,false);assert.match(held.evaluated[0].reason,/STOP/);
+  assert.equal(held.evaluated[0].completed,false);assert.equal(held.evaluated[0].reason,'STOP/HOLD prevents queued retirement effect');
   assert.deepEqual(f.read().actions,[]);assert.ok(fs.existsSync(f.lane));
+  // While the marker stands, the hold has no way past it.
+  assert.throws(f.release,/STOP/);
+  assert.deepEqual(f.read().actions,[]);assert.ok(fs.existsSync(f.lane));
+  const original=events(f);
+  assert.equal(original.filter(e=>e.type==='closeout.evaluated'&&e.key===entry.key&&!e.completed).length,1);
+  // This hold stopped before any effect, so clearing the marker resumes the
+  // original request under fresh guards. It never rewrites the held evaluation.
   fs.unlinkSync(marker);
-  assert.equal(f.release().steps,0);assert.ok(fs.existsSync(f.lane));
-  assert.deepEqual(f.read().actions,[],'clearing a fence does not replace its original held evaluation');
+  const resumed=f.release();assert.equal(resumed.steps,1);assert.deepEqual(resumed.errors,[]);
+  assert.equal(resumed.subjects[0].evaluations[0].completed,true);assert.equal(fs.existsSync(f.lane),false);
+  assert.deepEqual(events(f).slice(0,original.length),original,'the original held evaluation stays in the record');
+  const actions=f.read().actions;assert.equal(f.release().steps,0);
+  assert.deepEqual(f.read().actions,actions,'completed effects never replay');
   assert.ok(fs.existsSync(f.stop));assert.ok(fs.existsSync(f.hold));
 });
 

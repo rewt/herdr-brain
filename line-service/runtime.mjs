@@ -20,9 +20,9 @@ import {completionRows,completedInstallation} from './probation-completion.mjs';
 export const runtimeRoot=fs.realpathSync(fileURLToPath(new URL('../',import.meta.url)));
 export const digest=bytes=>createHash('sha256').update(bytes).digest('hex');
 
-export function acceptedRuntime(repo,{root=runtimeRoot,home=releaseHome(),verifyFiles=true,admission}={}) {
+export function acceptedRuntime(repo,{root=runtimeRoot,home=releaseHome(),verifyFiles=true,admission,record,reuse}={}) {
   root=fs.realpathSync(root);
-  const trial=probationRuntime(repo,{root,home});
+  const trial=probationRuntime(repo,{root,home,record,reuse});
   if(trial)return trial;
   const pin=projectPin(repo);
   if(!pin?.release)throw Error('line runtime requires an explicit accepted project pin');
@@ -31,7 +31,7 @@ export function acceptedRuntime(repo,{root=runtimeRoot,home=releaseHome(),verify
   const release=checkRelease(home,pin.release,{verifyFiles});
   requireReadyAcceptance(release,home);
   const org=findOrgDir({cwd:repo,env:{...process.env,ORG_DIR:''}});
-  if(org){const loaded=loadEvents(org);if(loaded.tornTail)throw Error('incomplete record prevents runtime admission');requireRecordCompatibility(root,loaded.events,admission);}
+  if(org){const loaded=record?.org===fs.realpathSync(org)?record:loadEvents(org);if(loaded.tornTail)throw Error('incomplete record prevents runtime admission');requireRecordCompatibility(root,loaded.events,admission);}
   return release;
 }
 

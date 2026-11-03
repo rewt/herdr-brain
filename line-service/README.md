@@ -186,6 +186,18 @@ diagnostic must attribute its child trees. Requested bytes are not physical disk
 bytes. `duration_ms` includes final bookkeeping and the final cache checkpoint;
 older rows stopped that clock before final bookkeeping, so compare with care.
 
+Each snapshot of an installed line checks its runtime against the record that
+snapshot returns, with no second load or fold. A withdrawn or ended trial, a held
+owner, a changed pin and an incompatible or torn record therefore stop that same
+snapshot. Only byte hashing is reused, within one process and never on disk: the
+release roots the trial binds and the Node binary hash again unless the identity,
+mode, size, mtime and ctime of every entry under them are unchanged. A failed or
+moved verification is never kept. A write that leaves all of those unchanged, which
+needs a raw device write or a rolled-back clock, is found when the next process
+hashes everything, at most one pass later. `installation.json` and the plist are
+still read at process start, not per snapshot. `runtime_bytes_verified` and
+`runtime_bytes_reused` count the hashed and reused verifications in a pass.
+
 The residual `other_scan_and_guard_ms` has an exclusive wall-time partition:
 `source_scan_ms` (including fresh pre-effect rescans), `admission_scan_ms`
 (exclusions, ordering and admission), `canonical_index_ms`,

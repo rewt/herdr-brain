@@ -17,7 +17,7 @@ import {withRuntimeLocks} from './runtime-locks.mjs';
 import {noticeLock} from '../supervisor/notice-lock.mjs';
 import {fold} from '../lib/state.mjs';
 import {trialOwnerHold} from '../lib/item-launch-hold.mjs';
-import {prepareDevelopmentRecovery,sealDevelopmentRecovery,verifyDevelopmentRecovery,recoveryNode} from './development-recovery.mjs';
+import {prepareDevelopmentRecovery,sealDevelopmentRecovery,verifyDevelopmentRecovery,recoveryNode,verifyFresh} from './development-recovery.mjs';
 import {legacyRecipientHistory,recipientChanges} from './recipient-history.mjs';
 import {successorExtensions} from './probation-successor-history.mjs';
 import {requireRecoveryEntry} from './recovery-admission.mjs';
@@ -48,6 +48,7 @@ export function probationTuple(root,home){
     node:{executable:process.execPath,version:process.version,platform:process.platform,arch:process.arch}};
 }
 const tuple=probationTuple;
+const verifiedTuple=(root,reuse)=>reuse(`tuple:${root}`,[root],()=>tuple(root,path.dirname(path.dirname(root))));
 function trials(events,c){return events.filter(e=>e.type==='line-service.probation-authorized'&&e.project===c.identity&&e.org===c.org);}
 function ended(events,c,id){return events.some(e=>['line-service.probation-withdrawn','line-service.probation-completed'].includes(e.type)&&e.project===c.identity&&e.org===c.org&&e.id===id);}
 function archived(event,c){
@@ -61,8 +62,8 @@ function archived(event,c){
   if(!Number.isSafeInteger(decision))throw Error('probation recorded authority is missing');
   return a;
 }
-export function authorityOwner(note,events){
-  const state=fold(events),run=state.runs.get(note.id),item=state.items.get(run?.item??note.id);
+export function authorityOwner(note,events,state=fold(events)){
+  const run=state.runs.get(note.id),item=state.items.get(run?.item??note.id);
   if(!item||run?.abandoned)throw Error('probation authority owning item/run is unavailable');
   const hold=trialOwnerHold(state,item.id);
   if(hold)throw Error(`probation authority HOLD: ${hold.reason}`);
@@ -87,12 +88,13 @@ export function completedProbationRuntime(repo,{root,events,completion}){
   return readProbationRuntime(repo,{root,events:history,allowEnded:true},true);
 }
 
-function readProbationRuntime(repo,{root,home=releaseHome(),events,allowEnded=false}={},archiveOnly=false){
+function readProbationRuntime(repo,{root,home=releaseHome(),events,record,reuse=verifyFresh,allowEnded=false}={},archiveOnly=false){
   const org=findOrgDir({cwd:repo,env:{...process.env,ORG_DIR:''}});
   if(!org)return null;
   const c=context(repo,org);
   if(!events&&!fs.existsSync(path.join(c.directory,'probation')))return null;
-  const loaded=events?{events}:loadEvents(c.org);
+  // A line snapshot brings its own record; a different discovered record loads fresh.
+  const loaded=events?{events}:record?.org===c.org?record:loadEvents(c.org);
   if(loaded.tornTail)throw Error('incomplete record prevents probation admission');
   const found=trials(loaded.events,c).filter(e=>e.scope?.candidate?.release?.root===root||
     e.scope?.previous?.kind==='development-recovery'&&e.scope.previous.release.root===root||
@@ -114,15 +116,15 @@ function readProbationRuntime(repo,{root,home=releaseHome(),events,allowEnded=fa
     }catch{/* An ended trial never excuses a failed ordinary admission. */}
     throw Error('probation authority withdrawn/completed; no new admissions');
   }
-  if(!allowEnded)authorityOwner(note,loaded.events);
+  if(!allowEnded)authorityOwner(note,loaded.events,loaded.state);
   const previous=a.scope.previous;
-  const candidateRoot=a.scope.candidate.release.root,candidateHome=path.dirname(path.dirname(candidateRoot));
-  if(event.repo!==c.repo||a.scope.candidate.common!==c.identity||(!archiveOnly&&!same(tuple(candidateRoot,candidateHome),a.scope.candidate)))throw Error('probation candidate/project tuple drifted');
+  const candidateRoot=a.scope.candidate.release.root;
+  if(event.repo!==c.repo||a.scope.candidate.common!==c.identity||(!archiveOnly&&!same(verifiedTuple(candidateRoot,reuse),a.scope.candidate)))throw Error('probation candidate/project tuple drifted');
   if(!archiveOnly){
     requireRecordCompatibility(root,loaded.events);
-    if(previous.kind==='development-recovery')verifyDevelopmentRecovery(c,previous,loaded.events);
+    if(previous.kind==='development-recovery')verifyDevelopmentRecovery(c,previous,loaded.events,reuse);
     else if(!allowEnded){
-      const old=checkRelease(home,previous.release.id,{verifyFiles:true});requireReadyAcceptance(old,home);
+      const old=reuse(`release:${home}:${previous.release.id}`,[path.join(home,'releases',previous.release.id)],()=>checkRelease(home,previous.release.id,{verifyFiles:true}));requireReadyAcceptance(old,home);
       if(!same(old,previous.release)||sha(readPlainFile(path.join(old.root,'.release-manifest.json')))!==previous.manifest_sha256)throw Error('probation previous runtime changed');
       requireRecordCompatibility(old.root,loaded.events);
     }
@@ -130,7 +132,7 @@ function readProbationRuntime(repo,{root,home=releaseHome(),events,allowEnded=fa
   const extensions=successorExtensions(loaded.events,c,event);
   if(!archiveOnly)for(const extension of extensions){
     const successor=extension.scope.candidate;
-    if(!same(tuple(successor.release.root,path.dirname(path.dirname(successor.release.root))),successor)||!same(extension.scope.node,recoveryNode()))throw Error('probation successor tuple/Node drifted');
+    if(!same(verifiedTuple(successor.release.root,reuse),successor)||!same(extension.scope.node,reuse('node',[process.execPath],recoveryNode)))throw Error('probation successor tuple/Node drifted');
   }
   const extension=extensions.find(e=>e.scope.candidate.release.root===root);
   const successor=extension?.scope.candidate;

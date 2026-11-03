@@ -34,6 +34,11 @@ const profiles = new Map([
   // ENG-1404: completed provenance drops retired payload checks; active trial,
   // successor effect/fence/history and rollback-target contracts are preserved.
   ['b5aae47d76ae1ee47de493f5c848b31f693d247de5f208cf2f35d7fb67ffdb86', 'successor-extensions'],
+  // ENG-1406: a line snapshot may supply its own record and reuse byte hashes while
+  // every input is unchanged; the defaults verify fresh. These bytes also carry
+  // df944992's ordinary-rollback option, unregistered until now, whose defaults leave
+  // admission unchanged. Effect, fence and history contracts are preserved.
+  ['7e349789e94f7708645d0cc25b1a3ce97672f8c6a0b11bc3109b37727c1c915b', 'successor-extensions'],
 ]);
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 export function successorFingerprint(root) {

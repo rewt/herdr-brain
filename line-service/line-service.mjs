@@ -34,6 +34,7 @@ import { enqueueNamedDecision } from './decision-wake.mjs';
 import { canonical } from '../messages/schema.mjs';
 import {bundleRelease} from '../lib/releases.mjs';
 import {serviceSource,acceptedRuntime} from './runtime.mjs';
+import {runtimeReuse} from './runtime-reuse.mjs';
 import {installedContext,regularJSON} from './cutoff.mjs';
 import {hostRecoveryNotices,hostRecoveryOwner} from './host-recovery.mjs';
 import { discoverChanges,dispatchInput,phase0Boundary,morningDigest,recordReviewResults,reviewCompletionPlan,recordReviewCompletion,ensureReviewBoundary,canonicalReviewIndex,observeReviewHealth } from './phase1.mjs';
@@ -184,15 +185,22 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
     const start=performance.now();
     try{return operation();}finally{if(timings)timings[name]=(timings[name]??0)+performance.now()-start;}
   };
+  const reuseRuntime=runtimeReuse(outcome=>{if(timings)timings[`runtime_bytes_${outcome}`]++;});
   const observe = ({ closeout = false,releaseOnly=false } = {}) => inStage('record_snapshot_ms',()=>{
     if (timings) timings.snapshots++;
     const live = timed('snapshot_identity_ms',()=>identify(repo));
     if (live.identity !== project.identity || live.canonical !== repo) throw Error('project identity changed');
-    if(bundleRelease().commit)timed('snapshot_runtime_ms',()=>acceptedRuntime(repo,{verifyFiles:false,home:runtimeHome}));
+    let loaded;
+    if(bundleRelease().commit){
+      // Every record decision reads the record this snapshot returns, so a
+      // withdrawal in it cannot pass unseen and no second load or fold runs.
+      loaded=timed('snapshot_materialize_ms',()=>loadRecord(org));
+      timed('snapshot_runtime_ms',()=>acceptedRuntime(repo,{verifyFiles:false,home:runtimeHome,record:{...loaded,org},reuse:reuseRuntime}));
+    }
     if(closeout)assertCloseoutFences(project,org,{releaseOnly});
     else if (fs.existsSync(path.join(directory, 'STOP')) || fs.existsSync(path.join(repo, '.lane/supervisor/STOP')) ||
         fs.existsSync(path.join(repo, '.lane/supervisor/HOLD'))) throw Error('STOP/HOLD prevents line-service effects');
-    const loaded = timed('snapshot_materialize_ms',()=>loadRecord(org));
+    loaded??=timed('snapshot_materialize_ms',()=>loadRecord(org));
     if (loaded.tornTail) throw Error('incomplete record tail');
     const result = { events: loaded.events, tornTail: loaded.tornTail, state: loaded.state };
     return result;
@@ -276,7 +284,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       const passStarted = performance.now();
       const passCPU=process.cpuUsage();
       let workStarted=workClock();const maintenanceStarted=workStarted,expired=()=>workClock()-workStarted>=passBudgetMs;
-      timings = { closeout_ms,snapshots: 0, record_snapshot_ms: 0, effect_command_ms: 0, historical_intake_skipped: 0, historical_review_skipped: 0, closeout_retained: 0,outcome_decisions_deferred:0,effects_journal_writes:0,notice_record_attempts:0,
+      timings = { closeout_ms,snapshots: 0, runtime_bytes_verified: 0, runtime_bytes_reused: 0, record_snapshot_ms: 0, effect_command_ms: 0, historical_intake_skipped: 0, historical_review_skipped: 0, closeout_retained: 0,outcome_decisions_deferred:0,effects_journal_writes:0,notice_record_attempts:0,
         pass_lock_ms:0,pass_lock_max_segment_ms:0,suspended_ms:0,effects_journal_bytes:0,effects_journal_serialize_ms:0,effects_journal_write_ms:0,
         evaluation_cache_writes:0,evaluation_cache_bytes:0,evaluation_cache_serialize_ms:0,evaluation_cache_write_ms:0,
         source_scan_ms:0,admission_scan_ms:0,canonical_index_ms:0,maintenance_review_ms:0,
@@ -1187,7 +1195,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       log({action:'schedule-unlocked',pass:passAt,pid:process.pid,duration_ms:performance.now()-lockedAt});release();release=null;
     }}} }
   }
-  return { pass, closeout, intake, directory, log, acquirePass, observeRecovery, observeHostRecovery };
+  return { pass, closeout, intake, directory, log, acquirePass, observe, observeRecovery, observeHostRecovery };
 }
 
 // The existing launchd schedule stays finite while the general pass runs in

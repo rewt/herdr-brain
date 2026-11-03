@@ -12,6 +12,8 @@ import {loginChanges,applyLoginChange} from './login-history.mjs';
 import {successorHistory} from './probation-successor-history.mjs';
 
 export const recoveryDigest=bytes=>createHash('sha256').update(bytes).digest('hex');
+// Reuse is opt-in: every caller except a line snapshot verifies fresh.
+export const verifyFresh=(key,paths,verify)=>verify();
 // Normalize only original development path identity, never archived bytes or
 // immutable installed-runtime tuples.
 export const developmentSourceMatches=(source,repo)=>typeof source==='string'&&path.isAbsolute(source)&&path.resolve(source)===repo;
@@ -61,15 +63,17 @@ export function sealDevelopmentRecovery(c,previous){
   verifyDevelopmentRecovery(c,previous);
 }
 
-export function verifyDevelopmentRecovery(c,previous,events){
+export function verifyDevelopmentRecovery(c,previous,events,reuse=verifyFresh){
   const {release,source}=previous,root=release?.root;
-  if(previous.kind!=='development-recovery'||!root||root!==path.join(c.directory,'development-recovery',path.basename(path.dirname(root)),'runtime')||
-      source.root!==c.repo||source.common!==c.identity||release.commit!==source.commit||release.id!=='runtime'||release.protocol!==1||
-      fs.realpathSync(root)!==root||!same(recoveryNode(),previous.node))throw Error('development recovery identity/node changed');
-  if(recoveryDigest(readPlainFile(path.join(root,'.release-manifest.json')))!==previous.manifest_sha256||
-      readPlainFile(path.join(root,'.release-commit'))!==source.commit+'\n'||
-      verifyProductPayload(root,source,{metadata:['.release-commit','.release-manifest.json'],readOnly:true})!==previous.inventory_sha256)
-    throw Error('development recovery payload changed');
+  reuse(`development-recovery:${recoveryDigest(canonical([c.repo,c.identity,c.directory,previous]))}`,[root,process.execPath],()=>{
+    if(previous.kind!=='development-recovery'||!root||root!==path.join(c.directory,'development-recovery',path.basename(path.dirname(root)),'runtime')||
+        source.root!==c.repo||source.common!==c.identity||release.commit!==source.commit||release.id!=='runtime'||release.protocol!==1||
+        fs.realpathSync(root)!==root||!same(recoveryNode(),previous.node))throw Error('development recovery identity/node changed');
+    if(recoveryDigest(readPlainFile(path.join(root,'.release-manifest.json')))!==previous.manifest_sha256||
+        readPlainFile(path.join(root,'.release-commit'))!==source.commit+'\n'||
+        verifyProductPayload(root,source,{metadata:['.release-commit','.release-manifest.json'],readOnly:true})!==previous.inventory_sha256)
+      throw Error('development recovery payload changed');
+  });
   if(events)requireRecordCompatibility(root,events);
   return release;
 }

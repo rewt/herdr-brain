@@ -326,7 +326,7 @@ if(a[0]==='agent'&&a[1]==='get'&&a[2]===${JSON.stringify(agent.pane_id)})console
   fs.unlinkSync(hold);
   const applied = invoke();
   assert.equal(applied.status, 0, applied.stderr);
-  const result = JSON.parse(applied.stdout), saved = () => loadEvents(f.org);
+  const result = JSON.parse(applied.stdout), saved = () => loadEvents(f.org).events;
   assert.equal(result.replayed, false); assert.deepEqual(result.completed, ['ENG-4', 'ENG-5']);
   assert.equal(saved().filter(e => e.type === 'correction.discharged').length, 1);
   assert.equal(itemConditions(fold(saved()), 'ENG-4').Accepted.status, 'True');

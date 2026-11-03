@@ -845,6 +845,27 @@ then that it has never met do. Choose the fallback in this order:
 A login registration or retarget after the handoff still needs its existing owner
 disposition, because rollback must follow the upgrade directly.
 
+What that target does with work the successor left open, witnessed for BCH's pin
+in `test/rollback-in-flight.test.mjs`. The previews name unread events, not these
+outcomes, and a rotated journal alone leaves the rollback admitted with nothing unread:
+
+- **Line passes stop once the journal has rotated.** The successor rotates
+  `passes.jsonl` at 16 MiB and saves an offset that counts retired bytes. The pin
+  refuses every general pass with `notice audit checkpoint is inconsistent`, so it
+  starts and reviews nothing, while restart still succeeds and closeouts still run.
+  A journal already over the limit rotates on the successor's first pass, so this
+  applies before any real work. Restoring the successor's pin recovers it. No
+  supported repair exists yet, and a pin offset is not a row boundary on return.
+- **A review queued but not started** stays held as an existing attempt, and starts
+  once the successor returns.
+- **A review report not yet recorded** is recorded by the pin, including its
+  correction and required check, with no second correction on return.
+- **A correction not yet finished** runs from a brief naming its required check, but
+  the pin requires no proof of it. On return its Major stays unproven and blocks an
+  offer. Nothing repairs that automatically.
+- **An unanswered native closeout request** stays open and is not replayed. A closeout
+  not yet started finishes once through the pin's own turn.
+
 ### Brain-only probation for one routine candidate
 
 Brain's first development predecessor has a separate typed extension in

@@ -16,7 +16,7 @@ import {gitProject} from '../lib/project.mjs';
 import {requireCorrectedMajors} from '../lib/consumer-offer.mjs';
 import {readCloseoutEntries,unresolvedCloseoutEffect} from '../lib/closeout.mjs';
 import {sourceRoot,serviceDirectory} from '../line-service/line-service.mjs';
-import {PASS_JOURNAL_LIMIT} from '../line-service/pass-journal.mjs';
+import {PASS_JOURNAL_LIMIT,passJournalSize} from '../line-service/pass-journal.mjs';
 import {setup,selectCurrentCleanup,events,effects} from './helpers/closeout-fixture.mjs';
 
 const PIN='98002dc75cb064dd639e79c922ddeb98d3781bc2',hash=b=>createHash('sha256').update(b).digest('hex');
@@ -101,7 +101,9 @@ test('the pin refuses every general pass once its successor rotates the journal 
   // Not a supported step: this names what a rollback repair has to establish.
   fs.writeFileSync(path.join(f.directory,'effects.json'),JSON.stringify({...journal(f),notice_audit_offset:live()},null,2)+'\n');
   assert.equal((await f.pass(pin)).result.result,'pass-complete');
-  // The pin's physical offset then replays older live rows on return, without harm.
+  // The pin saved a physical offset, so a return needs the opposite repair.
+  await assert.rejects(f.pass(sourceRoot),/notice audit checkpoint is not a row boundary/);
+  fs.writeFileSync(path.join(f.directory,'effects.json'),JSON.stringify({...journal(f),notice_audit_offset:passJournalSize(audit)},null,2)+'\n');
   assert.equal((await f.pass(sourceRoot)).result.result,'pass-complete');
 });
 

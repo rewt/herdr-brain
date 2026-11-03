@@ -50,15 +50,23 @@ through their existing mutation APIs.
 checksummed index are bound to the reader version, source identity and verified
 log-prefix digest. A missing, stale-version, foreign or corrupt file rebuilds
 from the append log; prefix rewrites cannot hide behind a projection. Compatible
-appends extend the folded state. Rebuilds stream events and spill touched
+appends extend the folded state. Rebuilds stream events and spill changed
 subjects between batches of 128 events, without splitting an event's dependency
-set. Publication replaces an immutable generation atomically; concurrent cold
-readers can build independently, and an older publication only causes a later
-reader to apply more tail. No cache lock confers authority. Read-only cache paths
-fall back to a temporary generation removed on close.
+set. A subject whose bytes did not change is not written again, and a map that
+an event scans stays decoded until the build ends. A finished build is published
+even if the record moved during it: its digest covers the exact bytes it folded,
+so the next open checks that prefix and extends it, or rejects it if the prefix
+was rewritten. A build whose final line was torn is reused only while the record
+is unmoved. Publication replaces an immutable generation atomically; concurrent
+cold readers can build independently, and an older publication only causes a
+later reader to apply more tail. Its spool is anonymous and its result file is
+created last, so a killed build leaves at most that one short-lived file. No
+cache lock confers authority. Read-only cache paths fall back to a temporary
+generation removed on close. A finite watcher does not use this view: it reads
+its run from the fold its ownership check already holds.
 
 Resident decoded history is bounded by a batch's subjects (or one large event's
-dependencies), the largest subject/line, graph/category arrays, and what the
+dependencies, or a map an event scans), the largest subject/line, graph/category arrays, and what the
 consumer explicitly retains. The in-memory ID/offset index still scales with
 the number of subjects; this is not a constant-space claim. Rebuild scratch and
 the on-disk projection scale with history/current facts. Close readers promptly:

@@ -9,6 +9,7 @@ import { serialize, deserialize } from 'node:v8';
 import { createHash } from 'node:crypto';
 import { initOrg, loadRecord, loadRecordReader, transact } from '../lib/store.mjs';
 import { READER_FILE, readerVersion } from '../lib/record-reader.mjs';
+import { readWatchSubject } from '../watch/shared.mjs';
 
 const stamp = '2026-10-30T12:00:00.000Z';
 const encode = events => events.map(e => JSON.stringify(e) + '\n').join('');
@@ -198,4 +199,99 @@ test('compact CLI show preserves full JSON and text for items and runs', t => {
     assert.equal(full.status, 0, full.stderr); assert.equal(compact.status, 0, compact.stderr);
     assert.equal(compact.stdout, full.stdout);
   }
+});
+
+const temporaries = dir => fs.readdirSync(dir).filter(name => name.startsWith(`${READER_FILE}.tmp-`));
+function duringReads(hook) {
+  const read = fs.readSync;
+  fs.readSync = function (...args) { const count = read.apply(this, args); hook(); return count; };
+  return () => { fs.readSync = read; };
+}
+function countingWrites() {
+  const write = fs.writeSync, counted = { bytes: 0, restore() { fs.writeSync = write; } };
+  fs.writeSync = function (...args) { const count = write.apply(this, args); counted.bytes += count; return count; };
+  return counted;
+}
+
+test('a finished build is published on a record that never stops moving, and later opens extend it', t => {
+  const f = fixture(t); let seq = 3;
+  const restore = duringReads(() => fs.appendFileSync(f.file, encode([{ seq: ++seq, type: 'note.added', id: 'ENG-1', text: 'busy', at: stamp }])));
+  try { assert.throws(() => loadRecordReader(f.dir), /changed repeatedly/); } finally { restore(); }
+  assert.equal(fs.statSync(f.cache).isFile(), true, 'the completed build survives the refused open');
+  assert.deepEqual(temporaries(f.dir), []);
+  const extended = equivalent(f);
+  assert.equal(extended.used, true); assert.ok(extended.offset > 0);
+  assert.equal(equivalent(f).tailEvents, 0);
+});
+
+test('a moved-record publication keeps open generations and rejects a prefix rewritten under its build', t => {
+  const f = fixture(t), text = fs.readFileSync(f.file, 'utf8'), old = loadRecordReader(f.dir);
+  fs.unlinkSync(f.cache);
+  let rewritten = false;
+  const restore = duringReads(() => { if (!rewritten) { rewritten = true; fs.writeFileSync(f.file, text.replace('alpha', 'bravo')); } });
+  try {
+    const r = loadRecordReader(f.dir);
+    try {
+      assert.equal(r.state.items.get('ENG-1').title, 'bravo', 'the first build folded alpha; its publication is not trusted');
+      assert.equal(r.snapshot.used, false);
+    } finally { r.close(); }
+  } finally { restore(); }
+  assert.equal(old.state.items.get('ENG-1').title, 'alpha', 'an already-open reader keeps its own generation');
+  old.close();
+  assert.equal(equivalent(f).used, true);
+});
+
+test('a torn final line built while the record moved is not published for reuse', t => {
+  const f = fixture(t);
+  fs.appendFileSync(f.file, '{"seq":4,"type":');
+  let moved = false;
+  const restore = duringReads(() => { if (!moved) { moved = true; fs.appendFileSync(f.file, '"note.added","id":"ENG-1","text":"finished","at":"' + stamp + '"}\n'); } });
+  try {
+    const r = loadRecordReader(f.dir);
+    try { assert.equal(r.tornTail, false); assert.equal(r.state.items.get('ENG-1').notes[0].text, 'finished'); assert.equal(r.snapshot.used, false); }
+    finally { r.close(); }
+  } finally { restore(); }
+  equivalent(f);
+});
+
+test('scanning a map costs one write per changed subject, on a cold build and on a tail', t => {
+  const events = [{ type: 'item.added', id: 'ENG-1', title: 'history' }, { type: 'item.added', id: 'ENG-2', title: 'unrelated' }];
+  for (let i = 1; i <= 1500; i++) events.push({ type: 'run.started', id: `R-${i}`, item: 'ENG-1' },
+    { type: 'report.ingested', run: `R-${i}`, report: { outcome: 'done' }, file: `R-${i}.md`, sha256: `s${i}` });
+  const f = fixture(t, events);
+  const cold = countingWrites();
+  try { assert.equal(equivalent(f).used, false); } finally { cold.restore(); }
+  const size = fs.statSync(f.cache).size;
+  assert.ok(cold.bytes < 3 * size, `cold build wrote ${cold.bytes} for a ${size} byte projection`);
+  f.append({ type: 'item.closed', id: 'ENG-2', as: 'done' }); // scans every obligation, changes none
+  const tail = countingWrites();
+  try { assert.equal(equivalent(f).tailEvents, 1); } finally { tail.restore(); }
+  assert.ok(tail.bytes < 1.5 * fs.statSync(f.cache).size, `one scanning tail event wrote ${tail.bytes}`);
+});
+
+test('a build names only its result, last, and leaves nothing after it fails', t => {
+  const f = fixture(t), seen = [];
+  const restore = duringReads(() => seen.push(temporaries(f.dir).length));
+  try { equivalent(f); } finally { restore(); }
+  assert.equal(seen[0], 0, 'nothing is named while folding');
+  assert.equal(Math.max(...seen), 1);
+  assert.deepEqual(temporaries(f.dir), []);
+  fs.unlinkSync(f.cache); fs.appendFileSync(f.file, 'not-json\n');
+  assert.throws(() => loadRecordReader(f.dir), /not valid JSON/);
+  assert.deepEqual(temporaries(f.dir), []);
+});
+
+test('a finite watcher reads its run from the owned fold, never building the whole-record view', t => {
+  const f = fixture(t);
+  f.append({ type: 'report.ingested', run: 'R-1', report: { outcome: 'done' }, file: 'R-1.md', sha256: 'one' });
+  const seen = readWatchSubject(f.dir, 'R-1');
+  assert.equal(seen.report.outcome, 'done');
+  assert.equal(seen.meta.identity_conflict, false);
+  assert.equal(fs.existsSync(f.cache), false, 'no projection was built or published');
+  assert.deepEqual(temporaries(f.dir), []);
+  seen.report.outcome = 'caller mutation';
+  assert.equal(readWatchSubject(f.dir, 'R-1').report.outcome, 'done', 'the held fold is not exposed');
+  assert.throws(() => readWatchSubject(f.dir, 'R-404'), /original run is missing/);
+  fs.appendFileSync(f.file, '{"seq":9,"type":');
+  assert.throws(() => readWatchSubject(f.dir, 'R-1'), /incomplete record/);
 });

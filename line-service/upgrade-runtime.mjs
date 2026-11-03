@@ -59,7 +59,7 @@ export function upgradeRuntime({repo,org,id,fromRoot,targetRoot,rollback=false,d
     const ordinary=saved.migration?.file===completionFile(c,saved.migration?.id);
     if(ordinary&&!fs.existsSync(path.join(targetRoot,'line-service/probation-completion.mjs')))
       throw Error('upgrade target lacks the probation completion reader; retain the current runtime');
-    const previous=releaseRoot(fromRoot,home,c.repo,{allowEnded:true,ordinary}),runtime=releaseRoot(targetRoot,home,c.repo);
+    const previous=releaseRoot(fromRoot,home,c.repo,{allowEnded:true,ordinary}),runtime=releaseRoot(targetRoot,home,c.repo,{ordinary});
     if(rollback&&previous.probation){
       const prior=previous.probation.previous;
       if(!same(runtime,prior.release)||digest(readPlainFile(path.join(targetRoot,'.release-manifest.json')))!==prior.manifest_sha256)

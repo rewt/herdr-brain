@@ -31,6 +31,9 @@ const profiles = new Map([
   ['6b908188fce4a9457cb90fcecd7271fb02375fdcf3c807ed933675283b3af60c', 'successor-extensions'],
   // ENG-1340: ordinary completion anchors preserve active successor contracts.
   ['daf453d2ccf094259ecd05d052e53ac3e4f9cf7c2a8d9ddebbc15a9b78749466', 'successor-extensions'],
+  // ENG-1404: completed provenance drops retired payload checks; active trial,
+  // successor effect/fence/history and rollback-target contracts are preserved.
+  ['b5aae47d76ae1ee47de493f5c848b31f693d247de5f208cf2f35d7fb67ffdb86', 'successor-extensions'],
 ]);
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 export function successorFingerprint(root) {

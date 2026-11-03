@@ -70,7 +70,24 @@ export function authorityOwner(note,events){
 
 // Reads only. A withdrawn trial can be read solely to validate an archived
 // rollback/captured request, never to admit a new controller or worker.
-export function probationRuntime(repo,{root,home=releaseHome(),events,allowEnded=false}={}){
+export function probationRuntime(repo,options={}){
+  return readProbationRuntime(repo,options);
+}
+
+// Provenance only, after the completion reader has verified its immutable
+// anchor. Never use this tuple for admission or a rollback target. Retired
+// payloads and the old Node binary are no longer execution dependencies.
+export function completedProbationRuntime(repo,{root,events,completion}){
+  const end=events.find(e=>e.seq===completion.seq+1);
+  if(completion.type!=='line-service.runtime-migrated'||completion.mode!=='probation-completion'||
+      end?.type!=='line-service.probation-completed'||end.id!==completion.id||
+      end.conversion?.file!==completion.archive?.file||end.conversion?.sha256!==completion.archive?.sha256)
+    throw Error('archived probation requires its completed conversion');
+  const history=events.filter(e=>e.seq<=completion.previous_seq);
+  return readProbationRuntime(repo,{root,events:history,allowEnded:true},true);
+}
+
+function readProbationRuntime(repo,{root,home=releaseHome(),events,allowEnded=false}={},archiveOnly=false){
   const org=findOrgDir({cwd:repo,env:{...process.env,ORG_DIR:''}});
   if(!org)return null;
   const c=context(repo,org);
@@ -100,16 +117,18 @@ export function probationRuntime(repo,{root,home=releaseHome(),events,allowEnded
   if(!allowEnded)authorityOwner(note,loaded.events);
   const previous=a.scope.previous;
   const candidateRoot=a.scope.candidate.release.root,candidateHome=path.dirname(path.dirname(candidateRoot));
-  if(event.repo!==c.repo||a.scope.candidate.common!==c.identity||!same(tuple(candidateRoot,candidateHome),a.scope.candidate))throw Error('probation candidate/project tuple drifted');
-  requireRecordCompatibility(root,loaded.events);
-  if(previous.kind==='development-recovery')verifyDevelopmentRecovery(c,previous,loaded.events);
-  else if(!allowEnded){
-    const old=checkRelease(home,previous.release.id,{verifyFiles:true});requireReadyAcceptance(old,home);
-    if(!same(old,previous.release)||sha(readPlainFile(path.join(old.root,'.release-manifest.json')))!==previous.manifest_sha256)throw Error('probation previous runtime changed');
-    requireRecordCompatibility(old.root,loaded.events);
+  if(event.repo!==c.repo||a.scope.candidate.common!==c.identity||(!archiveOnly&&!same(tuple(candidateRoot,candidateHome),a.scope.candidate)))throw Error('probation candidate/project tuple drifted');
+  if(!archiveOnly){
+    requireRecordCompatibility(root,loaded.events);
+    if(previous.kind==='development-recovery')verifyDevelopmentRecovery(c,previous,loaded.events);
+    else if(!allowEnded){
+      const old=checkRelease(home,previous.release.id,{verifyFiles:true});requireReadyAcceptance(old,home);
+      if(!same(old,previous.release)||sha(readPlainFile(path.join(old.root,'.release-manifest.json')))!==previous.manifest_sha256)throw Error('probation previous runtime changed');
+      requireRecordCompatibility(old.root,loaded.events);
+    }
   }
   const extensions=successorExtensions(loaded.events,c,event);
-  for(const extension of extensions){
+  if(!archiveOnly)for(const extension of extensions){
     const successor=extension.scope.candidate;
     if(!same(tuple(successor.release.root,path.dirname(path.dirname(successor.release.root))),successor)||!same(extension.scope.node,recoveryNode()))throw Error('probation successor tuple/Node drifted');
   }

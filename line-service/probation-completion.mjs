@@ -8,7 +8,7 @@ import {readPlainFile,plainDirectory,writeFileAtomic} from '../lib/files.mjs';
 import {loadEvents,transact} from '../lib/store.mjs';
 import {projectEnvironment,projectPin,selectRelease,checkRelease,requireReadyAcceptance} from '../lib/releases.mjs';
 import {requireRecordCompatibility} from '../lib/record-compatibility.mjs';
-import {probationRuntime,authorityOwner} from './probation.mjs';
+import {probationRuntime,completedProbationRuntime,authorityOwner} from './probation.mjs';
 import {developmentHistory} from './development-recovery.mjs';
 import {runtimeHistory,digest} from './runtime.mjs';
 import {inspectService} from './migrate-runtime.mjs';
@@ -41,11 +41,11 @@ export function completedInstallation(events,c,{event,cutover}){
       end?.type!=='line-service.probation-completed'||end.id!==event.id||end.project!==c.identity||end.repo!==c.repo||end.org!==c.org||
       end.authority_seq!==original.seq||!same(end.archive,original.archive)||!same(end.conversion,{id:event.id,...ref})||
       !same(end.native_caller,event.native_caller)||end.by!==event.by)throw Error('probation completion archive/event changed');
-  const before=JSON.parse(a.before.installation),admitted=probationRuntime(c.repo,{root:before.source,events,allowEnded:true});
+  const before=JSON.parse(a.before.installation),admitted=completedProbationRuntime(c.repo,{root:before.source,events,completion:event});
   if(admitted?.probation.id!==event.id||!before.probation_bootstrap||before.probation_bootstrap.trial!==event.id||before.migration||before.fresh_install)
     throw Error('probation completion original bootstrap differs');
   const prior=developmentHistory(events,{...c,installation:before,cutover,root:before.source,trial:admitted.probation,
-    through:event.previous_seq,plistBytes:a.before.plist});
+    through:event.previous_seq,plistBytes:a.before.plist,archiveOnly:true});
   const {probation_bootstrap,probation_successor,...base}=before;
   const {probation,...release}=admitted;
   const after={...base,runtime:release};

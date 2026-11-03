@@ -33,7 +33,13 @@ jobs, claims and saved watcher/callback roots are retained. No READY evidence or
 pin is manufactured, and no native service is started.
 
 Runtime history verifies the original trial chain through the anchor, then
-follows ordinary upgrades, login registrations and recipient changes. Ordinary
+follows ordinary upgrades, login registrations and recipient changes. Completed
+trial replay checks the retained immutable authority, switch, successor and
+completion archives through the anchor; it does not reopen retired payloads,
+rehash the trial's Node binary or test retired readers against later events.
+Keep those archives and fences. Active trials still require the sealed recovery
+payload and live-record compatibility, and every ordinary upgrade or rollback
+still checks its actual target against the live record. Ordinary
 upgrade still requires the exact accepted target pin and its compatible reader.
 The existing upgrade preview/apply and `upgrade --rollback` restore the previous
 ordinary installation/plist, including this anchor. They do not restore the

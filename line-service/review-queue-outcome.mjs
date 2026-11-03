@@ -8,6 +8,23 @@ import {roleIs} from '../lib/roles.mjs';
 import {outcomeFailure} from '../lib/uncertain-outcome.mjs';
 import {resolvedQueuePlanning} from './review-queue-proof.mjs';
 
+// These record fences throw before plannedAppend's append, naming that in the
+// message. Bound to the uncaught stack's first frame: a refusal, a revalidation
+// failure carrying a cause, or any other status 1 is not this retry.
+const conflicts=[
+  {frame:/^recordSourceConflict \(file:\/\/\/[^\n)]*\/lib\/record-observation\.mjs:\d+:\d+\)$/,message:/^record (?:Git )?observation conflict: (?![^\n]*could not be revalidated)[^\n]+ changed; no append was made$|^record (?:Git )?observation changed while planning: [^\n]+$/},
+  {frame:/^readRecord \(file:\/\/\/[^\n)]*\/lib\/record-snapshot\.mjs:\d+:\d+\)$/,message:/^record changed repeatedly while preparing a consistent read; no mutation attempted$/},
+];
+function transientConflict(entry){
+  const r=entry?.receipt;
+  if(r?.status!==1||typeof r.stderr!=='string'||entry.error!==r.stderr.trim())return null;
+  const found=/^file:\/\/\/[^\n]+\n[^\n]*\n *\^+\n\nError: ([^\n]+)\n {4}at ([^\n]+)\n/.exec(r.stderr);
+  return found&&conflicts.some(c=>c.message.test(found[1])&&c.frame.test(found[2]))?found[1]:null;
+}
+// A retry that met another conflict may retry again. Any other outcome ends it.
+const transientRetry=entry=>entry?.queue_recovery?.kind==='pre-append-transient-conflict'&&
+  Array.isArray(entry.history)&&entry.history.length>0&&entry.history.every(transientConflict);
+
 export function reviewQueueNoMutation({entry,key,events,state,repo,org,identity,item,run,target}){
   const local=entry?.error==='immutable landed target/evidence changed before queue mutation'&&
     resolvedQueuePlanning({events,state,repo,org,identity,item:item.id,run:run.id,key,entry});
@@ -18,8 +35,8 @@ export function reviewQueueNoMutation({entry,key,events,state,repo,org,identity,
   if(!entry||entry.state!=='held'||entry.owner!=='line-service'||entry.subject!==key||
     key!==`review:${item.id}:${target.head}`||entry.review_operation!=='record-queue'||
     !sameRange&&JSON.stringify(entry.review_target)!==JSON.stringify(target)||entry.result!=null||
-    entry.history!=null&&(!Array.isArray(entry.history)||entry.history.length)||
-    entry.queue_recovery||entry.recorded_review_status||outcomeFailure(entry).kind==='fence'||
+    !transientRetry(entry)&&(entry.history!=null&&(!Array.isArray(entry.history)||entry.history.length)||entry.queue_recovery)||
+    entry.recorded_review_status||outcomeFailure(entry).kind==='fence'||
     ['worker','reviewer','launchProcess','native_qualification','review_item','review_run'].some(k=>entry[k]!=null)||
     entry.native_launch_attempted===true||
     !Number.isFinite(Date.parse(entry.at))||!Number.isFinite(Date.parse(entry.finished_at))||
@@ -40,7 +57,11 @@ export function reviewQueueNoMutation({entry,key,events,state,repo,org,identity,
     e.type.startsWith('review.')&&e.type!=='review.reference-resolved'&&
     (e.run===run.id||(e.item===item.id||e.source_item===item.id)&&(e.head===target.head||e.target?.head===target.head))))return null;
   if(local)return sameRange?local:null;
-  if(r.status===1)return resolvedQueuePlanning({events,state,repo,org,identity,item:item.id,run:run.id,key,entry});
+  const conflict=transientConflict(entry);
+  if(transientRetry(entry)&&!conflict)return null;
+  if(r.status===1)return resolvedQueuePlanning({events,state,repo,org,identity,item:item.id,run:run.id,key,entry})??(conflict&&{
+    schema:'review-queue-no-mutation/v1',kind:'pre-append-transient-conflict',project:identity,org,subject:key,item:item.id,run:run.id,target,
+    original_sha256:reviewDigest(JSON.stringify(entry)),receipt_sha256:reviewDigest(JSON.stringify(r)),record_seq:events.at(-1)?.seq,conflict});
   const resolutions=events.filter(e=>e.type==='review.reference-resolved'&&e.project===identity&&e.org===org&&
     e.item===item.id&&e.run===run.id&&sameCapturedTarget(e.target,target));
   if(!resolutions.length||resolutions.some(e=>e.disposition!=='needs-review'||

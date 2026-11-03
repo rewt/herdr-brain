@@ -1351,6 +1351,23 @@ test('canonical unattributed queue assigns current real reviewer responsibility 
   }finally{process.chdir(before);}
 });
 
+test('a retained unattributed review spends no step, so the next canonical change queues and the original is never replayed',t=>{
+  const f=fixture(t,{reported:false}),env=installedService(f),[second,first]=f.heads.map(canonicalSelector),calls=[],cwd=process.cwd(),file=path.join(serviceDirectory(f.org,f.context().identity),'effects.json');
+  const options={repo:f.cwd,org:f.org,to:'supervisor-test',env,maxStarts:0,maxStepsPerStage:1,recordNotice:d=>({id:d.id,state:'record-only'}),command:(_exe,args)=>{
+    if(args[1]!=='queue-review')return{status:0,stdout:'{"created":[]}',stderr:''};
+    calls.push(args[2]);
+    return args[2]===first?{status:1,signal:null,stdout:'',stderr:'possible mutation',signal_sent:false}:{status:0,stdout:JSON.stringify({result:'review_queued',review_item:'REV-9',source_item:'REV-9',head:f.heads[0],existing:false}),stderr:''};
+  }};
+  process.chdir(f.cwd);
+  try{
+    createLineService(options).pass();assert.deepEqual(calls,[first],'the cap bounds what is issued');
+    const original=JSON.parse(fs.readFileSync(file)).actions[`review:${first}`];assert.equal(original.state,'held');
+    createLineService(options).pass();assert.deepEqual(calls,[first,second]);
+    createLineService(options).pass();assert.deepEqual(calls,[first,second]);
+    assert.deepEqual(JSON.parse(fs.readFileSync(file)).actions[`review:${first}`],original);
+  }finally{process.chdir(cwd);}
+});
+
 test('canonical unattributed targets retain exact-head UNKNOWN attempts, ownership ambiguity, native context and STOP fences',t=>{
   const f=fixture(t,{reported:false}),env={...installedService(f),ORG_ACTOR:'line-service'},before=process.cwd();process.chdir(f.cwd);
   try{

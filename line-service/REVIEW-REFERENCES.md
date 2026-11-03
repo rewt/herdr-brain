@@ -210,6 +210,21 @@ archive, an existing review, or any other UNKNOWN receipt cannot replay. No new
 supervisor command, replacement reviewer, service restart or delivery is needed.
 Brain's other retained outcome notes remain held unless their own proof fits.
 
+A status-1 queue command that lost a record or Git observation race is retried
+without a disposition: the same `review-queue-no-mutation/v1` entry with kind
+`pre-append-transient-conflict`. The saved stderr must be the uncaught record
+fence itself, by exact message and first stack frame: `observation conflict ...
+changed; no append was made`, `observation changed while planning`, or the
+snapshot's `record changed repeatedly ...; no mutation attempted`. These throw
+before the append, and the retried command repeats every native and source
+check. Another such conflict may retry again; any other result ends it and stays
+held. `retained review scope is UNKNOWN`, an existing review or a conflict that
+`could not be revalidated` stay held.
+
+A retained review effect spends no review step, and only an issued queue-review
+counts toward `maxStepsPerStage`, so held entries never block a later pending
+change. The retention is read from the pass's snapshot before the inventory scan.
+
 Two historical status-1 planner exits have a separate, explicit owner writer:
 the exact Node 20.19.4 record-observation stack from ENG-1141/R-1546 and the
 source-selection stack from ENG-1150/R-1543 (DEC-445/R-1567). The complete

@@ -430,12 +430,13 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         // fsynced delta, never native intents or a SENT/consumed assertion.
         log({action:'hold',...row,boundary,reason,canonical_key:key,scope,...(alert?{inspection_due:true}:{}),notice_record:{key,entry}});
       };
+      const retainEffect=(key,prior)=>{
+        log({ action: 'effect-retained', key, state: prior.state });
+        if (prior.state !== 'complete') note(key, prior.error ?? 'prior failed/uncertain effect retained; inspect its existing receipt, do not replay');
+        return prior;
+      };
       const effectBody = (key, run, binding, operation, safe=false, outcomeReadback=false, before,admission) => {
-        const retain=prior=>{
-          log({ action: 'effect-retained', key, state: prior.state });
-          if (prior.state !== 'complete') note(key, prior.error ?? 'prior failed/uncertain effect retained; inspect its existing receipt, do not replay');
-          return prior;
-        };
+        const retain=prior=>retainEffect(key,prior);
         const pendingHandoff = result => key.startsWith('closeout:') && Array.isArray(result?.evaluated) && result.evaluated.length===0 &&
           Array.isArray(result.restart?.keys) && result.restart.keys.length>0 && result.successor?.pending===true &&
           result.successor.reason==='fresh drain required' && JSON.stringify(result.successor.keys)===JSON.stringify(result.restart.keys);
@@ -637,6 +638,10 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
             referenceRevision({events:snapshot.events,identity:project.identity,org,item:item.id,run:run.id,target}),
             ...snapshot.events.filter(e=>e.type==='line-service.review-queue-reconciled'&&e.project===project.identity&&e.org===org&&e.item===item.id&&e.run===run.id).map(e=>e.seq));
           if(retained&&resolutionSeq<=(effects.review_reference_reconsidered?.[key]?.resolution_seq??0))continue;
+          // An original with no proof to continue stays held and is never
+          // replayed, so it spends no step, inventory scan or record reload.
+          const held=effects.actions[key];
+          if(held&&held.state!=='complete'&&!reviewQueueNoMutation({entry:held,key,...snapshot,repo,org,identity:project.identity,item,run,target})){retainEffect(key,held);continue;}
           const attempt=reviewAttempt(item,{org,identity:project.identity,events:snapshot.events,state:snapshot.state,repo,effects,cache:reviewCache,target,capturedRun:run.id,ignoreService});
           if(attempt){
             if(retained){effects.review_reference_reconsidered??={};effects.review_reference_reconsidered[key]={resolution_seq:resolutionSeq,target,attempt};}
@@ -644,8 +649,9 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
             if(attempt.includes('UNKNOWN'))note(`outcome:${key}`,'Original review completion producer is missing; retain its attempt for the project supervisor.',{item:item.id,run:run.id,head:target.head,attempt});
             note(key,attempt,{item:item.id,run:run.id,head:target.head,review:true},false,{action:'review-retained',item:item.id,head:target.head});continue;
           }
-          queueConsumer({run,env:childEnv});reviewSteps++;
+          queueConsumer({run,env:childEnv});
           effect(key,()=>{
+            reviewSteps++; // Only an issued queue-review spends a step.
             return JSON.parse(cli('bin/org.mjs',['queue-review',run.id,'--head',target.head,'--base',target.base]));
           },target,'record-queue',true,fresh=>{
             const proof=reviewQueueNoMutation({entry:effects.actions[key],key,...fresh,repo,org,identity:project.identity,item,run,target});
@@ -661,7 +667,6 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
             // the fresh target instead of retaining a command that never ran.
             const checked=scanChanges({events:fresh.events,state:fresh.state,repo,org,identity:project.identity,runId:run.id}).changes.find(c=>c.item.id===item.id&&JSON.stringify(c.target)===JSON.stringify(target));
             if(!checked){
-              reviewSteps--; // A stale selection did not spend a queue step.
               note(key,'Review queue deferred: immutable landed target/evidence changed before queue intent; fresh selection is required.',{item:item.id,run:run.id,head:target.head,review:true},false,{action:'review-queue-deferred',key});
               return false;
             }
@@ -675,14 +680,14 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         if(!admit({selector,target},'queue'))continue;
         const key=`review:${selector}`;let reviewLock;
         try{
-          reviewLock=noticeLock(path.join(directory,`review-change-${digest(selector)}.lock`),{recover:false});reviewSteps++;
+          reviewLock=noticeLock(path.join(directory,`review-change-${digest(selector)}.lock`),{recover:false});
           effect(key,()=>{
+            reviewSteps++;
             return JSON.parse(cli('bin/org.mjs',['queue-review',selector,'--head',target.head,'--base',target.base]));
           },target,'record-queue',true,false,fresh=>{
             if(!admit({selector,target},'queue-mutation',true))return false;
             const checked=scanChanges({events:fresh.events,state:fresh.state,repo,org,identity:project.identity}).unattributed?.find(c=>c.selector===selector&&JSON.stringify(c.target)===JSON.stringify(target));
             if(!checked){
-              reviewSteps--; // A stale selection did not spend a queue step.
               note(key,'Review queue deferred: immutable canonical target/evidence changed before queue intent; fresh selection is required.',{head:target.head,review:true},false,{action:'review-queue-deferred',key});
               return false;
             }

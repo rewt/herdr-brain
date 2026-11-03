@@ -867,3 +867,107 @@ test('mapping refuses an unstarted queue, contradictory references, and a differ
     const bytes=f.captured();assert.throws(()=>resolveReviewReference(f.args()));assert.deepEqual(f.captured(),bytes);
   }
 });
+
+// A second landed producer behind ENG-1, so the walk order and the cap are real.
+function laterProducer(f){
+  const base=f.head;fs.writeFileSync(path.join(f.repo,'later-build'),'later landed change');f.git('add','later-build');f.git('commit','-qm','Later build');const head=f.git('rev-parse','HEAD');
+  const report=`---\nrun: R-2\noutcome: done\nsummary: Later change\nartifacts:\n  - "source: ${head}; base: ${base}"\n---\n`;fs.writeFileSync(path.join(f.org,'reports/R-2.md'),report);
+  const dispatch=path.join(f.org,'dispatch/later.json');fs.writeFileSync(dispatch,JSON.stringify({token:'later',run:'R-2',item:'ENG-2',common:f.identity,org:f.org,workspace:f.repo,base,stage:'complete'}));
+  f.add([
+    {type:'item.added',id:'ENG-2',title:'Later build',role:'engineer',meta:{}},
+    {type:'run.started',id:'R-2',item:'ENG-2',workspace:f.repo,meta:{lane:'later',agent:'fixture-producer',dispatch_project:f.identity,dispatch_record:f.org,dispatch_journal:dispatch,dispatch_attempt:'later'}},
+    {type:'run.claimed',run:'R-2',record:f.org,project:f.identity,owner:{controller:'brain',legacy:false,release:{id:'source',root,identity:gitProject(root).identity,commit:null}}},
+    {type:'report.ingested',run:'R-2',item:'ENG-2',file:'reports/R-2.md',sha256:hash(report),report:{outcome:'done',artifacts:[`source: ${head}; base: ${base}`]}},
+  ]);
+  return{base,head};
+}
+const uncaught=(f,message,frame='recordSourceConflict',file='lib/record-observation.mjs')=>({...contentionReceipt(f),status:1,
+  stderr:`file:///install/${file}:15\n  const error = Object.assign(new ErrorType(message), { code });\n                              ^\n\nError: ${message}\n    at ${frame} (file:///install/${file}:15:31)\n    at caller (file:///install/lib/store.mjs:1:1) {\n  code: 'RECORD_OBSERVATION_CONFLICT'\n}\n\nNode.js v20.19.4\n`});
+const scopeUnknown=f=>uncaught(f,'retained review scope is UNKNOWN','capturedRange','line-service/review-targets.mjs');
+const passRows=f=>[...readPassJournal(path.join(f.directory,'passes.jsonl'))];
+
+test('a retained review spends no step, so a later landing queues on the first pass and the original is never replayed',t=>{
+  const f=fixture(t);f.prepare({producerEvidence:{kind:'checks'}});const later=laterProducer(f),calls=[],key=`review:ENG-1:${f.head}`,file=path.join(f.directory,'effects.json');
+  assert.deepEqual(discoverChanges({...f.context(),pendingOnly:true}).changes.map(c=>c.item.id),['ENG-1','ENG-2']);
+  const options={repo:f.repo,org:f.org,to:'fixture-supervisor',env:f.serviceEnv,maxStepsPerStage:1,command:(_exe,args)=>{
+    if(args[1]!=='queue-review')return{status:0,stdout:'{"created":[]}',stderr:''};
+    calls.push(args[2]);
+    return args[2]==='R-1'?scopeUnknown(f):{status:0,stdout:JSON.stringify({result:'review_queued',review_item:'REV-9',source_item:'ENG-2',head:later.head,existing:false}),stderr:''};
+  }};
+  // The cap still bounds what is actually issued: one command, ENG-2 not reached.
+  createLineService(options).pass();assert.deepEqual(calls,['R-1']);
+  const original=JSON.parse(fs.readFileSync(file)).actions[key];assert.equal(original.state,'held');
+  createLineService(options).pass();assert.deepEqual(calls,['R-1','R-2'],'the held entry did not spend the only step');
+  createLineService(options).pass();assert.deepEqual(calls,['R-1','R-2']);
+  const journal=JSON.parse(fs.readFileSync(file));assert.deepEqual(journal.actions[key],original,'retained byte for byte');
+  assert.equal(journal.actions[`review:ENG-2:${later.head}`].state,'complete');
+  const rows=passRows(f);assert.equal(rows.filter(r=>r.action==='effect-intent'&&r.key===key).length,1);
+  assert.equal(rows.filter(r=>r.action==='effect-retained'&&r.key===key).length,2);
+  assert.ok(rows.some(r=>r.action==='hold'&&r.boundary===key&&/retained review scope is UNKNOWN/.test(r.reason)),'its note stays');
+});
+
+test('a retained review costs no inventory scan or record reload',t=>{
+  const f=fixture(t);f.prepare({producerEvidence:{kind:'checks'}});const service=(command=()=>scopeUnknown(f))=>createLineService({repo:f.repo,org:f.org,to:'fixture-supervisor',env:f.serviceEnv,
+    command:(_exe,args)=>args[1]==='queue-review'?command():{status:0,stdout:'{"created":[]}',stderr:''}}).pass();
+  const snapshots=()=>passRows(f).filter(r=>r.action==='pass-complete').at(-1).timing.snapshots;
+  service();const first=snapshots();service();const retained=snapshots();
+  // The intent's own reload is gone; a retained step adds none of its own.
+  assert.ok(retained<first,`retained ${retained} against first ${first}`);
+  const journal=path.join(f.directory,'effects.json'),key=`review:ENG-1:${f.head}`,saved=JSON.parse(fs.readFileSync(journal));
+  fs.mkdirSync(path.join(f.org,'settle'),{recursive:true});fs.writeFileSync(path.join(f.org,'settle/R-1.json'),'not read by a retained step');
+  service();assert.deepEqual(JSON.parse(fs.readFileSync(journal)).actions[key],saved.actions[key]);
+  assert.equal(JSON.parse(fs.readFileSync(journal)).review_reference_observed?.[key],undefined,'no inventory reached the unreadable attempt');
+});
+
+test('only an exact pre-append record conflict with its own stack frame is a transient retry',t=>{
+  const f=fixture(t);f.prepare({producerEvidence:{kind:'checks'}});
+  const held=receipt=>failedQueue(f,receipt);
+  for(const receipt of [
+    uncaught(f,'record observation conflict: /x/.org/line-service/effects.json changed; no append was made'),
+    uncaught(f,'record Git observation conflict: /x/.git/worktrees changed; no append was made'),
+    uncaught(f,'record Git observation changed while planning: ["/x",["worktree","list","--porcelain"],[]]'),
+    uncaught(f,'record observation changed while planning: /x/y'),
+    uncaught(f,'record changed repeatedly while preparing a consistent read; no mutation attempted','readRecord','lib/record-snapshot.mjs'),
+  ]){const proof=noMutation(f,held(receipt));assert.equal(proof?.kind,'pre-append-transient-conflict',receipt.stderr);assert.equal(proof.original_sha256,hash(JSON.stringify(held(receipt))));}
+  for(const receipt of [
+    scopeUnknown(f),
+    uncaught(f,'item review already retained: existing same-change service intent/result','queueReviewMutation','line-service/review-queue.mjs'),
+    uncaught(f,'record Git observation conflict: k could not be revalidated; no append was made: x changed; no append was made'),
+    uncaught(f,'record observation conflict: /x changed; no append was made','refuse','lib/native.mjs'),
+    uncaught(f,'record changed repeatedly while preparing a consistent read; no mutation attempted'),
+    uncaught(f,'record observation conflict: /x changed; no append was made; native input refused'),
+    {...uncaught(f,'record observation conflict: /x changed; no append was made'),status:3},
+    {...uncaught(f,'record observation conflict: /x changed; no append was made'),signal:'SIGTERM'},
+    {...uncaught(f,'record observation conflict: /x changed; no append was made'),stdout:'{"possible":"review"}'},
+    {...uncaught(f,'record observation conflict: /x changed; no append was made'),signal_sent:true},
+    {status:1,signal:null,stdout:'',signal_sent:false,stderr:'Error: record observation conflict: /x changed; no append was made\n    at recordSourceConflict (file:///install/lib/record-observation.mjs:15:31)\n'},
+  ])assert.equal(noMutation(f,held(receipt)),null,receipt.stderr);
+  const conflict=held(uncaught(f,'record observation conflict: /x changed; no append was made')),proof=noMutation(f,conflict);
+  assert.equal(noMutation(f,{...conflict,error:'native input refused'}),null);
+  assert.equal(noMutation(f,{...conflict,history:[held(scopeUnknown(f))]}),null,'another history is not this retry');
+  assert.equal(noMutation(f,{...conflict,queue_recovery:{kind:'pre-append-record-contention'},history:[conflict]}),null,'another proof is not this retry');
+  assert.ok(noMutation(f,{...conflict,queue_recovery:proof,history:[conflict]}),'a retry that met another conflict may retry');
+  assert.equal(noMutation(f,{...conflict,queue_recovery:proof,history:[held(scopeUnknown(f))]}),null);
+  assert.equal(noMutation(f,{...held(scopeUnknown(f)),queue_recovery:proof,history:[conflict]}),null,'a retry ending any other way stays held');
+  f.add([{type:'change.reviewed',item:'ENG-1',head:f.head,verdict:'PASS'}]);
+  assert.equal(noMutation(f,conflict),null,'an existing review is not retried');
+});
+
+for(const next of ['queued','conflict-again','unknown'])test(`a held pre-append conflict is retried by the line with its original preserved: ${next}`,t=>{
+  const f=fixture(t);f.prepare({producerEvidence:{kind:'checks'}});const conflict=uncaught(f,'record observation conflict: /x changed; no append was made');let calls=0;
+  const options={repo:f.repo,org:f.org,to:'fixture-supervisor',env:f.serviceEnv,command:(_exe,args)=>{
+    if(args[1]!=='queue-review')return{status:0,stdout:'{"created":[]}',stderr:''};
+    calls++;
+    if(calls===1||next==='conflict-again'&&calls===2)return conflict;
+    if(next==='unknown')return{status:1,signal:null,stdout:'',stderr:'reply lost after possible mutation',signal_sent:false};
+    return{status:0,stdout:JSON.stringify(f.queue()),stderr:''};
+  }},pass=()=>createLineService(options).pass(),file=path.join(f.directory,'effects.json'),key=`review:ENG-1:${f.head}`,read=()=>JSON.parse(fs.readFileSync(file)).actions[key];
+  pass();const original=read();assert.equal(calls,1);assert.equal(original.state,'held');assert.equal(noMutation(f,original).kind,'pre-append-transient-conflict');
+  pass();assert.equal(calls,2);assert.deepEqual(read().history,[original]);assert.equal(read().queue_recovery.original_sha256,hash(JSON.stringify(original)));
+  if(next==='conflict-again'){pass();assert.equal(calls,3);assert.equal(read().history.length,2);}
+  const settled=read();pass();pass();assert.equal(calls,next==='conflict-again'?3:2,'nothing further is issued');
+  const reviews=[...f.context().state.items.values()].filter(q=>q.role==='reviewer');
+  assert.equal(reviews.length,next==='unknown'?0:1);assert.equal(settled.state,next==='unknown'?'held':'complete');
+  if(next!=='unknown')assert.equal(validateQueuedReview({...f.context(),item:reviews[0]}).head,f.head);
+  assert.equal(passRows(f).filter(r=>r.action==='review-queue-no-mutation').length,next==='conflict-again'?2:1);
+});

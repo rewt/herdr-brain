@@ -5,7 +5,7 @@ import path from 'node:path';
 import {captureReads} from '../lib/record-observation.mjs';
 import {gitProject} from '../lib/project.mjs';
 import {bindCloseoutSources,currentCloseoutEntries,unresolvedCloseoutEffect} from '../lib/closeout.mjs';
-import {closeoutNextStage} from '../lib/closeout-status.mjs';
+import {closeoutNextStage,closeoutWaitId} from '../lib/closeout-status.mjs';
 import {runCloseoutTurn} from '../line-service/closeout-turn.mjs';
 import {refreshCloseouts} from '../lib/closeout-consumer.mjs';
 import {closeoutCondition,preEffectCloseout,recordedCloseoutRefusal} from '../lib/closeout-facts.mjs';
@@ -61,6 +61,66 @@ test('named pre-effect formats preserve real fences uncertainty and historical s
   assert.equal(closeoutCondition(target,{reason},[],{uncertain:true}).kind,'uncertain-invocation');
   assert.equal(preEffectCloseout(target,{completed:false,reason,condition:{kind:'safety-hold'}},[]),false,
     'a new classifier must not reopen an existing typed hold');
+});
+
+test('the exact transient record read conflict stays with the closer, including historical owner-evidence rows',()=>{
+  const target={run:'R-1',common:'/git',key:'target',source:{seq:1,type:'cleanup.bound'}};
+  const reason='record changed repeatedly while preparing a consistent read; no mutation attempted';
+  assert.ok(fs.readFileSync(new URL('../lib/record-snapshot.mjs',import.meta.url),'utf8').includes(`Error('${reason}')`),'producer format');
+  const condition=closeoutCondition(target,{reason},[]);
+  assert.equal(condition.kind,'contention');assert.equal(condition.owner,'lane-closeout');
+  assert.equal(condition.continuation.kind,'pre-effect-observation');
+  const historical={completed:false,reason,condition:{kind:'owner-evidence-required',owner:'R-1',continuation:{kind:'owner-evidence',owner:'R-1'}}};
+  for(const prior of [{completed:false,reason,condition},historical]){
+    assert.equal(preEffectCloseout(target,prior,[]),true);
+    assert.deepEqual(closeoutNextStage(target,prior,[]),{stage:'pre-effect-observation',ready:true});
+    assert.equal(preEffectCloseout(target,prior,[],{uncertain:true}),false);
+  }
+  assert.equal(closeoutCondition(target,{reason,failure:{kind:'fence',code:'NATIVE_REFUSAL'}},[]).kind,'native-refusal');
+  assert.equal(closeoutCondition(target,{reason},[],{uncertain:true}).kind,'uncertain-invocation');
+  const fence={type:'closeout.command-failed',identity:target.common,key:target.key,source:target.source,failure:{kind:'fence',code:'EPERM'}};
+  assert.equal(closeoutNextStage(target,historical,[fence]),undefined);
+});
+
+test('reasons beside the transient read conflict keep their owner-evidence wait',()=>{
+  const target={run:'R-1',common:'/git',key:'target',source:{seq:1,type:'cleanup.bound'}};
+  const consistent='record changed repeatedly while preparing a consistent read; no mutation attempted';
+  for(const reason of [
+    'spawnSync git ENOBUFS',
+    'record changed repeatedly while preparing a compact read; no mutation attempted',
+    'record changed repeatedly before commit; no commit callback was run',
+    `${consistent}; retry`,
+    `lane: ${consistent}`,
+    `${consistent}\n`,
+    'an unmatched reason from a producer nobody classified',
+  ]){
+    const condition=closeoutCondition(target,{reason},[]);
+    assert.equal(condition.kind,'owner-evidence-required',reason);assert.equal(condition.owner,'R-1',reason);
+    assert.equal(condition.continuation.kind,'owner-evidence',reason);
+    assert.equal(preEffectCloseout(target,{completed:false,reason,condition},[]),false,reason);
+    assert.equal(closeoutNextStage(target,{completed:false,reason,condition},[]),undefined,reason);
+  }
+  const reason='queued worktree absent without a preservation proof; keep';
+  const condition=closeoutCondition(target,{reason},[]);
+  assert.equal(condition.kind,'unproven-removal');assert.equal(condition.continuation.kind,'owner-evidence');
+  assert.equal(preEffectCloseout(target,{completed:false,reason,condition},[]),false);
+});
+
+test('a held read conflict is retired by the next finite turn with its original wait preserved',t=>{
+  const f=setup(t,{direct:true,bound:true,merged:true});selectCurrentCleanup(f);f.report();
+  const target=entry(f),reason='record changed repeatedly while preparing a consistent read; no mutation attempted';
+  const [saved]=f.append([{type:'closeout.evaluated',identity:target.common,key:target.key,run:target.run,item:target.item,source:target.source,
+    revision:target.source.seq,completed:false,reason,condition:{kind:'owner-evidence-required',owner:target.run,continuation:{kind:'owner-evidence',owner:target.run}}}]);
+  f.append([{type:'closeout.waiting',identity:target.common,key:target.key,run:target.run,item:target.item,source:target.source,revision:saved.revision,
+    wait_id:closeoutWaitId(target,saved),waiting:{owner:'line-service',defect:`No existing completion writer for this exact wait: ${reason}`,producers:[]}}]);
+  const preserved=events(f);
+  const result=runCloseoutTurn({project:gitProject(f.repo),org:f.org,env:f.env,guard:()=>{},measure:()=>{},reconcileReports:false,maxSteps:1,
+    cli:(_file,argv)=>argv[0]==='refresh'?'{}':JSON.stringify(f.drain({keys:JSON.parse(argv[argv.indexOf('--keys')+1]),retrySafe:true,sessionsOnly:argv.includes('--sessions-only')}))});
+  assert.equal(result.steps,1);assert.equal(result.decisions.attempted,0);
+  assert.equal(latest(f).completed,true,JSON.stringify(result));
+  assert.equal(fs.existsSync(f.lane),false);
+  assert.equal(effects(f).filter(e=>e.action==='worktree-removed').length,1);
+  assert.deepEqual(events(f).slice(0,preserved.length),preserved,'original keep and wait remain immutable');
 });
 
 test('real removal input seal with a safety word in its path remains eligible for fresh observation',t=>{

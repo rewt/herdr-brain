@@ -553,6 +553,27 @@ test('owner acceptance covers only the unread work it previewed, including later
   assert.equal((await f.oldPass()).result,'pass-complete');
 });
 
+test('a rollback previews nothing unread after the offered release rotates its journal, and the real pin then refuses every general pass',async t=>{
+  const f=await offeredFromHistoricalPin(t);f.adopt();
+  const passWith=async root=>{
+    const {createLineService}=await import(pathToFileURL(path.join(root,'line-service/line-service.mjs')).href);
+    return createLineService({repo:f.cwd,org:f.org,to:'fixture-supervisor',runtimeHome:f.installationHome,env:{...f.env,HERDR_ENV:'',HERDR_PANE_ID:''},haltAfter:100,maxStarts:0,closeoutMeasure:()=>{},
+      command:()=>({status:0,stdout:'{"created":[]}',stderr:''}),capacity:()=>({count:0,cap:2})}).pass();
+  };
+  assert.equal(f.main(['restart','--repo',f.cwd,'--org',f.org],f.args).restarted,true);
+  assert.equal((await passWith(f.next)).result,'pass-complete');
+  const {rotatePassJournal}=await import(pathToFileURL(path.join(f.next,'line-service/pass-journal.mjs')).href);
+  assert.equal(rotatePassJournal(path.join(f.directory,'passes.jsonl'),{maxBytes:1}).rotated,true);
+  assert.equal((await passWith(f.next)).result,'pass-complete');
+  f.main(['stop','--repo',f.cwd,'--org',f.org],f.args);f.pin('bch-pin');
+  const plan=f.main([...f.back,'--dry-run'],f.args);
+  assert.deepEqual(plan.unread,[]);
+  assert.equal(f.main([...f.back,'--expected-plan',plan.archive.sha256],f.args).direction,'rollback');
+  assert.equal(f.oldMain(['restart','--repo',f.cwd,'--org',f.org],f.args).restarted,true);
+  // The restart looks healthy. Only its general passes fail, and every one does.
+  for(let n=0;n<2;n++)await assert.rejects(f.oldPass(),/notice audit checkpoint is inconsistent/);
+});
+
 test('a forward preview reports a refused rollback without blocking the upgrade, and acceptance needs a target predating admission',async t=>{
   const f=await successor(t);
   transact(f.org,()=>({add:[{type:'item.added',id:'ENG-1',title:'Current contract',accept:['Original']},

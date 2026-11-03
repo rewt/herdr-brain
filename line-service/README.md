@@ -833,9 +833,12 @@ then that it has never met do. Choose the fallback in this order:
 1. Plain rollback, while nothing since the handoff is new to the target.
 2. If it refuses, and the target predating admission is still wanted, review the
    named events and repeat preview and apply with `--accept-unread`. The target
-   will not read those events. The exact list goes into the plan digest and archive,
-   so a bare apply or a moved record refuses. A newer target applies its own
-   admission at restart and cannot accept this.
+   will not read those events. The preview's `unread_events` names each one by
+   sequence, type and gaps, and that exact list goes into the plan digest and archive.
+   A bare apply refuses, and so does any further unread event, even one repeating an
+   already listed name, whether it arrives before or during apply. Events the target
+   already ran on leave the plan valid. A newer target applies its own admission at
+   restart and cannot accept this.
 3. Otherwise restore the successor's pin and restart it, or keep STOP and fix forward.
    A refused preview changes nothing.
 

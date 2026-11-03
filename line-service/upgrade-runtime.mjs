@@ -125,7 +125,7 @@ export function upgradeRuntime({repo,org,id,fromRoot,targetRoot,rollback=false,a
   const archiveFile=path.join(c.directory,'upgrades',id+'.json');
   const archive={schema:'line-runtime-upgrade/v1',id,repo:c.repo,org:c.org,identity:c.identity,direction,source:targetRoot,previous_source:fromRoot,previous_seq:state.last.seq,
     owner,canonical_head:snapshot.head,stop_sha256:snapshot.stop_sha256,runtime:snapshot.runtime,...(settlement?{phase_settlement:settlement}:{}),
-    ...(acceptUnread?{unread_accepted:admitted.unread}:{}),
+    ...(acceptUnread?{unread_accepted:admitted.unread,unread_events_accepted:admitted.unread_events}:{}),
     before:{installation:savedBytes,plist:plistBytes},after:{installation:JSON.stringify(after),plist:nextPlist}};
   const bytes=json(archive),ref={id,file:archiveFile,sha256:digest(bytes)},nextInstallation=json(rollback?after:{...after,upgrade:ref});
   const validate=()=>{
@@ -137,12 +137,12 @@ export function upgradeRuntime({repo,org,id,fromRoot,targetRoot,rollback=false,a
     if(dryRun){
       validate();
       return {dry_run:true,id,direction,target,archive:ref,previous:snapshot.previous,runtime:snapshot.runtime,stopped:true,runtime_started:false,
-        ...(rollback?{established:admitted.established??[],unread:admitted.unread??[]}:{rollback:rollbackPreview({c,events:loaded.events,fromRoot,targetRoot,home})}),
+        ...(rollback?{established:admitted.established??[],unread:admitted.unread??[],unread_events:admitted.unread_events??[]}:{rollback:rollbackPreview({c,events:loaded.events,fromRoot,targetRoot,home})}),
         changes:['installation.source','installation.runtime','installation.upgrade','service.ProgramArguments[1]','service.ProcessType','service.Nice'],preserved:['migration archive/event','cutover','phase0','STOP','node','transport','saved jobs/watchers','claims','queue attempts']};
     }
     const result=transact(c.org,events=>{
       const current=requireRecordCompatibility(targetRoot,events,admission);
-      if(acceptUnread&&!same(current.unread,admitted.unread))throw Error('rollback unread events changed; preview and accept the new plan');
+      if(acceptUnread&&!same(current.unread_events,admitted.unread_events))throw Error('rollback unread events changed; preview and accept the new plan');
       if(!same(initial(),snapshot)||readPlainFile(installationFile)!==savedBytes||readPlainFile(file)!==plistBytes||fs.existsSync(archiveFile)||
           history(events).last.seq!==state.last.seq)throw Error('service upgrade source/record/native CAS changed');
       plainDirectory(path.dirname(archiveFile));

@@ -508,6 +508,51 @@ test('events the historical pin never met refuse rollback, keep the adopted runt
   assert.equal((await f.oldPass()).result,'pass-complete');
 });
 
+test('owner acceptance covers only the unread work it previewed, including later work needing an already listed capability',async t=>{
+  const f=await offeredFromHistoricalPin(t),before=retained(f);f.adopt();
+  f.pin('bch-pin');
+  const read=file=>fs.readFileSync(file,'utf8'),upgrades=path.join(f.directory,'upgrades'),archive=path.join(upgrades,'offer-rollback.json');
+  const closeout=run=>transact(f.org,()=>({add:[{type:'closeout.effect',run,outcome:{action:'agent-exit-requested'}}]}));
+  const receipts=()=>({...retained(f),effects:read(path.join(f.directory,'effects.json')),job:read(path.join(f.org,'dispatch/retained.json')),
+    upgrades:Object.fromEntries(fs.readdirSync(upgrades).map(name=>[name,read(path.join(upgrades,name))]))});
+  const refusedUnchanged=(apply,pattern)=>{
+    const held=receipts();
+    assert.throws(apply,pattern);
+    assert.deepEqual(receipts(),held);assert.equal(fs.existsSync(archive),false);
+    assert.equal(loadEvents(f.org).events.some(e=>e.type==='line-service.runtime-upgraded'&&e.direction==='rollback'),false);
+  };
+  closeout('R-2');
+  const accept=[...f.back,'--accept-unread'],plan=f.main([...accept,'--dry-run'],f.args);
+  assert.deepEqual(plan.unread,['capability:native.intent/v1']);
+  // Another run's work needing only the listed capability changes no gap name.
+  closeout('R-3');
+  refusedUnchanged(()=>f.main([...accept,'--expected-plan',plan.archive.sha256],f.args),/plan changed/);
+  const fresh=f.main([...accept,'--dry-run'],f.args);
+  assert.deepEqual(fresh.unread,plan.unread);assert.notEqual(fresh.archive.sha256,plan.archive.sha256);
+  assert.deepEqual(fresh.unread_events.map(e=>[e.type,e.gaps]),[['closeout.effect',['capability:native.intent/v1']],['closeout.effect',['capability:native.intent/v1']]]);
+  assert.deepEqual(fresh.unread_events.slice(0,1),plan.unread_events);
+  // The same work arriving during apply: after its plan read and digest check, before the final transaction.
+  let appended=false;
+  const command=(...call)=>{if(!appended){appended=true;closeout('R-4');}return f.args.command(...call);};
+  const held=receipts();
+  assert.throws(()=>f.main([...accept,'--expected-plan',fresh.archive.sha256],{...f.args,command}),/unread events changed/);
+  assert.equal(appended,true);
+  const {events:duringHeld,...unmoved}=held,{events:duringNow,...now}=receipts();
+  assert.deepEqual(now,unmoved);assert.equal(fs.existsSync(archive),false);
+  assert.equal(duringNow.startsWith(duringHeld),true);assert.equal(duringNow.slice(duringHeld.length).trim().split('\n').length,1);
+  assert.equal(loadEvents(f.org).events.some(e=>e.type==='line-service.runtime-upgraded'&&e.direction==='rollback'),false);
+  // Only unread instances bind: work the target already ran on leaves the plan valid.
+  const current=f.main([...accept,'--dry-run'],f.args);
+  assert.equal(current.unread_events.length,3);
+  transact(f.org,()=>({add:[{type:'report.ingested',run:'R-5',report:{outcome:'done'}},{type:'change.landed',run:'R-5'}]}));
+  assert.equal(f.main([...accept,'--expected-plan',current.archive.sha256],f.args).direction,'rollback');
+  const accepted=JSON.parse(read(archive));
+  assert.deepEqual(accepted.unread_accepted,current.unread);assert.deepEqual(accepted.unread_events_accepted,current.unread_events);
+  assert.equal(read(f.installationFile),before.installation);assert.equal(read(f.file),before.plist);
+  assert.equal(f.oldMain(['restart','--repo',f.cwd,'--org',f.org],f.args).restarted,true);
+  assert.equal((await f.oldPass()).result,'pass-complete');
+});
+
 test('a forward preview reports a refused rollback without blocking the upgrade, and acceptance needs a target predating admission',async t=>{
   const f=await successor(t);
   transact(f.org,()=>({add:[{type:'item.added',id:'ENG-1',title:'Current contract',accept:['Original']},

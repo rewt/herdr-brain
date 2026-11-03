@@ -225,3 +225,29 @@ cycle. Combining the retained S7 evidence with the subset therefore does not
 prove those later cases after S7's maintenance. The impact is limited because
 line passes run in-process via `service(0).pass()` and S7 restores the scenario
 pin; retain this limitation alongside the combined case evidence.
+
+## Consumer rollback under real launchd
+
+`rollback-launchd.mjs` runs the offered-release round trip on scratch consumers
+with the real `launchctl` of this login session: the old release runs, adopts the
+offered one, runs, returns and runs again. Each run is a job launchd itself started,
+checked through `launchctl print` and its own pass line. A second consumer covers
+the failure and recovery: events the old release never met refuse, the adopted
+release still starts, and the owner's bound `--accept-unread` returns. Herdr is a
+recording stand-in, so no job can reach a real pane, and no BCH path is read.
+Run it outside the agent sandbox, which refuses `launchctl bootstrap` with error 5.
+
+```bash
+node acceptance/rollback-launchd.mjs --old-root OLD --candidate-root CANDIDATE --evidence DIR
+node "$CANDIDATE/acceptance/rollback-launchd.mjs" --exact --old-root OLD --candidate-root "$CANDIDATE" --evidence DIR
+```
+
+A job takes its release home from the account, never `HOME`, so it admits an
+offered release only if that release really is offered. The default mode therefore
+uses sealed copies that differ only in their release home and validation proof, with
+a labelled fixture offer in a scratch home. It proves launchd behavior, not those
+bytes. `--exact` uses the installed roots unchanged and writes nothing to the real
+home. It is the release coordinator's run once the candidate has its offer record,
+before BCH is told about it. A candidate not yet READY exits 3 as UNRUN, after
+observing only the old release's own leg. `outcome.json` always lists what stayed
+unrun.

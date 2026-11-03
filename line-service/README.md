@@ -1510,8 +1510,8 @@ the original rendered brief is archived beside the run. No installed pin changes
 
 The focused Phase1 selection uses the existing runner, core files together and
 dispatch files separately (at most four per group):
-`test/line-service-phase1.test.mjs`, the `phase1` control in
-`test/closeout.test.mjs`, and `dispatch/test/phase1-starts.test.mjs`.
+`test/line-service-phase1.test.mjs`, the `phase1` controls in
+`test/closeout-continuity.test.mjs`, and `dispatch/test/phase1-starts.test.mjs`.
 All are discovered by the next full release. Run once through lane check on the
 clean committed candidate after self-landing; no full/default/reviewer suite.
 One independent async post-code review per landed change remains nonblocking.

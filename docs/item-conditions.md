@@ -139,6 +139,11 @@ and execution sidecar. Missing/foreign receipts, absent main ancestry and red
 results remain Unknown. A run with a landing still requires that landing's exact
 head, project and ownership generation; this exception cannot substitute a
 different checked head for delivered source.
+The correction condition consumes that verified discharge at its exact commit,
+retaining the current run, report hash, claim, review key and original finding
+bindings. It can therefore establish Accepted while SourceDelivered stays
+Unknown; no landing is synthesized. The condition's evidence includes the
+discharge event as well as the report.
 
 For a report already ingested, run the existing `record ingest ORIGINAL_REPORT`
 with its unchanged bytes through the intake owner. The same report hash can emit

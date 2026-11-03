@@ -310,6 +310,47 @@ test('evidence-only correction requires an exact main ancestor and original run 
   assert.deepEqual(intake(), [], 'copied declaration alone cannot replace the native receipt');
   fs.writeFileSync(receipt, original);
   f.report.outcome = 'failed'; assert.deepEqual(intake(), [], 'red evidence-only runs remain unresolved');
+
+  f.report.outcome = 'done';
+  const verified = intake();
+  assert.equal(verified.length, 1, 'restoring the original proof recovers without replaying the check');
+  extendFold(f.s, [{ type: 'report.ingested', run: f.run.id, report: f.report, sha256: reviewHash, seq: f.s.eventCount + 1 },
+    { type: 'item.added', id: 'ENG-5', role: 'engineer', seq: f.s.eventCount + 2 },
+    { type: 'link.added', blocker: f.run.item, blocked: 'ENG-5', requires: 'accepted', seq: f.s.eventCount + 3 }]);
+  assert.equal(itemConditions(f.s, f.run.item).Accepted.status, 'Unknown', 'a report declaration alone is not verified discharge');
+  assert.equal(itemStatus(f.s, 'ENG-5'), 'blocked');
+  extendFold(f.s, verified.map(e => ({ ...e, seq: f.s.eventCount + 1 })));
+  const accepted = itemConditions(f.s, f.run.item);
+  assert.equal(accepted.Accepted.status, 'True');
+  assert.equal(accepted.SourceDelivered.status, 'Unknown');
+  assert.equal(accepted.phase, 'accepted');
+  assert.ok(accepted.Accepted.evidence.some(e => e.type === 'correction.discharged'));
+  assert.equal(itemStatus(f.s, 'ENG-5'), 'ready');
+  assert.equal(f.run.landings.length, 0, 'acceptance does not invent a source landing');
+  assert.equal(f.s.runs.get('R-2').report.extra.verdict, 'FAIL');
+
+  for (const patch of [{ run: 'R-999' }, { item: 'ENG-999' }, { report_sha256: reportHash },
+    { claim_generation: f.run.owner_generation + 1 }, { review_key: 'ENG-1:foreign' },
+    { findings: [] }, { findings: [{ ...verified[0].findings[0], key: 'foreign' }] },
+    { findings: [{ ...verified[0].findings[0], finding_seq: 0 }] },
+    { findings: [{ ...verified[0].findings[0], head: 'not-a-commit' }] },
+    { findings: [...verified[0].findings, { ...verified[0].findings[0], head: base }] }]) {
+    const stale = structuredClone(f.s);
+    Object.assign(stale.runs.get(f.run.id).discharges[0], patch);
+    assert.equal(itemConditions(stale, f.run.item).Accepted.status, 'Unknown', JSON.stringify(patch));
+    assert.equal(itemStatus(stale, 'ENG-5'), 'blocked');
+  }
+  const unclaimed = structuredClone(f.s), unclaimedRun = unclaimed.runs.get(f.run.id);
+  unclaimedRun.owner_generation = unclaimedRun.discharges[0].claim_generation = null;
+  assert.equal(itemConditions(unclaimed, f.run.item).Accepted.status, 'Unknown', 'a missing claim cannot bind a discharge');
+  for (const patch of [{ head: checkedHead }, { head: checkedHead, project: '/foreign/.git' },
+    { head: checkedHead, producer: { ownership_generation: 0 } }, { head: base }]) {
+    const landed = structuredClone(f.s);
+    landed.runs.get(f.run.id).landings = [{ project: common, producer: { ownership_generation: f.run.owner_generation }, ...patch }];
+    const conditions = itemConditions(landed, f.run.item);
+    assert.equal(conditions.Accepted.status, patch.head === checkedHead && !patch.project && !patch.producer ? 'True' : 'Unknown',
+      'recorded source must retain its exact head, project and claim binding: ' + JSON.stringify(patch));
+  }
 });
 
 test('a completed correction alone does not accept; exact discharge accepts without rewriting FAIL or adding a review', t => {

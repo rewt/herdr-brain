@@ -385,13 +385,27 @@ spent, the item holds with `meta.hold_reason`, `meta.owner` (the project
 supervisor) and `meta.next_action`, and the line records an inspection-due
 notice. No session is started to discover the mismatch. To recover, the owner
 configures a route or an other-family `meta.route` and clears `meta.hold`; the
-next pass routes it. Clearing the hold with no route is the owner's choice to
-continue, recorded by `meta.reframe_hold`. A reshape of the title or acceptance,
-or a `done` report, ends the request. Unselected, reserved and held items are left alone, and no
-executor is ever synthesized.
+next pass routes it. Clearing the hold alone changes no input, so the next pass
+holds again. An unknown family or a spent reframe has no qualifying route, so
+those recover by a reshape of the title or acceptance, then clearing the hold.
+A reshape or a `done` report ends the request. Unselected, reserved and held
+items are left alone, and no executor is ever synthesized.
 
-This adds only `item.updated` and `note.added` events, so older folds and the
-sealed recovery root read the result as ordinary metadata.
+A saved route can wait on capacity across a configuration change, so each pass
+reads its current family. If that name now resolves to the requesting family,
+the line selects another qualifying route or holds. Admission applies the same
+check, so a request reported after the route stage waits for the next pass.
+
+The run started on the recorded route may be advice. Its `done` report with no
+delivered source does not close the item: the line reopens it, which clears the
+done outcome so dependents stay blocked, and holds it with `meta.reframe_advice`
+and a named owner. The report and the run's finite closeout are unaffected.
+Clearing the hold starts the implementation on `meta.route`, unless the owner
+sets another route or reshapes first. A reframe run that delivers source, and any
+later run on the item, completes normally.
+
+This adds only `item.reopened`, `item.updated` and `note.added` events, so older
+folds and the sealed recovery root read the result as ordinary metadata.
 
 ## Phase1 source contract
 

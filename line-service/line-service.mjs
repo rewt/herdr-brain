@@ -15,7 +15,7 @@ import { itemStatus, sortItems } from '../lib/state.mjs';
 import { effectiveWorkerIdentity, workerReceipt } from '../lib/worker-identity.mjs';
 import { readOwnedRun, requireController, assertOwner } from '../lib/run-owner.mjs';
 import { loadDiscoveredRoutes, resolveLaunchRoute, selectRoute } from '../lanes/routes.mjs';
-import {reframeDisposition,reframeEvents} from './reframe-route.mjs';
+import {reframeAdviceEvents,reframeDisposition,reframeEvents,reframeRun} from './reframe-route.mjs';
 import { correctionSource } from '../lib/report-closeout.mjs';
 import { directCloseoutObservation, currentCloseoutEntries, closeoutEvaluation } from '../lib/closeout.mjs';
 import { checkSessionCap,dispatchPool } from '../dispatch/session-cap.mjs';
@@ -736,12 +736,13 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         }
       }
       snapshot=current();
+      const reframeOwner=()=>{try{return projectExceptionAddress(repo,config,config.routes?.['engineer-xhigh']?'engineer-xhigh':'engineer',childEnv).to??to;}catch{return to;/* The line's own recipient stays the named owner. */}};
       let closeSteps=0;
       for (const item of [...snapshot.state.items.values()].sort((a,b)=>(snapshot.state.runs.get(b.runs.at(-1))?.report?.seq??0)-(snapshot.state.runs.get(a.runs.at(-1))?.report?.seq??0))) {
         if(expired()||closeSteps>=maxStepsPerStage)break;
         const run=snapshot.state.runs.get(item.runs.at(-1));
         if(item.closed||isQueueReview(item)||isDecision(item)||run?.report?.outcome!=='done'||run.abandoned||!run.workspace||
-            !run.owner||run.owner.legacy||run.owner.controller!=='brain')continue;
+            !run.owner||run.owner.legacy||run.owner.controller!=='brain'||item.meta.reframe_advice===run.report.sha256)continue;
         const key=`source-complete:${run.id}:${run.report.sha256}`,prior=effects.actions[key];
         const receipt=(type,details)=>{
           const binding={project:project.identity,org,item:item.id,run:run.id,report_sha256:run.report.sha256,claim_generation:run.owner_generation,...details};
@@ -765,6 +766,17 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
                 receipt('line-service.source-exception',{exception,command_started:false});}
               catch(failure){note(`source-exception:${run.id}`,failure.message,{item:item.id,run:run.id});}
             }
+            continue;
+          }
+          if(proof.source_provenance.status==='none'&&reframeRun(bound)){
+            const owner=reframeOwner(),advice=reframeAdviceEvents({item:item.id,run:bound.run,owner});
+            transact(org,(events,state)=>{
+              const fresh=state.items.get(item.id);
+              return{add:!fresh.closed&&fresh.runs.at(-1)===run.id&&fresh.outcome?.run===run.id?advice:[]};
+            },{actor:'line-service',strictTail:true});
+            stale=true;
+            log({action:'reframe-advice',item:item.id,run:run.id,report_sha256:run.report.sha256,owner});
+            note(`reframe:${item.id}`,advice[1].fields.meta.hold_reason,{item:item.id,owner},true);
             continue;
           }
           const legacy=preEffectSourceHold(prior);
@@ -941,6 +953,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         wait.last_at=now();wait.code=error.code;noticesDirty=true;
         log({action:'capacity-held',item:item.id,input,observed_at,waiting_since:wait.first_at,code:error.code,reason:error.message});
       };
+      const disposition=(item,{state,events})=>reframeDisposition({item,state,events,config,defaultRoute:()=>{try{return routeFor({...item,meta:{...item.meta,route:undefined}},config);}catch{return null;}}});
       const admitItems = (items,repair=false) => {
         const selection=queueSelection(snapshot.state);
         for (const item of items) {
@@ -981,6 +994,8 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         }
         const hold=itemLaunchHold(snapshot.state,item.id,snapshot.events);
         if (reserved(item) || hold) { note(`dispatch:${item.id}`, 'held or reserved ready item needs judgment',hold?{subject:hold.subject}:{},true);observation.retain('held or reserved');continue; }
+        // A request reported or left unrecorded since the route stage waits for it.
+        if(disposition(snapshot.state.items.get(item.id),snapshot)){observation.retain('reframe route pending');continue;}
         const heldBefore=effects.review_admission.held.length;
         if(!admit({item:snapshot.state.items.get(item.id)},'launch')){
           const held=effects.review_admission.held[heldBefore];
@@ -1087,7 +1102,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
           },undefined,undefined,Boolean(retryAdmission),Boolean(retryAdmission),fresh=>{
             // Defer readiness races before saving a one-shot recovery intent.
             const current = fresh.state.items.get(item.id);
-            if (!current || !queueSelected(current,fresh.state,readOrdinaryAdmission(repo,childEnv)) || obsoleteDecision(current,fresh) || itemLaunchHold(fresh.state,item.id,fresh.events) || dispatchInput({...fresh,item:current,org,identity:project.identity}) !== input || reserved(current) || (!continuation&&(reviewTarget ? reviewQueueRoute(config, current, fresh.state) : routeFor(current, config)) !== route)) throw Error('dispatch readiness or route changed');
+            if (!current || !queueSelected(current,fresh.state,readOrdinaryAdmission(repo,childEnv)) || obsoleteDecision(current,fresh) || itemLaunchHold(fresh.state,item.id,fresh.events) || disposition(current,fresh) || dispatchInput({...fresh,item:current,org,identity:project.identity}) !== input || reserved(current) || (!continuation&&(reviewTarget ? reviewQueueRoute(config, current, fresh.state) : routeFor(current, config)) !== route)) throw Error('dispatch readiness or route changed');
             if(!admit({item:fresh.state.items.get(item.id),state:fresh.state},'launch-mutation',true))return false;
             if(queueSelection(fresh.state)===selection)return true;
             log({action:'queue-selection-changed',item:item.id,stage:'after-capacity'});
@@ -1108,11 +1123,10 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
       // A reported reframe request picks its route or holds before any admission.
       const reframeRoutes=()=>{
         snapshot=current();
-        const disposition=(item,{state,events})=>reframeDisposition({item,state,events,config,defaultRoute:()=>{try{return routeFor({...item,meta:{...item.meta,route:undefined}},config);}catch{return null;}}});
         for(const item of [...snapshot.state.items.values()]){
           const seen=disposition(item,snapshot);
           if(!seen||!queueSelected(item,snapshot.state,ordinaryPolicy)||reserved(item)||itemLaunchHold(snapshot.state,item.id,snapshot.events))continue;
-          let owner=to;try{owner=projectExceptionAddress(repo,config,config.routes?.['engineer-xhigh']?'engineer-xhigh':'engineer',childEnv).to??to;}catch{/* The line's own recipient stays the named owner. */}
+          const owner=reframeOwner();
           transact(org,(events,state)=>{
             const fresh=disposition(state.items.get(item.id),{state,events});
             return{add:JSON.stringify(fresh)===JSON.stringify(seen)?reframeEvents(seen,{owner}):[]};

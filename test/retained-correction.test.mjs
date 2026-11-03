@@ -4,7 +4,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { initOrg, loadEvents } from '../lib/store.mjs';
 import { fold, itemConditions, itemStatus, dependencyReleases, retainedCorrectionResolution } from '../lib/state.mjs';
 import { completionFingerprint } from '../lib/completion.mjs';
 import { retainedCorrectionEvents, reconcileCorrectionCommand } from '../lib/retained-correction.mjs';
@@ -13,6 +15,7 @@ import { reviewFindingKey } from '../line-service/review-findings.mjs';
 
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 const command = 'node test/helpers/run.mjs --test-name-pattern="^exact required witness$" test/witness.test.mjs';
+const cli = fileURLToPath(new URL('../bin/org.mjs', import.meta.url));
 
 // Synthetic historical receipts exercise the writer. They execute no old
 // correction control and are never offered as live product acceptance proof.
@@ -294,4 +297,41 @@ test('offer check accepts a verified retained correction and refuses unproven fo
   offer(g);
   assert.throws(() => offer(g, g.checked, []), refused);
   assert.throws(() => offer(g, g.head), refused);
+});
+
+// The cases above inject mutate, so none of them shares one observation scope.
+// This one spawns the actual command: native sender, mutate and planTransaction.
+test('record command applies once through its real planned transaction, after a refusal and with a replay', t => {
+  const f = fixture(t), file = path.join(f.root, 'plan.json'), log = path.join(f.org, 'events.jsonl'), bin = path.join(f.root, 'bin');
+  fs.writeFileSync(file, JSON.stringify(f.plan));
+  fs.writeFileSync(path.join(f.root, '.identity-root'), '');
+  initOrg(f.org);
+  fs.writeFileSync(log, f.rows.map(row => JSON.stringify(row) + '\n').join(''));
+  const agent = { name: 'supervisor-fixture', terminal_id: 'terminal-fixture', agent_session: { value: 'session-fixture' },
+    pane_id: 'fixture:p1', workspace_id: 'fixture', cwd: f.repo };
+  fs.mkdirSync(bin);
+  fs.writeFileSync(path.join(bin, 'herdr'), `#!${process.execPath}
+const a=process.argv.slice(2);
+if(a[0]==='agent'&&a[1]==='get'&&a[2]===${JSON.stringify(agent.pane_id)})console.log(JSON.stringify({result:{agent:${JSON.stringify(agent)}}}));else process.exit(1);
+`, { mode: 0o755 });
+  const env = { ...Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('GIT_') && key !== 'HERDR_BRAIN_ROOT')),
+    ORG_DIR: f.org, ORG_ACTOR: agent.name, HERDR_ENV: '1', HERDR_PANE_ID: agent.pane_id, HERDR_WORKSPACE_ID: agent.workspace_id,
+    CODEX_THREAD_ID: agent.agent_session.value, PATH: `${bin}:${process.env.PATH}` };
+  const invoke = () => spawnSync(process.execPath, [cli, 'reconcile-correction', '--file', file], { cwd: f.repo, env, encoding: 'utf8' });
+  const hold = path.join(f.repo, '.lane/supervisor/HOLD'), before = fs.readFileSync(log);
+  fs.mkdirSync(path.dirname(hold), { recursive: true }); fs.writeFileSync(hold, 'hold');
+  const refused = invoke();
+  assert.notEqual(refused.status, 0); assert.match(refused.stderr, /STOP\/HOLD/);
+  assert.deepEqual(fs.readFileSync(log), before);
+  fs.unlinkSync(hold);
+  const applied = invoke();
+  assert.equal(applied.status, 0, applied.stderr);
+  const result = JSON.parse(applied.stdout), saved = () => loadEvents(f.org);
+  assert.equal(result.replayed, false); assert.deepEqual(result.completed, ['ENG-4', 'ENG-5']);
+  assert.equal(saved().filter(e => e.type === 'correction.discharged').length, 1);
+  assert.equal(itemConditions(fold(saved()), 'ENG-4').Accepted.status, 'True');
+  const committed = fs.readFileSync(log), replay = invoke();
+  assert.equal(replay.status, 0, replay.stderr);
+  assert.equal(JSON.parse(replay.stdout).replayed, true);
+  assert.deepEqual(fs.readFileSync(log), committed);
 });

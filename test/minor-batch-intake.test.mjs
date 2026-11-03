@@ -48,7 +48,7 @@ test('clean PASS intake accepts indented and unclosed fences unless a batch head
   }
 });
 
-test('one unselected batch keeps all Minor keys and leaves a fulfilled PASS accepted until selection or an attempt', () => {
+test('one unselected batch keeps all Minor keys and leaves a fulfilled PASS accepted through selection or an attempt', () => {
   for (const proposals of [[],[{role:'engineer',title:'First',blocking:true},{role:'engineer',title:'Second',blocking:true}]]) {
     const events=seed(), report=data(minors,proposals), added=intake(events,report), batch=added.find(e=>e.type==='item.added');
     assert.equal(added.filter(e=>e.type==='item.added').length,1);
@@ -70,7 +70,7 @@ test('one unselected batch keeps all Minor keys and leaves a fulfilled PASS acce
     for (const event of [
       {type:'item.updated',id:batch.id,fields:{meta:{queue_selected:true}}},
       {type:'run.started',id:'R-3',item:batch.id},
-    ]) assert.equal(itemConditions(fold(stamp([...recorded,event])),'ENG-1').phase,'needs-work');
+    ]) assert.equal(itemConditions(fold(stamp([...recorded,event])),'ENG-1').phase,'accepted');
     const selected=fold(stamp([...recorded,{type:'item.updated',id:batch.id,fields:{meta:{queue_selected:true}}}]));
     assert.equal(queueSelected(selected.items.get(batch.id),selected),true);
     assert.ok(dispatchInput({events:recorded,state:selected,item:selected.items.get(batch.id)}));
@@ -147,7 +147,7 @@ test('witnessing one selected conditional trigger allows its fix without waiting
     schema:'brain.review-live-witness/v1',finding_key:binding.finding_key,trigger:binding.finding.live_trigger,
     observed_at:'2026-11-01T17:59:00Z',evidence:'/evidence/first-trigger'})}]);
   state=fold(recorded);
-  assert.equal(itemConditions(state,'ENG-1').phase,'needs-work');
+  assert.equal(itemConditions(state,'ENG-1').phase,'accepted');
   assert.equal(queueSelected(state.items.get(batches[0].id),state),true);
   assert.ok(dispatchInput({events:recorded,state,item:state.items.get(batches[0].id)}));
   assert.equal(queueSelected(state.items.get(batches[1].id),state),false);

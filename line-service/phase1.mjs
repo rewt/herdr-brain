@@ -442,7 +442,8 @@ export function reviewResultEvents({state,events,run,report,sha256,body=report.b
   const corrections=reviewCorrectionEvents({state,events,run,review,report,findings,verdict,sha256,usedIds});
   if(previous)return corrections.add;
   const acceptance=report.extra?.acceptance,author=state.runs.get(review.acceptance_capture?.source_run);
-  const fulfilled=acceptance?.fulfilled===true&&acceptance.source_run===author?.id&&
+  const fulfilled=!!author?.id&&!!author.report?.sha256&&review.acceptance_capture?.target.claim_generation!=null&&
+    acceptance?.fulfilled===true&&acceptance.source_run===author.id&&
     acceptance.source_report_sha256===author?.report?.sha256&&acceptance.head===target.head&&
     acceptance.claim_generation===review.acceptance_capture?.target.claim_generation;
   return [{type:'change.reviewed',item:source,head:target.head,base:target.base,review_key:key,review_group_key:queueProducerGroup(review),covered_commits:capturedReviewCommits(target),review_item:review.id,review_run:run.id,verdict,

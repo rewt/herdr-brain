@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { fold, extendFold, itemConditions, itemStatus, dependencyReleases } from '../lib/state.mjs';
+import { fold, extendFold, itemConditions, itemStatus, dependencyReleases, acceptanceTarget } from '../lib/state.mjs';
 import { blockReason } from '../lib/render.mjs';
 import { buildProjectPage } from '../lib/project-page.mjs';
 import { correctionDischargeEvents } from '../lib/correction-discharge.mjs';
@@ -33,6 +33,7 @@ const judge = (verdict = 'PASS') => [
     source_run: 'R-1', source_report_sha256: reportHash, source_claim_generation: 3, report_sha256: reviewHash, covered_commits: [head], intent_fulfilled: true },
 ];
 const state = extra => fold(stamp([...seed(), ...extra]));
+const dischargeFacts = input => correctionDischargeEvents(input).filter(e => e.type === 'correction.discharged');
 
 test('ordinary completion releases unrelated work during async review; accepted edges opt in', () => {
   const s = state([
@@ -51,6 +52,37 @@ test('ordinary completion releases unrelated work during async review; accepted 
   assert.equal(itemConditions(s, 'ENG-1').Accepted.status, 'True');
   assert.equal(itemStatus(s, 'ENG-3'), 'ready');
   assert.equal(itemConditions(s, 'ENG-1').phase, 'accepted');
+});
+
+test('a PASS with a done Minor follow-up stays accepted and releases accepted dependencies', () => {
+  const k = 'minor-1';
+  const rows = [...judge(),
+    { type: 'item.added', id: 'ENG-4', role: 'engineer', from_run: 'R-2', meta: {
+      review_fix_of: `ENG-1:${head}`, review_source_item: 'ENG-1', review_source_run: 'R-1',
+      severity: 'minor', review_finding_keys: [k] } },
+    { type: 'review.finding-linked', correction_item: 'ENG-4', finding_key: k, source_item: 'ENG-1', head,
+      review_item: 'REV-1', review_run: 'R-2', finding: { severity: 'minor' } },
+    { type: 'run.started', id: 'R-4', item: 'ENG-4' },
+    { type: 'report.ingested', run: 'R-4', sha256: reviewHash, report: { outcome: 'done' } },
+    { type: 'item.added', id: 'ENG-3', role: 'engineer' },
+    { type: 'link.added', blocker: 'ENG-1', blocked: 'ENG-3', requires: 'accepted' },
+  ];
+  for (const events of [rows, [...rows, { type: 'item.closed', id: 'ENG-4', as: 'dropped' }]]) {
+    const s = state(events);
+    assert.equal(itemConditions(s, 'ENG-1').Accepted.status, 'True');
+    assert.equal(itemConditions(s, 'ENG-1').phase, 'accepted');
+    assert.equal(itemStatus(s, 'ENG-3'), 'ready');
+  }
+  const s = state(structuredClone(rows));
+  assert.equal(itemConditions(s, 'ENG-4').Accepted.status, 'Unknown', 'done is not discharge');
+  s.items.get('ENG-4').finding_bindings[0].finding.severity = 'major';
+  assert.equal(itemConditions(s, 'ENG-1').Accepted.status, 'Unknown', 'a done Major needs proof');
+  assert.equal(itemStatus(s, 'ENG-3'), 'blocked');
+  s.runs.get('R-4').report = null;
+  assert.equal(itemConditions(s, 'ENG-1').Accepted.status, 'False', 'unfinished Major still gates a PASS');
+  const negative = state(rows);
+  negative.runs.get('R-1').judgments[0].verdict = 'FAIL';
+  assert.equal(itemConditions(negative, 'ENG-1').Accepted.status, 'False', 'a Minor bound to FAIL still gates');
 });
 
 test('stale, foreign, unbound, retargeted and newer-run judgments accept nothing', () => {
@@ -80,6 +112,24 @@ test('review intake binds judgment to original capture and source report rather 
   assert.equal(result[0].source_report_sha256, reportHash);
   assert.equal(result[0].source_claim_generation, 3);
   assert.equal(result[0].intent_fulfilled, true);
+});
+
+test('historical or incomplete review bindings never declare intent fulfilled', () => {
+  for (const edit of [
+    s => { delete s.items.get('REV-1').acceptance_capture; },
+    s => { delete s.items.get('REV-1').acceptance_capture.source_run; },
+    s => { delete s.items.get('REV-1').acceptance_capture.target.claim_generation; },
+    s => { s.items.get('REV-1').acceptance_capture.target.claim_generation = null; },
+    s => { delete s.runs.get('R-1').report.sha256; },
+  ]) {
+    const events = seed(), s = fold(events); edit(s);
+    const capture = s.items.get('REV-1').acceptance_capture;
+    const report = { outcome: 'done', extra: { verdict: 'PASS', acceptance: { fulfilled: true, head,
+      source_run: capture?.source_run, source_report_sha256: capture ? s.runs.get('R-1').report.sha256 : undefined,
+      claim_generation: capture?.target.claim_generation } } };
+    const facts = reviewResultEvents({ state: s, events, run: s.runs.get('R-2'), report, sha256: reviewHash });
+    assert.equal(facts[0].intent_fulfilled, false);
+  }
 });
 
 test('plans accept a completed report without questions/reviews; done-only code and missing-result packets remain Unknown', () => {
@@ -139,7 +189,7 @@ function correction(t, existingOrg) {
 }
 
 test('correction discharge consumes original findings and actual green receipts; missing/red/changed/unrun results do not discharge', t => {
-  const f = correction(t), intake = () => correctionDischargeEvents({ state: f.s, run: f.run, report: f.report, sha256: reviewHash, org: f.org });
+  const f = correction(t), intake = () => dischargeFacts({ state: f.s, run: f.run, report: f.report, sha256: reviewHash, org: f.org });
   assert.equal(intake().length, 1);
   for (const patch of [{ result: 'unrun' }, { result: undefined }, { sha256: '0'.repeat(64) }, { head: base }, { requirement: 'Unrelated control' }, { key: 'other' }]) {
     const original = { ...f.finding }; Object.assign(f.finding, patch); assert.deepEqual(intake(), [], JSON.stringify(patch)); Object.assign(f.finding, original);
@@ -150,10 +200,47 @@ test('correction discharge consumes original findings and actual green receipts;
   fs.writeFileSync(f.output, 'changed'); assert.deepEqual(intake(), []);
 });
 
+test('discharge diagnostics name the first missing proof, preserve Unknown and deduplicate notes', t => {
+  const f = correction(t);
+  const intake = () => correctionDischargeEvents({ state: f.s, run: f.run, report: f.report, sha256: reviewHash, org: f.org });
+  f.gate.head = base; f.finding.sha256 = f.save();
+  const notes = intake();
+  assert.equal(notes.length, 1);
+  assert.equal(notes[0].type, 'note.added');
+  assert.equal(notes[0].id, f.run.id);
+  assert.match(notes[0].text, /gate head differs from final head.*rebase/);
+  extendFold(f.s, notes.map(e => ({ ...e, seq: f.s.eventCount + 1 })));
+  assert.deepEqual(intake(), []);
+  fs.unlinkSync(f.finding.evidence);
+  assert.match(intake()[0].text, /durable gate evidence.*ENOENT/);
+  f.gate.head = head; f.finding.sha256 = f.save();
+  fs.writeFileSync(f.output, 'changed');
+  assert.match(intake()[0].text, /check log hash differs/);
+  extendFold(f.s, [{ type: 'report.ingested', run: f.run.id, report: f.report, sha256: reviewHash, seq: f.s.eventCount + 1 }]);
+  assert.equal(itemConditions(f.s, f.run.item).Accepted.status, 'Unknown');
+});
+
+test('intake retains a done report with missing proof without calling its diagnostic a discharge', t => {
+  const cli = setupOrg(); t.after(() => fs.rmSync(cli.root, { recursive: true, force: true }));
+  const f = correction(t, cli.dir);
+  transact(cli.dir, () => ({ add: f.rows.slice(0, -1).map(({ seq, ...event }) => event) }));
+  const file = path.join(cli.root, 'missing-proof.md');
+  const bytes = `---\nrun: R-4\noutcome: done\nsummary: Proof unavailable\nheadline: Proof unavailable\n---\nOriginal report retained.\n`;
+  fs.writeFileSync(file, bytes);
+  cli.ok(['ingest', file]);
+  const before = cli.events();
+  assert.equal(before.at(-1).type, 'note.added');
+  assert.match(before.at(-1).text, /declaration is missing/);
+  assert.equal(itemConditions(fold(before), 'ENG-4').Accepted.status, 'Unknown');
+  assert.doesNotMatch(cli.ok(['ingest', file]), /correction discharged/);
+  assert.deepEqual(cli.events(), before);
+  assert.equal(fs.readFileSync(path.join(cli.dir, 'reports/R-4.md'), 'utf8'), bytes);
+});
+
 test('correction discharge accepts explicit non-TAP green proof but retains failed and missing execution', t => {
   const f = correction(t);
   f.gate.tap_totals = null; f.finding.sha256 = f.save();
-  const intake = () => correctionDischargeEvents({ state: f.s, run: f.run, report: f.report, sha256: reviewHash, org: f.org });
+  const intake = () => dischargeFacts({ state: f.s, run: f.run, report: f.report, sha256: reviewHash, org: f.org });
   const bytes = fs.readFileSync(f.finding.evidence);
   assert.equal(intake().length, 1);
   for (const patch of [{ command_started: false }, { exit_code: 1 }, { signal: 'SIGTERM' }, { gate_timeout: true }, { cleanup_error: 'held' }, { attempts: 0 }]) {
@@ -208,7 +295,7 @@ test('evidence-only correction requires an exact main ancestor and original run 
   const gate = validateTree({ cwd: repo, common, command, tier: 'fast' });
   assert.equal(gate.executed, true); assert.equal(gate.tap_totals, null); assert.equal(gate.exit_code, 0);
   Object.assign(f.gate, gate); Object.assign(f.finding, { head: checkedHead, command, sha256: f.save() });
-  const intake = () => correctionDischargeEvents({ state: f.s, run: f.run, report: f.report, sha256: reviewHash, org: f.org });
+  const intake = () => dischargeFacts({ state: f.s, run: f.run, report: f.report, sha256: reviewHash, org: f.org });
   assert.equal(intake().length, 1);
   for (const patch of [{ head: head }, { tree: head }, { branch: 'lane/foreign' }, { started_at: '2020-01-01T00:00:00Z' }]) {
     const original = { ...f.gate }; Object.assign(f.gate, patch); f.finding.sha256 = f.save();
@@ -226,7 +313,7 @@ test('evidence-only correction requires an exact main ancestor and original run 
 });
 
 test('a completed correction alone does not accept; exact discharge accepts without rewriting FAIL or adding a review', t => {
-  const f = correction(t), add = correctionDischargeEvents({ state: f.s, run: f.run, report: f.report, sha256: reviewHash, org: f.org });
+  const f = correction(t), add = dischargeFacts({ state: f.s, run: f.run, report: f.report, sha256: reviewHash, org: f.org });
   extendFold(f.s, [{ type: 'report.ingested', run: f.run.id, report: f.report, sha256: reviewHash, seq: f.s.eventCount + 1 }]);
   assert.equal(itemConditions(f.s, 'ENG-4').Accepted.status, 'Unknown');
   assert.equal(itemConditions(f.s, 'ENG-1').Accepted.status, 'False');
@@ -252,7 +339,7 @@ test('rebased correction keeps stale proof Unknown and discharges only its green
   const before = capture();
   assert.equal(before.executed, true); assert.equal(before.exit_code, 0);
   Object.assign(f.gate, before); f.finding.command = command; f.finding.sha256 = f.save();
-  const intake = () => correctionDischargeEvents({ state: f.s, run: f.run, report: f.report, sha256: reviewHash, org: f.org });
+  const intake = () => dischargeFacts({ state: f.s, run: f.run, report: f.report, sha256: reviewHash, org: f.org });
   const originalBytes = fs.readFileSync(before.history_receipt);
   const originalGate = path.join(f.org, 'evidence', 'pre-rebase-gate.json');
   fs.writeFileSync(originalGate, originalBytes);
@@ -306,14 +393,25 @@ test('rebased correction keeps stale proof Unknown and discharges only its green
   assert.equal([...f.s.items.values()].filter(item => item.role === 'reviewer').length, 1);
 });
 
-test('page and item/dependency phases consume the same exact conditions', () => {
-  const rows = stamp([...seed(), ...judge()]), s = fold(rows);
-  const doc = buildProjectPage({ reader: { state: s, events: () => rows, verify() {}, position: { lastSeq: rows.length } },
-    org: '/fixture/.org', project: { identity: project, canonical: '/fixture' } });
-  const row = doc.work.find(w => w.id === 'ENG-1');
-  assert.equal(row.conditions.Accepted.status, 'True');
-  assert.equal(row.phase, 'accepted');
-  assert.equal(row.completion, 'accepted completion (exact-target PASS)');
+test('page and record agree for ordinary and native-landings captures after repeated normalization', () => {
+  for (const native of [false, true]) {
+    const rows = stamp([...seed(), ...judge()]);
+    if (native) {
+      const target = rows.find(e => e.id === 'REV-1').meta.review_target;
+      Object.assign(target, { evidence_kind: 'native-landings/v1', source_group: { report_sha256: null } });
+      delete target.reportHash;
+      assert.deepEqual(acceptanceTarget(acceptanceTarget(target)), acceptanceTarget(target));
+      assert.equal(acceptanceTarget(acceptanceTarget(target)).report_sha256, null);
+    }
+    const s = fold(rows);
+    const doc = buildProjectPage({ reader: { state: s, events: () => rows, verify() {}, position: { lastSeq: rows.length } },
+      org: '/fixture/.org', project: { identity: project, canonical: '/fixture' } });
+    const row = doc.work.find(w => w.id === 'ENG-1');
+    assert.equal(itemConditions(s, 'ENG-1').Accepted.status, 'True');
+    assert.equal(row.conditions.Accepted.status, itemConditions(s, 'ENG-1').Accepted.status);
+    assert.equal(row.phase, 'accepted');
+    assert.equal(row.completion, 'accepted completion (exact-target PASS)');
+  }
 });
 
 test('CLI acceptance links name consumer, wake fact and stuck owner; old completion links remain unchanged', t => {

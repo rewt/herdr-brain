@@ -931,7 +931,7 @@ async function ingestFile(ctx, file, runHint, currentRun, selfClosedSeq) {
         const add = reviewResultEvents({ state:s, events:committedEvents, run, report:parsed.report, sha256, body:parsed.body, minorBackfillOnly:true });
         const discharges = correctionDischargeEvents({ state:s, run, report:parsed.report, sha256, org:ctx.dir });
         add.push(...discharges);
-        return { add, result: { already: true, runId, correctionDischarged: discharges.length > 0,
+        return { add, result: { already: true, runId, correctionDischarged: discharges.some(e=>e.type==='correction.discharged'),
           minorBatches: add.filter(e=>e.type==='item.added').map(e=>e.id) } };
       }
       throw new UserError(`${runId} already has a report (recorded ${run.report.at}); start a new run to report again`);

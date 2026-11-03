@@ -21,6 +21,12 @@ The phase is derived: pending, working, ready-for-review, in-review, needs-work,
 accepted. There is no setter. Existing historical item status is preserved;
 completion, source, native retirement and acceptance remain separate facts.
 
+Only linked corrections for Major findings or a bound non-PASS judgment gate
+source acceptance. Fix-forward Minors under PASS do not revoke that acceptance
+when selected, attempted, completed or dropped. Their owners and outstanding
+findings remain recorded. A done correction without discharge is Unknown;
+an original exact negative judgment remains False until its findings discharge.
+
 In that same async review report, a fulfilled result is declared as:
 
 ```yaml
@@ -116,8 +122,11 @@ Missing/malformed totals and TAP failures/cancellations do not discharge.
 The receipt must survive lane removal in the owning record's evidence directory;
 its original log and execution sidecar remain retrievable. Majors must name their
 original required-check text. Missing, red, changed and unrun controls produce no
-discharge, without refusing or rewriting the report. Intake uses the same guarded
-record mutation; it does not run checks, retarget findings or start another review.
+discharge, without refusing or rewriting the report. Intake records the first
+unmet proof requirement as an existing run note, including a stale gate head
+after rebase; unchanged repeated intake deduplicates that note. Intake uses the
+same guarded record mutation; it does not run checks, retarget findings or start
+another review.
 A discharge can establish accepted outcome while preserving the original FAIL.
 The release owner still judges whether the specific Major control proves its
 correction and runs final-release/live coverage.

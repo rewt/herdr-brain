@@ -43,7 +43,6 @@ test('named pre-effect keeps ignore safety keywords in paths branches and occupa
 test('named pre-effect formats preserve real fences uncertainty and historical safety holds',()=>{
   const target={run:'R-1',common:'/git',key:'target',source:{seq:1,type:'cleanup.bound'}};
   for(const reason of [
-    'STOP/HOLD prevents queued retirement effect',
     'preservation source record changed; prepare again; lane kept',
     'original report allocation/current run/claim changed; keep',
     'occupant or shell identity changed during agent exit',

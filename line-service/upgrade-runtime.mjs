@@ -138,7 +138,7 @@ export function upgradeRuntime({repo,org,id,fromRoot,targetRoot,rollback=false,a
       validate();
       return {dry_run:true,id,direction,target,archive:ref,previous:snapshot.previous,runtime:snapshot.runtime,stopped:true,runtime_started:false,
         ...(rollback?{established:admitted.established??[],unread:admitted.unread??[]}:{rollback:rollbackPreview({c,events:loaded.events,fromRoot,targetRoot,home})}),
-        changes:['installation.source','installation.runtime','installation.upgrade','service.ProgramArguments[1]'],preserved:['migration archive/event','cutover','phase0','STOP','node','transport','saved jobs/watchers','claims','queue attempts']};
+        changes:['installation.source','installation.runtime','installation.upgrade','service.ProgramArguments[1]','service.ProcessType','service.Nice'],preserved:['migration archive/event','cutover','phase0','STOP','node','transport','saved jobs/watchers','claims','queue attempts']};
     }
     const result=transact(c.org,events=>{
       const current=requireRecordCompatibility(targetRoot,events,admission);

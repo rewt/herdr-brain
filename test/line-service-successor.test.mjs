@@ -194,6 +194,9 @@ test('successor CLI preserves the original OLD sealed recovery through executabl
   assert.equal(fs.existsSync(path.join(f.recovery,'line-service/probation-successor.mjs')),false);
   await startPassStop(f,f.recovery);
   const entry=f.apply({cli:true});assert.equal(entry.runtime.root,f.successor);assert.equal(entry.stable_ready,false);
+  // Entry carries the job class; the sealed recovery's own plist never had it.
+  assert.doesNotMatch(f.anchor.plist,/ProcessType|Nice/);
+  assert.match(fs.readFileSync(f.file,'utf8'),/<key>ProcessType<\/key><string>Interactive<\/string>\n<key>Nice<\/key><integer>5<\/integer>/);
   const {acceptedRuntime}=await f.module(f.successor,'line-service/runtime.mjs');
   assert.equal(acceptedRuntime(f.cwd,{root:f.successor,home:f.installationHome}).probation.successor.archive.sha256,p.extension.sha256);
   await oldRefuses(f);await startPassStop(f,f.successor);

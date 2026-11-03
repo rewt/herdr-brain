@@ -29,16 +29,20 @@ export function inspectService(target,repo,command=spawnSync) {
 }
 
 // Decode through the native plist reader, then validate the complete supported
-// job schema. Regeneration changes only argv[1], retaining all other bindings.
+// job schema. Regeneration changes argv[1] and applies launchPlist's current job
+// class, retaining all other bindings. Older saved plists have no class keys.
 export function savedPlist(c,installation,command) {
   const r=command('/usr/bin/plutil',['-convert','json','-o','-','--',installation.file],{cwd:c.repo,encoding:'utf8',maxBuffer:4*1024*1024});
   if(r.error||r.status!==0)throw Error((r.stderr||r.error?.message||'saved plist could not be read').trim());
   const p=JSON.parse(r.stdout),a=p.ProgramArguments,e=p.EnvironmentVariables,label=`dev.herdr.line.${path.basename(c.directory)}`;
   if(!Array.isArray(a)||a.length!==11||typeof a[8]!=='string'||!/^[a-z][a-z0-9_-]{0,31}$/.test(a[8])||
       !path.isAbsolute(a[10]??'')||!path.isAbsolute(e?.HERDR_SOCKET_PATH??'')||typeof e?.PATH!=='string'||!e.PATH||
-      !Number.isSafeInteger(p.StartInterval)||p.StartInterval<1)throw Error('saved plist transport/runtime binding differs');
+      !Number.isSafeInteger(p.StartInterval)||p.StartInterval<1||
+      p.ProcessType!==undefined&&!['Background','Standard','Adaptive','Interactive'].includes(p.ProcessType)||
+      p.Nice!==undefined&&(!Number.isSafeInteger(p.Nice)||Math.abs(p.Nice)>20))throw Error('saved plist transport/runtime binding differs');
   const expected={Label:label,ProgramArguments:[installation.node,path.join(installation.source,'line-service/line-service.mjs'),'--once','--repo',c.repo,'--org',c.org,'--to',a[8],'--herdr',a[10]],
     WorkingDirectory:c.repo,EnvironmentVariables:{PATH:e.PATH,HERDR_SOCKET_PATH:e.HERDR_SOCKET_PATH},StartInterval:p.StartInterval,RunAtLoad:true,
+    ...(p.ProcessType===undefined?{}:{ProcessType:p.ProcessType}),...(p.Nice===undefined?{}:{Nice:p.Nice}),
     StandardOutPath:path.join(c.directory,'launchd.log'),StandardErrorPath:path.join(c.directory,'launchd.error.log')};
   if(!same(p,expected))throw Error('saved plist bindings drifted; no replacement authorized');
   if(installation.recipient!==undefined&&installation.recipient!==a[8])throw Error('saved installation recipient differs from plist');
@@ -118,7 +122,7 @@ export function migrateRuntime({repo,org,id,dryRun=false,expectedPlan,cwd=proces
   return withRuntimeLocks(c,{id,operation:'migration',dryRun,owner,validate},()=>{
     if(dryRun){
       validate();
-      return{dry_run:true,id,target,runtime:snapshot.runtime,archive:ref,changes:['installation.source','installation.runtime','installation.migration','service.ProgramArguments[1]'],
+      return{dry_run:true,id,target,runtime:snapshot.runtime,archive:ref,changes:['installation.source','installation.runtime','installation.migration','service.ProgramArguments[1]','service.ProcessType','service.Nice'],
         preserved:['node','transport','recipient','interval','logs','STOP','cutover','phase0','saved jobs/watchers','claims','queue attempts'],stopped:true,runtime_started:false};
     }
     const result=transact(c.org,events=>{

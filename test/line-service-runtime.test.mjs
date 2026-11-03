@@ -11,11 +11,12 @@ import {copyProduct} from '../lib/product-files.mjs';
 import {gitProject} from '../lib/project.mjs';
 import {lineDirectory} from '../line-service/cutoff.mjs';
 import {launchPlist} from '../line-service/plist.mjs';
+import {savedPlist,replacementPlist} from '../line-service/migrate-runtime.mjs';
 import {noticeLock} from '../supervisor/notice-lock.mjs';
 import {recipientAgent} from './helpers/recipient-agent.mjs';
 import {fixture as dispatchFixture,promptCalls} from '../dispatch/test/dispatch-fixture.mjs';
 
-async function fixture(t,{phase='installed',legacyMigration=false}={}){
+async function fixture(t,{phase='installed',legacyMigration=false,olderJobClass=false}={}){
   const f=configFixture(t,{custom:true}),org=f.env.ORG_DIR,identity=gitProject(f.cwd).identity,directory=lineDirectory(org,identity);
   fs.writeFileSync(path.join(f.cwd,'.herdr-release.json'),'{"release":"compatible"}\n');f.git('add','.herdr-release.json');f.git('commit','-qm','Accept fixture release');
   fs.mkdirSync(directory,{recursive:true});
@@ -49,6 +50,12 @@ async function fixture(t,{phase='installed',legacyMigration=false}={}){
   if(legacyMigration){
     const migration=path.join(f.bundle,'line-service/migrate-runtime.mjs');
     fs.writeFileSync(migration,fs.readFileSync(migration,'utf8').replace(/const settlement=installationPhaseProof\(saved,savedBytes,\{target,service:snapshot.service,stop_sha256:snapshot.stop_sha256\}\);/,'const settlement=null;'));
+    const manifest=spawnSync(process.execPath,[path.resolve('herdr/releases.mjs'),'manifest',f.bundle,path.join(f.bundle,'.release-acceptance.json')],{cwd:f.cwd,env:f.env,encoding:'utf8'});
+    assert.equal(manifest.status,0,manifest.stderr);
+  }
+  if(olderJobClass){
+    const generator=path.join(f.bundle,'line-service/plist.mjs'),bytes=fs.readFileSync(generator,'utf8'),older=bytes.replace('<key>ProcessType</key><string>Interactive</string>\\n<key>Nice</key><integer>5</integer>\\n','');
+    assert.notEqual(older,bytes);fs.writeFileSync(generator,older);
     const manifest=spawnSync(process.execPath,[path.resolve('herdr/releases.mjs'),'manifest',f.bundle,path.join(f.bundle,'.release-acceptance.json')],{cwd:f.cwd,env:f.env,encoding:'utf8'});
     assert.equal(manifest.status,0,manifest.stderr);
   }
@@ -360,6 +367,33 @@ test('release upgrade retains original migration and cutoff, restarts the succes
   assert.equal(restart(['restart','--repo',f.cwd,'--org',f.org],f.args).restarted,true);
   assert.equal(fs.readFileSync(path.join(f.org,'dispatch/retained.json'),'utf8'),f.original.jobs);
   assert.deepEqual(JSON.parse(fs.readFileSync(path.join(f.directory,'effects.json'))).actions['review:original'],JSON.parse(f.original.effects).actions['review:original']);
+});
+
+test('upgrade adds the job class to an older saved plist, a keyed plist upgrades again and rollback restores the exact bytes',async t=>{
+  const f=await successor(t,{olderJobClass:true}),parse=()=>JSON.parse(spawnSync('/usr/bin/plutil',['-convert','json','-o','-','--',f.file],{encoding:'utf8'}).stdout);
+  const older=parse();assert.equal(older.ProcessType,undefined);assert.equal(older.Nice,undefined);
+  assert.ok(f.plan().changes.includes('service.ProcessType'));f.upgrade();
+  const keyed=parse();assert.equal(keyed.ProcessType,'Interactive');assert.equal(keyed.Nice,5);
+  assert.deepEqual({...keyed,ProcessType:undefined,Nice:undefined,ProgramArguments:keyed.ProgramArguments.toSpliced(1,1)},{...older,ProcessType:undefined,Nice:undefined,ProgramArguments:older.ProgramArguments.toSpliced(1,1)});
+  f.pin('compatible');
+  const rollback=['upgrade','--repo',f.cwd,'--org',f.org,'--id','fixture-rollback','--from-root',f.next,'--target-root',f.bundle,'--rollback'];
+  f.main([...rollback,'--expected-plan',f.main([...rollback,'--dry-run'],f.args).archive.sha256],f.args);
+  assert.equal(fs.readFileSync(f.file,'utf8'),f.migrated.plist);
+});
+
+test('saved plist accepts the job class in supported shapes, replaces it with the current value and refuses anything else',t=>{
+  const scratch=fs.mkdtempSync(path.join(fs.realpathSync(process.env.TMPDIR??'/tmp'),'job-class-'));t.after(()=>fs.rmSync(scratch,{recursive:true,force:true}));
+  const c={repo:'/project',org:'/record',directory:path.join(scratch,'line')},file=path.join(scratch,'service.plist'),installation={node:process.execPath,source:'/root/current',file};
+  const current=launchPlist({label:'dev.herdr.line.line',repo:c.repo,org:c.org,to:'fixture-supervisor',herdr:'/saved/bin/herdr',socket:'/saved/native.sock',directory:c.directory,node:process.execPath,source:installation.source,interval:47,searchPath:'/usr/bin:/bin'});
+  const job='<key>ProcessType</key><string>Interactive</string>\n<key>Nice</key><integer>5</integer>\n';assert.ok(current.includes(job));
+  const accepted=[current,current.replace(job,''),current.replace('<integer>5</integer>','<integer>10</integer>')];
+  for(const bytes of accepted){
+    fs.writeFileSync(file,bytes);assert.equal(savedPlist(c,installation,spawnSync).Label,'dev.herdr.line.line');
+    const next=replacementPlist(c,installation,spawnSync,'/root/next');
+    assert.equal(next,current.replace('/root/current/','/root/next/'));
+  }
+  const refused=[current.replace(job,'<key>ProcessType</key><string>Fast</string>\n'),current.replace(job,'<key>Nice</key><integer>21</integer>\n'),current.replace(job,job+'<key>LowPriorityIO</key><true/>\n')];
+  for(const bytes of refused){fs.writeFileSync(file,bytes);assert.throws(()=>savedPlist(c,installation,spawnSync),/saved plist/);}
 });
 
 test('rollback rejects a historical fold that would silently discard current acceptance',async t=>{

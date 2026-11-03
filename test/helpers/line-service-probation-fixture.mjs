@@ -10,7 +10,6 @@ import {freezeReleaseValidation} from '../../herdr/validation-admission.mjs';
 import {loadEvents,transact} from '../../lib/store.mjs';
 import {gitProject} from '../../lib/project.mjs';
 import {lineDirectory} from '../../line-service/cutoff.mjs';
-import {launchPlist} from '../../line-service/plist.mjs';
 import {requireReadyAcceptance,selectRelease,requireHomeRelease} from '../../lib/releases.mjs';
 import {fixture as dispatchFixture,promptCalls} from '../../dispatch/test/dispatch-fixture.mjs';
 
@@ -37,6 +36,9 @@ export async function fixture(t,{development=false,phase='installed',sourceSuffi
   const installation={target:`gui/${process.getuid()}/dev.herdr.line.${path.basename(directory)}`,repo:f.cwd,org,source:f.cwd+sourceSuffix,node:process.execPath,file,phase,
     ...(phase==='uncertain-or-refused'?{error:'Original refused bootstrap'}:{})};
   fs.writeFileSync(installationFile,JSON.stringify(installation)+'\n');
+  // The original job comes from its own product's generator; an OLD strict reader
+  // refuses keys that its generator never wrote.
+  const {launchPlist}=await import(pathToFileURL(path.join(productRoot,'line-service/plist.mjs')).href);
   fs.writeFileSync(file,launchPlist({label:`dev.herdr.line.${path.basename(directory)}`,repo:f.cwd,org,to:'fixture-supervisor',herdr:'/saved/bin/herdr',socket:'/saved/native.sock',directory,node:process.execPath,source:f.cwd}));
   fs.writeFileSync(stop,'Original service STOP\n');
   const boundary={id:'original-cutover',project:identity,repo:f.cwd,org,source:f.cwd,main:'main',canonical_head:commit};

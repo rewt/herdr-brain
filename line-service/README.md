@@ -414,7 +414,10 @@ Each model-free launchd pass uses the existing record, native dispatch, route,
 claim, closeout queue and transport. It never promotes another owner's work or
 calls a model API. The supervisor uses its accepted installed release (or the
 existing committed canonical development-source controls), pinned Node20.19.4,
-actual native path/socket and its own project.
+actual native path/socket and its own project. The generated launchd job runs at
+`ProcessType` Interactive with Nice 5 so macOS stops throttling it, and because
+this is product code every project gets that value when it adopts, including BCH's
+own line.
 BCH effects belong only to BCH's supervisor. No pins, saved consumers, old
 watchers, claims or retained ambiguous/native-refused attempts are replaced.
 
@@ -628,8 +631,10 @@ Dry-run leaves runtime bindings unchanged (dead-pass recovery is receipted as be
 migrations remain refused. This recovery must be present in the accepted release
 **before the project's one migration**; a7b9b37dcd does not contain it.
 
-The only plist change is the controller entry point in `ProgramArguments[1]`.
-Label, project/record, recipient, Node, Herdr executable, socket, PATH, interval
+The plist changes are the controller entry point in `ProgramArguments[1]` and the
+generator's current `ProcessType` and `Nice`. A restart bootstraps the saved file
+unchanged, so only a migration, upgrade or successor entry from a source carrying
+those keys adds them; rollback restores the exact prior bytes. Label, project/record, recipient, Node, Herdr executable, socket, PATH, interval
 and log paths remain the saved values. The installation retains its original
 time/target and records the immutable accepted runtime plus migration archive.
 No install flags are accepted for migration. Original installation/plist bytes

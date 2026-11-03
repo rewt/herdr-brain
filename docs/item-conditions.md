@@ -118,6 +118,9 @@ Intake checks the original correction/finding/run binding, claim and landed head
 receipt hash, command, executed green result, log hash and actual execution result.
 An explicit `tap_totals: null` is the lane runner's successful non-TAP format;
 it needs the same executed green, zero-exit, unsignalled execution proof as TAP.
+Null only means the log had no summary lines, so a test command that printed none
+looks the same; the discharged finding carries `no_tap_summary: true` for the
+release owner's judgment of that control.
 Missing/malformed totals and TAP failures/cancellations do not discharge.
 The receipt must survive lane removal in the owning record's evidence directory;
 its original log and execution sidecar remain retrievable. Majors must name their
@@ -187,10 +190,12 @@ record those effects.
 
 An evidence-only correction needs no invented source landing. Its finding and
 gate must name the same exact existing commit and tree, already an ancestor of
-the owning project's `refs/heads/main`. Intake verifies the gate against the
-original lane receipt inventory, branch and run interval, plus its original log
-and execution sidecar. Missing/foreign receipts, absent main ancestry and red
-results remain Unknown. A run with a landing still requires that landing's exact
+the owning project's `refs/heads/main`, and that commit must contain the reviewed
+head in the finding binding. Intake verifies the gate against the original lane
+receipt inventory, branch and run interval, plus its original log and execution
+sidecar. Missing/foreign receipts, absent main ancestry, a checked commit older
+than the reviewed head, a Git query still hung after 10 seconds and red results
+remain Unknown. A run with a landing still requires that landing's exact
 head, project and ownership generation; this exception cannot substitute a
 different checked head for delivered source.
 The correction condition consumes that verified discharge at its exact commit,

@@ -191,6 +191,7 @@ function correction(t, existingOrg) {
 test('correction discharge consumes original findings and actual green receipts; missing/red/changed/unrun results do not discharge', t => {
   const f = correction(t), intake = () => dischargeFacts({ state: f.s, run: f.run, report: f.report, sha256: reviewHash, org: f.org });
   assert.equal(intake().length, 1);
+  assert.equal(Object.hasOwn(intake()[0].findings[0], 'no_tap_summary'), false, 'TAP proof keeps its original shape');
   for (const patch of [{ result: 'unrun' }, { result: undefined }, { sha256: '0'.repeat(64) }, { head: base }, { requirement: 'Unrelated control' }, { key: 'other' }]) {
     const original = { ...f.finding }; Object.assign(f.finding, patch); assert.deepEqual(intake(), [], JSON.stringify(patch)); Object.assign(f.finding, original);
   }
@@ -242,7 +243,7 @@ test('correction discharge accepts explicit non-TAP green proof but retains fail
   f.gate.tap_totals = null; f.finding.sha256 = f.save();
   const intake = () => dischargeFacts({ state: f.s, run: f.run, report: f.report, sha256: reviewHash, org: f.org });
   const bytes = fs.readFileSync(f.finding.evidence);
-  assert.equal(intake().length, 1);
+  assert.equal(intake()[0].findings[0].no_tap_summary, true, 'a discharge without a test summary says so');
   for (const patch of [{ command_started: false }, { exit_code: 1 }, { signal: 'SIGTERM' }, { gate_timeout: true }, { cleanup_error: 'held' }, { attempts: 0 }]) {
     fs.writeFileSync(f.execution, JSON.stringify({ command_started: true, exit_code: 0, signal: null, attempts: 1, ...patch }));
     assert.deepEqual(intake(), [], JSON.stringify(patch));
@@ -283,11 +284,13 @@ test('same-report correction ingest reconciles original non-TAP proof once witho
   assert.equal(cli.events().filter(e => e.type === 'item.added' && e.role === 'reviewer').length, 1);
 });
 
-test('evidence-only correction requires an exact main ancestor and original run lane receipt', t => {
+function evidenceOnly(t) {
   const f = correction(t), repo = path.join(path.dirname(f.org), 'repo'); fs.mkdirSync(repo);
   const git = (...args) => execFileSync('git', ['-C', repo, ...args], { encoding: 'utf8' }).trim();
   git('init', '-b', 'main'); git('config', 'user.name', 'Fixture'); git('config', 'user.email', 'fixture@example.test');
-  fs.writeFileSync(path.join(repo, 'seed'), 'existing source'); git('add', '.'); git('commit', '-m', 'Existing source');
+  fs.writeFileSync(path.join(repo, 'seed'), 'reviewed source'); git('add', '.'); git('commit', '-m', 'Reviewed source');
+  const reviewedHead = git('rev-parse', 'HEAD');
+  fs.writeFileSync(path.join(repo, 'seed'), 'existing source'); git('commit', '-am', 'Existing source');
   const checkedHead = git('rev-parse', 'HEAD'); git('checkout', '-b', 'lane/correction');
   const common = git('rev-parse', '--path-format=absolute', '--git-common-dir');
   f.run.landings = []; f.run.meta.dispatch_project = common; f.run.meta.lane = 'correction';
@@ -295,6 +298,17 @@ test('evidence-only correction requires an exact main ancestor and original run 
   const gate = validateTree({ cwd: repo, common, command, tier: 'fast' });
   assert.equal(gate.executed, true); assert.equal(gate.tap_totals, null); assert.equal(gate.exit_code, 0);
   Object.assign(f.gate, gate); Object.assign(f.finding, { head: checkedHead, command, sha256: f.save() });
+  const reviewed = commit => {
+    const item = f.s.items.get(f.run.item);
+    item.finding_bindings[0].head = commit;
+    item.meta.review_fix_of = f.report.extra.correction_discharge.review_key = `ENG-1:${commit}`;
+  };
+  reviewed(reviewedHead);
+  return { f, git, common, gate, reviewed, reviewedHead, checkedHead };
+}
+
+test('evidence-only correction requires an exact main ancestor and original run lane receipt', t => {
+  const { f, git, common, gate, checkedHead } = evidenceOnly(t);
   const intake = () => dischargeFacts({ state: f.s, run: f.run, report: f.report, sha256: reviewHash, org: f.org });
   assert.equal(intake().length, 1);
   for (const patch of [{ head: head }, { tree: head }, { branch: 'lane/foreign' }, { started_at: '2020-01-01T00:00:00Z' }]) {
@@ -351,6 +365,45 @@ test('evidence-only correction requires an exact main ancestor and original run 
     assert.equal(conditions.Accepted.status, patch.head === checkedHead && !patch.project && !patch.producer ? 'True' : 'Unknown',
       'recorded source must retain its exact head, project and claim binding: ' + JSON.stringify(patch));
   }
+});
+
+test('evidence-only checked commit must contain the reviewed head on main', t => {
+  const { f, git, reviewed, reviewedHead, checkedHead } = evidenceOnly(t);
+  const intake = () => correctionDischargeEvents({ state: f.s, run: f.run, report: f.report, sha256: reviewHash, org: f.org });
+  assert.equal(intake()[0].type, 'correction.discharged');
+  const newer = git('commit-tree', `${checkedHead}^{tree}`, '-p', checkedHead, '-m', 'Newer reviewed source');
+  git('update-ref', 'refs/heads/main', newer);
+  reviewed(newer);
+  assert.equal(intake()[0].type, 'note.added', 'a lane set back behind the reviewed head proves older code');
+  assert.match(intake()[0].text, /main ancestry, reviewed head and original receipt does not match/);
+  reviewed(reviewedHead);
+  assert.equal(intake()[0].type, 'correction.discharged', 'an older reviewed head on main recovers from the same proof');
+});
+
+test('evidence-only native receipt must fall inside the run interval', t => {
+  const { f, gate } = evidenceOnly(t);
+  const intake = () => dischargeFacts({ state: f.s, run: f.run, report: f.report, sha256: reviewHash, org: f.org });
+  const observed = Date.parse(gate.observed_at ?? gate.started_at), started = f.run.started.at;
+  const at = offset => new Date(observed + offset).toISOString();
+  assert.equal(intake().length, 1);
+  f.run.started.at = at(1000);
+  assert.deepEqual(intake(), [], 'a matching native receipt from before the run');
+  f.run.started.at = started;
+  f.run.report = { at: at(-1000) };
+  assert.deepEqual(intake(), [], 'a matching native receipt from after the report');
+  f.run.report.at = at(0);
+  assert.equal(intake().length, 1, 'a receipt at the report time is inside the interval');
+});
+
+test('a hung evidence-only Git query fails into the retained Unknown note', t => {
+  const { f } = evidenceOnly(t);
+  const intake = () => correctionDischargeEvents({ state: f.s, run: f.run, report: f.report, sha256: reviewHash, org: f.org });
+  const bin = path.join(path.dirname(f.org), 'hung-git'), inherited = process.env.PATH;
+  fs.mkdirSync(bin); fs.writeFileSync(path.join(bin, 'git'), '#!/bin/sh\nexec sleep 30\n', { mode: 0o755 });
+  process.env.PATH = `${bin}${path.delimiter}${inherited}`;
+  try { assert.match(intake()[0].text, /ETIMEDOUT/); }
+  finally { process.env.PATH = inherited; }
+  assert.equal(intake()[0].type, 'correction.discharged', 'a responsive Git recovers from the same proof');
 });
 
 test('a completed correction alone does not accept; exact discharge accepts without rewriting FAIL or adding a review', t => {

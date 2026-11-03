@@ -32,6 +32,14 @@ export function readSoakInput(file, bytes = fs.readFileSync(file, 'utf8')) {
       })};
     }
   }
+  trial.turnWitnesses = (trial.turnEvidence ?? []).filter(id => saved.has(id)).map(id => ({bytes: saved.get(id).toString('utf8'), evidence: [id]}));
+  if (trial.capacity) {
+    const c = trial.capacity;
+    // Ignore supplied hydrated state. Only the original hash-verified bytes
+    // enter scoring, with their absolute journal paths retained separately.
+    c.saved = Object.fromEntries([c.inventoryEvidence, c.configEvidence, c.censusEvidence,
+      ...(c.journalRefs ?? []).map(r => r.evidence)].filter(id => saved.has(id)).map(id => [id, saved.get(id).toString('utf8')]));
+  }
   return {trial, verifiedEvidence: [...saved.keys()]};
 }
 

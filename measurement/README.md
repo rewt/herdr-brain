@@ -164,8 +164,11 @@ Following HUM-45 (1 Nov 2026), new assessments report the 120-second close,
 session-release and folder-removal comparisons in `cleanupTargets` as measured
 planning targets. Raw latency remains in `latency`. Every completion, linked
 retirement effect, physical observation and common finite turn is still required.
-The 60-second report ingestion and 120-second eligible/free-to-input comparisons
-retain their existing offer consequences, including the documented-load policy.
+HUM-46 YES also makes eligible/free-to-input a prospective 120-second measured
+planning target in `inputTargets`, with raw known/exceeded/unknown reporting.
+Known misses alone do not withhold qualification. Unknown input timing remains
+INCOMPLETE; report ingestion stays hard at 60 seconds with its documented-load
+rule. No pause or load subtraction changes raw timing.
 
 An optional verified `pauses` ledger has `complete: true` and `intervals` with
 `project: "BCH"`, timezone-bearing `from`/`until`, `owner` and `reason`. The reader
@@ -181,3 +184,17 @@ Focused evaluator controls: `node test/helpers/run.mjs test/canary-soak.test.mjs
  test/canary-soak-successor.test.mjs` through the clean committed lane check.
 `SOAK_CONTROL_OUTPUT` preserves control inputs/results and copied-CLI artifacts;
 `SOAK_RETAINED_HISTORY` adds a read-only reconstruction of captured real history.
+
+
+The [combined evaluator contract](CANARY-SOAK.md#verified-capacity-and-physical-debt)
+uses original hash-verified capacity journal inventory/config/carry-in census,
+the native allocation validator and structured logical report releases. Physical
+retirement is required by cutoff, independently of release/start turnover.
+Per-pool physical occupancy and report-released/unretired debt retain opening,
+peak, cutoff, cap ratios, run/allocation identities and unknown/lower-bound coverage.
+HUM-47 process-learning diagnostics retain actual per-run watcher RSS, provenance
+and original deliveries; shared proof stays unproved and mandatory for an offer.
+Original finite-turn packets expose both item closure and resource evaluation;
+the offer's same-turn item-close criterion is unchanged. An adapted frozen
+real-slice CLI run is development evidence, with every unresolved issue retained;
+the new candidate's own live witness stays UNRUN until observed.

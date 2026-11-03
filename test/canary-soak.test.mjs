@@ -9,7 +9,7 @@ import {spawnSync} from 'node:child_process';
 import {copyProduct} from '../lib/product-files.mjs';
 import {validateConsumerCanaryEvidence} from '../lib/consumer-offer.mjs';
 
-import {project, at, fixture} from './helpers/soak-fixture.mjs';
+import {project, at, fixture, saveSoakOriginals} from './helpers/soak-fixture.mjs';
 const evaluate = f => evaluateSoak(f);
 const has = (result, code) => result.issues.some(i => i.code === code);
 
@@ -78,7 +78,7 @@ test('a different controller, worker, watcher, claim or scripted tuple fails', (
   for (const mutate of [f => f.trial.controller.samples[0].candidate.root = '/development',
     f => f.trial.runs[0].runtime.worker.candidate.commit = 'f'.repeat(40),
     f => f.trial.runs[0].runtime.watcher.candidate.manifestSha256 = 'f'.repeat(64),
-    f => f.events.find(e => e.type === 'run.claimed').owner.release.root = '/other',
+    f => f.events.find(e => e.type === 'run.claimed' && e.run === 'R-1').owner.release.root = '/other',
     f => f.trial.scripted.candidate.inventorySha256 = 'f'.repeat(64)]) {
     const f = fixture(); mutate(f); assert.equal(evaluate(f).status, 'FAIL');
   }
@@ -121,7 +121,7 @@ test('review and reviewer roles classify reviews without a REV item prefix', () 
   }
 });
 test('duplicate report ingestion and shared notices fail', () => {
-  const f = fixture(), duplicate = {...f.events.find(e => e.type === 'report.ingested'), seq: ++f.trial.window.through_seq};
+  const f = fixture(), duplicate = {...f.events.find(e => e.type === 'report.ingested' && e.run === 'R-1'), seq: ++f.trial.window.through_seq};
   f.events.push(duplicate); assert.equal(evaluate(f).status, 'FAIL');
   const g = fixture(); g.trial.runs[0].shared.duplicates = 1; assert.equal(evaluate(g).status, 'FAIL');
 });
@@ -156,7 +156,7 @@ test('unverified evidence, short duration and forged physical identities cannot 
   }
 });
 test('unknown start time is accounted for rather than omitted', () => {
-  const f = fixture(); delete f.events.find(e => e.type === 'run.started').at;
+  const f = fixture(); delete f.events.find(e => e.type === 'run.started' && e.id === 'R-1').at;
   const r = evaluate(f); assert.equal(r.counts.all_started, 13); assert.equal(r.status, 'INCOMPLETE');
   assert.ok(has(r, 'start-time'));
 });
@@ -174,6 +174,7 @@ test('copied installed CLI verifies artifacts and consumes original packets inst
     const bytes = JSON.stringify(value); fs.writeFileSync(path.join(root, id + '.json'), bytes);
     f.trial.evidence[id] = {path: id + '.json', sha256: digest(bytes)};
   }
+  saveSoakOriginals(f, (id, bytes) => { fs.writeFileSync(path.join(root, id + '.json'), bytes); });
   save('probation', f.trial.probation.archive);
   f.events[1].archive.sha256 = f.trial.evidence.probation.sha256;
   const packet = f.trial.scripted; save('scripted', packet);

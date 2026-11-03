@@ -1,4 +1,4 @@
-import {fixture, at, proof} from './soak-fixture.mjs';
+import {fixture, at, proof, bindSavedEvidence} from './soak-fixture.mjs';
 import {digest} from '../../measurement/canary-soak.mjs';
 import {canonical} from '../../messages/schema.mjs';
 const json = value => JSON.stringify(value) + '\n';
@@ -91,8 +91,8 @@ export function successorFixture({next = true} = {}) {
   effect('current-return', current.release, false);
   for (const [id, bytes] of Object.entries(fences)) save(`${directory}/probation-switches/.successor-${id}`, bytes);
   p.history.installation = savedBytes; p.history.plist = plist;
-  f.events = [...events.slice(0, 2), ...historyEvents, ...events.slice(2)]; trial.window.start_seq = seq;
+  f.events = [...events.slice(0, 2), ...historyEvents, ...events.slice(2)]; trial.window.start_seq = Math.max(seq, trial.window.start_seq + 100);
   trial.recovery.tuple = {root: recovery.root, commit: recovery.commit, tree: previous.source.tree,
     manifestSha256: previous.manifest_sha256, inventorySha256: previous.inventory_sha256, node: previous.node};
-  return f;
+  return bindSavedEvidence(f);
 }

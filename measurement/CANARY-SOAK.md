@@ -103,10 +103,13 @@ full candidate tuple copied from saved executable/journal provenance. Include:
 - `turns`: proof; identical actual `close`, `session`, `folder` finite-turn IDs.
   Supporting evidence must prove source item closure precedes the async verdict.
 - `queue`: proof; `eligibleAt`, `freeAt`, `inputAt` (matches the original native
-  session binding's `prompted_at`), optional `freedBy` prior ordinary run. Two
-  successive causal links are required; free time follows prior folder retirement.
-  Preserve admission/queue/effect spans and the capacity allocation identity in
-  the proof; coincident timestamps alone do not establish causality.
+  session binding's `prompted_at`), full native `allocation` and structured
+  `freedBy: {type, seq, run, sha256}`. `freeAt` is the original report-ingested
+  event time: logical admission release, independent of folder retirement.
+  Two successive in-window ordinary links must reuse the exact middle allocation.
+  Each unit still needs linked automatic session/tab/folder retirement and
+  independent physical absence by cutoff. Removal may follow the next start.
+  Roots/reset/carry-in/review links supply no ordinary turnover credit.
 - `source` for source-producing work: proof and immutable landed `base`/`head`.
 - `review`: proof; source work names its original review `run`, `original: true`,
   `cap: 1`, `suites: 0`. Non-source work can explicitly use `required: false`.
@@ -129,11 +132,15 @@ the actual result on ENG-1162. Its `brain.installed-shared-control/v1` output is
 one scoped canary witness; it leaves whole-canary and genuine real-work soak
 UNRUN and cannot replace an exact-candidate S0–S8 passing packet.
 
-Report-to-ingest target is 60 seconds; report-to-close/session/folder and
-eligible-plus-free-to-input targets are 120 seconds. The output uses B4's latency
-and distribution definitions, adds maximums and a session/input projection,
-and retains each unknown. Documented load contamination makes timing misses
-INCOMPLETE; rescue/product/safety failures remain FAIL. A zero-work window cannot
+Report-to-ingest remains a hard 60-second comparison with the existing
+ documented-load rule (INCOMPLETE under documented load, otherwise FAIL).
+HUM-45 and HUM-46 YES make cleanup and eligible/free-to-input prospective
+120-second measured planning targets. `inputTargets.eligible_free_to_input`
+reports known/exceeded/unknown counts; `latency` retains raw per-run values,
+distributions and maximums. A known input miss alone does not change ordinary
+qualification or create FAIL/load-threshold INCOMPLETE. Unknown/malformed/negative
+spans and missing automatic input stay INCOMPLETE; rescue and safety stay FAIL.
+No pause/load subtraction changes these raw spans. A zero-work window cannot
 pass. Re-evaluation with identical frozen inputs/fences is deterministic and has
 no clock-derived fields. Later event appends beyond both the sequence fence and
 time cutoff do not change it. Backdated appends beyond `through_seq` raise
@@ -189,3 +196,65 @@ own activation owner explicitly accepts, defers or declines through its supporte
 controls. No other project state is written. One async immutable producer
 diff/evidence review follows the existing report queue; no reviewer suites or
 parallel settle/review path is introduced.
+
+
+## Verified capacity and physical debt
+
+`capacity` names `inventoryEvidence`, `configEvidence`, `censusEvidence`,
+`complete: true` and `journalRefs: [{journal: ORIGINAL_ABSOLUTE_PATH, evidence: ID}]`.
+All IDs resolve saved original JSON bytes through the normal digest-verifying
+reader. Inline `saved`, allocation/config overrides and live journals cannot
+replace those bytes. The inventory has `complete: true` and the complete original
+`journals` path list, including ancestors and sibling allocations. The config
+packet has `identities` containing saved configured `capacityIdentity` values
+(project, record, pool, cap and cap provenance). The census has `complete: true`,
+`at: window.from`, `through_seq: window.start_seq` and `resources`; each carry-in
+row retains `run`, `allocation` ID, exact `capacity`, `startedAt` and observed
+`session/tab/folder` states (`present`, `absent` or `unknown`). Unknown origin,
+identity, pool, inventory or retirement coverage withholds a complete audit.
+
+The adapter parses only hash-verified original jobs. The shared native
+`validateCapacityAllocation` validates receipt hashes, start/claim/journal and
+attempt bindings, admission fences, original report release and full ancestor /
+sibling consumption. The queue must equal that original receipt, including all
+release fields. Release sequence precedes the next start and wall time is no
+later for turnover credit; equal timestamps use event sequence. A valid release
+selected after the start can establish admission without earning turnover.
+
+`capacity` output separates each exact pool's physical run occupancy from
+report-released/unretired debt. Both retain opening/peak/cutoff counts and cap
+ratios, run/allocation IDs, known oldest ages and per-resource endpoints; debt
+also records created/resolved counts. Carry-in/held/failed/review resources stay
+visible. Unknown coverage marks the peak as a lower bound. Physical overlap
+above a logical cap is descriptive; an actual logical over-admission remains
+adverse. Directory absence alone proves no retirement timestamp.
+
+## Process learning and unchanged offer proof
+
+HUM-47 YES permits `purpose: process-learning`. Retain attributable full
+`runtime.watcher` provenance and verified `process` with `mode: process`, actual
+positive `watcherRssBytes`, nonnegative `noticeLatencyMs`, original ordered
+`expectedNoticeIds` / `deliveredNoticeIds`. Duplicate delivery is FAIL. The
+`learning` object identifies its diagnostic purpose, exposes operational units,
+turnovers, real RSS and deliveries, and states shared coverage `UNPROVED`.
+Missing shared offer evidence remains in the full issues, status and
+`offerEligible: false`. Shared offer proof still requires its original notice
+IDs/counts, positive aggregate RSS, absence of a per-run resident and exact tuple.
+
+`turnEvidence` names original hash-verified `brain.hold-closeout/v1` witness
+packets. The reader joins project/run/source/key and typed effects within their
+original sequence/time fences. Diagnostics expose item.closed and resource
+closeout.evaluated separately, resource-turn versus offer-turn results and the
+run-attributed source-close/original-verdict sequence. Supplied matching labels
+or coincident times are insufficient. The offer still requires item closure,
+session release and folder removal in the same finite turn. Its reserved
+amendment is not implemented. `corrections.complete/pending` remains a verified
+producer declaration: the evaluator does not infer a complete Major discharge
+inventory or exact-candidate applicability for the packet owner.
+
+A newer scorer reading an old frozen slice is diagnostic development evidence.
+Retain its original candidate tuple, event/cutoff fences, collector/adapter bytes,
+input policy, evidence digests, execution and every issue's owner/next event.
+Copy saved bytes into a fresh exclusive-create evidence directory; never replace
+an original assessment. The next candidate's own live window remains UNRUN until
+captured and scored by that candidate. Synthetic controls cannot qualify it.

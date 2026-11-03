@@ -3,6 +3,8 @@ import {createHash} from 'node:crypto';
 import {measureLifecycle, distribution, timestamp} from './lifecycle.mjs';
 import {canonical} from '../messages/schema.mjs';
 import {probationChain} from './probation-chain.mjs';
+import {capacityAudit} from './capacity-audit.mjs';
+import {diagnoseTurns} from './soak-turns.mjs';
 
 export const digest = value => createHash('sha256').update(value).digest('hex');
 const equal = (a, b) => canonical(a ?? null) === canonical(b ?? null);
@@ -153,6 +155,8 @@ export function evaluateSoak({events, trial, verifiedEvidence = []}) {
   if (lifecycle.source.unscoped_starts_in_window.length) missing('unscoped-starts', 'projectless starts require reconciliation');
   const observations = trial.runs ?? [];
   if (new Set(observations.map(r => r.run)).size !== observations.length) throw Error('duplicate run observation');
+  const capacity = capacityAudit({trial, events: selected, verified, missing, fail});
+  const processLearning = trial.purpose === 'process-learning';
   const rows = [], timing = {report_to_ingest: [], report_to_closed: [], report_to_folder_removed: [], report_to_session_release: [], eligible_free_to_input: []};
   for (const start of starts) {
     const id = start.id, o = observations.find(r => r.run === id), b = lifecycle.runs.find(r => r.run === id);
@@ -196,19 +200,26 @@ export function evaluateSoak({events, trial, verifiedEvidence = []}) {
     const sessionMs = sessionAt !== null && reportAt !== null && sessionAt >= reportAt ? sessionAt - reportAt : null;
     timing.report_to_session_release.push(sessionMs);
     need(o?.queue, 'queue-evidence', id);
+    const allocation = capacity.valid.get(id);
+    const allocationProved = allocation && capacity.lineageComplete && equal(o?.queue?.allocation, allocation) &&
+      equal(o?.queue?.freedBy, allocation.freedBy) && o?.queue?.freeAt === allocation.freeAt;
+    if (!allocationProved) missing('capacity-run', 'complete original allocation and exact native queue release required', id);
     const eligible = timestamp(o?.queue?.eligibleAt), free = timestamp(o?.queue?.freeAt), input = timestamp(o?.queue?.inputAt);
-    const queueMs = eligible !== null && free !== null && input !== null && input >= Math.max(eligible, free) && inTime(o.queue.inputAt) &&
+    const queueMs = allocationProved && eligible !== null && free !== null && input !== null && input >= Math.max(eligible, free) && inTime(o.queue.inputAt) &&
       o.queue.inputAt === sessionBinding?.prompted_at ? input - Math.max(eligible, free) : null;
     timing.eligible_free_to_input.push(queueMs);
     const spans = {...b?.latency, report_to_session_release: {ms: sessionMs}, eligible_free_to_input: {ms: queueMs}};
     for (const [key, span] of Object.entries(spans)) {
       if (span.ms === null) missing('timing-unknown', `${key} unknown`, id);
-      else if (!['report_to_closed', 'report_to_folder_removed', 'report_to_session_release'].includes(key) &&
+      else if (!['report_to_closed', 'report_to_folder_removed', 'report_to_session_release', 'eligible_free_to_input'].includes(key) &&
           span.ms > (key === 'report_to_ingest' ? 60000 : 120000)) {
         if (host?.contaminated === true) missing('load-threshold', `${key} misses planning target under documented load`, id);
         else fail('latency', `${key} exceeds planning target`, id);
       }
     }
+    const turn = diagnoseTurns({trial, events: selected, verified, row: {run: id, lifecycle: b, observation: o}});
+    if (!turn.same_offer_turn || !turn.claimed_turns_match) missing('turn-binding', 'original finite-turn fences must join item close and typed resource effects', id);
+    if (o?.source && turn.source_close_before_original_verdict !== true) missing('source-review-order', 'run-attributed source closure before original verdict unproved', id);
     const review = o?.review;
     if (kind === 'ordinary' && (o?.source || review?.required !== false)) {
       need(review, 'original-review-evidence', id);
@@ -218,12 +229,22 @@ export function evaluateSoak({events, trial, verifiedEvidence = []}) {
       if (review?.cap !== 1 || review?.suites !== 0 || review?.original !== true || !['PASS', 'pass'].includes(ingests[0]?.report?.extra?.verdict))
         missing('review-verdict', 'original cap1/zero-suite passing review or specific checked corrections required', id);
     }
+    if (processLearning && !sharedObserver) {
+      need(o?.process, 'process-evidence', id);
+      const p = o?.process;
+      if (p?.mode !== 'process' || !Number.isFinite(p.watcherRssBytes) || p.watcherRssBytes <= 0 ||
+          !Number.isFinite(p.noticeLatencyMs) || p.noticeLatencyMs < 0 || !Array.isArray(p.expectedNoticeIds) || !p.expectedNoticeIds.length ||
+          !equal(p.expectedNoticeIds, p.deliveredNoticeIds)) missing('process-observer', 'attributable process RSS and original expected/delivered notices required', id);
+      if (Array.isArray(p?.deliveredNoticeIds) && new Set(p.deliveredNoticeIds).size !== p.deliveredNoticeIds.length) fail('process-duplicate', 'duplicate process watcher delivery', id);
+    }
     need(o?.shared, 'shared-evidence', id);
     if (o?.shared?.mode !== 'shared' || o.shared.perRunWatcherRssBytes !== 0 || !Number.isFinite(o.shared.hostRssBytes) || o.shared.hostRssBytes <= 0 ||
         !Number.isFinite(o.shared.noticeLatencyMs) || o.shared.noticeLatencyMs < 0 || !Number.isInteger(o.shared.expectedNotices) || o.shared.expectedNotices < 1 ||
-        o.shared.deliveredNotices !== o.shared.expectedNotices || o.shared.duplicates !== 0)
+        o.shared.deliveredNotices !== o.shared.expectedNotices || o.shared.duplicates !== 0 ||
+        !Array.isArray(o.shared.expectedNoticeIds) || o.shared.expectedNoticeIds.length !== o.shared.expectedNotices ||
+        !equal(o.shared.expectedNoticeIds, o.shared.deliveredNoticeIds))
       missing('shared-observer', 'shared mode memory, notice latency, delivery count and dedupe observations required', id);
-    if (o?.shared?.duplicates > 0) fail('shared-duplicate', 'duplicate shared observer delivery', id);
+    if (o?.shared?.duplicates > 0 || o?.shared?.deliveredNoticeIds && new Set(o.shared.deliveredNoticeIds).size !== o.shared.deliveredNoticeIds.length) fail('shared-duplicate', 'duplicate shared observer delivery', id);
     const source = o?.source;
     if (source && (!commit(source.base) || !commit(source.head) || source.base === source.head || !proof(source))) missing('source-unit', 'immutable owned source range and landing proof required', id);
     rows.push({run: id, item: start.item, kind, counted: issues.length === beforeIssues && kind === 'ordinary', source: Boolean(source),
@@ -236,15 +257,25 @@ export function evaluateSoak({events, trial, verifiedEvidence = []}) {
   if (counted.filter(r => r.source).length < 3) missing('source-sample', 'at least three completed source units required');
   const exposure = activeExposure(trial.pauses, w, need, missing);
   if (exposure.active_ms < 90 * 60000) missing('duration', 'at least 90 active minutes required');
-  const links = new Map();
-  for (const row of ordinary) {
-    const q = row.observation?.queue, previous = ordinary.find(r => r.run === q?.freedBy);
-    if (!previous || !row.counted || !previous.counted) continue;
-    const removed = timestamp(previous.lifecycle?.resources.folder.receipt?.at), free = timestamp(q.freeAt);
-    need(q, 'turnover-evidence', row.run);
-    if (removed !== null && free !== null && removed <= free && timestamp(previous.lifecycle?.start.at) < timestamp(row.lifecycle?.start.at)) links.set(row.run, previous.run);
-  }
-  if (![...links.values()].some(id => links.has(id))) missing('turnover', 'two successive ordinary starts causally using retired candidate capacity required');
+  const learningOnly = new Set(['shared-evidence', 'shared-observer', 'finite-turn', 'turn-evidence', 'turn-binding']);
+  const operational = row => row.kind === 'ordinary' && row.issues.every(i => learningOnly.has(i.code)) &&
+    (!(row.source || row.observation?.review?.required !== false) || rows.some(r => r.kind === 'review' && r.run === row.observation?.review?.run && r.issues.every(i => learningOnly.has(i.code))));
+  const turnover = qualifies => {
+    const links = new Map();
+    for (const row of ordinary) {
+      const allocation = capacity.valid.get(row.run), q = row.observation?.queue;
+      const previous = ordinary.find(r => r.run === allocation?.freedBy?.run), parent = capacity.valid.get(previous?.run);
+      if (!allocation || !parent || !previous || !qualifies(row) || !qualifies(previous) || !capacity.lineageComplete ||
+          !equal(q?.allocation, allocation) || !equal(q?.freedBy, allocation.freedBy) || q?.freeAt !== allocation.freeAt ||
+          allocation.predecessor?.id !== parent.id || allocation.predecessor?.journal !== parent.allocation.journal ||
+          !equal(allocation.capacity, parent.capacity) || allocation.slot !== parent.slot) continue;
+      const release = selected.find(e => e.seq === allocation.freedBy.seq), a = previous.lifecycle?.start, b = row.lifecycle?.start;
+      if (release?.seq < b?.seq && timestamp(release.at) <= timestamp(b.at) && timestamp(a?.at) < timestamp(b.at)) links.set(row.run, previous.run);
+    }
+    return links;
+  };
+  const links = turnover(row => row.counted), operationalLinks = turnover(operational);
+  if (![...links.values()].some(id => links.has(id))) missing('turnover', 'two successive ordinary starts using validated logical report releases, with physical retirement by cutoff required');
   if (trial.corrections?.complete !== true || trial.corrections?.pending?.length || !proof(trial.corrections)) missing('corrections', 'all required corrections need specific producer checks');
   const status = issues.some(i => i.severity === 'FAIL') ? 'FAIL' : issues.length ? 'INCOMPLETE' : 'PASS';
   const scriptedStatus = issues.some(i => i.code.startsWith('scripted') && i.severity === 'FAIL') ? 'FAIL' :
@@ -258,7 +289,15 @@ export function evaluateSoak({events, trial, verifiedEvidence = []}) {
     layers: {scripted: scriptedStatus, real: realStatus, stable: trial.stable ?? {liveAcceptance: 'UNRUN', fullSuite: 'UNRUN'}},
     counts: {all_started: rows.length, ordinary: ordinary.length, reviews: rows.length - ordinary.length, completed_ordinary: counted.length,
       source_units: counted.filter(r => r.source).length, turnover_links: Object.fromEntries(links)},
-    exposure,
+    exposure, capacity: capacity.report,
+    inputTargets: {eligible_free_to_input: {policy: 'measured-planning-target', target_ms: 120000,
+      known: timing.eligible_free_to_input.filter(ms => ms !== null).length,
+      exceeded: timing.eligible_free_to_input.filter(ms => ms > 120000).length, unknown: timing.eligible_free_to_input.filter(ms => ms === null).length}},
+    learning: {schema: 'brain.soak-learning/v1', purpose: processLearning ? 'process-learning' : 'offer-assessment',
+      sharedCoverage: processLearning ? 'UNPROVED' : (issues.some(i => i.code.startsWith('shared')) ? 'INCOMPLETE' : 'PROVED'),
+      operational_completed_ordinary: ordinary.filter(operational).length, turnover_links: Object.fromEntries(operationalLinks),
+      process: rows.filter(r => r.observation?.process).map(r => ({run: r.run, watcher: r.observation.runtime?.watcher ?? null, ...r.observation.process})),
+      turns: rows.map(row => diagnoseTurns({trial, events: selected, verified, row}))},
     cleanupTargets: Object.fromEntries(['report_to_closed', 'report_to_folder_removed', 'report_to_session_release'].map(key =>
       [key, {policy: 'measured-planning-target', target_ms: 120000, exceeded: timing[key].filter(ms => ms > 120000).length,
         unknown: timing[key].filter(ms => ms === null).length}])),

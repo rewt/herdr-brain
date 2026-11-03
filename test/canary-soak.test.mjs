@@ -241,3 +241,14 @@ test('saved-input offer probation output withholds missing authority and wrong a
     assert.ok(result.issues.some(i => ['authority', 'probation-drift', 'probation-evidence'].includes(i.code)));
   }
 });
+
+test('the soak result shows the canary harness without scoring it', () => {
+  const harness = {schema: 'brain.installed-harness/v1', commit: 'a'.repeat(40), changes: [' M acceptance/installed-canary.mjs'], files: {}};
+  const older = fixture();
+  assert.equal(evaluate(older).scriptedHarness, null);
+  const f = fixture();
+  f.trial.scripted.harness = harness;
+  const r = evaluate(f);
+  assert.deepEqual(r.scriptedHarness, harness);
+  assert.equal(r.status, evaluate(older).status);
+});

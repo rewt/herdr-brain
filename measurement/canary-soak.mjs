@@ -284,7 +284,7 @@ export function evaluateSoak({events, trial, verifiedEvidence = []}) {
   const realStatus = !starts.length ? 'UNRUN' : realIssues.some(i => i.severity === 'FAIL') ? 'FAIL' : realIssues.length ? 'INCOMPLETE' : 'PASS';
   const shared = rows.map(r => r.observation?.shared);
   const noticeMs = shared.map(s => Number.isFinite(s?.noticeLatencyMs) ? s.noticeLatencyMs : null);
-  return {schema: 'brain.canary-soak/v1', status, offerEligible: status === 'PASS', candidate: c, window: w,
+  return {schema: 'brain.canary-soak/v1', status, offerEligible: status === 'PASS', candidate: c, scriptedHarness: scripted?.harness ?? null, window: w,
     inputs: {trial_sha256: digest(canonical(trial)), events: lifecycle.source, verifiedEvidence: [...verified].sort()},
     layers: {scripted: scriptedStatus, real: realStatus, stable: trial.stable ?? {liveAcceptance: 'UNRUN', fullSuite: 'UNRUN'}},
     counts: {all_started: rows.length, ordinary: ordinary.length, reviews: rows.length - ordinary.length, completed_ordinary: counted.length,

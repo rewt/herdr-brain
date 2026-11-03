@@ -73,7 +73,7 @@ export async function runCanary(c) {
   if(config.sharedOnly){
     await sharedCase();
     await until(()=>!fs.existsSync(path.join(directory,'closeout-turn.lock')),'shared finite closeout teardown');
-    write('outcome.json',{schema:'brain.installed-shared-control/v1',scope:['shared-observer'],status:'PASS',candidate:config.candidate,
+    write('outcome.json',{schema:'brain.installed-shared-control/v1',scope:['shared-observer'],status:'PASS',candidate:config.candidate,harness:config.harness,
       fixtureOnly:true,ready:false,wholeCanary:'UNRUN',originalLifecycleEvidence:'reuse separately retained original packet; never infer whole-canary PASS'});
     return;
   }
@@ -351,7 +351,7 @@ export async function runCanary(c) {
   const {productFiles,payloadEntry}=await module('lib/product-files.mjs');
   assert.deepEqual(Object.fromEntries(productFiles(bundle).sort().map(f=>[f,payloadEntry(bundle,f)])),config.candidate.files);
   write('outcome.json',{schema:config.skipPassedCases.length?'brain.installed-lifecycle-control/v1':'brain.installed-canary/v1',ready:false,fixtureOnly:true,scriptedMechanics:true,
-    candidate:config.candidate,cases:['S0','S1','S2','S3','S4','S5','S6','S7','S8','shared-observer'].filter(name=>!config.skipPassedCases.includes(name)),
+    candidate:config.candidate,harness:config.harness,cases:['S0','S1','S2','S3','S4','S5','S6','S7','S8','shared-observer'].filter(name=>!config.skipPassedCases.includes(name)),
     skippedCases:config.skipPassedCases,wholeCanary:config.skipPassedCases.length?'UNRUN':'executed',status:failures.length?'FAIL':'PASS',failures,
     originalReview:review.id,reviewerSuites:0,base,head,ordinarySuccessor:b.run,limits:['No real model/native/account execution','No real probation/soak/adoption','Synthetic acceptance never qualifies real runtime'],
     packet:{stages:'stages.json',tuple:'original-candidate.json',equivalence:'candidate-equivalence.json',commands:'commands.jsonl',native:'../native-calls.jsonl',record:'../project/.org/events.jsonl'}});

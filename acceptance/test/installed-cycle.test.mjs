@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { copyProduct } from '../../lib/product-files.mjs';
-import { captureCandidate, fixtureInventory } from '../installed-candidate.mjs';
+import { captureCandidate, fixtureInventory, harnessFiles, installHarness } from '../installed-candidate.mjs';
 import { harnessEnvironment } from '../run.mjs';
 import { enterScratchHomes } from '../environment.mjs';
 import { makeSnapshotWritable } from '../snapshot.mjs';
@@ -122,8 +122,7 @@ for (const [mode, revision] of [...historical, ['current', 'HEAD'], ['canary', n
       freeze(successor);
     }
     fs.symlinkSync(bundle, path.join(home, 'current'));
-    for (const name of ['installed-cycle.mjs', 'installed-canary.mjs', 'installed-closeout-control.mjs', 'installed-native.mjs', 'installed-observations.mjs']) fs.copyFileSync(path.join(source, 'acceptance', name), path.join(root, 'harness', name));
-    for (const name of ['fixture-policy.mjs', 'memory-fixture.mjs']) fs.copyFileSync(path.join(source, 'test/helpers', name), path.join(root, 'harness', name));
+    const harness = installHarness(source, path.join(root, 'harness'), args => run('git', ['--no-optional-locks', '-C', source, ...args]));
     env.NODE_OPTIONS = `--import=${path.join(root, 'harness/fixture-policy.mjs')} --import=${path.join(root, 'harness/installed-observations.mjs')}`;
     fs.writeFileSync(path.join(root, 'bin/herdr'), `#!/bin/sh\nexec ${quote(process.execPath)} ${quote(path.join(root, 'harness/installed-native.mjs'))} "$@"\n`, { mode: 0o755 });
     fs.writeFileSync(path.join(root, 'bin/watch'), `#!/bin/sh\nexec ${quote(process.execPath)} ${quote(path.join(bundle, 'watch/watch.mjs'))} "$@" --record-only --retry-after 0.02 --start-grace 0\n`, { mode: 0o755 });
@@ -142,7 +141,7 @@ for (const [mode, revision] of [...historical, ['current', 'HEAD'], ['canary', n
     run('git', ['-C', repo, 'add', '.']); run('git', ['-C', repo, 'commit', '-qm', 'Independent scratch project']);
     fs.writeFileSync(path.join(root, 'native.json'), JSON.stringify({ repo, workspaces: {}, next: 0 }));
     const forbidden = [path.join(source, 'package.json'), path.join(savedHome, 'development/rewt/.org/config.json')];
-    const config = { root, repo, org, home, bundle, successor, commit, mode, development, forbidden, candidate,
+    const config = { root, repo, org, home, bundle, successor, commit, mode, development, forbidden, candidate, harness,
       skipPassedCases: mode === 'canary' ? skipPassedCases : [],
       sharedOnly:mode==='canary'&&process.env.INSTALLED_CYCLE_SHARED_ONLY==='1' };
     fs.writeFileSync(path.join(root, 'config.json'), JSON.stringify(config, null, 2));
@@ -156,7 +155,36 @@ for (const [mode, revision] of [...historical, ['current', 'HEAD'], ['canary', n
     fs.writeFileSync(path.join(evidence, 'scenario-output.json'), JSON.stringify({ status: result.status, signal: result.signal,
       error: result.error?.message, stdout: result.stdout, stderr: result.stderr }, null, 2));
     assert.equal(result.status, 0, result.error?.message ?? result.stderr + result.stdout);
+    if (mode === 'canary') assert.deepEqual(JSON.parse(fs.readFileSync(path.join(evidence, 'outcome.json'))).harness, harness);
     success = true;
     t.diagnostic(JSON.stringify({ mode, commit, evidence, result: ['current','canary'].includes(mode) ? JSON.parse(fs.readFileSync(path.join(evidence, 'outcome.json'))) : 'historical dispatch witnessed' }));
   });
 }
+
+test('installed harness identity names the commit, copied bytes and any uncommitted change', t => {
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ih-')));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const repo = path.join(root, 'repo'), target = path.join(root, 'harness');
+  const git = args => {
+    const result = spawnSync('git', ['-C', repo, ...args], { encoding: 'utf8' });
+    assert.equal(result.status, 0, result.stderr); return result.stdout;
+  };
+  fs.mkdirSync(target);
+  for (const file of harnessFiles) { fs.mkdirSync(path.dirname(path.join(repo, file)), { recursive: true }); fs.writeFileSync(path.join(repo, file), file); }
+  spawnSync('git', ['init', '-qb', 'main', repo]);
+  git(['add', '.']); git(['-c', 'user.name=t', '-c', 'user.email=t@example.invalid', 'commit', '-qm', 'Harness']);
+  const clean = installHarness(repo, target, git), probe = harnessFiles[1];
+  assert.equal(clean.commit, git(['rev-parse', 'HEAD']).trim());
+  assert.deepEqual(clean.changes, []);
+  assert.deepEqual(Object.keys(clean.files), harnessFiles);
+  assert.equal(fs.readFileSync(path.join(target, path.basename(probe)), 'utf8'), probe);
+  fs.appendFileSync(path.join(repo, probe), 'uncommitted assertion');
+  const changed = installHarness(repo, target, git);
+  assert.equal(changed.commit, clean.commit);
+  assert.deepEqual(changed.changes, [` M ${probe}`]);
+  assert.notEqual(changed.files[probe], clean.files[probe]);
+  git(['checkout', '--', probe]);
+  assert.deepEqual(installHarness(repo, target, git), clean);
+  fs.rmSync(path.join(repo, probe));
+  assert.throws(() => installHarness(repo, target, git), /ENOENT/);
+});

@@ -163,7 +163,10 @@ broken/fixed witnesses are reused, not replayed by this selection.
 `brain.installed-canary/v1` is the packet contract for probation and soak owners.
 `outcome.json` names the original `brain.installed-candidate/v1` tuple, S0–S8
 and shared-observer results, immutable consumer base/head, original review and
-zero reviewer suites. `stages.json` includes UTC boundaries and monotonic spans;
+zero reviewer suites. The test copies the harness from its checkout, so
+`harness` names that checkout's commit, its `git status` lines and the SHA-256
+of each copied file; a nonempty `changes` means the hashes may not match the
+commit. `stages.json` includes UTC boundaries and monotonic spans;
 `commands.jsonl`, `executables.jsonl`, the complete scratch record and dispatch
 journals retain actual commands, runtime roots, attempts and effect receipts.
 `candidate-equivalence.json` compares every runtime file/hash/mode with the

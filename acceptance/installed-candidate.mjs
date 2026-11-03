@@ -12,6 +12,20 @@ export function fixtureInventory(root, candidate) {
   if(JSON.stringify(files)!==JSON.stringify(candidate.files))throw Error('candidate runtime inventory drift');
   return sha(JSON.stringify(files));
 }
+// The candidate tuple binds only the bundle; these files come from the checkout.
+// Hash the copied bytes that will run. Nonempty changes means they may not be
+// what commit holds.
+export const harnessFiles=['acceptance/installed-cycle.mjs','acceptance/installed-canary.mjs','acceptance/installed-closeout-control.mjs',
+  'acceptance/installed-native.mjs','acceptance/installed-observations.mjs','test/helpers/fixture-policy.mjs','test/helpers/memory-fixture.mjs'];
+export function installHarness(source,target,git){
+  const files={};
+  for(const file of harnessFiles){
+    const copy=path.join(target,path.basename(file));
+    fs.copyFileSync(path.join(source,file),copy);files[file]=sha(fs.readFileSync(copy));
+  }
+  return {schema:'brain.installed-harness/v1',commit:git(['rev-parse','HEAD']).trim(),
+    changes:git(['status','--porcelain']).split('\n').filter(Boolean),files};
+}
 export function captureCandidate(directory, {commit,manifestSha256,tree}={}) {
   if(!/^[a-f0-9]{40}$/.test(commit??''))throw Error('exact candidate commit required');
   if(!/^[a-f0-9]{64}$/.test(manifestSha256??''))throw Error('exact manifest digest required');

@@ -1806,6 +1806,16 @@ durable outcome decision naming both attempts; it does not grant another retry.
 Capacity retries keep the fresh attempt's separate ask path, preserving the
 original ask as well as its journal and terminal receipt.
 
+A dispatch that the shared launch hold refused at `open`, before any allocation or
+native effect, follows the same edge once that hold no longer stands. Its typed
+`DISPATCH_INPUT_CHANGED` failure, terminal row and saved foreground receipt must
+agree on the refusal, its subject and zero native execution, and no run may have
+started since. Without this, a refusal outlives its hold: the line retains the
+attempt on every pass and the item idles as ready work. Its proof kind is
+`launch-hold-cleared`; a current hold, a later stage or any other refusal stays
+held. A pre-completion attempt has no published completion to read, so its
+outcome diagnostic stays open until the fresh attempt records a run.
+
 Final reports and authorized abandonments bind their original run/claim, dispatch,
 launch receipt, common directory and worktree/branch generation in the source
 transaction. Missing allocation or native identity produces a typed binding

@@ -47,7 +47,7 @@ export function haltObservation({state,events,org,identity,config,occupancy,acti
   const causes=ready.map(i=>({item:i.id,created:i.created.seq,role:i.role,capability:i.capability,route:i.meta.route,queue_class:classify(i),priority:i.priority,last_run:i.runs.at(-1)??null,report:state.runs.get(i.runs.at(-1))?.report?.file??null,
     holds:[held(i),...ancestors(state,i.id).map(held)],
     failures:Object.entries(actions).filter(([key])=>key.startsWith(`dispatch:${i.id}:`)).map(([key,e])=>[key,canonicalFailure(e.error)])}));
-  const source=['line-service/line-service.mjs','line-service/priority-order.mjs','line-service/halt-repair.mjs','line-service/decision-policy.mjs','line-service/outcome-decision.mjs','line-service/phase1.mjs','line-service/review.mjs','line-service/review-observation.mjs','dispatch/preflight.mjs','lib/worker-brief.mjs','lib/item-launch-hold.mjs','lib/ordinary-admission.mjs'].map(file=>[file,hash(fs.readFileSync(new URL(`../${file}`,import.meta.url),'utf8'))]);
+  const source=['line-service/line-service.mjs','line-service/priority-order.mjs','line-service/halt-repair.mjs','line-service/decision-policy.mjs','line-service/outcome-decision.mjs','line-service/phase1.mjs','line-service/review.mjs','line-service/review-observation.mjs','dispatch/preflight.mjs','dispatch/hold-readmission.mjs','lib/worker-brief.mjs','lib/item-launch-hold.mjs','lib/ordinary-admission.mjs'].map(file=>[file,hash(fs.readFileSync(new URL(`../${file}`,import.meta.url),'utf8'))]);
   return {ready:ready.map(i=>i.id),productive,progress,causes,signature:hash([causes,policy,progress,config.routes,config.selection_policy,config.ordinary_admission,source])};
 }
 

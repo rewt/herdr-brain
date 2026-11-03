@@ -40,6 +40,7 @@ import {hostRecoveryNotices,hostRecoveryOwner} from './host-recovery.mjs';
 import { discoverChanges,dispatchInput,phase0Boundary,morningDigest,recordReviewResults,reviewCompletionPlan,recordReviewCompletion,ensureReviewBoundary,canonicalReviewIndex,observeReviewHealth } from './phase1.mjs';
 import {preflightContinuation,initialCapacityRefusal,initialBriefRefusal,initialSourceRootRefusal} from '../dispatch/preflight.mjs';
 import {stoppedDispatchReadmission} from '../dispatch/stopped-readmission.mjs';
+import {clearedHoldReadmission} from '../dispatch/hold-readmission.mjs';
 import {prejournalReadmission} from '../dispatch/prejournal-readmission.mjs';
 import {sourceCompletionProof,preEffectSourceHold,queueSourceException} from './source-completion.mjs';
 import {createWorkerBrief,projectExceptionAddress} from '../lib/worker-brief.mjs';
@@ -913,7 +914,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
             save();stale=true;
           }
           else if(!outcome.producer&&!['not-started','dispatch-complete'].includes(outcome.status)){
-            const recovery=entry.prejournal_recovery,recovered=effects.actions[recovery?.key];
+            const recovery=entry.prejournal_recovery??entry.stop_recovery,recovered=effects.actions[recovery?.key];
             // A saved edge alone does not own an exit. Keep the original's
             // signal until a recorded start or a durable outcome handoff.
             if(!recovery||!(recovered?.original_outcome?.run||recovered?.recorded_dispatch_status?.run||effects.outcome_decisions?.[recovery.key]))note(`outcome:${key}`,'Original dispatch completion producer is missing; retain its original attempt for the project supervisor.',{item,journal:outcome.journal??null,outcome});
@@ -1004,7 +1005,7 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
         if (roleIs(item, 'REV') && !isQueueReview(item)) { note(`dispatch:${item.id}`, 'T2 legacy/manual review queue binding UNKNOWN; retain existing owner/attempt'); observation.retain('legacy review binding');continue; }
         try {
           const key = `dispatch:${item.id}:${input}`;
-          let continuation,retryAdmission,briefRecovery,sourceRecovery,prejournalRecovery,stopRecovery,dispatchKey=key;
+          let continuation,retryAdmission,briefRecovery,sourceRecovery,prejournalRecovery,stopRecovery,stopProof,dispatchKey=key;
           if (effects.actions[key]) {
             const original=effects.actions[key];
             dispatchKey=original.stop_recovery?.key??original.prejournal_recovery?.key??key;
@@ -1016,8 +1017,9 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
             if(!result?.journal&&prior.receipt?.stdout)try{result=JSON.parse(prior.receipt.stdout);}catch{}
             if(!result?.journal&&prior.original_outcome?.journal)result={journal:prior.original_outcome.journal};
             if(result?.journal){
-              if(!original.stop_recovery&&!original.prejournal_recovery)stopRecovery=stoppedDispatchReadmission({journal:result.journal,repo,org,common:project.identity,item:item.id,
-                brief:path.join(directory,`${digest(key)}.ask.md`),input,events:snapshot.events});
+              const binding={journal:result.journal,repo,org,common:project.identity,item:item.id,brief:path.join(directory,`${digest(key)}.ask.md`)};
+              stopProof=(events,state)=>stoppedDispatchReadmission({...binding,input,events})??clearedHoldReadmission({...binding,entry:effects.actions[key],events,state});
+              if(!original.stop_recovery&&!original.prejournal_recovery)stopRecovery=stopProof(snapshot.events,snapshot.state);
               if(stopRecovery)dispatchKey=`dispatch-recovered:${item.id}:${digest([key,stopRecovery])}`;
               else continuation=preflightContinuation({journal:result.journal,repo,org,common:project.identity,root:fs.realpathSync(sourceRoot),events:snapshot.events});
             }
@@ -1055,12 +1057,10 @@ export function createLineService({ repo, org, to, herdr = 'herdr', env = proces
               return JSON.parse(cli('dispatch/dispatch.mjs',args));
             };
             if(stopRecovery){
-              const proof=stoppedDispatchReadmission({journal:stopRecovery.journal,repo,org,common:project.identity,item:item.id,
-                brief:path.join(directory,`${digest(key)}.ask.md`),input,events:fresh.events});
+              const proof=stopProof(fresh.events,fresh.state);
               if(JSON.stringify(proof)!==JSON.stringify(stopRecovery))throw Error('original stopped dispatch proof changed before re-admission');
-              transact(org,events=>{
-                const checked=stoppedDispatchReadmission({journal:proof.journal,repo,org,common:project.identity,item:item.id,
-                  brief:path.join(directory,`${digest(key)}.ask.md`),input,events});
+              transact(org,(events,state)=>{
+                const checked=stopProof(events,state);
                 if(JSON.stringify(checked)!==JSON.stringify(proof))throw Error('original stopped dispatch changed during re-admission');
                 return{add:[{type:'line-service.dispatch-readmitted',project:project.identity,org,item:item.id,key,recovery_key:dispatchKey,proof}]};
               },{actor:'line-service',strictTail:true});

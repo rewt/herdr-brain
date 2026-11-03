@@ -22,6 +22,7 @@ import {queueOutcomeDecision} from '../line-service/outcome-decision.mjs';
 import {commandIntent,finishCommand,forgetActiveCommand} from '../lib/command-receipt.mjs';
 import {stoppedDispatchReadmission} from '../dispatch/stopped-readmission.mjs';
 import {prejournalReadmission} from '../dispatch/prejournal-readmission.mjs';
+import {clearedHoldReadmission} from '../dispatch/hold-readmission.mjs';
 import {setup as closeoutFixture,events as closeoutEvents,evaluations as closeoutEvaluations} from './helpers/closeout-fixture.mjs';
 
 function fixture(t) {
@@ -306,6 +307,103 @@ test('HOLD-stopped dispatch requires exact original zero-launch evidence and rel
   fs.unlinkSync(f.journal+'.locks/original');assert.ok(stoppedDispatchReadmission(args));
   fs.unlinkSync(f.journal+'.driver/results.jsonl');assert.equal(stoppedDispatchReadmission(args),null);
   f.service.pass();assert.equal(f.calls.length,0,'missing terminal evidence stays held');
+});
+
+// ARCH-41 shape: a foreground refusal older than published completions, whose
+// saved outcome froze as retained before its terminal could prove not-started.
+function holdRefusalFixture(t) {
+  const f=fixture(t),review=f.record(['add','Completed review','--role','reviewer']).split(' ')[0],parent=f.add('Open follow-up',1,['--parent',review]);
+  const item=f.add('Refused ordinary work',1,['--parent',parent]),service=f.service(),common=gitProject(f.repo).identity;
+  transact(f.org,()=>({add:[{type:'item.closed',id:review,as:'done'},{type:'item.updated',id:parent,fields:{meta:{hold:true}}}]}));
+  const key=`dispatch:${item}:${f.show(item).created.seq}:ordinary`;
+  const brief=path.join(service.directory,createHash('sha256').update(JSON.stringify(key)).digest('hex')+'.ask.md');
+  fs.writeFileSync(brief,'# Original assignment\n');
+  const journal=path.join(f.org,'dispatch/hold-original.json');fs.mkdirSync(path.dirname(journal),{recursive:true});
+  const reason=`dispatch launch input changed: item/ancestor ${parent} is closed/held/reserved`;
+  const failure={code:'DISPATCH_INPUT_CHANGED',kind:'guard-or-command',stage:'open',native_launch_attempted:false,
+    launch_input:{journal,token:'hold-original',item,run:null,project:common,subject:parent}};
+  const job={token:'hold-original',repo:f.repo,org:f.org,common,item,brief,stage:'open',run:null,release:{root:'/retired/source'},
+    phase1_protocol:1,native_launch_attempted:false,error:reason,failure};
+  const bytes=JSON.stringify(job);fs.writeFileSync(journal,bytes);fs.mkdirSync(journal+'.driver');fs.mkdirSync(journal+'.locks');
+  const terminal={journal,stage:'open',run:null,exit_code:1,error:reason,code:failure.code,native_launch_attempted:false};
+  fs.writeFileSync(journal+'.driver/results.jsonl',JSON.stringify(terminal)+'\n');
+  const original={state:'held',at:'2026-10-27T19:18:31.591Z',error:`dispatch: ${reason}\nrequest: ${journal}`,finished_at:'2026-10-27T19:18:36.780Z',
+    receipt:{status:1,signal:null,stdout:JSON.stringify({result:'failed',code:failure.code,reason,journal})+'\n',stderr:`dispatch: ${reason}\nrequest: ${journal}\n`},
+    original_outcome:{status:'retained',journal,request_sha256:createHash('sha256').update(bytes).digest('hex'),stage:'open',run:null,native_launch_attempted:false,error:reason}};
+  const file=path.join(service.directory,'effects.json');fs.writeFileSync(file,JSON.stringify({identity:common,org:f.org,actions:{[key]:original}}));
+  const hold=value=>transact(f.org,()=>({add:[{type:'item.updated',id:parent,fields:{meta:{hold:value}}}]}));
+  const proof=(entry=original,extra=[])=>{
+    const events=[...loadEvents(f.org).events,...extra];
+    return clearedHoldReadmission({entry,journal,repo:f.repo,org:f.org,common,item,brief,events,state:fold(events)});
+  };
+  const holds=()=>fs.readFileSync(path.join(service.directory,'passes.jsonl'),'utf8').trim().split('\n').map(JSON.parse).filter(r=>r.action==='hold'&&r.boundary===`outcome:${key}`).length;
+  // The open parent is independent ready work once its own hold lifts.
+  const starts=()=>f.calls.filter(c=>c.args[1]===item);
+  return {...f,item,parent,review,line:service,common,key,brief,journal,job,terminal,failure,reason,original,file,bytes,hold,proof,holds,starts};
+}
+
+test('a launch-hold refusal stays held while its hold stands, then starts once and retains its original attempt',t=>{
+  const f=holdRefusalFixture(t);
+  assert.equal(f.proof(),null);f.line.pass();assert.equal(f.starts().length,0,'a current hold keeps the attempt held');
+  assert.deepEqual(JSON.parse(fs.readFileSync(f.file)).actions[f.key],f.original);
+  f.hold(false);f.line.pass();assert.equal(f.starts().length,1,'first eligible pass starts one fresh attempt');
+  f.service().pass();f.service().pass();assert.equal(f.starts().length,1,'restart cannot double-launch');
+  const [call]=f.starts();assert.ok(!call.args.includes('--retry'));
+  assert.notEqual(call.args[call.args.indexOf('--brief')+1],f.brief,'new attempt owns a separate ask');
+  assert.equal(fs.readFileSync(f.journal,'utf8'),f.bytes);assert.equal(fs.readFileSync(f.brief,'utf8'),'# Original assignment\n');
+  assert.equal(fs.readFileSync(f.journal+'.driver/results.jsonl','utf8'),JSON.stringify(f.terminal)+'\n');
+  const actions=JSON.parse(fs.readFileSync(f.file)).actions,{stop_recovery:recovery,...kept}=actions[f.key];
+  assert.deepEqual(kept,f.original);assert.equal(recovery.kind,'launch-hold-cleared');assert.equal(recovery.subject,f.parent);
+  assert.equal(recovery.journal,f.journal);assert.equal(actions[recovery.key].state,'complete');
+  const admissions=loadEvents(f.org).events.filter(e=>e.type==='line-service.dispatch-readmitted');
+  assert.equal(admissions.length,1);assert.equal(admissions[0].proof.native_launch_attempted,false);
+});
+
+test('a launch-hold refusal keeps its outcome diagnostic until the fresh attempt records a run',t=>{
+  const f=holdRefusalFixture(t);
+  f.hold(false);f.line.pass();const first=f.holds();assert.ok(first>0);
+  f.service().pass();const second=f.holds();assert.ok(second>first,'admitted but unstarted keeps the diagnostic');
+  const effects=JSON.parse(fs.readFileSync(f.file));effects.actions[effects.actions[f.key].stop_recovery.key].original_outcome={status:'recorded-run',run:'R-9'};
+  fs.writeFileSync(f.file,JSON.stringify(effects));
+  f.service().pass();assert.equal(f.holds(),second,'the recorded run ends the diagnostic');assert.equal(f.starts().length,1);
+});
+
+test('a launch-hold refusal requires its exact typed zero-effect evidence and released driver ownership',t=>{
+  const f=holdRefusalFixture(t);f.hold(false);assert.ok(f.proof());
+  const journalled=(patch,terminal=f.terminal)=>{
+    fs.writeFileSync(f.journal,JSON.stringify({...f.job,...patch}));
+    fs.writeFileSync(f.journal+'.driver/results.jsonl',JSON.stringify(terminal)+'\n');
+    const proof=f.proof();fs.writeFileSync(f.journal,f.bytes);fs.writeFileSync(f.journal+'.driver/results.jsonl',JSON.stringify(f.terminal)+'\n');return proof;
+  };
+  const native='EPERM native refusal';
+  for(const [patch,terminal] of [
+    [{native_launch_attempted:true},f.terminal],[{worker:{name:'original'}},f.terminal],[{launchProcess:{pid:1}},f.terminal],[{sessionBinding:{}},f.terminal],[{run:'R-1'},f.terminal],
+    [{error:native},{...f.terminal,error:native}],
+    [{failure:{...f.failure,code:'DISPATCH_FAILED'}},{...f.terminal,code:'DISPATCH_FAILED'}],
+    [{failure:{...f.failure,kind:'fence'}},f.terminal],
+    [{failure:{...f.failure,launch_input:undefined}},f.terminal],
+    [{failure:{...f.failure,launch_input:{...f.failure.launch_input,subject:f.review}}},f.terminal],
+    [{failure:{...f.failure,launch_input:{...f.failure.launch_input,item:f.parent}}},f.terminal],
+    [{failure:{...f.failure,launch_input:{...f.failure.launch_input,journal:f.journal+'.other'}}},f.terminal],
+    [{failure:{...f.failure,launch_input:{...f.failure.launch_input,token:'other'}}},f.terminal],
+    [{stage:'start',failure:{...f.failure,stage:'start'}},{...f.terminal,stage:'start'}],
+    [{},{...f.terminal,exit_code:0}],[{},{...f.terminal,native_launch_attempted:null}],[{},{...f.terminal,run:'R-1'}],[{},{...f.terminal,error:'other'}],
+  ])assert.equal(journalled(patch,terminal),null,JSON.stringify([patch,terminal]));
+  assert.ok(f.proof(),'restored evidence still proves');
+  for(const alter of [e=>e.state='started',e=>e.history=[{}],e=>e.at='invalid',e=>e.failure={kind:'fence'},e=>e.stop_recovery={},e=>e.prejournal_recovery={},
+    e=>e.receipt.status=0,e=>e.receipt.signal='SIGTERM',e=>e.receipt.signal_sent=true,e=>e.receipt.error={message:'lost'},e=>e.receipt.stdout='not json',
+    ...[{result:'detached'},{code:'DISPATCH_FAILED'},{reason:'other'},{journal:f.journal+'.other'}].map(patch=>e=>e.receipt.stdout=JSON.stringify({...JSON.parse(e.receipt.stdout),...patch}))]){
+    const entry=structuredClone(f.original);alter(entry);assert.equal(f.proof(entry),null,alter.toString());
+  }
+  for(const start of [{item:f.item,at:'2026-11-03T00:00:00Z',meta:{}},{item:f.parent,at:'2026-10-01T00:00:00Z',meta:{dispatch_journal:f.journal}},{item:f.parent,at:'2026-10-01T00:00:00Z',meta:{dispatch_attempt:'hold-original'}}])
+    assert.equal(f.proof(f.original,[{type:'run.started',id:'R-9',seq:99999,...start}]),null,JSON.stringify(start));
+  assert.equal(clearedHoldReadmission({entry:f.original,journal:f.journal,repo:f.repo,org:f.org,common:f.common,item:f.item,brief:f.brief+'.other',events:loadEvents(f.org).events,state:fold(loadEvents(f.org).events)}),null,'foreign ask');
+  fs.writeFileSync(f.journal+'.lock','original driver');assert.equal(f.proof(),null);fs.unlinkSync(f.journal+'.lock');
+  fs.writeFileSync(f.journal+'.locks/original','ticket');assert.equal(f.proof(),null);fs.unlinkSync(f.journal+'.locks/original');
+  assert.ok(f.proof());
+  fs.unlinkSync(f.journal+'.driver/results.jsonl');assert.equal(f.proof(),null);
+  f.line.pass();assert.equal(f.starts().length,0,'missing terminal evidence stays held');
+  assert.deepEqual(JSON.parse(fs.readFileSync(f.file)).actions[f.key],f.original);
 });
 
 test('HOLD-stopped dispatch rechecks the original proof after capacity observation before a fresh command',t=>{

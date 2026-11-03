@@ -231,10 +231,13 @@ chain at native launch and immediately before prompt delivery. A closed target,
 closed goal, dropped ancestor, held, reserved or missing subject refuses only
 that request. Completing an ordinary work ancestor leaves its open follow-ups
 dispatchable without reparenting, including nested follow-ups and older direct
-filings without a proposing run. A completed review still admits only its exact
-formally linked correction with immutable finding/source evidence; moving that
-correction under completed ordinary work does not grant an exception. Explicit
-holds and human/reserved ancestors remain barriers even after completion.
+filings without a proposing run. A completed review treats an ordinary proposal
+the same way: it starts without reparenting and its landed source gets its own
+independent review. Among corrections, a completed review admits only its exact
+formally linked correction with immutable finding/source evidence, which retains
+the original review with no re-review chain; moving that correction under
+completed ordinary work does not grant an exception. Explicit holds and
+human/reserved ancestors remain barriers even after completion.
 The launcher also checks
 after native shell preparation, binding its check to the pending journal bytes,
 source/project, current run and claim generation. Changed inputs retain a typed

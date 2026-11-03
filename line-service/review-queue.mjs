@@ -23,9 +23,10 @@ import {installedContext} from './cutoff.mjs';
 import {uncertainOutcomeDoctrine} from '../lib/uncertain-outcome.mjs';
 import { intentFirstCreation } from '../lib/dispatch-template.mjs';
 import { reviewDiffForm } from '../lib/review-diff-form.mjs';
+import { retainsOriginalReview } from '../lib/proposal-intake.mjs';
 
 const root = fs.realpathSync(fileURLToPath(new URL('../', import.meta.url)));
-const files = ['lib/review-diff-form.mjs','line-service/producer-ranges.mjs','line-service/review-reference-proof.mjs','line-service/review-unstarted.mjs','line-service/review-queue.mjs', 'line-service/review-findings.mjs', 'line-service/review-targets.mjs','line-service/review.mjs','line-service/review-observation.mjs','line-service/review-group.mjs','line-service/review-recovery.mjs','line-service/review-resolutions.mjs', 'line-service/phase1.mjs', 'line-service/cutoff.mjs','settle/review-range.mjs', 'bin/org.mjs', 'dispatch/dispatch.mjs','dispatch/launch-guard.mjs','lib/item-launch-hold.mjs','lib/worker-brief.mjs','dispatch/preflight.mjs','dispatch/foreground-command.mjs','dispatch/outcome.mjs','dispatch/completion.mjs','lib/uncertain-outcome.mjs','dispatch/not-started.mjs','dispatch/request-lock.mjs', 'dispatch/session-cap.mjs', 'dispatch/unlanded-cap.mjs','lanes/lane.mjs'];
+const files = ['lib/review-diff-form.mjs','line-service/producer-ranges.mjs','line-service/review-reference-proof.mjs','line-service/review-unstarted.mjs','line-service/review-queue.mjs', 'line-service/review-findings.mjs', 'line-service/review-targets.mjs','line-service/review.mjs','line-service/review-observation.mjs','line-service/review-group.mjs','line-service/review-recovery.mjs','line-service/review-resolutions.mjs', 'line-service/phase1.mjs', 'line-service/cutoff.mjs','settle/review-range.mjs', 'bin/org.mjs', 'dispatch/dispatch.mjs','dispatch/launch-guard.mjs','lib/item-launch-hold.mjs','lib/proposal-intake.mjs','lib/worker-brief.mjs','dispatch/preflight.mjs','dispatch/foreground-command.mjs','dispatch/outcome.mjs','dispatch/completion.mjs','lib/uncertain-outcome.mjs','dispatch/not-started.mjs','dispatch/request-lock.mjs', 'dispatch/session-cap.mjs', 'dispatch/unlanded-cap.mjs','lanes/lane.mjs'];
 const hashes = files.map(file => createHash('sha256').update(fs.readFileSync(path.join(root, file))).digest('hex'));
 const immutableCode=fs.existsSync(path.join(root,'.release-manifest.json'))||fs.existsSync(path.join(root,'.release-commit'));
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
@@ -78,7 +79,7 @@ function queueImplementation(env){
 function source({ state, events, org, repo, identity, runId, head, base,env=process.env,originalCapture }) {
   const run = state.runs.get(runId), item = run && state.items.get(run.item);
   if (!run || !item) throw Error('review queue needs an owned immutable landed source');
-  if (roleIs(state.items.get(item.parent), 'REV') || item.meta.review_fix_of) throw Error('linked formal correction retains its original review; no automatic re-review chain');
+  if (retainsOriginalReview(state, item)) throw Error('linked formal correction retains its original review; no automatic re-review chain');
   const current = readOwnedRun(org, run.id);
   requireController(current, 'brain'); assertOwner(current, { owner: run.owner, generation: run.owner_generation });
   queueConsumer({ run,env });

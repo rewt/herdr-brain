@@ -82,6 +82,19 @@ test('selected ordinary proposal passes the fresh dispatch fence without reparen
   assert.deepEqual(f.read().actions, [], 'no native effects');
 });
 
+test('correction data on an unrelated ordinary proposal stays refused at launch and prompt', t => {
+  const f = formalFixture(t), correction = f.source();
+  const job = f.job({ correction, item: 'ENG-3', base: correction.base }), record = fs.readFileSync(f.eventFile);
+  const { events, state } = f.current();
+  assert.equal(correctionSource({ item: state.items.get('ENG-3'), state, events, repo: f.repo, org: f.org }), null);
+  const refusal = (boundary, reason) => assert.throws(() => checkDispatchEligibility(job, 'offline-formal-boundary', { boundary }), error =>
+    error.code === 'DISPATCH_INPUT_CHANGED' && error.launch_input.subject === 'ENG-3' && reason.test(error.message), boundary);
+  refusal('launch', /saved author source changed/);
+  refusal('prompt', /no owned launched source/);
+  assert.deepEqual(fs.readFileSync(f.eventFile), record, 'refusal appends nothing');
+  assert.deepEqual(f.read().actions, [], 'no native effects');
+});
+
 test('formal correction with a wrong or missing typed finding or source stays refused', t => {
   const cases = {
     'missing finding binding': { link: { finding_key: 'review-finding/v1:other' } },

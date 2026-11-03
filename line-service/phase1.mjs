@@ -26,6 +26,7 @@ import {reviewCorrectionEvents} from './review-findings.mjs';
 import {conditionalMinorDeferrals} from '../lib/review-live-trigger.mjs';
 import {batchedMinorSection,batchedMinorKey} from '../lib/batched-minors.mjs';
 import {routedReframe} from './reframe-route.mjs';
+import {retainsOriginalReview} from '../lib/proposal-intake.mjs';
 
 export function reviewCompletionPlan({events,state,runId}){
   const run=state.runs.get(runId),item=state.items.get(run?.item),key=item?.meta.review_key;
@@ -124,7 +125,7 @@ export function canonicalReviewIndex({events,state,repo,org,identity,boundary,re
   }
   const nativeGroups=new Map();for(const q of state.items.values())if(q.meta.review_target?.evidence_kind==='native-landings/v1')nativeGroups.set(`${q.meta.review_source_item}:${q.meta.review_source_run}`,queueProducerGroup(q));
   const entries=heads.map(head=>{
-    const owners=landed.get(head)??claims.get(head)??[],owner=owners.length===1?owners[0]:null,item=owner&&state.items.get(owner.item),run=owner&&state.runs.get(owner.run),fix=item&&(item.meta.review_fix_of||roleIs(state.items.get(item.parent),'REV'));
+    const owners=landed.get(head)??claims.get(head)??[],owner=owners.length===1?owners[0]:null,item=owner&&state.items.get(owner.item),run=owner&&state.runs.get(owner.run),fix=item&&retainsOriginalReview(state,item);
     const native=owner&&nativeGroups.get(`${owner.item}:${owner.run}`);
     return{head,item:owner?.item??null,run:owner?.run??null,key:owner?`${owner.item}:${head}`:null,group_key:owner?(native??producerGroupKey(owner.item,owner.run,run?.report?.sha256)??`producer-pending:${owner.item}:${owner.run}`):`unattributed:${head}`,attribution:owner?(landed.has(head)?'landed-producer':'report-claim'):owners.length?'ambiguous':'missing',producer_report:!!run?.report,native_evidence:Boolean(native),source_status:owner&&guardedHeads.has(head)?'covered':'unknown',
       ...(fix?{exemption:{reason:'linked formal correction retains its original review; no re-review chain',review_key:item.meta.review_fix_of??null}}:{})};
@@ -226,7 +227,7 @@ export function discoverChanges({events,state,repo,org,identity,boundary,readGit
     const item=state.items.get(run.item);
     // Non-engineer reports can cite reviewed/researched source. Only positive
     // own-landing receipts make those runs producers, never report references.
-    if(!item||!roleIs(item,'ENG')&&!landed.has(run.id)||roleIs(state.items.get(item.parent),'REV')||item.meta.review_fix_of)continue;
+    if(!item||!roleIs(item,'ENG')&&!landed.has(run.id)||retainsOriginalReview(state,item))continue;
     const group=producerGroupKey(item.id,run.id,run.report?.sha256),backfills=[...authorized.values()].filter(e=>e.run===run.id&&e.item===item.id),tokens=claimedCommitTokens(run.report?.artifacts??[]),nativeQueues=queues.filter(q=>!archived.has(q.id)&&sameProducerQueue(q,item.id,run.id)&&q.meta.review_target?.evidence_kind==='native-landings/v1');
     const relevant=(landed.get(run.id)??[]).length||backfills.length||tokens.some(token=>index.heads.some(head=>head.startsWith(token)));
     if(!relevant&&!(tokens.length&&run.report?.seq>boundary.seq))continue;

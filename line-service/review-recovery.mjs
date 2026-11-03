@@ -25,6 +25,7 @@ import {sameCapturedTarget,sameProducerQueue,capturedReviewCommits} from './revi
 import {lockRequest} from '../dispatch/request-lock.mjs';
 import {lookupProcess} from '../lib/processes.mjs';
 import {implementationChangeOutcome} from '../dispatch/preflight.mjs';
+import {retainsOriginalReview} from '../lib/proposal-intake.mjs';
 const root=fs.realpathSync(fileURLToPath(new URL('../',import.meta.url)));
 const git=(repo,args)=>execFileSync('git',['--no-optional-locks','-C',repo,...args],{encoding:'utf8',stdio:['ignore','pipe','pipe'],timeout:10000,maxBuffer:32*1024*1024}).trim();
 const verdicts=new Set(['PASS','FAIL','NEEDS-WORK']);
@@ -199,7 +200,7 @@ export function recoverInactiveReview({repo,org,runId,head,base,resolution,decis
   if(input.item===undefined||input.run!==runId||input.head!==head||input.base!==base||!Array.isArray(input.attempts)||!input.attempts.length||input.inactive?.verified_by!==binding.native.name||!['never-created','absent'].includes(input.inactive.kind))throw Error('inactive resolution tuple/native verifier differs from requested source');
   const native=()=>{const b=nativeSender(org,{cwd,env,call});if(['name','pane_id','workspace_id','terminal_id'].some(k=>b.native[k]!==binding.native[k])||b.native.agent_session.value!==binding.native.agent_session.value)throw Error('native supervisor changed before recovery');return b.native;};
   const initialEvents=loadEvents(org).events,initialState=fold(initialEvents),run=initialState.runs.get(runId),item=initialState.items.get(input.item);
-  if(!run||run.item!==input.item||!run.report||!roleIs(item,'ENG')||roleIs(initialState.items.get(item.parent),'REV')||item.meta.review_fix_of)throw Error('review recovery needs an actual reported source build, not a packet or correction review chain');
+  if(!run||run.item!==input.item||!run.report||!roleIs(item,'ENG')||retainsOriginalReview(initialState,item))throw Error('review recovery needs an actual reported source build, not a packet or correction review chain');
   const owned=readOwnedRun(org,runId);requireController(owned,'brain');assertOwner(owned,{owner:run.owner,generation:run.owner_generation});queueConsumer({run,env});
   const sourceHead=git(repo,['rev-parse','HEAD']);
   let verifyPreparation=()=>{};

@@ -41,6 +41,7 @@ import {inspectReviewAdmission} from '../line-service/review-admission.mjs';
 import {queueSelected} from '../line-service/priority-order.mjs';
 import {negativeEvaluationCache} from '../line-service/evaluation-cache.mjs';
 import {ordinaryAdmissionHold} from '../lib/ordinary-admission.mjs';
+import {itemLaunchHold} from '../lib/item-launch-hold.mjs';
 
 const hash=b=>createHash('sha256').update(b).digest('hex');
 function fixture(t,{reported=true,role='engineer'}={}){
@@ -989,6 +990,57 @@ for(const link of ['parent','review_fix_of'])test(`phase1 post-FF non-engineer r
   assert.deepEqual(found.changes,[]);assert.deepEqual(found.unattributed,[]);assert.deepEqual(found.holds,[]);assert.equal(health.exemptions.length,2);assert.equal(health.owed,0);assert.equal(health.missing_queue,0);assert.deepEqual(health.coverage_gaps,[]);
   const before=process.cwd(),env={...installedService(f),ORG_ACTOR:'line-service'};process.chdir(f.cwd);
   try{assert.throws(()=>queueReviewMutation({...c,runId:'R-1',env}),/linked formal correction/);}finally{process.chdir(before);}
+});
+
+const underReview=(f,meta)=>[{type:'item.added',id:'REV-99',title:'Original review',role:'reviewer'},{type:'item.updated',id:'ENG-1',fields:{parent:'REV-99',meta}},{type:'item.closed',id:'REV-99',as:'done'}];
+const ORDINARY_PROPOSAL={proposal_intake:'report-proposal/v1',queue_selected:true};
+
+test('selected ordinary proposal under a done review lands into one independent review without a reparent',t=>{
+  const f=fixture(t,{reported:false});f.add(underReview(f,ORDINARY_PROPOSAL));unreportedNativeLandings(f);
+  const c=f.context(),index=canonicalReviewIndex(c),health=reviewHealth({...c,index}),found=discoverChanges(c);
+  assert.deepEqual(index.entries.map(e=>[e.head,e.source_status,e.exemption]).sort(),f.heads.map(h=>[h,'covered',undefined]).sort());
+  assert.deepEqual(health.exemptions,[]);assert.equal(health.owed,1);assert.equal(health.owed_commits,2);assert.equal(health.missing_queue,1);
+  assert.equal(found.changes.length,1);assert.equal(found.changes[0].item.id,'ENG-1');assert.equal(found.changes[0].target.head,f.heads[1]);assert.deepEqual(found.holds,[]);
+  const before=process.cwd(),env={...installedService(f),ORG_ACTOR:'line-service'};process.chdir(f.cwd);
+  try{
+    const queued=queueReviewMutation({...c,runId:'R-1',head:f.heads[1],base:f.base,env});f.add(queued.add);
+    const fresh=f.context(),q=fresh.state.items.get(queued.result.review_item);
+    assert.equal(fresh.item.parent,'REV-99','the proposal keeps its review parent');assert.equal(fresh.state.items.get('REV-99').closed.as,'done');
+    assert.deepEqual(validateQueuedReview({...fresh,item:q}),q.meta.review_target);assert.equal(q.meta.review_round_cap,1);assert.equal(q.meta.review_source_item,'ENG-1');
+    assert.equal(itemLaunchHold(fresh.state,q.id,fresh.events),null,'its review can start under the same closed review');
+    const after=reviewHealth({...fresh,index:canonicalReviewIndex(fresh)});assert.equal(after.queued,1);assert.equal(after.missing_queue,0);assert.deepEqual(after.exemptions,[]);
+    assert.equal(queueReviewMutation({...fresh,runId:'R-1',env}).result.existing,true,'exactly one review item');
+  }finally{process.chdir(before);}
+});
+
+test('reported ordinary proposal under a done review is discovered once with no exemption',t=>{
+  const f=fixture(t);f.add(underReview(f,ORDINARY_PROPOSAL));
+  const c=f.context(),found=discoverChanges(c);assert.equal(found.changes.length,1);assert.equal(found.changes[0].target.head,f.heads[1]);
+  assert.deepEqual(reviewHealth({...c,index:canonicalReviewIndex(c)}).exemptions,[]);
+});
+
+for(const [name,meta,review_key] of [
+  ['formal correction',{review_fix_of:'original:key'},'original:key'],
+  ['correction adopted from a typed proposal',{...ORDINARY_PROPOSAL,review_fix_of:'original:key'},'original:key'],
+  ['historical direct child without typed intake',{queue_selected:true},null],
+])test(`${name} under a done review stays exempt with no re-review chain`,t=>{
+  const f=fixture(t,{reported:false});f.add(underReview(f,meta));unreportedNativeLandings(f);
+  const c=f.context(),health=reviewHealth({...c,index:canonicalReviewIndex(c)}),found=discoverChanges(c);
+  assert.deepEqual(found.changes,[]);assert.deepEqual(found.holds,[]);assert.deepEqual(found.unattributed,[]);
+  assert.equal(health.owed,0);assert.equal(health.missing_queue,0);
+  assert.deepEqual(health.exemptions.map(e=>e.review_key??null),[review_key,review_key]);
+  const before=process.cwd(),env={...installedService(f),ORG_ACTOR:'line-service'};process.chdir(f.cwd);
+  try{assert.throws(()=>queueReviewMutation({...c,runId:'R-1',env}),/linked formal correction/);}finally{process.chdir(before);}
+});
+
+test('supervisor review recovery tells a typed proposal from a formal correction or historical child',t=>{
+  const queued=recoveryFixture(t);queued.add(underReview(queued,ORDINARY_PROPOSAL));
+  assert.equal(recoverInactiveReview(queued.args).result,'review_queued');
+  for(const meta of [{review_fix_of:'original:key'},{queue_selected:true}]){
+    const f=recoveryFixture(t);f.add(underReview(f,meta));
+    assert.throws(()=>recoverInactiveReview(f.args),/correction review chain/);
+    assert.equal(f.context().events.some(e=>e.type==='review.recovery-completed'),false);
+  }
 });
 
 function unreportedNativeLandings(f){
